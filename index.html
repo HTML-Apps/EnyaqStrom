@@ -69,8 +69,8 @@
     <div class="flex items-center justify-between gap-3">
       <h1 id="app-title" class="min-w-0 truncate text-lg font-semibold">Skoda Enyaq | Ladekosten NK</h1>
       <div class="flex items-center gap-1.5 shrink-0">
-        <button id="btn-bell" type="button" aria-label="Erinnerungen" class="relative w-10 h-10 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 flex items-center justify-center active:scale-95 transition"><svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M6 17V11a6 6 0 0 1 12 0v6l1.5 2h-15zM10 21a2 2 0 0 0 4 0"/></svg><span id="bell-badge" class="hidden absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-600 text-white text-[11px] leading-[18px] text-center font-semibold"></span></button>
-        <button id="btn-profile" type="button" aria-label="Profil und Einstellungen" class="w-10 h-10 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 flex items-center justify-center active:scale-95 transition"><svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg></button>
+        <button id="btn-bell" type="button" aria-label="Erinnerungen" class="relative w-10 h-10 rounded-xl text-white flex items-center justify-center active:scale-95 transition"><svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M6 17V11a6 6 0 0 1 12 0v6l1.5 2h-15zM10 21a2 2 0 0 0 4 0"/></svg><span id="bell-badge" class="hidden absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-emerald-500 text-white text-[11px] leading-[18px] text-center font-semibold"></span></button>
+        <button id="btn-profile" type="button" aria-label="Profil und Einstellungen" class="w-10 h-10 rounded-xl text-white flex items-center justify-center active:scale-95 transition"><svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg></button>
       </div>
     </div>
     <div id="setup-hint" class="hidden rounded-2xl p-3 text-sm bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-200">Willkommen! Trage über das Profil-Symbol oben rechts unter „Einstellungen“ zuerst Strompreis, Nettokapazität der Batterie und Ladeleistung deines Autos ein, damit alle Berechnungen stimmen.</div>
@@ -2397,7 +2397,8 @@ function renderReminderBadges() {
   ['bell-badge', 'nav-badge'].forEach(id => {
     const el = $(id); if (!el) return;
     el.textContent = n > 99 ? '99+' : String(n);
-    el.classList.toggle('hidden', n === 0); el.classList.toggle('bg-red-600', over); el.classList.toggle('bg-amber-500', !over);
+    el.classList.toggle('hidden', n === 0);
+    if (id === 'nav-badge') { el.classList.toggle('bg-red-600', over); el.classList.toggle('bg-amber-500', !over); }      // Glocke bleibt immer grün (#10b981 wie die Balken)
   });
   const b = $('btn-bell'); if (b) b.setAttribute('aria-label', n ? 'Erinnerungen, ' + n + (n === 1 ? ' fällig oder bald fällig' : ' fällig oder bald fällig') : 'Erinnerungen');
 }
