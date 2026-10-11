@@ -564,6 +564,8 @@
       <input id="import-file" type="file" accept=".json,application/json" class="hidden">
       <button id="btn-fuelio" type="button" class="w-full py-3 rounded-2xl bg-slate-200 dark:bg-slate-800 font-medium active:scale-95 transition">Fuelio-Export importieren (CSV)</button>
       <input id="fuelio-file" type="file" accept=".csv,text/csv,text/plain" class="hidden">
+      <button id="btn-restore" type="button" class="w-full py-3 rounded-2xl border border-red-500 text-red-600 dark:text-red-400 font-medium active:scale-95 transition">Sicherung wiederherstellen (ersetzt alle Daten)</button>
+      <input id="restore-file" type="file" accept=".json,application/json" class="hidden">
       <p id="io-msg" class="hidden text-sm"></p>
     </div>
     <div class="rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4 space-y-3">
@@ -1342,7 +1344,7 @@ window.onCloudProviders = (list, first, uid) => {
   if (first) checkCacheUid(uid);
   const local = getProviders();
   let next = Array.isArray(list) ? list.filter(n => typeof n === 'string' && n.trim()) : [];
-  if (first) { const merged = next.concat(local.filter(n => !next.some(m => m.toLowerCase() === n.toLowerCase()))); if (merged.length !== next.length || !Array.isArray(list)) { next = merged; if (next.length) window.cloud.setProviders(next).catch(() => {}); } }
+  if (first && (uploadCutoff(uid) === 0 || !Array.isArray(list))) { const merged = next.concat(local.filter(n => !next.some(m => m.toLowerCase() === n.toLowerCase()))); if (merged.length !== next.length || !Array.isArray(list)) { next = merged; if (next.length) window.cloud.setProviders(next).catch(() => {}); } }
   if (JSON.stringify(next) !== JSON.stringify(local)) { save(KEY_PROVIDERS, next); renderProviders(); if (capPlace === 'away') setCapPlace('away'); }
 };
 $('btn-save-settings').addEventListener('click', () => {
@@ -2196,6 +2198,29 @@ $('import-file').addEventListener('change', async (e) => {
   }
 });
 
+/** Sicherung wiederherstellen: ersetzt Zählerstände, Kosten, Erinnerungen und wiederkehrende Kosten (Cloud und dieses Gerät) durch den Inhalt der Datei. Nichts wird zusammengeführt. */
+$('btn-restore').addEventListener('click', () => $('restore-file').click());
+$('restore-file').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  try {
+    const text = await file.text(), readings = parseImport(text), ic = parseImportCosts(text), ir = parseImportReminders(text), irc = parseImportRecurring(text);
+    const signed = !!window.cloud?.isSignedIn();
+    if (!confirm('ACHTUNG: Alles wird durch den Inhalt der Datei ersetzt (' + readings.length + ' Ladungen, ' + ic.costs.length + ' Kosten, ' + ir.length + ' Erinnerungen, ' + irc.length + ' wiederkehrende Kosten).\n\nEinträge, die nicht in der Datei stehen, werden gelöscht – ' + (signed ? 'in der Cloud und auf diesem Gerät.' : 'auf diesem Gerät (nicht angemeldet, die Cloud bleibt unverändert).') + '\n\nFortfahren?')) return;
+    flash($('io-msg'), 'Stelle wieder her …', true);
+    let res = null;
+    if (signed) res = await window.cloud.restoreAll({ readings, costs: ic.costs, reminders: ir, recurring: irc, categories: ic.categories });
+    save(KEY_READINGS, readings); save(KEY_COSTS, ic.costs); save(KEY_REMINDERS, ir); save(KEY_RECUR, irc);
+    if (ic.categories.length) { save(KEY_CATEGORIES, ic.categories); renderCategories(); }
+    stopLive(false); touchSync(); refreshViews();
+    const del = res ? res.readings.deleted + res.costs.deleted + res.reminders.deleted + res.recurring.deleted : 0;
+    flash($('io-msg'), 'Wiederhergestellt: ' + readings.length + ' Ladungen, ' + ic.costs.length + ' Kosten, ' + ir.length + ' Erinnerungen' + (res ? ' · ' + del + ' überzählige Einträge in der Cloud gelöscht.' : ' (nur auf diesem Gerät).'), true);
+  } catch (err) {
+    flash($('io-msg'), 'Wiederherstellung fehlgeschlagen: ' + (err.code === 'permission-denied' ? 'Keine Berechtigung (Firestore-Regeln prüfen).' : err.message), false);
+  }
+});
+
 /* =====================================================================
    Kosten: Kategorien (Einstellungen) und Erfassen
    ===================================================================== */
@@ -2233,7 +2258,7 @@ window.onCloudCategories = (list, first, uid) => {
   const customized = localStorage.getItem(KEY_CATEGORIES) !== null, local = getCategories();
   let next = Array.isArray(list) ? list.filter(n => typeof n === 'string' && n.trim()) : null;
   if (next === null) { if (customized && first) window.cloud.setCategories(local).catch(() => {}); return; }
-  if (first && customized) { const merged = next.concat(local.filter(n => !next.some(m => m.toLowerCase() === n.toLowerCase()))); if (merged.length !== next.length) { next = merged; window.cloud.setCategories(next).catch(() => {}); } }
+  if (first && customized && uploadCutoff(uid) === 0) { const merged = next.concat(local.filter(n => !next.some(m => m.toLowerCase() === n.toLowerCase()))); if (merged.length !== next.length) { next = merged; window.cloud.setCategories(next).catch(() => {}); } }
   if (!customized || JSON.stringify(next) !== JSON.stringify(local)) { save(KEY_CATEGORIES, next); renderCategories(); if (!$('view-costs').classList.contains('hidden')) renderCostsView(); }
 };
 
@@ -2619,11 +2644,11 @@ $('rem-ics-all').addEventListener('click', () => downloadIcs(sortedOpenReminders
 window.onCloudReminders = (cloud, isFirst, uid) => {
   if (isFirst) checkCacheUid(uid);
   if (isFirst) {
-    const missing = getReminders().filter(c => !cloud.some(x => sameId(x, c)));
+    const missing = unsyncedLocal(getReminders(), cloud, uid);
     if (missing.length) { window.cloud.pushReminders([], missing).catch(e => window.onCloudStatus({ error: 'Erinnerungen-Upload fehlgeschlagen: ' + (e.code || e.message) })); cloud = cloud.concat(missing); }
   }
   save(KEY_REMINDERS, cloud.sort((a, b) => Number(a.id) - Number(b.id)));
-  refreshViews();
+  refreshViews(); touchSync();
 };
 
 /** Fuelio: eine Zeile aus „## Costs“, die eine Erinnerung ist (RemindDate / RemindOdo / Wiederholung) -> Erinnerung der App oder null. */
@@ -2729,12 +2754,12 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) book
 window.onCloudRecurring = (cloud, isFirst, uid) => {
   if (isFirst) checkCacheUid(uid);
   if (isFirst) {
-    const missing = getRecurring().filter(c => !cloud.some(x => sameId(x, c)));
+    const missing = unsyncedLocal(getRecurring(), cloud, uid);
     if (missing.length) { window.cloud.pushRecurring([], missing).catch(e => window.onCloudStatus({ error: 'Upload fehlgeschlagen: ' + (e.code || e.message) })); cloud = cloud.concat(missing); }
   }
   save(KEY_RECUR, cloud.sort((a, b) => Number(a.id) - Number(b.id)));
   if (!editMode) bookRecurring();
-  refreshViews();
+  refreshViews(); touchSync();
 };
 function parseImportRecurring(text) {
   const data = JSON.parse(text); if (!Array.isArray(data.recurring)) return [];
@@ -2788,10 +2813,28 @@ function renderHeroReminder() {
 }
 $('hero-rem').addEventListener('click', () => showView('reminders'));
 const probeImg = (src) => new Promise(res => { const i = new Image(); i.onload = () => res(src); i.onerror = () => res(null); i.src = src; });
-async function findHeroImg(n) { for (const e of ['png', 'webp', 'jpg', 'jpeg']) { const ok = await probeImg('Enyaq' + n + '.' + e); if (ok) return ok; } return null; }
+const HERO_VER = '2';                                    // bei neuen Bildern hochzählen (umgeht den Browser- und Service-Worker-Cache)
+async function findHeroImg(n) { for (const e of ['png', 'webp', 'jpg', 'jpeg']) { const ok = await probeImg('Enyaq' + n + '.' + e + '?v=' + HERO_VER); if (ok) return ok; } return null; }
+/** Hat ein Bild einen opaken weißen Rand (nicht wirklich freigestellt), wird der von den Bildrändern aus zusammenhängende weiße Bereich transparent gemacht. Transparente PNGs bleiben unverändert. */
+async function cutWhite(src) {
+  const img = await new Promise(res => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = src; });
+  if (!img) return src;
+  try {
+    const w = img.naturalWidth, h = img.naturalHeight, c = document.createElement('canvas'); c.width = w; c.height = h;
+    const ctx = c.getContext('2d', { willReadFrequently: true }); ctx.drawImage(img, 0, 0);
+    const d = ctx.getImageData(0, 0, w, h), px = d.data, light = (p) => px[p * 4 + 3] > 200 && px[p * 4] > 232 && px[p * 4 + 1] > 232 && px[p * 4 + 2] > 232;
+    if (![0, w - 1, (h - 1) * w, h * w - 1].every(light)) return src;
+    const seen = new Uint8Array(w * h), stack = [], push = (x, y) => { const p = y * w + x; if (!seen[p] && light(p)) { seen[p] = 1; stack.push(p); } };
+    for (let x = 0; x < w; x++) { push(x, 0); push(x, h - 1); }
+    for (let y = 0; y < h; y++) { push(0, y); push(w - 1, y); }
+    while (stack.length) { const p = stack.pop(), x = p % w, y = (p - x) / w; px[p * 4 + 3] = 0; if (x > 0) push(x - 1, y); if (x < w - 1) push(x + 1, y); if (y > 0) push(x, y - 1); if (y < h - 1) push(x, y + 1); }
+    ctx.putImageData(d, 0, 0); return c.toDataURL('image/png');
+  } catch { return src; }
+}
 async function initCarousel() {
   const box = $('car-scroll'), dash = $('car-dashes'); if (!box) return;
   let srcs = (await Promise.all([1, 2, 3].map(findHeroImg))).filter(Boolean);
+  srcs = await Promise.all(srcs.map(cutWhite));
   if (!srcs.length) srcs = [HERO_FALLBACK];
   box.innerHTML = srcs.map((s, i) => `<div class="relative flex-none w-full h-full snap-center"><div class="absolute left-[14%] w-[72%] bottom-1 h-[22px] rounded-[50%]" style="background:radial-gradient(ellipse at center,rgba(0,0,0,.85),rgba(0,0,0,0) 70%);filter:blur(5px)"></div><img src="${s}" alt="Skoda Enyaq, Bild ${i + 1} von ${srcs.length}" draggable="false" class="absolute left-2.5 top-1.5 w-[calc(100%-1.25rem)] h-[207px] object-contain"></div>`).join('');
   dash.innerHTML = srcs.length > 1 ? srcs.map((_, i) => `<span class="car-dash h-[3px] w-6 rounded-sm ${i === 0 ? 'bg-white' : 'bg-white/35'}"></span>`).join('') : '';
@@ -2820,6 +2863,13 @@ function refreshViews() {
   renderReminderBadges();
 }
 const sameId = (a, b) => String(a.id) === String(b.id);
+/* Alte Zwischenspeicher dürfen nichts wieder hochladen, was inzwischen woanders gelöscht wurde (z. B. nach einer Wiederherstellung):
+   Lokale Einträge, die in der Cloud fehlen, werden nur hochgeladen, wenn dieses Gerät sie nach dem letzten Abgleich angelegt hat (die ID ist ein Zeitstempel)
+   oder wenn es noch nie mit diesem Konto abgeglichen war (erste Anmeldung mit vorhandenen lokalen Daten). Offline angelegte Einträge hält zusätzlich die Firestore-Warteschlange. */
+const LAST_SYNC_AT = Number(localStorage.getItem('enyaq.lastSync')) || 0, CACHE_UID_AT_BOOT = localStorage.getItem('enyaq.cacheUid');
+function touchSync() { try { localStorage.setItem('enyaq.lastSync', String(Date.now())); } catch {} }
+function uploadCutoff(uid) { return LAST_SYNC_AT > 0 ? LAST_SYNC_AT : (CACHE_UID_AT_BOOT === uid ? Infinity : 0); }       // 0 = alles hochladen, Infinity = nichts
+const unsyncedLocal = (local, cloud, uid) => { const cut = uploadCutoff(uid); return local.filter(x => !cloud.some(c => sameId(c, x)) && (cut === 0 || Number(x.id) > cut)); };
 const KEY_CACHE_UID = 'enyaq.cacheUid';                   // Konto (UID), zu dem der lokale Cache gehört
 
 /** Schutz: Daten eines anderen Kontos nie in dieses Konto hochladen (gilt für Zählerstände, Kosten, Listen). */
@@ -2834,19 +2884,20 @@ window.onCloudCosts = (cloud, isFirst, uid) => {
   if (isFirst) checkCacheUid(uid);
   cloud = cloud.sort((a, b) => new Date(a.date) - new Date(b.date));
   if (isFirst) {                                         // lokale Kosten, die in der Cloud fehlen, automatisch hochladen und behalten
-    const missing = getCosts().filter(c => !cloud.some(x => sameId(x, c)));
+    const missing = unsyncedLocal(getCosts(), cloud, uid);
     if (missing.length) {
       window.cloud.pushCosts([], missing).catch(e => window.onCloudStatus({ error: 'Kosten-Upload fehlgeschlagen: ' + (e.code || e.message) }));
       cloud = cloud.concat(missing).sort((a, b) => new Date(a.date) - new Date(b.date));
     }
   }
   if (editMode) deferredCosts = cloud; else { save(KEY_COSTS, cloud); refreshViews(); bookRecurring(); }
+  touchSync();
 };
 window.onCloudReadings = (cloud, isFirst, uid) => {
   if (isFirst) checkCacheUid(uid);
   cloud = cloud.sort((a, b) => new Date(a.date) - new Date(b.date));
   if (isFirst) {                                         // beim ersten Abgleich: lokale Einträge, die in der Cloud fehlen
-    const missing = getReadings().filter(r => !cloud.some(c => sameId(c, r)));
+    const missing = unsyncedLocal(getReadings(), cloud, uid);
     if (missing.length) {                                // automatisch hochladen und lokal behalten – es geht nichts verloren
       window.cloud.push([], missing)
         .then(() => window.onCloudStatus({ email: cloudEmail, note: missing.length + ' lokale Einträge in die Cloud übertragen' }))
@@ -2855,6 +2906,7 @@ window.onCloudReadings = (cloud, isFirst, uid) => {
     }
   }
   if (editMode) deferredCloud = cloud; else applyCloud(cloud);
+  touchSync();
 };
 
 window.onCloudStatus = (s) => {
@@ -3157,7 +3209,7 @@ showView('dashboard');
 /* Firebase (modular SDK). Die Konfiguration ist kein Geheimnis – geschützt wird über Auth + Firestore-Regeln. */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
 import { getAuth, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, doc, onSnapshot, writeBatch, setDoc } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, doc, onSnapshot, writeBatch, setDoc, getDocsFromServer } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
 
 const app = initializeApp({
   apiKey: "AIzaSyDM_1SM3ueFYhAB7zkHO8SG5VVOCsMu_0c", authDomain: "daily-companion-24975.firebaseapp.com",
@@ -3191,7 +3243,25 @@ async function diffPush(colFn, sigFn, prev, next) {
   }
 }
 
+/** Macht eine Cloud-Sammlung exakt gleich der Liste: neue/geänderte Einträge schreiben, alle anderen Dokumente löschen (liest den Stand direkt vom Server, nicht aus dem Cache). */
+async function replaceCol(colFn, items) {
+  const snap = await getDocsFromServer(colFn()), keep = new Set(items.map(r => String(r.id)));
+  const ops = items.map(r => ['set', r]).concat(snap.docs.filter(d => !keep.has(d.id)).map(d => ['del', d.id]));
+  for (let i = 0; i < ops.length; i += 400) {
+    const b = writeBatch(db);
+    ops.slice(i, i + 400).forEach(([t, x]) => t === 'set' ? b.set(doc(colFn(), String(x.id)), x) : b.delete(doc(colFn(), x)));
+    await b.commit();
+  }
+  return { written: items.length, deleted: ops.filter(o => o[0] === 'del').length };
+}
+
 window.cloud = {
+  restoreAll: async (d) => {                                      // Sicherung wiederherstellen: Cloud = Inhalt der Datei
+    if (!user) throw new Error('Nicht angemeldet.');
+    const r = { readings: await replaceCol(col, d.readings), costs: await replaceCol(costsCol, d.costs), reminders: await replaceCol(remCol, d.reminders), recurring: await replaceCol(recCol, d.recurring) };
+    if (Array.isArray(d.categories) && d.categories.length) await setDoc(catDoc(), { list: d.categories, updatedAt: new Date().toISOString() });
+    return r;
+  },
   setCategories: (list) => user ? setDoc(catDoc(), { list, updatedAt: new Date().toISOString() }) : Promise.resolve(),
   pushCosts: (prev, next) => diffPush(costsCol, costSig, prev, next),
   pushReminders: (prev, next) => diffPush(remCol, remSig, prev, next),
