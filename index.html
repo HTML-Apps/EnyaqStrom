@@ -287,7 +287,7 @@
 
   <!-- ============ VIEW: HISTORIE ============ -->
   <section id="view-history" class="view hidden space-y-4">
-    <div class="flex items-center justify-between">
+    <div id="hist-head" class="flex items-center justify-between">
       <h1 class="text-xl font-semibold">Historie</h1>
       <div class="flex gap-2">
         <button id="btn-edit" class="px-4 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-800 text-sm font-medium active:scale-95 transition">Bearbeiten</button>
@@ -443,6 +443,12 @@
 </div>
 
 <!-- ============ BOTTOM NAVIGATION ============ -->
+<div id="hist-fab" class="hidden fixed right-4 z-30 flex gap-2" style="bottom: calc(5.25rem + env(safe-area-inset-bottom))">
+  <button id="fab-edit" type="button" class="px-5 py-2.5 rounded-2xl bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 text-sm font-semibold shadow-lg active:scale-95 transition">Bearbeiten</button>
+  <button id="fab-cancel" type="button" class="hidden px-5 py-2.5 rounded-2xl bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-600 text-sm font-medium shadow-lg active:scale-95 transition">Abbrechen</button>
+  <button id="fab-save" type="button" class="hidden px-5 py-2.5 rounded-2xl bg-emerald-600 text-white text-sm font-semibold shadow-lg active:scale-95 transition">Speichern</button>
+</div>
+
 <nav class="fixed bottom-0 inset-x-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-t border-slate-200 dark:border-slate-800"
      style="padding-bottom: env(safe-area-inset-bottom)">
   <div class="max-w-xl mx-auto grid grid-cols-5">
@@ -858,7 +864,9 @@ const getSettings = () => ({ price: 0.35, pin: '', ...load(KEY_SETTINGS, {}) });
 /* =====================================================================
    Navigation
    ===================================================================== */
+let currentView = 'dashboard', histHeadVisible = true;
 function showView(name) {
+  currentView = name; if (name === 'history') histHeadVisible = true;     // frisch geöffnet: Kopfzeile steht oben im Bild
   document.querySelectorAll('.view').forEach(v => v.classList.toggle('hidden', v.id !== 'view-' + name));
   document.querySelectorAll('.nav-btn').forEach(b => {
     const active = b.dataset.view === name;
@@ -871,6 +879,7 @@ function showView(name) {
   if (name === 'settings') fillSettings();
   if (name !== 'history' && editMode) setEditMode(false);
   if (name === 'history') renderHistory();
+  updateHistFab();
   fitSeg();
 }
 document.querySelectorAll('.nav-btn').forEach(b => b.addEventListener('click', () => showView(b.dataset.view)));
@@ -1520,6 +1529,7 @@ function setEditMode(on) {
   $('btn-edit-cancel').classList.toggle('hidden', !on);
   $('btn-edit-save').classList.toggle('hidden', !on);
   renderHistory();
+  updateHistFab();
 }
 
 function renderHistory() {
@@ -1701,6 +1711,19 @@ $('history-list').addEventListener('click', (e) => {      // "Eintrag löschen" 
   e.target.textContent = on ? 'Löschen zurücknehmen' : 'Eintrag löschen';
   li.classList.toggle('opacity-50', on); li.classList.toggle('ring-red-500', on);
 });
+/** Schwebende Buttons: sobald die Kopfzeile der Historie aus dem Bild gescrollt ist, erscheinen Bearbeiten bzw. Abbrechen/Speichern über der Navigation. */
+function updateHistFab() {
+  const has = getReadings().length > 0, on = currentView === 'history' && !histHeadVisible && has;
+  $('hist-fab').classList.toggle('hidden', !on);
+  $('fab-edit').classList.toggle('hidden', editMode);
+  $('fab-cancel').classList.toggle('hidden', !editMode); $('fab-save').classList.toggle('hidden', !editMode);
+}
+if ('IntersectionObserver' in window) {
+  new IntersectionObserver((entries) => { histHeadVisible = entries[entries.length - 1].isIntersecting; updateHistFab(); }).observe($('hist-head'));
+}
+$('fab-edit').addEventListener('click', () => $('btn-edit').click());
+$('fab-cancel').addEventListener('click', () => $('btn-edit-cancel').click());
+$('fab-save').addEventListener('click', () => $('btn-edit-save').click());
 $('btn-edit').addEventListener('click', () => setEditMode(true));
 $('btn-edit-cancel').addEventListener('click', () => setEditMode(false));
 $('btn-edit-save').addEventListener('click', () => {
