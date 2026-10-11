@@ -4,14 +4,13 @@
 <meta charset="UTF-8">
 <meta name="theme-color" content="#000000">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Enyaq Ladekosten</title>
   
 <!-- Favicon für Browser-Tabs -->
-<link rel="icon" type="image/png" href="/car.png?v=1">
+<link rel="icon" type="image/png" href="/car.png">
 <!-- Apple Touch Icon für iOS -->
-<link rel="apple-touch-icon" href="/car.png?v=1">
+<link rel="apple-touch-icon" href="/car.png">
 <!-- Manifest verlinken -->
-<link rel="manifest" href="/manifest.json?v=1">
+<link rel="manifest" href="/manifest.json"> 
   
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
@@ -76,8 +75,8 @@
     <div class="flex items-center justify-between gap-3">
       <h1 id="app-title" class="min-w-0 truncate text-lg font-semibold">Skoda Enyaq | Ladekosten NK</h1>
       <div class="flex items-center gap-1.5 shrink-0">
-        <button id="btn-bell" type="button" aria-label="Erinnerungen" class="relative w-10 h-10 rounded-xl text-white flex items-center justify-center active:scale-95 transition"><svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M6 17V11a6 6 0 0 1 12 0v6l1.5 2h-15zM10 21a2 2 0 0 0 4 0"/></svg><span id="bell-badge" class="hidden absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-emerald-500 text-white text-[11px] leading-[18px] text-center font-semibold"></span></button>
-        <button id="btn-profile" type="button" aria-label="Profil und Einstellungen" class="w-10 h-10 rounded-xl text-white flex items-center justify-center active:scale-95 transition"><svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg></button>
+        <button id="btn-bell" type="button" aria-label="Erinnerungen" class="relative w-12 h-12 rounded-xl text-white flex items-center justify-center active:scale-95 transition"><svg class="w-7 h-7" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M6 17V11a6 6 0 0 1 12 0v6l1.5 2h-15zM10 21a2 2 0 0 0 4 0"/></svg><span id="bell-badge" class="hidden absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-emerald-500 text-white text-[11px] leading-[18px] text-center font-semibold"></span></button>
+        <button id="btn-profile" type="button" aria-label="Profil und Einstellungen" class="w-12 h-12 rounded-xl text-white flex items-center justify-center active:scale-95 transition"><svg class="w-7 h-7" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg></button>
       </div>
     </div>
     <div id="setup-hint" class="hidden rounded-2xl p-3 text-sm bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-200">Willkommen! Trage über das Profil-Symbol oben rechts unter „Einstellungen“ zuerst Strompreis, Nettokapazität der Batterie und Ladeleistung deines Autos ein, damit alle Berechnungen stimmen.</div>
@@ -626,7 +625,7 @@
      style="padding-bottom: env(safe-area-inset-bottom)">
   <div class="max-w-xl mx-auto grid grid-cols-5">
     <button data-view="dashboard" class="nav-btn py-3 flex flex-col items-center text-xs gap-1">
-      <span class="relative"><svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span id="nav-badge" class="hidden absolute -top-1 -right-2 min-w-[16px] h-4 px-1 rounded-full bg-red-600 text-white text-[10px] leading-4 text-center font-semibold"></span></span>Start</button>
+      <span class="relative"><svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span id="nav-badge" class="hidden absolute -top-1 -right-2 min-w-[16px] h-4 px-1 rounded-full bg-emerald-500 text-white text-[10px] leading-4 text-center font-semibold"></span></span>Start</button>
     <button data-view="capture" class="nav-btn py-3 flex flex-col items-center text-xs gap-1">
       <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2.5"/><rect x="7" y="6" width="10" height="5" rx="1"/><path d="M13.2 13.5l-2.4 3.3h3.2l-2.4 3.4"/></svg>Laden</button>
     <button data-view="costs" class="nav-btn py-3 flex flex-col items-center text-xs gap-1">
@@ -2404,8 +2403,7 @@ function renderReminderBadges() {
   ['bell-badge', 'nav-badge'].forEach(id => {
     const el = $(id); if (!el) return;
     el.textContent = n > 99 ? '99+' : String(n);
-    el.classList.toggle('hidden', n === 0);
-    if (id === 'nav-badge') { el.classList.toggle('bg-red-600', over); el.classList.toggle('bg-amber-500', !over); }      // Glocke bleibt immer grün (#10b981 wie die Balken)
+    el.classList.toggle('hidden', n === 0);                                                                              // immer grün (#10b981 wie die Balken)
   });
   const b = $('btn-bell'); if (b) b.setAttribute('aria-label', n ? 'Erinnerungen, ' + n + (n === 1 ? ' fällig oder bald fällig' : ' fällig oder bald fällig') : 'Erinnerungen');
 }
