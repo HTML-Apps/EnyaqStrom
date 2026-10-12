@@ -179,7 +179,7 @@
     </div>
 
     <div class="rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
-      <p class="text-sm text-slate-500 dark:text-slate-400 mb-3">Verbrauch &amp; Effizienz (Ø)</p>
+      <p class="text-sm text-slate-500 dark:text-slate-400 mb-3">Verbrauch &amp; Effizienz (Ø) inkl. Verluste</p>
       <div class="grid grid-cols-3 gap-2 text-center">
         <div class="rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 p-3"><p class="text-xs text-slate-500 dark:text-slate-400">kWh/100 km</p><p id="eff-kwh" class="text-xl font-semibold text-emerald-700 dark:text-emerald-300">–</p></div>
         <div class="rounded-2xl bg-sky-50 dark:bg-sky-950/50 p-3"><p class="text-xs text-slate-500 dark:text-slate-400">€/100 km</p><p id="eff-cost" class="text-xl font-semibold text-sky-700 dark:text-sky-300">–</p></div>
@@ -389,8 +389,8 @@
 
   <!-- ============ VIEW: BERICHTE ============ -->
   <section id="view-report" class="view hidden space-y-4">
-    <div id="rep-mode" class="print:hidden flex bg-slate-200 dark:bg-slate-800 rounded-xl p-1"><button type="button" data-mode="laden" class="rep-mode-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Laden</button><button type="button" data-mode="kosten" class="rep-mode-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Kosten</button></div>
-    <div class="flex items-center justify-between">
+    <div id="rep-mode" class="print:hidden flex bg-slate-200 dark:bg-slate-800 rounded-xl p-1"><button type="button" data-mode="laden" class="rep-mode-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Laden</button><button type="button" data-mode="kosten" class="rep-mode-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Kosten</button><button type="button" data-mode="akku" class="rep-mode-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Akku</button></div>
+    <div id="rep-head" class="flex items-center justify-between">
       <button id="rep-prev" type="button" aria-label="Vorheriger Monat" class="print:invisible w-10 h-10 rounded-xl bg-slate-200 dark:bg-slate-800 flex items-center justify-center active:scale-95 transition disabled:opacity-30"><svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
       <div class="text-center">
         <p id="rep-print-app" class="hidden print:block text-sm text-slate-500"></p>
@@ -457,6 +457,47 @@
       <p id="rep-msg" class="hidden text-sm"></p>
       <p class="text-xs text-slate-500 dark:text-slate-400 text-center">Verbrauch: Energie, die zwischen zwei Ladungen aus dem Akku entnommen wurde (Ende-% der letzten bis Start-% dieser Ladung), umgerechnet auf die Steckdose. Ohne Akku-% grob aus den geladenen kWh. Zuordnung nach Ablesedatum.</p>
     </div>
+    </div>
+
+    <div id="rep-akku" class="hidden space-y-4">
+      <div class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
+        <p class="text-sm text-slate-500 dark:text-slate-400">Akku-Kapazität (geschätzt) · Langzeitwert</p>
+        <div id="bat-value" class="hidden">
+          <p class="mt-1 text-5xl font-semibold tabular-nums text-emerald-600 dark:text-emerald-400"><span id="bat-k">–</span> <span class="text-3xl font-medium">kWh</span></p>
+          <p class="text-sm mt-1">an der Steckdose je 100 % Akku <span id="bat-ci" class="text-slate-500 dark:text-slate-400"></span></p>
+          <p id="bat-c" class="text-sm mt-2"></p>
+          <p id="bat-basis" class="text-xs text-slate-500 dark:text-slate-400 mt-2"></p>
+        </div>
+        <div id="bat-few">
+          <p class="mt-1 text-xl font-semibold">Noch zu wenige Daten</p>
+          <p class="text-sm mt-2 text-slate-600 dark:text-slate-300">Für eine belastbare Schätzung braucht die App mindestens 10 passende Ladungen mit zusammen mindestens 400 %-Punkten Akku-Hub. Passend sind Ladungen Zuhause oder bei Bosch mit eingetragenem Akku-Start und -Ende, mindestens 30 % Hub, gemessenen kWh und einem Ende unter 99 %. Trage dafür bei jeder Ladung den Akku-Stand vor und nach dem Laden ein.</p>
+          <div class="mt-3 space-y-3">
+            <div><p id="bat-p1t" class="text-xs text-slate-500 dark:text-slate-400"></p><div class="mt-1 h-2 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden"><div id="bat-p1" class="h-2 rounded-full bg-emerald-500" style="width:0%"></div></div></div>
+            <div><p id="bat-p2t" class="text-xs text-slate-500 dark:text-slate-400"></p><div class="mt-1 h-2 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden"><div id="bat-p2" class="h-2 rounded-full bg-emerald-500" style="width:0%"></div></div></div>
+          </div>
+        </div>
+      </div>
+      <div id="bat-trend-card" class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
+        <p class="text-sm text-slate-500 dark:text-slate-400">Veränderung</p>
+        <p id="bat-trend-h" class="mt-1 text-xl font-semibold"></p>
+        <p id="bat-trend-t" class="text-sm mt-1 text-slate-600 dark:text-slate-300"></p>
+      </div>
+      <div id="bat-chart-card" class="hidden rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
+        <p class="text-sm text-slate-500 dark:text-slate-400 mb-2">Verlauf: kWh je 100 % Akku</p>
+        <div class="relative h-56"><canvas id="bat-chart"></canvas></div>
+        <p id="bat-chart-note" class="text-xs text-slate-500 dark:text-slate-400 mt-3"></p>
+      </div>
+      <details class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
+        <summary class="cursor-pointer font-medium">So wird gerechnet</summary>
+        <div class="mt-3 space-y-2 text-sm text-slate-600 dark:text-slate-300">
+          <p><b>Messgröße:</b> Steckdosen-kWh je 100 % Akku = Summe der geladenen kWh ÷ Summe des Akku-Hubs. Es wird die Summe durch die Summe geteilt statt den Mittelwert der Einzelladungen zu bilden. So zählen große Ladehübe stärker, denn die Rundung des Akku-% (±0,5 je Ende) fällt bei 60 % Hub nur halb so stark ins Gewicht wie bei 30 %.</p>
+          <p><b>Auswahl:</b> nur Wechselstrom-Ladungen Zuhause und Bosch, mindestens 30 % Hub, Ende unter 99 % (Zellausgleich und Ladekurve verfälschen die letzten Prozent). „Unterwegs“ bleibt außen vor (Gleich- und Wechselstrom gemischt). Ausreißer werden robust ausgeschlossen.</p>
+          <p><b>Genauigkeit:</b> Der ±-Bereich (95 %) ergibt sich aus der tatsächlichen Streuung deiner Ladungen und der Rundung des Akku-%. Je mehr Ladungen, desto enger.</p>
+          <p><b>Nutzbare kWh:</b> Steckdosen-kWh × Ladewirkungsgrad (88–92 %). Das ist nur grob; der Absolutwert ist unsicher, wichtig ist die Veränderung über die Zeit.</p>
+          <p><b>Trend:</b> erst nach 12 Monaten und nur im Vergleich desselben Zeitraums zum Vorjahr, weil Kälte im Winter Wirkungsgrad und nutzbare Kapazität senkt. Ein „Hinweis“ erscheint nur, wenn der Unterschied größer ist als die Messunsicherheit.</p>
+          <p><b>Grenzen:</b> Sinkt der Wert, kann das Alterung sein, aber auch höhere Ladeverluste (Kabel, Wallbox, Batterieheizung). Die Akku-Anzeige ist nicht exakt linear. Dieser Wert ersetzt keine Auslesung des Akku-Zustands (State of Health) per OBD-Diagnose.</p>
+        </div>
+      </details>
     </div>
 
     <div id="rep-kosten" class="hidden space-y-4">
@@ -2878,13 +2919,14 @@ function renderHeroReminder() {
 }
 $('hero-rem').addEventListener('click', () => showView('reminders'));
 const probeImg = (src) => new Promise(res => { const i = new Image(); i.onload = () => res(src); i.onerror = () => res(null); i.src = src; });
-const HERO_VER = '2';                                    // bei neuen Bildern hochzählen (umgeht den Browser- und Service-Worker-Cache)
+const HERO_VER = '3';                                    // bei neuen Bildern hochzählen (umgeht den Browser- und Service-Worker-Cache)
 async function findHeroImg(n) { for (const e of ['png', 'webp', 'jpg', 'jpeg']) { const ok = await probeImg('Enyaq' + n + '.' + e + '?v=' + HERO_VER); if (ok) return ok; } return null; }
 /** Bereitet ein Karussell-Bild auf: (1) opaker weißer Rand wird transparent gemacht (nicht wirklich freigestellte Bilder), (2) transparenter Rand wird weggeschnitten,
-    damit das Auto den Bildbereich ausfüllt. Passt ein Bild schon, bleibt es unverändert. */
+    damit das Auto den Bildbereich ausfüllt. Liefert { src, aspect, extra }: Seitenverhältnis des zugeschnittenen Bilds und den Anteil der Bildhöhe unterhalb der Aufstandslinie
+    der Reifen (Zeile mit deckenden Pixeln, Schatten darunter ist durchscheinend). Daraus richtet die Seite alle Bilder auf dieselbe Standlinie aus. */
 async function cutWhite(src) {
   const img = await new Promise(res => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = src; });
-  if (!img) return src;
+  if (!img) return { src, aspect: null, extra: 0 };
   try {
     const w = img.naturalWidth, h = img.naturalHeight, c = document.createElement('canvas'); c.width = w; c.height = h;
     const ctx = c.getContext('2d', { willReadFrequently: true }); ctx.drawImage(img, 0, 0);
@@ -2899,28 +2941,45 @@ async function cutWhite(src) {
     }
     let x0 = w, y0 = h, x1 = -1, y1 = -1;                                                      // Rahmen um alles, was sichtbar ist (Alpha > 24)
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (px[(y * w + x) * 4 + 3] > 24) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
-    if (x1 < 0) return src;
-    const cw = x1 - x0 + 1, ch = y1 - y0 + 1;
-    if (cw >= w * 0.97 && ch >= h * 0.97) return changed ? c.toDataURL('image/png') : src;   // kaum Rand: nichts abschneiden
+    if (x1 < 0) return { src, aspect: w / h, extra: 0 };
+    const cw = x1 - x0 + 1, ch = y1 - y0 + 1, need = Math.max(4, Math.round(cw * 0.01));
+    let ground = y1;                                                                           // unterste Zeile mit deckenden Pixeln (Alpha ≥ 235): Aufstandslinie
+    for (let y = y1; y >= y0; y--) { let n = 0; for (let x = x0; x <= x1; x++) if (px[(y * w + x) * 4 + 3] >= 235) n++; if (n >= need) { ground = y; break; } }
+    const extra = (y1 - ground) / ch;
+    if (cw >= w * 0.97 && ch >= h * 0.97) return { src: changed ? c.toDataURL('image/png') : src, aspect: w / h, extra: (y1 - ground) / h };   // kaum Rand: nichts abschneiden
     const o = document.createElement('canvas'); o.width = cw; o.height = ch;
     o.getContext('2d').drawImage(c, x0, y0, cw, ch, 0, 0, cw, ch);
-    return o.toDataURL('image/png');
-  } catch { return src; }
+    return { src: o.toDataURL('image/png'), aspect: cw / ch, extra };
+  } catch { return { src, aspect: null, extra: 0 }; }
 }
+const CAR_COUNT = 2, CAR_AUTO_MS = 30000;                               // Enyaq1 … Enyaq2; automatischer Wechsel alle 30 Sekunden
 async function initCarousel() {
   const box = $('car-scroll'), dash = $('car-dashes'); if (!box) return;
-  let srcs = (await Promise.all([1, 2, 3].map(findHeroImg))).filter(Boolean);
-  srcs = await Promise.all(srcs.map(cutWhite));
-  if (!srcs.length) srcs = [HERO_FALLBACK];
+  let srcs = (await Promise.all(Array.from({ length: CAR_COUNT }, (_, i) => findHeroImg(i + 1)))).filter(Boolean);
+  let imgs = await Promise.all(srcs.map(cutWhite));
+  if (!imgs.length) imgs = [{ src: HERO_FALLBACK, aspect: 700 / 391, extra: 0 }];
   /* Die Bilder liegen übereinander; ein Wisch (oder Pfeiltaste) blendet per CSS-Übergang auf das nächste bzw. vorherige Bild über. Pro Wisch genau ein Bild.
-     Bewusst ohne mitlaufende Bewegung beim Wischen: Nur Deckkraft wird animiert (läuft ohne JavaScript pro Frame), dadurch ruckelt nichts. */
-  box.innerHTML = srcs.map((s, i) => `<div class="car-slide absolute inset-0 pointer-events-none" style="opacity:${i === 0 ? 1 : 0};transition:opacity .45s ease-in-out;will-change:opacity"><div class="absolute left-[12%] w-[76%] bottom-0 h-[22px] rounded-[50%]" style="background:radial-gradient(ellipse at center,rgba(0,0,0,.85),rgba(0,0,0,0) 70%);filter:blur(5px)"></div><img src="${s}" alt="Skoda Enyaq, Bild ${i + 1} von ${srcs.length}" draggable="false" class="absolute inset-x-4 top-0 bottom-2.5 w-[calc(100%-2rem)] h-[calc(100%-0.625rem)] object-contain object-bottom"></div>`).join('');
-  dash.innerHTML = srcs.length > 1 ? srcs.map(() => '<span class="select-none text-[22px] leading-none text-white">━</span>').join('') : '';    // Zeichen statt Linien (Dark-Mode des Browsers), alle gleich, ohne Hervorhebung
-  const slides = [...box.querySelectorAll('.car-slide')]; let cur = 0, lock = false, sx = 0, sy = 0, tracking = false;
+     Bewusst ohne mitlaufende Bewegung beim Wischen: Nur Deckkraft wird animiert (läuft ohne JavaScript pro Frame), dadurch ruckelt nichts.
+     Der Schatten unter dem Auto kommt aus den Bildern selbst. */
+  box.innerHTML = imgs.map((m, i) => `<div class="car-slide absolute inset-0 pointer-events-none" style="opacity:${i === 0 ? 1 : 0};transition:opacity .45s ease-in-out;will-change:opacity"><img src="${m.src}" alt="Skoda Enyaq, Bild ${i + 1} von ${imgs.length}" draggable="false" class="absolute inset-x-4 top-0 bottom-2.5 w-[calc(100%-2rem)] h-[calc(100%-0.625rem)] object-contain object-bottom"></div>`).join('');
+  dash.innerHTML = imgs.length > 1 ? imgs.map(() => '<span class="select-none text-[22px] leading-none text-white">•</span>').join('') : '';    // Zeichen statt Formen (Dark-Mode des Browsers), alle gleich, ohne Hervorhebung
+  const slides = [...box.querySelectorAll('.car-slide')], els = [...box.querySelectorAll('img')]; let cur = 0, lock = false, sx = 0, sy = 0, tracking = false, autoT = 0;
+  /* Auf dieselbe Standlinie ausrichten: Bild 1 ist die Referenz. Bilder mit mehr Schatten unter den Reifen werden so weit nach unten gesetzt, dass die Reifen auf gleicher Höhe stehen. */
+  const align = () => {
+    if (imgs.length < 2) return;
+    const bw = box.clientWidth - 32, bh = box.clientHeight - 10; if (bw <= 0 || bh <= 0) return;
+    const over = imgs.map(m => m.aspect ? m.extra * Math.min(bh, bw / m.aspect) : 0);
+    els.forEach((el, i) => { el.style.transform = 'translateY(' + (over[i] - over[0]).toFixed(1) + 'px)'; });
+  };
+  align(); window.addEventListener('resize', align);
   const show = (n) => {
     if (lock || n === cur || n < 0 || n >= slides.length) return;
-    lock = true; slides[cur].style.opacity = '0'; slides[n].style.opacity = '1'; cur = n; setTimeout(() => { lock = false; }, 450);
+    lock = true; slides[cur].style.opacity = '0'; slides[n].style.opacity = '1'; cur = n; setTimeout(() => { lock = false; }, 450); schedule();
   };
+  /* Automatisch weiterschalten (im Kreis), nur wenn die Start-Ansicht sichtbar ist; jede Bedienung startet die 30 Sekunden neu */
+  const schedule = () => { clearTimeout(autoT); if (slides.length > 1) autoT = setTimeout(tick, CAR_AUTO_MS); };
+  const tick = () => { if (!document.hidden && !$('view-dashboard').classList.contains('hidden')) show((cur + 1) % slides.length); schedule(); };
+  schedule();
   box.addEventListener('pointerdown', (e) => { sx = e.clientX; sy = e.clientY; tracking = true; });
   box.addEventListener('pointerup', (e) => { if (!tracking) return; tracking = false; const dx = e.clientX - sx, dy = e.clientY - sy; if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.3) show(cur + (dx < 0 ? 1 : -1)); });
   box.addEventListener('pointercancel', () => { tracking = false; });
@@ -2987,6 +3046,90 @@ function applyHeroColor() {
 $('hero-swatches').innerHTML = Object.entries(HERO_THEMES).map(([k, t]) => `<button type="button" data-hero="${k}" aria-pressed="false" class="flex flex-col items-center gap-1.5 rounded-xl ring-offset-white dark:ring-offset-black active:scale-95 transition"><span class="block h-12 w-full rounded-xl border border-slate-300 dark:border-slate-700" style="background:linear-gradient(180deg,#000 0%,${t.mid} 55%,#000 100%)"></span><span class="text-xs text-slate-600 dark:text-slate-300">${t.label}</span></button>`).join('');
 $('hero-swatches').addEventListener('click', (e) => { const b = e.target.closest('[data-hero]'); if (!b) return; save(KEY_HERO, b.dataset.hero); applyHeroColor(); });
 applyHeroColor();
+
+/* =====================================================================
+   Akku-Kapazität (geschätzt) – Langzeitwert in den Berichten (Tab „Akku“)
+   Messgröße: Steckdosen-kWh je 100 % Akku, K = Σ kWh ÷ Σ (Akku-Hub/100). Summe über Summe statt Mittel der Einzelwerte, damit große Ladehübe stärker zählen
+   (der Rundungsfehler des Akku-% von ±0,5 je Ende wiegt bei 60 % Hub halb so schwer wie bei 30 %). Sinkt K bei gleichem Ladeverlust, fasst der Akku weniger.
+   Verwendet nur Wechselstrom-Ladungen Zuhause und Bosch (gleiche Ladetechnik, Zähler bzw. Wallbox), mit Akku-Start/-Ende, Hub ≥ 30 %, Ende < 99 %
+   (Zellausgleich und Ladekurve verfälschen die letzten Prozent) und gemessener kWh-Angabe. Ausreißer werden robust (MAD) ausgeschlossen.
+   Unsicherheit: größerer Wert aus (a) der tatsächlichen Streuung der Ladungen (Ratio-Schätzer) und (b) dem reinen Rundungsfehler; 95-%-Bereich mit t-Faktor.
+   Trend erst ab 12 Monaten und nur als Vergleich desselben Zeitraums im Vorjahr (Kälte senkt im Winter Wirkungsgrad und nutzbare Kapazität); „Hinweis“ nur,
+   wenn der Unterschied größer ist als die kombinierte 95-%-Unsicherheit. Absolutwert (nutzbare kWh) = K × Ladewirkungsgrad 88–92 %: grobe Umrechnung.
+   ===================================================================== */
+const BAT = { hub: 30, endMax: 98, minN: 10, minHub: 400, etaLo: 0.88, etaHi: 0.92, win: 91, day: 864e5 };
+let batChart = null;
+const median = (a) => { const s = a.slice().sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+const tCrit = (df) => df < 1 ? Infinity : df <= 15 ? [0, 12.71, 4.30, 3.18, 2.78, 2.57, 2.45, 2.36, 2.31, 2.26, 2.23, 2.20, 2.18, 2.16, 2.14, 2.13][df] : df <= 20 ? 2.09 : df <= 30 ? 2.04 : 1.96;
+function batRows() {
+  return getReadings().filter(r => (placeOf(r) === 'home' || placeOf(r) === 'bosch') && Number.isFinite(r.socStart) && Number.isFinite(r.socEnd) && r.socEnd - r.socStart >= BAT.hub && r.socEnd <= BAT.endMax && r.consumedSinceLast > 0)
+    .map(r => { const hub = r.socEnd - r.socStart; return { t: Date.parse(r.date), hub, e: r.consumedSinceLast, k: r.consumedSinceLast / (hub / 100) }; })
+    .filter(x => Number.isFinite(x.t)).sort((a, b) => a.t - b.t);
+}
+function batFit(rows) {
+  if (rows.length < 3) return null;
+  let use = rows;
+  if (rows.length >= 8) { const med = median(rows.map(x => x.k)), mad = median(rows.map(x => Math.abs(x.k - med))), lim = Math.max(3 * 1.4826 * mad, 0.04 * med); use = rows.filter(x => Math.abs(x.k - med) <= lim); }
+  const n = use.length; if (n < 3) return null;
+  const sumE = use.reduce((a, x) => a + x.e, 0), sumD = use.reduce((a, x) => a + x.hub / 100, 0), K = sumE / sumD;
+  const ss = use.reduce((a, x) => a + Math.pow(x.e - K * x.hub / 100, 2), 0) * n / (n - 1);
+  const se = Math.max(Math.sqrt(ss) / sumD, K * 0.41 * Math.sqrt(n) / (sumD * 100));
+  return { n, out: rows.length - n, K, se, ci: tCrit(n - 1) * se, sumHub: sumD * 100, use, drop: rows.filter(x => !use.includes(x)) };
+}
+function batTrend(rows, now) {
+  const months = (now - rows[0].t) / (30.44 * BAT.day);
+  if (months < 12) return { state: 'short', months };
+  for (const w of [91, 182]) {
+    const a = batFit(rows.filter(x => x.t > now - w * BAT.day)), b = batFit(rows.filter(x => x.t > now - (365 + w) * BAT.day && x.t <= now - 365 * BAT.day));
+    if (a && b && a.n >= 8 && b.n >= 8) { const d = (a.K / b.K - 1) * 100, se = Math.sqrt(Math.pow(a.se / a.K, 2) + Math.pow(b.se / b.K, 2)) * 100; return { state: 'ok', w, d, se, crit: tCrit(Math.min(a.n, b.n) - 1), a, b }; }
+  }
+  return { state: 'few', months };
+}
+function renderBattery() {
+  const rows = batRows(), fit = batFit(rows), now = Date.now(), ok = !!fit && fit.n >= BAT.minN && fit.sumHub >= BAT.minHub;
+  $('bat-value').classList.toggle('hidden', !ok); $('bat-few').classList.toggle('hidden', ok);
+  const hubSum = rows.reduce((a, x) => a + x.hub, 0);
+  $('bat-p1').style.width = Math.min(100, rows.length / BAT.minN * 100) + '%'; $('bat-p2').style.width = Math.min(100, hubSum / BAT.minHub * 100) + '%';
+  $('bat-p1t').textContent = rows.length + ' von ' + BAT.minN + ' passenden Ladungen'; $('bat-p2t').textContent = fmt(hubSum, 0) + ' von ' + BAT.minHub + ' %-Punkten Akku-Hub';
+  if (ok) {
+    $('bat-k').textContent = fmt(fit.K, 1); $('bat-ci').textContent = '(± ' + fmt(fit.ci, 1) + ', 95 %)';
+    $('bat-c').textContent = '≈ ' + fmt(fit.K * BAT.etaLo, 1) + ' bis ' + fmt(fit.K * BAT.etaHi, 1) + ' kWh nutzbar (bei 88–92 % Ladewirkungsgrad)';
+    $('bat-basis').textContent = 'Basis: ' + fit.n + ' Ladungen Zuhause/Bosch · ' + fmtDate(new Date(fit.use[0].t).toISOString()) + ' bis ' + fmtDate(new Date(fit.use[fit.use.length - 1].t).toISOString()) + (fit.out ? ' · ' + fit.out + (fit.out === 1 ? ' Ausreißer' : ' Ausreißer') + ' ausgeschlossen' : '');
+  }
+  /* Trend */
+  const tr = rows.length ? batTrend(rows, now) : { state: 'none' }, h = $('bat-trend-h'), t = $('bat-trend-t');
+  h.className = 'mt-1 text-xl font-semibold'; t.className = 'text-sm mt-1 text-slate-600 dark:text-slate-300';
+  if (!ok) { h.textContent = 'Noch nicht bewertbar'; t.textContent = 'Der Trend folgt, sobald genug Ladungen für einen Ausgangswert vorliegen und mindestens 12 Monate Daten vorhanden sind.'; }
+  else if (tr.state === 'short') { h.textContent = 'Ausgangswert festgehalten'; t.textContent = 'Ein Trend ist erst nach 12 Monaten sinnvoll, weil Kälte den Wert im Winter senkt (aktuell ' + fmt(tr.months, 1) + ' Monate Daten). Dein Ausgangswert: ' + fmt(fit.K, 1) + ' kWh je 100 %.'; }
+  else if (tr.state === 'few') { h.textContent = 'Zu wenige Vergleichsdaten'; t.textContent = 'Im selben Zeitraum vor einem Jahr liegen weniger als 8 passende Ladungen vor – ein Vergleich wäre nicht aussagekräftig.'; }
+  else {
+    const per = tr.w === 91 ? 'den letzten 3 Monaten' : 'den letzten 6 Monaten', sig = Math.abs(tr.d) > tr.crit * tr.se, val = (tr.d > 0 ? '+' : '−') + fmt(Math.abs(tr.d), 1) + ' % (± ' + fmt(tr.crit * tr.se, 1) + ' %)';
+    h.textContent = sig ? (tr.d < 0 ? 'Hinweis auf geringere Kapazität: ' : 'Höhere Werte: ') + val : 'Kein erkennbarer Unterschied: ' + val;
+    h.className += sig ? (tr.d < 0 ? ' text-amber-600 dark:text-amber-400' : ' text-sky-600 dark:text-sky-400') : ' text-emerald-600 dark:text-emerald-400';
+    t.textContent = 'Vergleich von ' + per + ' (' + fmt(tr.a.K, 1) + ' kWh je 100 %, ' + tr.a.n + ' Ladungen) mit demselben Zeitraum im Vorjahr (' + fmt(tr.b.K, 1) + ', ' + tr.b.n + ' Ladungen). '
+      + (sig ? (tr.d < 0 ? 'Der Unterschied ist größer als die Messunsicherheit. Er kann auf Akkualterung hindeuten, aber auch auf höhere Ladeverluste (Kabel, Wallbox, Heizung) – prüfe das mit einer Diagnose per OBD.' : 'Ein Anstieg ist bei einem Akku ungewöhnlich – prüfe Zählerstände, Akku-Angaben und Ladeverluste.') : 'Die Differenz liegt innerhalb der Messunsicherheit.');
+  }
+  /* Verlauf: Einzelwerte und gleitender Wert (letzte 3 Monate, ab 6 Ladungen) */
+  const draw = rows.length >= 3, day = BAT.day;
+  $('bat-chart-card').classList.toggle('hidden', !draw);
+  if (batChart) { batChart.destroy(); batChart = null; }
+  if (!draw) return;
+  const roll = [];
+  rows.forEach(r => { const w = rows.filter(x => x.t > r.t - BAT.win * day && x.t <= r.t); if (w.length >= 6) { const f = batFit(w); if (f) roll.push({ x: r.t, y: f.K }); } });
+  const use = fit ? fit.use : rows, drop = fit ? fit.drop : [], t0 = rows[0].t - 3 * day, t1 = Math.max(now, rows[rows.length - 1].t) + 3 * day;
+  const dark = matchMedia('(prefers-color-scheme: dark)').matches, text = dark ? '#cbd5e1' : '#475569', grid = dark ? 'rgba(148,163,184,.15)' : 'rgba(100,116,139,.15)', yrs = (t1 - t0) > 300 * day;
+  const ds = [{ type: 'scatter', label: 'Einzelne Ladung', data: use.map(x => ({ x: x.t, y: +x.k.toFixed(2) })), backgroundColor: '#94a3b8', pointRadius: 3.5 }];
+  if (drop.length) ds.push({ type: 'scatter', label: 'Ausreißer', data: drop.map(x => ({ x: x.t, y: +x.k.toFixed(2) })), backgroundColor: '#ef4444', pointRadius: 3.5 });
+  if (roll.length >= 2) ds.push({ type: 'line', label: 'Gleitend (3 Monate)', data: roll, borderColor: '#10b981', backgroundColor: '#10b981', pointRadius: 0, tension: .25, borderWidth: 2.5 });
+  if (ok) ds.push({ type: 'line', label: 'Gesamt ± 95 %', data: [{ x: t0, y: fit.K + fit.ci }, { x: t1, y: fit.K + fit.ci }], borderColor: '#0ea5e9', borderDash: [5, 4], pointRadius: 0, borderWidth: 1.2 }, { type: 'line', label: 'untere Grenze', data: [{ x: t0, y: fit.K - fit.ci }, { x: t1, y: fit.K - fit.ci }], borderColor: '#0ea5e9', borderDash: [5, 4], pointRadius: 0, borderWidth: 1.2 });
+  batChart = new Chart($('bat-chart'), {
+    data: { datasets: ds },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: text, filter: (i) => i.text !== 'untere Grenze' } }, tooltip: { callbacks: { label: (c) => c.dataset.label + ': ' + fmt(c.parsed.y, 1) + ' kWh · ' + new Date(c.parsed.x).toLocaleDateString('de-DE') } } },
+      scales: { x: { type: 'linear', min: t0, max: t1, ticks: { color: text, maxTicksLimit: 5, callback: (v) => new Date(v).toLocaleDateString('de-DE', yrs ? { month: 'short', year: '2-digit' } : { day: '2-digit', month: 'short' }) }, grid: { display: false } },
+        y: { title: { display: true, text: 'kWh je 100 % Akku', color: text }, ticks: { color: text }, grid: { color: grid } } } }
+  });
+  $('bat-chart-note').textContent = 'Jeder Punkt ist eine Ladung (Steckdosen-kWh ÷ Akku-Hub). Einzelwerte streuen durch die %-Rundung, Temperatur und Ladeleistung – deshalb zählt nur der gewichtete Gesamt- und Trendwert.';
+}
 
 /* =====================================================================
    Cloud-Sync: Firestore ist die Quelle der Wahrheit, localStorage der schnelle Cache (auch offline).
@@ -3217,6 +3360,8 @@ function renderReport() {
   markReportSeen(y, m);
   segPaintKey('.rep-mode-btn', 'mode', repMode);
   $('rep-laden').classList.toggle('hidden', repMode !== 'laden'); $('rep-kosten').classList.toggle('hidden', repMode !== 'kosten');
+  $('rep-head').classList.toggle('hidden', repMode === 'akku'); $('rep-akku').classList.toggle('hidden', repMode !== 'akku');
+  if (repMode === 'akku') { renderBattery(); return; }
   if (repMode === 'kosten') { $('rep-sub').textContent = (cur ? 'Zwischenstand bis heute' : 'Kostenbericht') + ' · Laden + Kosten'; renderCostReport(y, m, cur); return; }
 
   const empty = !r.charges.length;
