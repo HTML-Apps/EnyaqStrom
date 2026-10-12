@@ -79,15 +79,17 @@
         <button id="btn-profile" type="button" aria-label="Profil und Einstellungen" class="w-12 h-12 rounded-xl text-white flex items-center justify-center active:scale-95 transition"><svg class="w-7 h-7" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg></button>
         </div>
       </div>
-      <button id="hero-stats" type="button" aria-label="Zeitraum wechseln" class="mt-2 grid w-full grid-cols-3 text-center text-white [perspective:600px] active:opacity-80 transition-opacity">
+      <button id="hero-stats" type="button" aria-label="Zeitraum wechseln" class="mt-2 grid w-full grid-cols-[1fr_auto_1fr_auto_1fr] items-center text-center text-white [perspective:600px] active:opacity-80 transition-opacity">
         <span class="hs-cell block"><span class="block text-[21px] leading-tight font-semibold tabular-nums text-white"><span id="hs-km">–</span> <span class="text-[13px] font-medium text-white/70">km</span></span><span id="hs-km-l" class="mt-0.5 block truncate px-1 text-xs text-white/60">&nbsp;</span></span>
-        <span class="hs-cell block border-l border-white/20"><span class="block text-[21px] leading-tight font-semibold tabular-nums text-white"><span id="hs-cost">–</span> <span class="text-[13px] font-medium text-white/70">€</span></span><span id="hs-cost-l" class="mt-0.5 block truncate px-1 text-xs text-white/60">&nbsp;</span></span>
-        <span class="hs-cell block border-l border-white/20"><span class="block text-[21px] leading-tight font-semibold tabular-nums text-white"><span id="hs-kwh">–</span> <span class="text-[13px] font-medium text-white/70">kWh</span></span><span id="hs-kwh-l" class="mt-0.5 block truncate px-1 text-xs text-white/60">&nbsp;</span></span>
+        <span aria-hidden="true" class="select-none text-[30px] font-light leading-none text-slate-400">|</span>
+        <span class="hs-cell block"><span class="block text-[21px] leading-tight font-semibold tabular-nums text-white"><span id="hs-cost">–</span> <span class="text-[13px] font-medium text-white/70">€</span></span><span id="hs-cost-l" class="mt-0.5 block truncate px-1 text-xs text-white/60">&nbsp;</span></span>
+        <span aria-hidden="true" class="select-none text-[30px] font-light leading-none text-slate-400">|</span>
+        <span class="hs-cell block"><span class="block text-[21px] leading-tight font-semibold tabular-nums text-white"><span id="hs-kwh">–</span> <span class="text-[13px] font-medium text-white/70">kWh</span></span><span id="hs-kwh-l" class="mt-0.5 block truncate px-1 text-xs text-white/60">&nbsp;</span></span>
       </button>
       <div class="relative -mx-4 mt-3 h-[clamp(230px,64vw,340px)]">
-        <div id="car-scroll" class="car-scroll absolute inset-0 flex overflow-x-auto overflow-y-hidden snap-x snap-mandatory" role="group" aria-roledescription="Karussell" aria-label="Bilder vom Enyaq, wischen zum Wechseln"></div>
+        <div id="car-scroll" class="car-scroll absolute inset-0 flex overflow-x-auto overflow-y-hidden snap-x snap-mandatory overscroll-x-contain" role="group" aria-roledescription="Karussell" aria-label="Bilder vom Enyaq, wischen zum Wechseln"></div>
       </div>
-      <div id="car-dashes" class="mt-2 flex justify-center gap-2.5 min-h-[3px]" aria-hidden="true"></div>
+      <div id="car-dashes" class="mt-1 flex justify-center gap-1 min-h-[22px]" aria-hidden="true"></div>
       <div class="mt-4 text-center">
         <button id="hero-rem" type="button" class="inline-flex items-center gap-1.5 font-barlow font-bold text-[22px] uppercase tracking-[0.1em] text-white active:scale-95 transition">Erinnerungen prüfen<svg class="w-[18px] h-[18px]" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
         <p id="hero-rem-sub" class="mt-px px-2 truncate font-barlow font-bold text-[0.7rem] leading-4 tracking-[0.05em] text-white/80"></p>
@@ -2904,12 +2906,21 @@ async function initCarousel() {
   let srcs = (await Promise.all([1, 2, 3].map(findHeroImg))).filter(Boolean);
   srcs = await Promise.all(srcs.map(cutWhite));
   if (!srcs.length) srcs = [HERO_FALLBACK];
-  box.innerHTML = srcs.map((s, i) => `<div class="relative flex-none w-full h-full snap-center"><div class="absolute left-[12%] w-[76%] bottom-0 h-[22px] rounded-[50%]" style="background:radial-gradient(ellipse at center,rgba(0,0,0,.85),rgba(0,0,0,0) 70%);filter:blur(5px)"></div><img src="${s}" alt="Skoda Enyaq, Bild ${i + 1} von ${srcs.length}" draggable="false" class="absolute inset-x-4 top-0 bottom-2.5 w-[calc(100%-2rem)] h-[calc(100%-0.625rem)] object-contain object-bottom"></div>`).join('');
-  dash.innerHTML = srcs.length > 1 ? srcs.map((_, i) => `<span class="car-dash h-[3px] w-6 rounded-sm ${i === 0 ? 'bg-white' : 'bg-white/35'}"></span>`).join('') : '';
-  box.addEventListener('scroll', () => {
-    const i = Math.round(box.scrollLeft / box.clientWidth);
-    dash.querySelectorAll('.car-dash').forEach((d, k) => { d.classList.toggle('bg-white', k === i); d.classList.toggle('bg-white/35', k !== i); });
-  }, { passive: true });
+  box.innerHTML = srcs.map((s, i) => `<div class="car-slide relative flex-none w-full h-full snap-center snap-always" style="scroll-snap-stop:always"><div class="car-inner absolute inset-0 will-change-transform"><div class="absolute left-[12%] w-[76%] bottom-0 h-[22px] rounded-[50%]" style="background:radial-gradient(ellipse at center,rgba(0,0,0,.85),rgba(0,0,0,0) 70%);filter:blur(5px)"></div><img src="${s}" alt="Skoda Enyaq, Bild ${i + 1} von ${srcs.length}" draggable="false" class="absolute inset-x-4 top-0 bottom-2.5 w-[calc(100%-2rem)] h-[calc(100%-0.625rem)] object-contain object-bottom"></div></div>`).join('');
+  /* Indikator als Schriftzeichen (im Dark-Mode des Browsers bleiben Zeichen weiß, Hintergründe und Rahmen nicht): aktiv ━ weiß, übrige ─ grau */
+  dash.innerHTML = srcs.length > 1 ? srcs.map((_, i) => `<span class="car-dash select-none text-[22px] leading-none ${i === 0 ? 'text-white' : 'text-slate-400'}">${i === 0 ? '━' : '─'}</span>`).join('') : '';
+  const inners = [...box.querySelectorAll('.car-inner')], dashes = [...dash.querySelectorAll('.car-dash')];
+  let raf = 0, cur = -1;
+  /* Überblenden: Die Bilder bleiben an Ort und Stelle (die Wischbewegung wird ausgeglichen), die Deckkraft folgt der Wischposition. */
+  const update = () => {
+    raf = 0; const w = box.clientWidth || 1, pos = box.scrollLeft / w;
+    inners.forEach((el, i) => { const d = pos - i, a = Math.max(0, 1 - Math.abs(d)); el.style.opacity = String(a); el.style.visibility = a === 0 ? 'hidden' : 'visible'; el.style.transform = 'translateX(' + (d * w) + 'px) scale(' + (0.95 + 0.05 * a) + ')'; });
+    const i = Math.max(0, Math.min(inners.length - 1, Math.round(pos)));
+    if (i !== cur) { cur = i; dashes.forEach((el, k) => { el.textContent = k === i ? '━' : '─'; el.classList.toggle('text-white', k === i); el.classList.toggle('text-slate-400', k !== i); }); }
+  };
+  box.addEventListener('scroll', () => { if (!raf) raf = requestAnimationFrame(update); }, { passive: true });
+  window.addEventListener('resize', update);
+  update();
 }
 
 
