@@ -154,6 +154,11 @@
       </div>
     </div>
 
+    <button id="go-stat" type="button" class="flex w-full items-center justify-between rounded-2xl bg-white dark:bg-[#141414]/80 dark:backdrop-blur-md dark:border dark:border-white/5 text-slate-900 dark:text-slate-100 shadow-sm px-4 py-3 active:scale-[0.99] transition">
+      <span class="flex items-center gap-3 font-medium"><svg class="w-6 h-6 text-emerald-500" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/></svg>Statistik</span>
+      <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+    </button>
+
     <div id="dash-place" class="flex bg-slate-200 dark:bg-slate-800 rounded-xl p-1"><button type="button" data-place="home" class="dash-place-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Zuhause</button><button type="button" data-place="bosch" class="dash-place-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Bosch</button><button type="button" data-place="away" class="dash-place-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Unterwegs</button><button type="button" data-place="all" class="dash-place-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Gesamt</button></div>
 
     <div class="rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
@@ -389,7 +394,7 @@
 
   <!-- ============ VIEW: BERICHTE ============ -->
   <section id="view-report" class="view hidden space-y-4">
-    <div id="rep-mode" class="print:hidden flex bg-slate-200 dark:bg-slate-800 rounded-xl p-1"><button type="button" data-mode="laden" class="rep-mode-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Laden</button><button type="button" data-mode="kosten" class="rep-mode-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Kosten</button><button type="button" data-mode="akku" class="rep-mode-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Akku</button></div>
+    <div id="rep-mode" class="print:hidden flex bg-slate-200 dark:bg-slate-800 rounded-xl p-1"><button type="button" data-mode="stat" class="rep-mode-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Statistik</button><button type="button" data-mode="laden" class="rep-mode-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Laden</button><button type="button" data-mode="kosten" class="rep-mode-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Kosten</button><button type="button" data-mode="akku" class="rep-mode-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Akku</button></div>
     <div id="rep-head" class="flex items-center justify-between">
       <button id="rep-prev" type="button" aria-label="Vorheriger Monat" class="print:invisible w-10 h-10 rounded-xl bg-slate-200 dark:bg-slate-800 flex items-center justify-center active:scale-95 transition disabled:opacity-30"><svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
       <div class="text-center">
@@ -457,6 +462,49 @@
       <p id="rep-msg" class="hidden text-sm"></p>
       <p class="text-xs text-slate-500 dark:text-slate-400 text-center">Verbrauch: Energie, die zwischen zwei Ladungen aus dem Akku entnommen wurde (Ende-% der letzten bis Start-% dieser Ladung), umgerechnet auf die Steckdose. Ohne Akku-% grob aus den geladenen kWh. Zuordnung nach Ablesedatum.</p>
     </div>
+    </div>
+
+    <div id="rep-stat" class="hidden space-y-4">
+      <div id="st-img-card" class="hidden rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4"><img id="st-img" alt="Statistik" draggable="false" class="mx-auto block max-h-44 w-auto object-contain"></div>
+      <div class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
+        <p class="text-sm text-slate-500 dark:text-slate-400">Letzter Tachostand</p>
+        <p id="st-odo" class="text-3xl font-semibold tabular-nums">–</p>
+        <div class="mt-3 border-t border-slate-200 dark:border-slate-800 pt-3 grid grid-cols-2 gap-x-4 gap-y-4">
+          <div class="flex items-start gap-3 min-w-0"><span class="text-sky-400 shrink-0"><svg class="w-9 h-9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 13l4-4M7.2 15.2a5.5 5.5 0 0 1 .3-5"/></svg></span><div class="min-w-0"><p id="st-km-year" class="text-lg font-semibold tabular-nums">–</p><p class="text-sm text-slate-500 dark:text-slate-400">Dieses Jahr</p></div></div>
+          <div class="flex items-start gap-3 min-w-0"><span class="text-sky-400 shrink-0"><svg class="w-9 h-9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 13l4-4M7.2 15.2a5.5 5.5 0 0 1 .3-5"/></svg></span><div class="min-w-0"><p id="st-km-month" class="text-lg font-semibold tabular-nums">–</p><p class="text-sm text-slate-500 dark:text-slate-400">Dieser Monat</p></div></div>
+          <div class="flex items-start gap-3 min-w-0"><span class="text-sky-400 shrink-0"><svg class="w-9 h-9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 13l4-4M7.2 15.2a5.5 5.5 0 0 1 .3-5"/></svg></span><div class="min-w-0"><p id="st-km-lastyear" class="text-lg font-semibold tabular-nums">–</p><p class="text-sm text-slate-500 dark:text-slate-400">Vorjahr</p></div></div>
+          <div class="flex items-start gap-3 min-w-0"><span class="text-sky-400 shrink-0"><svg class="w-9 h-9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 13l4-4M7.2 15.2a5.5 5.5 0 0 1 .3-5"/></svg></span><div class="min-w-0"><p id="st-km-lastmonth" class="text-lg font-semibold tabular-nums">–</p><p class="text-sm text-slate-500 dark:text-slate-400">Vormonat</p></div></div>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4"><p class="text-sm text-slate-500 dark:text-slate-400">Ø Laufleistung pro Tag</p><div class="mt-2 flex items-center gap-2"><span class="text-sky-400 shrink-0"><svg class="w-9 h-9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16v-4l2-5h12l2 5v4M3 16h18M7 16v2.5M17 16v2.5"/><circle cx="8" cy="13" r=".8"/><circle cx="16" cy="13" r=".8"/></svg></span><p id="st-km-day" class="text-xl font-semibold tabular-nums">–</p></div></div>
+        <div class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4"><p class="text-sm text-slate-500 dark:text-slate-400">Ø Laufleistung pro Monat</p><div class="mt-2 flex items-center gap-2"><span class="text-sky-400 shrink-0"><svg class="w-9 h-9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16v-4l2-5h12l2 5v4M3 16h18M7 16v2.5M17 16v2.5"/><circle cx="8" cy="13" r=".8"/><circle cx="16" cy="13" r=".8"/></svg></span><p id="st-km-mon" class="text-xl font-semibold tabular-nums">–</p></div></div>
+      </div>
+      <div class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
+        <p class="text-sm text-slate-500 dark:text-slate-400">Durchschnittsverbrauch (Ø) inkl. Verluste</p>
+        <p id="st-kwh" class="text-3xl font-semibold tabular-nums">–</p>
+        <div class="mt-3 border-t border-slate-200 dark:border-slate-800 pt-3 grid grid-cols-2 gap-x-4 gap-y-4">
+          <div class="flex items-start gap-3 min-w-0"><span class="text-emerald-500 shrink-0"><svg class="w-9 h-9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8.5 12.5L12 16l3.5-3.5"/></svg></span><div class="min-w-0"><p id="st-kwh-min" class="text-lg font-semibold tabular-nums">–</p><p class="text-sm text-slate-500 dark:text-slate-400">Niedrigster Verbrauch</p></div></div>
+          <div class="flex items-start gap-3 min-w-0"><span class="text-red-500 shrink-0"><svg class="w-9 h-9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 16V8M8.5 11.5L12 8l3.5 3.5"/></svg></span><div class="min-w-0"><p id="st-kwh-max" class="text-lg font-semibold tabular-nums">–</p><p class="text-sm text-slate-500 dark:text-slate-400">Höchster Verbrauch</p></div></div>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4"><p class="font-medium">Ladungen</p><div class="mt-3 space-y-3"><div class="flex items-start gap-3 min-w-0"><span class="text-emerald-500 shrink-0"><svg class="w-9 h-9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8.5 12.5L12 16l3.5-3.5"/></svg></span><div class="min-w-0"><p id="st-chg-min" class="text-lg font-semibold tabular-nums">–</p><p class="text-sm text-slate-500 dark:text-slate-400">Niedrigste Ladung</p></div></div><div class="flex items-start gap-3 min-w-0"><span class="text-red-500 shrink-0"><svg class="w-9 h-9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 16V8M8.5 11.5L12 8l3.5 3.5"/></svg></span><div class="min-w-0"><p id="st-chg-max" class="text-lg font-semibold tabular-nums">–</p><p class="text-sm text-slate-500 dark:text-slate-400">Höchste Ladung</p></div></div></div></div>
+        <div class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4"><p class="font-medium">Strompreise</p><div class="mt-3 space-y-3"><div class="flex items-start gap-3 min-w-0"><span class="text-emerald-500 shrink-0"><svg class="w-9 h-9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8Z"/></svg></span><div class="min-w-0"><p id="st-price-min" class="text-lg font-semibold tabular-nums">–</p><p class="text-sm text-slate-500 dark:text-slate-400">Bester Preis</p></div></div><div class="flex items-start gap-3 min-w-0"><span class="text-red-500 shrink-0"><svg class="w-9 h-9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8Z"/></svg></span><div class="min-w-0"><p id="st-price-max" class="text-lg font-semibold tabular-nums">–</p><p class="text-sm text-slate-500 dark:text-slate-400">Schlechtester Preis</p></div></div></div></div>
+      </div>
+      <div class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
+        <p class="text-sm text-slate-500 dark:text-slate-400">Durchschnittliche Ladekosten pro Kilometer</p>
+        <p id="st-cpk" class="text-3xl font-semibold tabular-nums">–</p>
+        <div class="mt-3 border-t border-slate-200 dark:border-slate-800 pt-3 grid grid-cols-2 gap-x-4 gap-y-4">
+          <div class="flex items-start gap-3 min-w-0"><span class="text-emerald-500 shrink-0"><svg class="w-9 h-9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8.5 12.5L12 16l3.5-3.5"/></svg></span><div class="min-w-0"><p id="st-cpk-min" class="text-lg font-semibold tabular-nums">–</p><p class="text-sm text-slate-500 dark:text-slate-400">Niedrigster Preis pro Kilometer</p></div></div>
+          <div class="flex items-start gap-3 min-w-0"><span class="text-red-500 shrink-0"><svg class="w-9 h-9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 16V8M8.5 11.5L12 8l3.5 3.5"/></svg></span><div class="min-w-0"><p id="st-cpk-max" class="text-lg font-semibold tabular-nums">–</p><p class="text-sm text-slate-500 dark:text-slate-400">Höchster Preis pro Kilometer</p></div></div>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4"><p class="text-sm text-slate-500 dark:text-slate-400">Ø Ladekosten pro Tag</p><div class="mt-2 flex items-center gap-2"><span class="text-sky-400 shrink-0"><svg class="w-9 h-9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5A4.5 4.5 0 0 0 8 10m0 4a4.5 4.5 0 0 0 7.5 1.5M7 11h6M7 13h6"/></svg></span><p id="st-cpd" class="text-xl font-semibold tabular-nums">–</p></div></div>
+        <div class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4"><p class="text-sm text-slate-500 dark:text-slate-400">Ø Ladekosten pro Monat</p><div class="mt-2 flex items-center gap-2"><span class="text-sky-400 shrink-0"><svg class="w-9 h-9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5A4.5 4.5 0 0 0 8 10m0 4a4.5 4.5 0 0 0 7.5 1.5M7 11h6M7 13h6"/></svg></span><p id="st-cpm" class="text-xl font-semibold tabular-nums">–</p></div></div>
+      </div>
+      <p id="st-note" class="text-xs text-slate-500 dark:text-slate-400 px-1"></p>
     </div>
 
     <div id="rep-akku" class="hidden space-y-4">
@@ -3132,6 +3180,49 @@ function renderBattery() {
 }
 
 /* =====================================================================
+   Statistik (Berichte → Tab „Statistik“, Einstieg auch über „Statistik ›“ auf der Start-Seite)
+   km: aus den erfassten km-Ständen (Stand vor dem Zeitraum bis letzter Stand darin). Verbrauch: wie auf Start inkl. Ladeverluste, Extremwerte je Ladung ohne grob geschätzte
+   (Akku-Entnahme unter 3 kWh). Kosten pro km, Tag und Monat beziehen sich auf die Ladekosten (Strom); Einnahmen und sonstige Kosten stehen im Kosten-Tab.
+   Ø pro Tag/Monat: Laufleistung vom ersten bis zum letzten km-Stand, Ladekosten vom ersten Eintrag bis heute.
+   ===================================================================== */
+function renderStat() {
+  const rs = getReadings(), now = new Date(), cy = now.getFullYear(), cm = now.getMonth(), D = 864e5, MON = 30.4375;
+  const kmT = (v) => v != null ? fmt(v, 0) + ' km' : '–', pts = rs.filter(r => r.odometerKm > 0).map(r => [Date.parse(r.date), r.odometerKm])
+    .concat(getCosts().filter(c => c.odometerKm > 0).map(c => [Date.parse(c.date), c.odometerKm])).filter(q => Number.isFinite(q[0])).sort((a, b) => a[0] - b[0]);
+  const km = lastKnownKm(), t = (y, m) => new Date(y, m, 1).getTime();
+  $('st-odo').textContent = km != null ? fmt(km, 0) + ' km' : '–';
+  $('st-km-year').textContent = kmT(rangeKm(t(cy, 0), t(cy + 1, 0))); $('st-km-month').textContent = kmT(rangeKm(t(cy, cm), t(cy, cm + 1)));
+  $('st-km-lastyear').textContent = kmT(rangeKm(t(cy - 1, 0), t(cy, 0))); $('st-km-lastmonth').textContent = kmT(rangeKm(t(cy, cm - 1), t(cy, cm)));
+  let perDay = null;
+  if (pts.length > 1) { const days = (pts[pts.length - 1][0] - pts[0][0]) / D, dk = pts[pts.length - 1][1] - pts[0][1]; if (days >= 1 && dk > 0) perDay = dk / days; }
+  $('st-km-day').textContent = kmT(perDay); $('st-km-mon').textContent = kmT(perDay != null ? perDay * MON : null);
+  /* Verbrauch und Kosten pro km */
+  const idx = rs.map((_, i) => i), tot = consumptionTotals(rs, idx), per = idx.map(i => entryStats(rs, i)).filter(x => x.kwh100 != null && !x.rough);
+  const kw = per.map(x => x.kwh100), cp = per.filter(x => x.cost100 != null).map(x => x.cost100 / 100), mm = (a, f) => a.length ? f(...a) : null;
+  $('st-kwh').textContent = tot.km ? fmt(tot.kwh100, 1) + ' kWh/100 km' : '–';
+  $('st-kwh-min').textContent = kw.length ? fmt(mm(kw, Math.min), 1) + ' kWh/100 km' : '–'; $('st-kwh-max').textContent = kw.length ? fmt(mm(kw, Math.max), 1) + ' kWh/100 km' : '–';
+  $('st-cpk').textContent = tot.cost100 != null ? fmt(tot.cost100 / 100, 3) + ' €/km' : '–';
+  $('st-cpk-min').textContent = cp.length ? fmt(mm(cp, Math.min), 3) + ' €/km' : '–'; $('st-cpk-max').textContent = cp.length ? fmt(mm(cp, Math.max), 3) + ' €/km' : '–';
+  /* Ladungen und Strompreise */
+  const costs = rs.filter(r => r.cost > 0).map(r => r.cost), prices = rs.map(unitOf).filter(u => u != null && u > 0);
+  $('st-chg-min').textContent = costs.length ? eur(mm(costs, Math.min)) : '–'; $('st-chg-max').textContent = costs.length ? eur(mm(costs, Math.max)) : '–';
+  $('st-price-min').textContent = prices.length ? fmt(mm(prices, Math.min), 3) + ' €/kWh' : '–'; $('st-price-max').textContent = prices.length ? fmt(mm(prices, Math.max), 3) + ' €/kWh' : '–';
+  /* Ladekosten pro Tag und Monat: erster Eintrag bis heute */
+  const dts = rs.map(r => Date.parse(r.date)).filter(Number.isFinite), sum = costs.reduce((a, x) => a + x, 0), days = dts.length ? Math.max(1, (now.getTime() - Math.min(...dts)) / D) : 0;
+  $('st-cpd').textContent = sum > 0 && days ? eur(sum / days) : '–'; $('st-cpm').textContent = sum > 0 && days ? eur(sum / (days / MON)) : '–';
+  $('st-note').textContent = 'Verbrauch inkl. Ladeverlusten (' + tot.n + ' Ladungen mit km-Stand' + (tot.approx ? ', grob ohne Akku-%' : '') + '). Kosten pro km, Tag und Monat sind reine Ladekosten – Einnahmen und sonstige Kosten findest du im Kosten-Tab.';
+}
+$('go-stat').addEventListener('click', () => { repMode = 'stat'; showView('report'); });
+/** Bild oben auf der Statistik-Seite: Statistik.png/.webp/.jpg/.jpeg im Hauptverzeichnis (freigestellt, auf dem Kartenhintergrund der App); fehlt es, bleibt die Karte weg. */
+const STAT_IMG_VER = '2';                                 // bei neuem Bild hochzählen (umgeht Browser- und Service-Worker-Cache); v2 = bei Canva freigestelltes PNG
+async function initStatImg() {
+  let src = null;
+  for (const e of ['png', 'webp', 'jpg', 'jpeg']) { src = await probeImg('Statistik.' + e + '?v=' + STAT_IMG_VER); if (src) break; }
+  if (!src) return;
+  const m = await cutWhite(src); $('st-img').src = m.src; $('st-img-card').classList.remove('hidden');
+}
+
+/* =====================================================================
    Cloud-Sync: Firestore ist die Quelle der Wahrheit, localStorage der schnelle Cache (auch offline).
    Pfad: enyaqStrom/{uid}/readings/{id}. Einstellungen und Live-Daten bleiben bewusst lokal.
    Das Firebase-Modul unten ruft diese beiden Funktionen auf.
@@ -3360,7 +3451,8 @@ function renderReport() {
   markReportSeen(y, m);
   segPaintKey('.rep-mode-btn', 'mode', repMode);
   $('rep-laden').classList.toggle('hidden', repMode !== 'laden'); $('rep-kosten').classList.toggle('hidden', repMode !== 'kosten');
-  $('rep-head').classList.toggle('hidden', repMode === 'akku'); $('rep-akku').classList.toggle('hidden', repMode !== 'akku');
+  $('rep-head').classList.toggle('hidden', repMode === 'akku' || repMode === 'stat'); $('rep-akku').classList.toggle('hidden', repMode !== 'akku'); $('rep-stat').classList.toggle('hidden', repMode !== 'stat');
+  if (repMode === 'stat') { renderStat(); return; }
   if (repMode === 'akku') { renderBattery(); return; }
   if (repMode === 'kosten') { $('rep-sub').textContent = (cur ? 'Zwischenstand bis heute' : 'Kostenbericht') + ' · Laden + Kosten'; renderCostReport(y, m, cur); return; }
 
@@ -3490,7 +3582,8 @@ if (getLive()) tickLive();                              // Live-Modus nach Neula
 $('scan-card').classList.toggle('hidden', !ENABLE_AI_SCAN);
 setCapPlace(capPlace);                                   // Reiter "Zuhause" gleich beim Start hervorheben
 bookRecurring();                                         // fällige wiederkehrende Kosten nachbuchen
-initCarousel();                                          // Enyaq1–3 laden (asynchron)
+initCarousel();                                          // Enyaq1–2 laden (asynchron)
+initStatImg();                                           // Statistik-Bild laden (asynchron)
 showView('dashboard');
 </script>
 <script type="module">
