@@ -199,7 +199,7 @@
       <p id="loss-empty" class="hidden text-center text-sm text-slate-500 py-6">Noch keine Ladungen mit Akku-Start und -Ende erfasst.</p>
       <p id="loss-note" class="text-xs text-slate-500 dark:text-slate-400 mt-3 text-center"></p>
     </div>
-    <div aria-hidden="true" class="absolute -top-5 -inset-x-4 -z-10 h-[620px] pointer-events-none !mt-0" style="background:radial-gradient(ellipse 72% 190px at 50% 190px,rgba(80,150,255,.40),rgba(80,150,255,0) 70%),linear-gradient(180deg,#000 0,#000 28px,#030b24 70px,#061a52 160px,#0b2f8a 280px,#0a2466 370px,#050f2e 470px,#000 600px)"></div>
+    <div id="hero-bg" aria-hidden="true" class="absolute -top-5 -inset-x-4 -z-10 h-[620px] pointer-events-none !mt-0" style="background:radial-gradient(ellipse 72% 190px at 50% 190px,rgba(80,150,255,.40),rgba(80,150,255,0) 70%),linear-gradient(180deg,#000 0,#000 28px,#030b24 70px,#061a52 160px,#0b2f8a 280px,#0a2466 370px,#050f2e 470px,#000 600px)"></div>
   </section>
 
   <!-- ============ VIEW 2: ERFASSEN ============ -->
@@ -525,6 +525,10 @@
         <input id="set-power" type="text" inputmode="decimal" placeholder="7"
                class="mt-1 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500">
         
+      </div>
+      <div>
+        <p class="text-sm text-slate-500 dark:text-slate-400">Hintergrundfarbe der Start-Seite</p>
+        <div id="hero-swatches" class="mt-2 grid grid-cols-4 gap-2" role="group" aria-label="Hintergrundfarbe der Start-Seite"></div>
       </div>
       <div>
         <label for="set-purchase" class="text-sm text-slate-500 dark:text-slate-400">Kaufmonat (für „Seit Kauf“ auf der Start-Seite)</label>
@@ -1391,7 +1395,7 @@ $('btn-save-settings').addEventListener('click', () => {
 });
 $('btn-wipe').addEventListener('click', () => {
   if (confirm('Wirklich ALLE Zählerstände, Kosten, wiederkehrende Kosten, Erinnerungen und Einstellungen löschen?' + (window.cloud?.isSignedIn() ? ' Auch die Daten in der Cloud werden gelöscht.' : '') + ' Das kann nicht rückgängig gemacht werden.')) {
-    commitReadings([]); commitCosts([]); commitReminders([]); commitRecurring([]); localStorage.removeItem(KEY_SETTINGS); setProviders([]); setCategories(DEFAULT_CATEGORIES.slice()); fillSettings(); alert('Alle Daten wurden gelöscht.');
+    commitReadings([]); commitCosts([]); commitReminders([]); commitRecurring([]); localStorage.removeItem(KEY_SETTINGS); localStorage.removeItem(KEY_HERO); applyHeroColor(); setProviders([]); setCategories(DEFAULT_CATEGORIES.slice()); fillSettings(); alert('Alle Daten wurden gelöscht.');
   }
 });
 
@@ -2963,6 +2967,24 @@ function bannerAct(act) {
 $('rem-banner').addEventListener('click', (e) => { const b = e.target.closest('[data-bact]'); if (b) bannerAct(b.dataset.bact); });
 $('rem-banner').addEventListener('pointerdown', () => { clearTimeout(bannerTimer); const bar = $('rb-bar'); bar.style.transition = 'none'; bar.style.width = '100%'; });   // Antippen: Banner bleibt offen
 
+
+/** Hintergrundfarbe der Start-Seite (Farbverlauf hinter dem Enyaq): Auswahl in den Einstellungen, wirkt sofort und wird auf diesem Gerät gespeichert. */
+const KEY_HERO = 'enyaq.heroColor';
+const HERO_THEMES = {
+  blue:     { label: 'Blau',     mid: '#0b2f8a', glow: 'rgba(80,150,255,.40)',  glow0: 'rgba(80,150,255,0)',  stops: '#000 0,#000 28px,#030b24 70px,#061a52 160px,#0b2f8a 280px,#0a2466 370px,#050f2e 470px,#000 600px' },
+  green:    { label: 'Grün',     mid: '#0b6a4d', glow: 'rgba(52,211,153,.30)',  glow0: 'rgba(52,211,153,0)',  stops: '#000 0,#000 28px,#02150f 70px,#05301f 160px,#0b6a4d 280px,#0a4a37 370px,#03120e 470px,#000 600px' },
+  graphite: { label: 'Graphit',  mid: '#3b3f45', glow: 'rgba(255,255,255,.14)', glow0: 'rgba(255,255,255,0)', stops: '#000 0,#000 28px,#0c0d0e 70px,#1b1d20 160px,#3b3f45 280px,#26292d 370px,#0e0f10 470px,#000 600px' },
+  red:      { label: 'Bordeaux', mid: '#7a1427', glow: 'rgba(255,90,110,.30)',  glow0: 'rgba(255,90,110,0)',  stops: '#000 0,#000 28px,#1a0509 70px,#3a0b14 160px,#7a1427 280px,#4d0d19 370px,#1a0508 470px,#000 600px' }
+};
+const heroThemeKey = () => { const k = load(KEY_HERO, 'blue'); return HERO_THEMES[k] ? k : 'blue'; };
+function applyHeroColor() {
+  const k = heroThemeKey(), t = HERO_THEMES[k], bg = $('hero-bg');
+  if (bg) bg.style.background = 'radial-gradient(ellipse 72% 190px at 50% 190px,' + t.glow + ',' + t.glow0 + ' 70%),linear-gradient(180deg,' + t.stops + ')';
+  document.querySelectorAll('[data-hero]').forEach(b => { const on = b.dataset.hero === k; b.setAttribute('aria-pressed', String(on)); b.classList.toggle('ring-2', on); b.classList.toggle('ring-emerald-500', on); b.classList.toggle('ring-offset-2', on); });
+}
+$('hero-swatches').innerHTML = Object.entries(HERO_THEMES).map(([k, t]) => `<button type="button" data-hero="${k}" aria-pressed="false" class="flex flex-col items-center gap-1.5 rounded-xl ring-offset-white dark:ring-offset-black active:scale-95 transition"><span class="block h-12 w-full rounded-xl border border-slate-300 dark:border-slate-700" style="background:linear-gradient(180deg,#000 0%,${t.mid} 55%,#000 100%)"></span><span class="text-xs text-slate-600 dark:text-slate-300">${t.label}</span></button>`).join('');
+$('hero-swatches').addEventListener('click', (e) => { const b = e.target.closest('[data-hero]'); if (!b) return; save(KEY_HERO, b.dataset.hero); applyHeroColor(); });
+applyHeroColor();
 
 /* =====================================================================
    Cloud-Sync: Firestore ist die Quelle der Wahrheit, localStorage der schnelle Cache (auch offline).
