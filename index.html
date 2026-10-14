@@ -510,6 +510,11 @@
         <div class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4"><p class="text-sm text-slate-500 dark:text-slate-400">Ø Ladekosten pro Tag</p><div class="mt-2 flex items-center gap-2 min-w-0"><span class="text-sky-400 shrink-0 w-6 h-6"><svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5A4.5 4.5 0 0 0 8 10m0 4a4.5 4.5 0 0 0 7.5 1.5M7 11h6M7 13h6"/></svg></span><p id="st-cpd" class="st-v whitespace-nowrap text-base font-semibold tabular-nums leading-6">–</p></div></div>
         <div class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4"><p class="text-sm text-slate-500 dark:text-slate-400">Ø Ladekosten pro Monat</p><div class="mt-2 flex items-center gap-2 min-w-0"><span class="text-sky-400 shrink-0 w-6 h-6"><svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5A4.5 4.5 0 0 0 8 10m0 4a4.5 4.5 0 0 0 7.5 1.5M7 11h6M7 13h6"/></svg></span><p id="st-cpm" class="st-v whitespace-nowrap text-base font-semibold tabular-nums leading-6">–</p></div></div>
       </div>
+      <div id="st-temp-card" class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
+        <p class="text-sm text-slate-500 dark:text-slate-400">Verbrauch je Außentemperatur</p>
+        <div id="st-temp-wrap" class="relative mt-2 hidden h-[220px]"><canvas id="st-temp-chart" role="img" aria-label="Verbrauch in kWh pro 100 km je Außentemperatur"></canvas></div>
+        <p id="st-temp-note" class="mt-2 text-xs text-slate-500 dark:text-slate-400"></p>
+      </div>
       <div class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
         <p id="st-tco-title" class="text-sm text-slate-500 dark:text-slate-400">Total Cost of Ownership (TCO)</p>
         <p id="st-tco-year" class="st-v st-big whitespace-nowrap text-2xl font-semibold tabular-nums">–</p>
@@ -821,6 +826,7 @@ const KEY_REMINDERS = 'enyaq.reminders';        // Erinnerungen (lokal + Cloud-S
 const KEY_CATEGORIES = 'enyaq.categories';      // Kosten-Kategorien (lokal + Cloud-Dokument enyaqStrom/<uid>/settings/categories)
 const KEY_WXLOC = 'enyaq.wxLoc';                 // Wetter-Standort { lat, lon, label } (nur lokal)
 const KEY_WXCACHE = 'enyaq.wxCache';             // letzte Regen-Vorhersage (30 Min. gültig, offline als Notlösung)
+const KEY_TEMPS = 'enyaq.temps';                 // Tagesmittel-Temperaturen { loc, days:{ 'JJJJ-MM-TT': °C } } vom Standort (nur lokal)
 const KEY_PROVIDERS = 'enyaq.providers';          // Ladeanbieter für "Unterwegs" (lokal + Cloud-Dokument enyaqStrom/<uid>/settings/providers)
 const PROXY_URL = '/api/read-meter';   // Vercel-Funktion; der Prompt und der OpenAI-Key liegen dort
 
@@ -1522,7 +1528,7 @@ $('btn-save-settings').addEventListener('click', () => {
 });
 $('btn-wipe').addEventListener('click', () => {
   if (confirm('Wirklich ALLE Zählerstände, Kosten, wiederkehrende Kosten, Erinnerungen und Einstellungen löschen?' + (window.cloud?.isSignedIn() ? ' Auch die Daten in der Cloud werden gelöscht.' : '') + ' Das kann nicht rückgängig gemacht werden.')) {
-    commitReadings([]); commitCosts([]); commitReminders([]); commitRecurring([]); localStorage.removeItem(KEY_SETTINGS); localStorage.removeItem(KEY_WXLOC); localStorage.removeItem(KEY_WXCACHE); localStorage.removeItem(KEY_HERO); applyHeroColor(); setProviders([]); setCategories(DEFAULT_CATEGORIES.slice()); fillSettings(); alert('Alle Daten wurden gelöscht.');
+    commitReadings([]); commitCosts([]); commitReminders([]); commitRecurring([]); localStorage.removeItem(KEY_SETTINGS); localStorage.removeItem(KEY_WXLOC); localStorage.removeItem(KEY_WXCACHE); localStorage.removeItem(KEY_TEMPS); localStorage.removeItem(KEY_HERO); applyHeroColor(); setProviders([]); setCategories(DEFAULT_CATEGORIES.slice()); fillSettings(); alert('Alle Daten wurden gelöscht.');
   }
 });
 
@@ -3248,6 +3254,7 @@ function renderStat() {
   /* Ladekosten pro Tag und Monat: erster Eintrag bis heute */
   const dts = rs.map(r => Date.parse(r.date)).filter(Number.isFinite), sum = costs.reduce((a, x) => a + x, 0), days = dts.length ? Math.max(1, (now.getTime() - Math.min(...dts)) / D) : 0;
   $('st-cpd').textContent = sum > 0 && days ? eur(sum / days) : '–'; $('st-cpm').textContent = sum > 0 && days ? eur(sum / (days / MON)) : '–';
+  try { renderTempChart(); } catch (e) { /* Wetter-Modul noch nicht initialisiert */ }
   /* TCO (Laden + Kosten − Einnahmen, wie „Kosten“ auf Start): laufendes Jahr, Ø pro Monat im laufenden Jahr, seit Kaufmonat. Der Monatsschnitt rechnet ab Jahresbeginn bzw. Kaufmonat/erstem Eintrag (was später liegt), mindestens 1 Monat. */
   const tcoSum = (from) => { let sum = 0; for (let y = from.getFullYear(), m = from.getMonth(); y < cy || (y === cy && m <= cm); m++) { if (m > 11) { m = 0; y++; if (y > cy) break; } sum += costTotals(y, m).total; } return sum; };
   const allD = dts.concat(getCosts().map(c => Date.parse(c.date))).filter(Number.isFinite), [pY, pM] = purchaseMonth().split('-').map(Number);
@@ -3756,6 +3763,51 @@ async function wxOpen() {
   card.addEventListener('pointerup', end); card.addEventListener('pointercancel', end);
 })();
 renderWxLoc();
+
+/* =====================================================================
+   Verbrauch je Außentemperatur (Statistik): Für jede Strecke zwischen zwei Ladungen (genaue Werte aus Akku-%) wird die mittlere Tagestemperatur am Wetter-Standort
+   bestimmt (Open-Meteo: Archiv bis vor 7 Tagen, danach Vorhersage-Schnittstelle mit past_days). Nichts davon wird an den Ladungen gespeichert; nur die Tageswerte liegen lokal im Cache.
+   ===================================================================== */
+let stTempChart = null, stTempTok = 0;
+async function wxTemps(l, fromIso, toIso) {
+  const key = l.lat + ',' + l.lon; let c = load(KEY_TEMPS, null); if (!c || c.loc !== key) c = { loc: key, days: {} };
+  const recent = wxIso(new Date(Date.now() - 3 * 864e5)), arch = wxIso(new Date(Date.now() - 7 * 864e5)); let need = false;
+  for (let t = Date.parse(fromIso + 'T12:00:00'), e = Date.parse(toIso + 'T12:00:00'); t <= e; t += 864e5) { const d = wxIso(new Date(t)); if (c.days[d] === undefined || d >= recent) { need = true; break; } }   // die letzten 3 Tage immer neu holen
+  if (need) {
+    const q = '&latitude=' + l.lat + '&longitude=' + l.lon + '&daily=temperature_2m_mean&timezone=auto', put = (j) => j.daily.time.forEach((d, i) => { const v = j.daily.temperature_2m_mean[i]; if (v != null) c.days[d] = v; });
+    try {
+      if (fromIso <= arch) { const r = await fetch('https://archive-api.open-meteo.com/v1/archive?start_date=' + fromIso + '&end_date=' + (toIso < arch ? toIso : arch) + q); if (r.ok) put(await r.json()); }
+      if (toIso > arch) { const r = await fetch('https://api.open-meteo.com/v1/forecast?past_days=10&forecast_days=1' + q); if (r.ok) put(await r.json()); }
+      save(KEY_TEMPS, c);
+    } catch (e) { /* offline: vorhandene Werte nutzen */ }
+  }
+  return c.days;
+}
+async function renderTempChart() {
+  const tok = ++stTempTok, rs = getReadings(), l = wxLoc(), note = $('st-temp-note'), wrap = $('st-temp-wrap');
+  if (stTempChart) { stTempChart.destroy(); stTempChart = null; } wrap.classList.add('hidden');
+  const iv = [];                                                                       // nur genaue Strecken (Akku-%), ohne grobe Entnahmen unter 3 kWh und Kurzstrecken unter 20 km
+  rs.forEach((r, i) => { if (i < 1) return; const s = entryStats(rs, i), a = Date.parse(rs[i - 1].date), b = Date.parse(r.date); if (s.method !== 'soc' || s.rough || !(s.kwh100 > 0) || s.km < 20 || !Number.isFinite(a) || !Number.isFinite(b)) return; iv.push({ a: wxIso(new Date(a)), b: wxIso(new Date(b)), y: s.kwh100 }); });
+  if (!l) { note.textContent = 'Für diese Auswertung bitte in den Einstellungen einen Wetter-Standort eintragen.'; return; }
+  if (iv.length < 3) { note.textContent = 'Noch zu wenige genaue Ladungen: Es braucht mindestens 3 Ladungen mit Akku-Start/-Ende in % und km-Stand.'; return; }
+  note.textContent = 'Temperaturen werden geladen …';
+  const days = await wxTemps(l, iv.reduce((m, x) => x.a < m ? x.a : m, iv[0].a), iv.reduce((m, x) => x.b > m ? x.b : m, iv[0].b)); if (tok !== stTempTok) return;
+  const pts = [];
+  iv.forEach(x => { let sum = 0, n = 0; for (let t = Date.parse(x.a + 'T12:00:00'), e = Date.parse(x.b + 'T12:00:00'); t <= e; t += 864e5) { const v = days[wxIso(new Date(t))]; if (v != null) { sum += v; n++; } } if (n) pts.push({ x: +(sum / n).toFixed(1), y: +x.y.toFixed(2) }); });
+  if (pts.length < 3) { note.textContent = 'Keine Temperaturdaten verfügbar (offline?). Sobald eine Verbindung besteht, erscheint die Auswertung.'; return; }
+  if (typeof Chart === 'undefined') { note.textContent = 'Diagramm nicht verfügbar (Chart.js nicht geladen).'; return; }
+  const n = pts.length, mx = pts.reduce((a, p) => a + p.x, 0) / n, my = pts.reduce((a, p) => a + p.y, 0) / n, sxx = pts.reduce((a, p) => a + (p.x - mx) ** 2, 0), sxy = pts.reduce((a, p) => a + (p.x - mx) * (p.y - my), 0);
+  const slope = sxx > 0 ? sxy / sxx : 0, icpt = my - slope * mx, xmin = Math.min(...pts.map(p => p.x)), xmax = Math.max(...pts.map(p => p.x)), trend = n >= 5 && xmax - xmin >= 6;
+  const dark = matchMedia('(prefers-color-scheme: dark)').matches, text = dark ? '#cbd5e1' : '#475569', grid = dark ? 'rgba(148,163,184,.15)' : 'rgba(100,116,139,.15)';
+  const ds = [{ type: 'scatter', data: pts, backgroundColor: '#94a3b8', pointRadius: 3.5 }];
+  if (trend) ds.push({ type: 'line', data: [{ x: xmin, y: +(icpt + slope * xmin).toFixed(2) }, { x: xmax, y: +(icpt + slope * xmax).toFixed(2) }], borderColor: '#10b981', backgroundColor: '#10b981', pointRadius: 0, borderWidth: 2.5 });
+  wrap.classList.remove('hidden');
+  stTempChart = new Chart($('st-temp-chart'), { data: { datasets: ds }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { filter: (c) => c.datasetIndex === 0, callbacks: { label: (c) => fmt(c.parsed.y, 1) + ' kWh/100 km bei ' + fmt(c.parsed.x, 1) + ' °C' } } },
+    scales: { x: { type: 'linear', title: { display: true, text: 'Ø Außentemperatur seit der letzten Ladung (°C)', color: text }, ticks: { color: text }, grid: { color: grid } }, y: { title: { display: true, text: 'kWh/100 km', color: text }, ticks: { color: text }, grid: { color: grid } } } } });
+  const d10 = -slope * 10, parts = [n + ' Ladungen'];
+  if (trend) { parts.push('Trend: je 10 °C kälter ' + (d10 >= 0 ? '+' : '−') + fmt(Math.abs(d10), 1) + ' kWh/100 km'); const a20 = icpt + slope * 20, a0 = icpt; if (xmin <= 5 && xmax >= 15 && a20 > 0 && a0 > 0) parts.push('bei 20 °C ≈ ' + fmt(a20, 1) + ', bei 0 °C ≈ ' + fmt(a0, 1) + ' kWh/100 km (' + (a0 >= a20 ? '+' : '−') + fmt(Math.abs((a0 / a20 - 1) * 100), 0) + ' %)'); }
+  note.textContent = parts.join(' · ') + '. Jeder Punkt ist eine Ladung: der Verbrauch seit der vorherigen Ladung bei der Durchschnittstemperatur dieser Tage am Wetter-Standort.';
+}
 
 initStatImg();                                           // Statistik-Bild laden (asynchron)
 showView('dashboard');
