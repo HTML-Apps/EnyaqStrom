@@ -3860,7 +3860,7 @@ function renderHeat() {
   cv.style.width = W + 'px'; cv.style.height = H + 'px'; cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
   const cell = (x, y, col) => { g.fillStyle = col; g.beginPath(); g.roundRect ? g.roundRect(x, y, 13, 13, 3) : g.rect(x, y, 13, 13); g.fill(); };
   g.font = '11px system-ui, sans-serif'; g.fillStyle = text; g.textAlign = 'left';
-  ['Mo', 'Mi', 'Fr'].forEach((l, i) => g.fillText(l, 0, T + i * 2 * P + 11));
+  ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].forEach((l, i) => g.fillText(l, 0, T + i * P + 11));   // alle sieben Wochentage
   let lastM = -1;
   for (let c = 0; c < N; c++) {
     const d0 = new Date(start); d0.setDate(d0.getDate() + c * 7); if (d0.getMonth() !== lastM) { lastM = d0.getMonth(); g.fillStyle = text; g.fillText(['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'][lastM], L + c * P, 12); }
