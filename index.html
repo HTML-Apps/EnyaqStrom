@@ -484,7 +484,6 @@
       <div id="st-wrap-card" class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
         <p id="st-wrap-title" class="font-barlow text-xl font-bold uppercase tracking-[0.08em]">Wrapped</p>
         <div id="st-wrap-list" class="mt-1 flex flex-col"></div>
-        <p id="st-wrap-next" class="mt-2 text-xs text-slate-500 dark:text-slate-400"></p>
       </div>
       <div id="st-img-card" class="hidden rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4"><img id="st-img" alt="Statistik" draggable="false" class="mx-auto block max-h-44 w-auto object-contain"></div>
       <div class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
@@ -3996,13 +3995,6 @@ function wrPeriods() {
   const list = time.concat(km).map(p => ({ ...p, st: wrStats(p) })).filter(p => p.st.n >= 1 && p.st.km > 0).sort((a, b) => b.avail - a.avail);
   return { list, runStart: s, runPrev: time[time.length - 1] || null };
 }
-/** Nächster Auslöser: Datum (01.01. oder Jahrestag) und verbleibende km bis zum nächsten 5.000er. */
-function wrNext() {
-  const now = Date.now(), ty = new Date().getFullYear(), [, pm, pd] = purchaseDay().split('-').map(Number), od = getReadings().filter(r => r.odometerKm > 0), last = lastKnownKm();
-  const date = [new Date(ty, 0, 1), new Date(ty + 1, 0, 1), new Date(ty, pm - 1, pd), new Date(ty + 1, pm - 1, pd)].map(d => d.getTime()).filter(x => x > now).sort((a, b) => a - b)[0];
-  return { date, left: od.length > 1 && last != null ? WR_KM - ((last - od[0].odometerKm) % WR_KM) : null };
-}
-
 /* ---- Vergleiche ---- */
 const WR_DEST = [[400, 'Paris'], [800, 'Berlin'], [1250, 'Rom'], [2200, 'Lissabon']];       // grobe Straßenentfernungen ab dem Saarland
 function wrDist(km) {
@@ -4098,13 +4090,12 @@ function renderWrapCard() {
   $('wrap-open').addEventListener('click', () => { if (c.dataset.swiped) { delete c.dataset.swiped; return; } if (wrCardP) wrOpen(wrCardP); });
 })();
 function renderWrapList() {
-  const box = $('st-wrap-list'), { list } = wrPeriods(), nx = wrNext(); box.textContent = ''; $('st-wrap-title').textContent = wrTitle();
+  const box = $('st-wrap-list'), { list } = wrPeriods(); box.textContent = ''; $('st-wrap-title').textContent = wrTitle(); $('st-wrap-card').classList.toggle('hidden', !list.length);   // ohne fälligen Rückblick bleibt die Karte weg
   list.forEach(p => {
     const b = document.createElement('button'); b.type = 'button'; b.className = 'flex min-h-[56px] w-full items-center justify-between gap-3 border-t border-slate-200 dark:border-slate-800 py-2 text-left';
     b.innerHTML = '<span class="min-w-0"><span class="block text-sm font-semibold">' + esc(p.kind === 'k' ? p.label : 'Rückblick ' + p.label) + '</span><span class="block text-xs text-slate-500 dark:text-slate-400">' + (p.kind === 'k' ? esc(wrDY(p.t0) + ' – ' + wrDY(p.t1)) : 'Zeitraum') + ' · ' + fmt(p.st.km, 0) + ' km</span></span><svg class="h-5 w-5 shrink-0 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>';
     b.addEventListener('click', () => wrOpen(p)); box.appendChild(b);
   });
-  $('st-wrap-next').textContent = (list.length ? 'Nächster Rückblick: ' : 'Der erste Rückblick erscheint ') + (list.length ? '' : 'am ') + wrDY(nx.date) + (nx.left != null ? ' oder nach noch ' + fmt(nx.left, 0) + ' km' : '') + ', je nachdem, was zuerst eintritt.';
 }
 $('btn-wrap-preview').addEventListener('click', () => {
   const { runStart, runPrev } = wrPeriods(), p = { kind: 't', id: 'preview', preview: true, t0: runStart, t1: Date.now(), label: wrDY(runStart) + ' – heute', prev: runPrev }, st = wrStats(p);
