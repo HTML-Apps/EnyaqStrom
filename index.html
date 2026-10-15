@@ -547,7 +547,7 @@
       </div>
       <div id="st-akte-card" class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
         <p class="font-barlow text-xl font-bold uppercase tracking-[0.08em]">Fahrzeugakte</p>
-        <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Lückenlose Historie als PDF, zum Beispiel für den Verkauf: km-Verlauf, Wartung und Service, Kosten, Akku-Schätzung und Wartungsplan.</p>
+        <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Lückenlose Historie als PDF, zum Beispiel für den Verkauf: Eckdaten mit Kaufangaben, Diagramme zu km, Verbrauch, Kosten, Akku und Strompreis, Monatsübersicht, AC-/DC-Aufteilung, Rekorde, Wartung und Service sowie Wartungsplan.</p>
         <button id="btn-akte" type="button" class="mt-3 w-full rounded-xl bg-emerald-600 py-3 text-sm font-semibold text-white active:scale-95 transition">Fahrzeugakte als PDF erstellen</button>
       </div>
       <p id="st-note" class="text-xs text-slate-500 dark:text-slate-400 px-1"></p>
@@ -676,6 +676,13 @@
           <div><label for="set-rem-km" class="text-xs text-slate-500 dark:text-slate-400">km vor Fälligkeit</label><input id="set-rem-km" type="text" inputmode="numeric" placeholder="500" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
         </div>
         <p class="text-xs text-slate-500 mt-1">Ab dann zählt die Erinnerung am Start-Tab und an der Glocke.</p>
+      </div>
+      <div>
+        <div class="grid grid-cols-2 gap-3">
+          <div><label for="set-purchase-km" class="text-sm text-slate-500 dark:text-slate-400">Kilometerstand bei Kauf</label><input id="set-purchase-km" type="text" inputmode="numeric" placeholder="z. B. 16.969" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
+          <div><label for="set-purchase-price" class="text-sm text-slate-500 dark:text-slate-400">Kaufpreis [€]</label><input id="set-purchase-price" type="text" inputmode="decimal" placeholder="z. B. 32.500" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
+        </div>
+        <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">Nur für die Fahrzeugakte. Beides fließt nicht in die Kosten (TCO) ein.</p>
       </div>
       <div>
         <label for="set-wltp" class="text-sm text-slate-500 dark:text-slate-400">WLTP-Verbrauch in kWh/100 km (für den Vergleich im Rückblick)</label>
@@ -862,7 +869,7 @@ const KEY_COSTS = 'enyaq.costs';                // Kosten (lokal + Cloud-Sammlun
 const KEY_RECUR = 'enyaq.recurring';            // wiederkehrende Kosten (lokal + Cloud-Sammlung enyaqStrom/<uid>/recurring)
 const KEY_REMINDERS = 'enyaq.reminders';        // Erinnerungen (lokal + Cloud-Sammlung enyaqStrom/<uid>/reminders)
 const KEY_CATEGORIES = 'enyaq.categories';      // Kosten-Kategorien (lokal + Cloud-Dokument enyaqStrom/<uid>/settings/categories)
-const KEY_WXLOC = 'enyaq.wxLoc';                 // Wetter-Standort { lat, lon, label } (nur lokal)
+const KEY_WXLOC = 'enyaq.wxLoc';                 // Wetter-Standort { lat, lon, label } (lokal + Cloud-Dokument enyaqStrom/<uid>/settings/prefs)
 const KEY_WXCACHE = 'enyaq.wxCache';             // letzte Regen-Vorhersage (30 Min. gültig, offline als Notlösung)
 const KEY_WRAP = 'enyaq.wrapSeen';               // Liste der Rückblick-IDs, die schon angesehen bzw. weggewischt wurden (nur lokal)
 const KEY_TEMPS = 'enyaq.temps';                 // Tagesmittel-Temperaturen { loc, days:{ 'JJJJ-MM-TT': °C } } vom Standort (nur lokal)
@@ -1511,7 +1518,7 @@ function fillSettings() {
   $('set-battery').value = String(batteryKwh()).replace('.', ',');
   $('set-title').value = s.title || DEFAULT_TITLE;
   $('set-power').value = String(chargePowerKw()).replace('.', ',');
-  $('set-purchase').value = purchaseDay(); $('set-wltp').value = s.wltp ? String(s.wltp).replace('.', ',') : ''; renderWxLoc();
+  $('set-purchase').value = purchaseDay(); $('set-purchase-km').value = s.purchaseKm != null ? fmt(s.purchaseKm, 0) : ''; $('set-purchase-price').value = s.purchasePrice != null ? fmt(s.purchasePrice, 2) : ''; $('set-wltp').value = s.wltp ? String(s.wltp).replace('.', ',') : ''; renderWxLoc();
   $('set-rem-days').value = String(remWarn().days); $('set-rem-km').value = String(remWarn().km);
 }
 /** Ladeanbieter: speichern sofort (lokal und, wenn angemeldet, in der Cloud). Ältere Einträge behalten ihren Anbieter-Namen. */
@@ -1562,15 +1569,19 @@ $('btn-save-settings').addEventListener('click', () => {
   if (!Number.isInteger(remKm) || remKm < 0 || remKm > 20000) { alert('Bitte die Vorwarnung in km als ganze Zahl von 0 bis 20000 eingeben.'); return; }
   const pd = $('set-purchase').value, purchase = /^\d{4}-\d{2}-\d{2}$/.test(pd) && !isNaN(Date.parse(pd)) ? pd : '2026-06-08';
   const wl = $('set-wltp').value.trim() === '' ? undefined : parseFloat($('set-wltp').value.replace(',', '.'));
+  const deNum = (v) => { const t = v.trim(); if (t === '') return undefined; return Number((/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(t) ? t.replace(/\./g, '') : t).replace(',', '.')); };   // 16.969 = sechzehntausend…, 32.500,50 = Euro mit Cent
+  const pk = deNum($('set-purchase-km').value), pp = deNum($('set-purchase-price').value);
+  if (pk !== undefined && !(pk >= 0 && pk <= 2e6)) { alert('Bitte den Kilometerstand bei Kauf als Zahl eingeben (z. B. 16.969) oder das Feld leer lassen.'); return; }
+  if (pp !== undefined && !(pp >= 0 && pp <= 1e7)) { alert('Bitte den Kaufpreis in Euro als Zahl eingeben (z. B. 32.500) oder das Feld leer lassen.'); return; }
   if (wl !== undefined && !(wl > 5 && wl < 40)) { alert('Bitte den WLTP-Verbrauch in kWh/100 km eingeben (z. B. 16,0) oder das Feld leer lassen.'); return; }
-  if (save(KEY_SETTINGS, { title: $('set-title').value.trim() || DEFAULT_TITLE, price, battery, power, remDays, remKm, purchase, wltp: wl })) {
-    renderReminderBadges(); renderHeroStats();
+  if (save(KEY_SETTINGS, { title: $('set-title').value.trim() || DEFAULT_TITLE, price, battery, power, remDays, remKm, purchase, wltp: wl, purchaseKm: pk !== undefined ? Math.round(pk) : undefined, purchasePrice: pp !== undefined ? Math.round(pp * 100) / 100 : undefined })) {
+    renderReminderBadges(); renderHeroStats(); pushPrefs();
     $('settings-msg').classList.remove('hidden'); setTimeout(() => $('settings-msg').classList.add('hidden'), 2500);
   }
 });
 $('btn-wipe').addEventListener('click', () => {
   if (confirm('Wirklich ALLE Zählerstände, Kosten, wiederkehrende Kosten, Erinnerungen und Einstellungen löschen?' + (window.cloud?.isSignedIn() ? ' Auch die Daten in der Cloud werden gelöscht.' : '') + ' Das kann nicht rückgängig gemacht werden.')) {
-    commitReadings([]); commitCosts([]); commitReminders([]); commitRecurring([]); localStorage.removeItem(KEY_SETTINGS); localStorage.removeItem(KEY_WXLOC); localStorage.removeItem(KEY_WXCACHE); localStorage.removeItem(KEY_TEMPS); localStorage.removeItem(KEY_WRAP); localStorage.removeItem(KEY_HERO); applyHeroColor(); setProviders([]); setCategories(DEFAULT_CATEGORIES.slice()); fillSettings(); alert('Alle Daten wurden gelöscht.');
+    commitReadings([]); commitCosts([]); commitReminders([]); commitRecurring([]); localStorage.removeItem(KEY_SETTINGS); localStorage.removeItem(KEY_WXLOC); localStorage.removeItem(KEY_WXCACHE); localStorage.removeItem(KEY_TEMPS); localStorage.removeItem(KEY_WRAP); localStorage.removeItem(KEY_HERO); applyHeroColor(); pushPrefs(); setProviders([]); setCategories(DEFAULT_CATEGORIES.slice()); fillSettings(); alert('Alle Daten wurden gelöscht.');
   }
 });
 
@@ -3356,7 +3367,7 @@ const KEY_CACHE_UID = 'enyaq.cacheUid';                   // Konto (UID), zu dem
 function checkCacheUid(uid) {
   if (!uid) return;
   const prev = localStorage.getItem(KEY_CACHE_UID);
-  if (prev && prev !== uid) { save(KEY_READINGS, []); save(KEY_COSTS, []); save(KEY_REMINDERS, []); save(KEY_RECUR, []); localStorage.removeItem(KEY_PROVIDERS); localStorage.removeItem(KEY_CATEGORIES); stopLive(false); }
+  if (prev && prev !== uid) { save(KEY_READINGS, []); save(KEY_COSTS, []); save(KEY_REMINDERS, []); save(KEY_RECUR, []); localStorage.removeItem(KEY_PROVIDERS); localStorage.removeItem(KEY_CATEGORIES); localStorage.removeItem(KEY_WXLOC); localStorage.removeItem(KEY_WXCACHE); localStorage.removeItem(KEY_TEMPS); localStorage.removeItem(KEY_WRAP); const st = load(KEY_SETTINGS, null); if (st && st.wltp !== undefined) { delete st.wltp; save(KEY_SETTINGS, st); } stopLive(false); }
   localStorage.setItem(KEY_CACHE_UID, uid);
 }
 let deferredCosts = null;
@@ -3716,7 +3727,7 @@ async function wxSearch() {
       b.textContent = [r.name, r.admin2 && r.admin2 !== r.name ? r.admin2 : '', r.admin1, r.country].filter(Boolean).join(', ') + (r.postcodes && r.postcodes[0] ? ' · ' + r.postcodes[0] : '');
       b.addEventListener('click', () => {
         const label = [r.name, r.admin1, r.country].filter(Boolean).join(', ');
-        if (save(KEY_WXLOC, { lat: r.latitude, lon: r.longitude, label })) { localStorage.removeItem(KEY_WXCACHE); box.textContent = ''; renderWxLoc(); }
+        if (save(KEY_WXLOC, { lat: r.latitude, lon: r.longitude, label })) { localStorage.removeItem(KEY_WXCACHE); box.textContent = ''; renderWxLoc(); pushPrefs(); }
       });
       box.appendChild(b);
     });
@@ -3875,40 +3886,120 @@ function renderHeat() {
    Alles aus den eigenen Aufzeichnungen der App; kein Gutachten.
    ===================================================================== */
 const AKTE_SERVICE = /service|wartung|inspektion|reifen|räder|werkstatt|tüv|\bhu\b|\bau\b|reparatur|bremse|garantie|ersatzteil|rückruf/i;
-function akteChart() {
-  const pts = getReadings().filter(r => r.odometerKm > 0).map(r => [Date.parse(r.date), r.odometerKm]).concat(getCosts().filter(c => c.odometerKm > 0).map(c => [Date.parse(c.date), c.odometerKm])).filter(q => Number.isFinite(q[0])).sort((a, b) => a[0] - b[0]);
-  if (pts.length < 2) return '';
-  const W = 1000, H = 340, L = 90, R = 20, T = 20, B = 50, cv = document.createElement('canvas'); cv.width = W; cv.height = H; const g = cv.getContext('2d');
-  const x0 = pts[0][0], x1 = pts[pts.length - 1][0], ylo = Math.min(...pts.map(q => q[1])), yhi = Math.max(...pts.map(q => q[1])), span = Math.max(1, yhi - ylo), X = (t) => L + (t - x0) / Math.max(1, x1 - x0) * (W - L - R), Y = (v) => T + (1 - (v - ylo) / span) * (H - T - B);
-  g.fillStyle = '#fff'; g.fillRect(0, 0, W, H); g.font = '20px system-ui, sans-serif'; g.fillStyle = '#475569'; g.strokeStyle = '#e2e8f0'; g.lineWidth = 1; g.textAlign = 'right';
-  for (let i = 0; i <= 4; i++) { const v = ylo + span * i / 4, y = Y(v); g.beginPath(); g.moveTo(L, y); g.lineTo(W - R, y); g.stroke(); g.fillText(fmt(v, 0), L - 10, y + 7); }
-  g.textAlign = 'left'; g.fillText(wrDY(x0), L, H - 14); g.textAlign = 'right'; g.fillText(wrDY(x1), W - R, H - 14);
-  g.strokeStyle = '#059669'; g.lineWidth = 4; g.beginPath(); pts.forEach((q, i) => i ? g.lineTo(X(q[0]), Y(q[1])) : g.moveTo(X(q[0]), Y(q[1]))); g.stroke();
-  g.fillStyle = '#059669'; pts.forEach(q => { g.beginPath(); g.arc(X(q[0]), Y(q[1]), 4, 0, 7); g.fill(); });
-  return '<img alt="Kilometerverlauf" src="' + cv.toDataURL('image/png') + '" style="width:100%;border:1px solid #cbd5e1;border-radius:6px">';
+/* ---- Diagramm-Helfer: Canvas → PNG, damit die Grafiken im PDF scharf und farbtreu sind ---- */
+const AK = { ink: '#334155', grid: '#e2e8f0', green: '#059669', sky: '#0284c7', amber: '#d97706', rose: '#e11d48', slate: '#94a3b8' };
+const akNice = (lo, hi, n = 4) => { const span = Math.max(1e-9, hi - lo), s0 = span / n, mag = Math.pow(10, Math.floor(Math.log10(s0))), r = s0 / mag, step = (r <= 1 ? 1 : r <= 2 ? 2 : r <= 5 ? 5 : 10) * mag, a = Math.floor(lo / step + 1e-9) * step, t = []; for (let v = a; v <= hi + step * .999; v += step) t.push(+v.toFixed(10)); return t.length > 1 ? t : [a, a + step]; };
+const akDec = (yt) => { const st = yt[1] - yt[0]; return st >= 1 ? 0 : Math.min(2, Math.ceil(-Math.log10(st) - 1e-9)); };   // Nachkommastellen der y-Achse (sonst stehen bei kleiner Spanne gleiche Zahlen mehrfach)
+const akImg = (cv, alt) => '<div style="break-inside:avoid;margin:4px 0 10px"><img alt="' + alt + '" src="' + cv.toDataURL('image/png') + '" style="display:block;width:100%;border:1px solid #cbd5e1;border-radius:6px"></div>';
+function akLegend(g, items, W) { g.font = '19px system-ui, sans-serif'; g.textAlign = 'left'; g.textBaseline = 'middle'; let x = 86; items.forEach(([col, lab]) => { g.fillStyle = col; g.fillRect(x, 12, 18, 18); g.fillStyle = AK.ink; g.fillText(lab, x + 26, 21); x += 26 + g.measureText(lab).width + 28; }); }
+function akAxes(g, W, H, L, R, T, yt, Y, yFmt) { const dec = akDec(yt); g.fillStyle = '#fff'; g.fillRect(0, 0, W, H); g.font = '19px system-ui, sans-serif'; g.lineWidth = 1; g.strokeStyle = AK.grid; g.fillStyle = AK.ink; g.textAlign = 'right'; g.textBaseline = 'middle'; yt.forEach(v => { const y = Y(v); g.beginPath(); g.moveTo(L, y); g.lineTo(W - R, y); g.stroke(); g.fillText(yFmt(v, dec), L - 10, y); }); }
+function akRef(g, ref, W, L, R, Y) { (ref || []).forEach(r => { const y = Y(r.y); g.save(); g.setLineDash([9, 7]); g.strokeStyle = r.color; g.lineWidth = 2.5; g.beginPath(); g.moveTo(L, y); g.lineTo(W - R, y); g.stroke(); g.restore(); g.font = 'bold 19px system-ui, sans-serif'; const tw = g.measureText(r.label).width; g.fillStyle = '#fff'; g.fillRect(W - R - tw - 14, y - 30, tw + 12, 26); g.fillStyle = r.color; g.textAlign = 'right'; g.textBaseline = 'bottom'; g.fillText(r.label, W - R - 8, y - 6); }); }
+/** Linien/Punkte-Diagramm: series = [{ kind: 'line'|'dots', pts: [[x, y]], color }], ref = [{ y, label, color }]; xTicks optional (sonst Anfang und Ende). */
+function akXY(c) {
+  const W = 1000, H = c.H || 330, L = 90, R = 24, T = c.legend ? 46 : 20, B = 50, cv = document.createElement('canvas'); cv.width = W; cv.height = H; const g = cv.getContext('2d');
+  const ys = [].concat(...c.series.map(s => s.pts.map(q => q[1])), (c.ref || []).map(r => r.y)), yt = akNice(c.ymin != null ? c.ymin : Math.min(...ys), Math.max(...ys), 4), ylo = yt[0], yhi = yt[yt.length - 1], xhi = Math.max(c.xmax, c.xmin + 1e-9);
+  const X = (x) => L + (x - c.xmin) / (xhi - c.xmin) * (W - L - R), Y = (y) => T + (1 - (y - ylo) / Math.max(1e-9, yhi - ylo)) * (H - T - B);
+  akAxes(g, W, H, L, R, T, yt, Y, c.yFmt); g.textBaseline = 'alphabetic'; g.fillStyle = AK.ink;
+  if (c.xTicks) { g.textAlign = 'center'; c.xTicks.forEach(x => g.fillText(c.xFmt(x), X(x), H - 16)); } else { g.textAlign = 'left'; g.fillText(c.xFmt(c.xmin), L, H - 16); g.textAlign = 'right'; g.fillText(c.xFmt(xhi), W - R, H - 16); }
+  if (c.xTitle) { g.textAlign = 'center'; g.fillText(c.xTitle, (L + W - R) / 2, H - 16); }
+  akRef(g, c.ref, W, L, R, Y);
+  c.series.forEach(s => { if (s.kind === 'line') { g.strokeStyle = s.color; g.lineWidth = s.w || 4; g.beginPath(); s.pts.forEach((q, i) => i ? g.lineTo(X(q[0]), Y(q[1])) : g.moveTo(X(q[0]), Y(q[1]))); g.stroke(); } else { g.fillStyle = s.color; s.pts.forEach(q => { g.beginPath(); g.arc(X(q[0]), Y(q[1]), s.r || 5, 0, 7); g.fill(); }); } });
+  if (c.legend) akLegend(g, c.legend, W);
+  return akImg(cv, c.alt || 'Diagramm');
+}
+/** Balkendiagramm (auch gestapelt): labels, stacks = [{ color, label, vals }], ref wie oben. */
+function akBars(c) {
+  const W = 1000, H = c.H || 330, L = 90, R = 24, T = 46, B = 56, n = c.labels.length, cv = document.createElement('canvas'); cv.width = W; cv.height = H; const g = cv.getContext('2d');
+  const tot = c.labels.map((_, i) => c.stacks.reduce((a, s) => a + Math.max(0, s.vals[i] || 0), 0)), yt = akNice(0, Math.max(...tot, ...(c.ref || []).map(r => r.y), 1e-9), 4), yhi = yt[yt.length - 1];
+  const Y = (v) => T + (1 - v / yhi) * (H - T - B), cx = (i) => L + (i + .5) * (W - L - R) / n, bw = Math.min(64, (W - L - R) / n * .64);
+  akAxes(g, W, H, L, R, T, yt, Y, c.yFmt);
+  c.labels.forEach((_, i) => { let acc = 0; c.stacks.forEach(s => { const v = Math.max(0, s.vals[i] || 0); if (v > 0) { g.fillStyle = s.color; g.fillRect(cx(i) - bw / 2, Y(acc + v), bw, Y(acc) - Y(acc + v)); acc += v; } }); });
+  g.font = '18px system-ui, sans-serif'; g.fillStyle = AK.ink; g.textAlign = 'center'; g.textBaseline = 'alphabetic'; const st = Math.ceil(n / 12); c.labels.forEach((l, i) => { if (i % st === 0) g.fillText(l, cx(i), H - 20); });
+  akRef(g, c.ref, W, L, R, Y); akLegend(g, c.stacks.map(s => [s.color, s.label]), W);
+  return akImg(cv, c.alt || 'Diagramm');
+}
+/** Zwei gestapelte Balken (Energie, Anzahl): AC (grün) gegen DC (orange), je mit Prozentangabe. */
+function akSplit(rows) {
+  const W = 1000, H = 230, L = 250, R = 24, cv = document.createElement('canvas'); cv.width = W; cv.height = H; const g = cv.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, W, H); akLegend(g, [[AK.green, 'AC (Zuhause + Bosch)'], [AK.amber, 'DC (Unterwegs)']], W);
+  rows.forEach(([lab, ac, dc, fmtV], i) => { const y = 70 + i * 74, tot = ac + dc, wA = tot > 0 ? (W - L - R) * ac / tot : 0, wD = (W - L - R) - wA; g.font = '20px system-ui, sans-serif'; g.fillStyle = AK.ink; g.textAlign = 'right'; g.textBaseline = 'middle'; g.fillText(lab, L - 16, y + 26);
+    g.fillStyle = AK.green; g.fillRect(L, y, wA, 52); g.fillStyle = AK.amber; g.fillRect(L + wA, y, wD, 52); g.font = 'bold 20px system-ui, sans-serif'; g.fillStyle = '#fff'; g.textAlign = 'center';
+    const put = (v, w, cx) => { const full = fmt(v / tot * 100, 0) + ' % · ' + fmtV(v), short = fmt(v / tot * 100, 0) + ' %'; if (tot > 0 && g.measureText(full).width <= w - 24) g.fillText(full, cx, y + 27); else if (tot > 0 && g.measureText(short).width <= w - 16) g.fillText(short, cx, y + 27); };   // lange Beschriftung nur, wenn sie ins Segment passt
+    put(ac, wA, L + wA / 2); put(dc, wD, L + wA + wD / 2); });
+  return akImg(cv, 'AC- und DC-Laden');
+}
+/** Monatsdaten ab dem ersten Eintrag bis heute: km, Ladungen, kWh, Ø Verbrauch, Ladekosten, sonstige Kosten, Einnahmen. */
+function akMonths(rs, cs) {
+  const ts = rs.map(r => Date.parse(r.date)).concat(cs.map(c => Date.parse(c.date))).filter(Number.isFinite); if (!ts.length) return [];
+  const a = new Date(Math.min(...ts)), now = new Date(), out = [];
+  for (let y = a.getFullYear(), m = a.getMonth(); y < now.getFullYear() || (y === now.getFullYear() && m <= now.getMonth()); m++) {
+    if (m > 11) { m = 0; y++; if (y > now.getFullYear()) break; }
+    const s0 = new Date(y, m, 1).getTime(), e0 = new Date(y, m + 1, 1).getTime(), idx = []; rs.forEach((r, i) => { const t = Date.parse(r.date); if (t >= s0 && t < e0 && !isStartRow(rs, i)) idx.push(i); });
+    const mr = monthReport(y, m, 'all'), ct = costTotals(y, m), tot = idx.length ? consumptionTotals(rs, idx) : null;
+    out.push({ y, m, label: MONTHS[m] + ' ' + String(y).slice(2), km: rangeKm(s0, e0) || 0, n: mr.charges.length, kwh: mr.kwh, k100: tot && tot.km ? tot.kwh100 : null, laden: ct.laden, other: ct.other, income: ct.income });
+  }
+  return out;
+}
+function akTempPts() {                                                                  // nur aus dem lokalen Temperatur-Cache (kein Netz nötig); leer, wenn Standort/Cache fehlen
+  const l = wxLoc(), c = load(KEY_TEMPS, null); if (!l || !c || c.loc !== l.lat + ',' + l.lon) return []; const rs = getReadings(), pts = [];
+  rs.forEach((r, i) => { if (i < 1) return; const s = entryStats(rs, i), a = Date.parse(rs[i - 1].date), b = Date.parse(r.date); if (s.method !== 'soc' || s.rough || !(s.kwh100 > 0) || s.km < 20 || !Number.isFinite(a) || !Number.isFinite(b)) return;
+    let sum = 0, n = 0; for (let t = Date.parse(wxIso(new Date(a)) + 'T12:00:00'), e = Date.parse(wxIso(new Date(b)) + 'T12:00:00'); t <= e; t += 864e5) { const v = c.days[wxIso(new Date(t))]; if (v != null) { sum += v; n++; } } if (n) pts.push([sum / n, s.kwh100]); });
+  return pts;
 }
 function akteHtml() {
-  const rs = getReadings(), cs = getCosts(), set = getSettings(), now = Date.now(), name = (set.title || DEFAULT_TITLE).split('|')[0].trim() || 'Fahrzeug';
-  const od = rs.filter(r => r.odometerKm > 0), km = lastKnownKm(), driven = od.length > 1 && km != null ? km - od[0].odometerKm : null, tot = rs.length ? consumptionTotals(rs, rs.map((_, i) => i)) : null;
-  let kwh = 0, laden = 0, n = 0; const pl = { home: 0, bosch: 0, away: 0 };
-  rs.forEach((r, i) => { if (isStartRow(rs, i)) return; const c = r.consumedSinceLast || 0; kwh += c; laden += r.cost || 0; pl[placeOf(r)] += c; if (isCharge(rs, i)) n++; });
-  const other = cs.reduce((a, c) => a + Math.max(0, costAmt(c)), 0), income = -cs.reduce((a, c) => a + Math.min(0, costAmt(c)), 0), total = laden + other - income;
-  const H2 = (t) => '<h2 style="font-size:15px;margin:22px 0 6px;padding-bottom:3px;border-bottom:2px solid #059669;break-after:avoid">' + t + '</h2>', TD = 'padding:4px 6px;border-bottom:1px solid #e2e8f0;vertical-align:top;font-size:12px', TH = 'text-align:left;padding:4px 6px;border-bottom:2px solid #94a3b8;font-size:12px';
+  const rs = getReadings(), cs = getCosts(), set = getSettings(), now = Date.now(), name = (set.title || DEFAULT_TITLE).split('|')[0].trim() || 'Fahrzeug', D1 = (ms) => wrDY(ms), P0 = Date.parse(purchaseDay() + 'T12:00:00');
+  const od = rs.filter(r => r.odometerKm > 0), km = lastKnownKm(), driven = od.length > 1 && km != null ? km - od[0].odometerKm : null, tot = rs.length ? consumptionTotals(rs, rs.map((_, i) => i)) : null, pk = set.purchaseKm != null ? Number(set.purchaseKm) : null, pp = set.purchasePrice != null ? Number(set.purchasePrice) : null;
+  let kwh = 0, laden = 0, n = 0, chg = 0, stored = 0; const pl = { home: { n: 0, kwh: 0, cost: 0, ck: 0 }, bosch: { n: 0, kwh: 0, cost: 0, ck: 0 }, away: { n: 0, kwh: 0, cost: 0, ck: 0 } }, ent = [];
+  rs.forEach((r, i) => { if (isStartRow(rs, i)) return; const c = r.consumedSinceLast || 0, st = entryStats(rs, i), o = pl[placeOf(r)]; kwh += c; laden += r.cost || 0; o.kwh += c; o.cost += r.cost || 0; if (c > 0 && r.cost > 0) o.ck += c; if (isCharge(rs, i)) { n++; o.n++; } if (st.stored !== undefined) { chg += c; stored += st.stored; } ent.push({ r, st, c, t: Date.parse(r.date), ch: isCharge(rs, i) }); });
+  const other = cs.reduce((a, c) => a + Math.max(0, costAmt(c)), 0), income = -cs.reduce((a, c) => a + Math.min(0, costAmt(c)), 0), total = laden + other - income, loss = chg > 0 ? (1 - stored / chg) * 100 : null;
+  const H2 = (t) => '<h2 style="font-size:15px;margin:22px 0 6px;padding-bottom:3px;border-bottom:2px solid #059669;break-after:avoid">' + t + '</h2>', CAP = (t) => '<p style="font-size:12px;font-weight:600;margin:10px 0 2px;break-after:avoid">' + t + '</p>', NOTE = (t) => '<p style="font-size:11px;color:#64748b;margin:2px 0 0">' + t + '</p>';
+  const TD = 'padding:4px 6px;border-bottom:1px solid #e2e8f0;vertical-align:top;font-size:12px', TH = 'text-align:left;padding:4px 6px;border-bottom:2px solid #94a3b8;font-size:12px';
   const kv = (rows) => '<table style="width:100%;border-collapse:collapse">' + rows.filter(Boolean).map(([k, v]) => '<tr style="break-inside:avoid"><td style="' + TD + ';width:46%;color:#475569">' + k + '</td><td style="' + TD + ';font-weight:600">' + v + '</td></tr>').join('') + '</table>';
-  const tbl = (head, rows, right = []) => '<table style="width:100%;border-collapse:collapse"><thead><tr>' + head.map((h, i) => '<th style="' + TH + (right.includes(i) ? ';text-align:right' : '') + '">' + h + '</th>').join('') + '</tr></thead><tbody>' + rows.map(r => '<tr style="break-inside:avoid">' + r.map((c, i) => '<td style="' + TD + (right.includes(i) ? ';text-align:right' : '') + '">' + c + '</td>').join('') + '</tr>').join('') + '</tbody></table>';
-  const fit = batFit(batRows()), batOk = !!fit && fit.n >= BAT.minN && fit.sumHub >= BAT.minHub;
-  let h = '<div style="max-width:720px;margin:0 auto;font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#111;line-height:1.35"><h1 style="font-size:26px;margin:0">Fahrzeugakte</h1><p style="margin:2px 0 0;font-size:15px;color:#475569">' + esc(name) + ' · erstellt am ' + wrDY(now) + '</p>';
-  h += H2('Fahrzeug') + kv([['Kauftag', wrDY(Date.parse(purchaseDay() + 'T12:00:00'))], ['Nutzungsdauer', fmt((now - Date.parse(purchaseDay() + 'T12:00:00')) / 864e5 / 30.4375, 1) + ' Monate'], ['Aktueller km-Stand', km != null ? fmt(km, 0) + ' km' : '–'], driven != null ? ['Gefahren seit Beginn der Aufzeichnung', fmt(driven, 0) + ' km (ab ' + wrDY(Date.parse(od[0].date)) + ')'] : null, ['Batterie (Nettokapazität laut Einstellung)', fmt(batteryKwh(), 0) + ' kWh'], rs.length ? ['Aufzeichnung', wrDY(Date.parse(rs[0].date)) + ' bis ' + wrDY(Date.parse(rs[rs.length - 1].date))] : null]);
-  h += H2('Betrieb und Kosten gesamt') + kv([['Ladungen', fmt(n, 0)], ['Geladene Energie', fmt(kwh, 0) + ' kWh (Zuhause ' + fmt(kwh ? pl.home / kwh * 100 : 0, 0) + ' %, Bosch ' + fmt(kwh ? pl.bosch / kwh * 100 : 0, 0) + ' %, unterwegs ' + fmt(kwh ? pl.away / kwh * 100 : 0, 0) + ' %)'], tot && tot.km ? ['Ø Verbrauch inkl. Ladeverluste', fmt(tot.kwh100, 1) + ' kWh/100 km'] : null, kwh > 0 ? ['Ø Strompreis', fmt(laden / kwh * 100, 1) + ' ct/kWh'] : null, ['Ladekosten', eur(laden)], ['Sonstige Kosten (Service, Reifen, …)', eur(other)], income ? ['Einnahmen und Erstattungen', eur(income)] : null, ['Betriebskosten gesamt (ohne Kaufpreis)', eur(total)], driven > 0 ? ['Betriebskosten pro km', fmt(total / driven * 100, 1) + ' ct/km'] : null]);
-  h += H2('Akku-Schätzung') + (batOk ? kv([['Kapazität an der Steckdose je 100 % Akku', fmt(fit.K, 1) + ' kWh (± ' + fmt(fit.ci, 1) + ', 95 %)'], ['Nutzbar etwa', fmt(fit.K * BAT.etaLo, 1) + ' bis ' + fmt(fit.K * BAT.etaHi, 1) + ' kWh'], ['Basis', fit.n + ' Ladungen, ' + wrDY(fit.use[0].t) + ' bis ' + wrDY(fit.use[fit.use.length - 1].t)]]) + '<p style="font-size:11px;color:#64748b;margin:4px 0 0">Schätzung aus eigenen Messungen der Ladungen, kein Gutachten und kein Wert des Herstellers.</p>' : '<p style="font-size:12px;color:#475569;margin:0">Noch nicht genug passende Ladungen (Akku-Start/-Ende in % und gemessene kWh) für eine Schätzung.</p>');
-  const chart = akteChart(); if (chart) h += H2('Kilometerverlauf') + chart;
+  const tbl = (head, rows, right = [], fs = 12) => '<table style="width:100%;border-collapse:collapse"><thead><tr>' + head.map((h, i) => '<th style="' + TH + (right.includes(i) ? ';text-align:right' : '') + ';font-size:' + fs + 'px">' + h + '</th>').join('') + '</tr></thead><tbody>' + rows.map(r => '<tr style="break-inside:avoid' + (r.bold ? ';font-weight:700' : '') + '">' + r.map((c, i) => '<td style="' + TD + (right.includes(i) ? ';text-align:right' : '') + ';font-size:' + fs + 'px">' + c + '</td>').join('') + '</tr>').join('') + '</tbody></table>';
+  const tile = (l, v) => '<div style="border:1px solid #cbd5e1;border-radius:8px;padding:8px 10px;break-inside:avoid"><div style="font-size:11px;color:#64748b">' + l + '</div><div style="font-size:17px;font-weight:700;margin-top:2px">' + v + '</div></div>';
+  const fit = batFit(batRows()), batOk = !!fit && fit.n >= BAT.minN && fit.sumHub >= BAT.minHub, months = akMonths(rs, cs);
+  let h = '<div style="max-width:720px;margin:0 auto;font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#111;line-height:1.35"><h1 style="font-size:26px;margin:0">Fahrzeugakte</h1><p style="margin:2px 0 0;font-size:15px;color:#475569">' + esc(name) + ' · erstellt am ' + D1(now) + '</p>';
+  h += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px">' + tile('Kilometerstand', km != null ? fmt(km, 0) + ' km' : '–') + tile('Geladen', fmt(kwh, 0) + ' kWh') + tile('Ø Verbrauch', tot && tot.km ? fmt(tot.kwh100, 1) + ' kWh/100 km' : '–') + tile('Ø Strompreis', kwh > 0 ? fmt(laden / kwh * 100, 1) + ' ct/kWh' : '–') + tile('Betriebskosten gesamt', eur(total)) + tile('Betriebskosten pro km', driven > 0 ? fmt(total / driven * 100, 1) + ' ct/km' : '–') + '</div>';
+  const yrs = (now - P0) / (365.25 * 864e5), sincePk = pk != null && km != null ? km - pk : null;
+  h += H2('Fahrzeug') + kv([['Kauftag', D1(P0)], ['Nutzungsdauer', fmt((now - P0) / 864e5 / 30.4375, 1) + ' Monate'], pk != null ? ['Kilometerstand bei Kauf', fmt(pk, 0) + ' km'] : null, pp != null ? ['Kaufpreis', eur(pp)] : null, ['Aktueller km-Stand', km != null ? fmt(km, 0) + ' km' : '–'], sincePk != null ? ['Gefahren seit Kauf', fmt(sincePk, 0) + ' km' + (yrs >= .25 ? ' (Ø ' + fmt(sincePk / yrs, 0) + ' km pro Jahr)' : '')] : null, driven != null ? ['Aufgezeichnet', fmt(driven, 0) + ' km seit ' + D1(Date.parse(od[0].date))] : null, ['Batterie (Nettokapazität laut Einstellung)', fmt(batteryKwh(), 0) + ' kWh'], rs.length ? ['Aufzeichnung', D1(Date.parse(rs[0].date)) + ' bis ' + D1(Date.parse(rs[rs.length - 1].date))] : null]);
+  h += H2('Betrieb und Kosten gesamt') + kv([['Ladungen', fmt(n, 0)], ['Geladene Energie', fmt(kwh, 0) + ' kWh'], tot && tot.km ? ['Ø Verbrauch inkl. Ladeverluste', fmt(tot.kwh100, 1) + ' kWh/100 km (WLTP-Angabe ' + fmt(wltpVal(), 1) + ')'] : null, loss != null ? ['Ø Ladeverlust', fmt(loss, 1) + ' %'] : null, kwh > 0 ? ['Ø Strompreis', fmt(laden / kwh * 100, 1) + ' ct/kWh'] : null, ['Ladekosten', eur(laden)], ['Sonstige Kosten (Service, Reifen, …)', eur(other)], income ? ['Einnahmen und Erstattungen', eur(income)] : null, ['Betriebskosten gesamt (ohne Kaufpreis)', eur(total)], driven > 0 ? ['Betriebskosten pro km', fmt(total / driven * 100, 1) + ' ct/km'] : null]);
+  const placeRows = PLACE_KEYS.filter(k => pl[k].kwh > 0 || pl[k].n > 0).map(k => [PLACES[k], fmt(pl[k].n, 0), fmt(pl[k].kwh, 0), kwh ? fmt(pl[k].kwh / kwh * 100, 0) + ' %' : '–', eur(pl[k].cost), pl[k].ck > 0 ? fmt(pl[k].cost / pl[k].ck * 100, 1) : '–']);
+  if (placeRows.length) h += CAP('Ladeorte') + tbl(['Ort', 'Ladungen', 'kWh', 'Anteil', 'Kosten', 'ct/kWh'], placeRows, [1, 2, 3, 4, 5]);
+  const ac = { n: pl.home.n + pl.bosch.n, kwh: pl.home.kwh + pl.bosch.kwh }, dc = pl.away, pc = (x, t) => t > 0 ? fmt(x / t * 100, 0) + ' %' : '–', noKwh = ent.filter(e => e.ch && !(e.c > 0)).length;
+  if (n > 0) h += CAP('AC- und DC-Laden') + akSplit([['Energie (kWh)', ac.kwh, dc.kwh, (v) => fmt(v, 0) + ' kWh'], ['Ladungen (Anzahl)', ac.n, dc.n, (v) => fmt(v, 0) + (v === 1 ? ' Ladung' : ' Ladungen')]])
+    + tbl(['Ladeart', 'Ladungen', 'Anteil', 'Energie (kWh)', 'Anteil'], [['AC-Laden (Zuhause + Bosch)', fmt(ac.n, 0), pc(ac.n, n), fmt(ac.kwh, 0), pc(ac.kwh, kwh)], ['davon Zuhause', fmt(pl.home.n, 0), pc(pl.home.n, n), fmt(pl.home.kwh, 0), pc(pl.home.kwh, kwh)], ['davon Bosch', fmt(pl.bosch.n, 0), pc(pl.bosch.n, n), fmt(pl.bosch.kwh, 0), pc(pl.bosch.kwh, kwh)], ['DC-Laden (Unterwegs)', fmt(dc.n, 0), pc(dc.n, n), fmt(dc.kwh, 0), pc(dc.kwh, kwh)], Object.assign(['Summe', fmt(n, 0), '100 %', fmt(kwh, 0), '100 %'], { bold: true })], [1, 2, 3, 4])
+    + NOTE('AC = Zuhause und Bosch, DC = Unterwegs.' + (noKwh ? ' ' + noKwh + (noKwh === 1 ? ' Ladung ohne kWh-Angabe zählt' : ' Ladungen ohne kWh-Angabe zählen') + ' nur bei der Anzahl, nicht bei der Energie.' : ''));
+  h += H2('Akku-Schätzung') + (batOk ? kv([['Kapazität an der Steckdose je 100 % Akku', fmt(fit.K, 1) + ' kWh (± ' + fmt(fit.ci, 1) + ', 95 %)'], ['Nutzbar etwa', fmt(fit.K * BAT.etaLo, 1) + ' bis ' + fmt(fit.K * BAT.etaHi, 1) + ' kWh'], ['Basis', fit.n + ' Ladungen, ' + D1(fit.use[0].t) + ' bis ' + D1(fit.use[fit.use.length - 1].t)]]) + NOTE('Schätzung aus eigenen Messungen der Ladungen, kein Gutachten und kein Wert des Herstellers.') : '<p style="font-size:12px;color:#475569;margin:0">Noch nicht genug passende Ladungen (Akku-Start/-Ende in % und gemessene kWh) für eine Schätzung.</p>');
+  /* Diagramme */
+  h += H2('Diagramme');
+  const kmPts = rs.filter(r => r.odometerKm > 0).map(r => [Date.parse(r.date), r.odometerKm]).concat(cs.filter(c => c.odometerKm > 0).map(c => [Date.parse(c.date), c.odometerKm])).filter(q => Number.isFinite(q[0])).sort((a, b) => a[0] - b[0]);
+  if (kmPts.length > 1) h += CAP('Kilometerstand im Zeitverlauf') + akXY({ series: [{ kind: 'line', pts: kmPts, color: AK.green }, { kind: 'dots', pts: kmPts, color: AK.green, r: 4 }], xmin: kmPts[0][0], xmax: kmPts[kmPts.length - 1][0], xFmt: D1, yFmt: (v, d) => fmt(v, d), alt: 'Kilometerstand im Zeitverlauf' });
+  if (months.length > 1 && months.some(x => x.km > 0)) h += CAP('Gefahrene Kilometer je Monat') + akBars({ labels: months.map(x => x.label), stacks: [{ color: AK.sky, label: 'km je Monat', vals: months.map(x => x.km) }], yFmt: (v, d) => fmt(v, d), alt: 'Kilometer je Monat' });
+  if (months.some(x => x.k100 != null)) h += CAP('Ø Verbrauch je Monat (kWh/100 km, inkl. Ladeverluste)') + akBars({ labels: months.map(x => x.label), stacks: [{ color: AK.green, label: 'Verbrauch', vals: months.map(x => x.k100 || 0) }], ref: [{ y: wltpVal(), label: 'WLTP ' + fmt(wltpVal(), 1), color: AK.amber }], yFmt: (v, d) => fmt(v, d), alt: 'Verbrauch je Monat' });
+  if (months.some(x => x.laden + x.other > 0)) h += CAP('Kosten je Monat (Euro)') + akBars({ labels: months.map(x => x.label), stacks: [{ color: AK.green, label: 'Laden', vals: months.map(x => x.laden) }, { color: AK.amber, label: 'Sonstige Kosten', vals: months.map(x => x.other) }], yFmt: (v, d) => fmt(v, d), alt: 'Kosten je Monat' }) + NOTE('Einnahmen und Erstattungen sind nicht abgezogen.');
+  const tp = akTempPts();
+  if (tp.length >= 5) { const mxx = tp.reduce((a, q) => a + q[0], 0) / tp.length, myy = tp.reduce((a, q) => a + q[1], 0) / tp.length, sxx = tp.reduce((a, q) => a + (q[0] - mxx) ** 2, 0), sl = sxx > 0 ? tp.reduce((a, q) => a + (q[0] - mxx) * (q[1] - myy), 0) / sxx : 0, ic = myy - sl * mxx, xa = Math.min(...tp.map(q => q[0])), xb = Math.max(...tp.map(q => q[0]));
+    h += CAP('Verbrauch je Außentemperatur (jeder Punkt = eine Ladung)') + akXY({ series: [{ kind: 'dots', pts: tp, color: AK.slate, r: 6 }].concat(xb - xa >= 6 ? [{ kind: 'line', pts: [[xa, ic + sl * xa], [xb, ic + sl * xb]], color: AK.green, w: 5 }] : []), xmin: Math.floor(xa), xmax: Math.ceil(xb), xFmt: (v) => fmt(v, 0) + ' °C', xTicks: akNice(xa, xb, 5), yFmt: (v, d) => fmt(v, d), alt: 'Verbrauch je Außentemperatur' }) + NOTE('Mittlere Tagestemperatur zwischen zwei Ladungen am Wetter-Standort (Open-Meteo), Verbrauch in kWh/100 km.'); }
+  const br = batRows(); if (br.length >= 5) { const roll = []; br.forEach(r => { const w = br.filter(x => x.t > r.t - BAT.win * BAT.day && x.t <= r.t); if (w.length >= 6) { const f = batFit(w); if (f) roll.push([r.t, f.K]); } });
+    h += CAP('Akku-Schätzung je Ladung (kWh an der Steckdose je 100 % Akku)') + akXY({ series: [{ kind: 'dots', pts: br.map(x => [x.t, x.k]), color: AK.slate, r: 5 }].concat(roll.length > 1 ? [{ kind: 'line', pts: roll, color: AK.green, w: 5 }] : []), ref: batOk ? [{ y: fit.K, label: 'Ø ' + fmt(fit.K, 1), color: AK.amber }] : [], xmin: br[0].t, xmax: br[br.length - 1].t, xFmt: D1, yFmt: (v, d) => fmt(v, d), legend: [[AK.slate, 'Einzelne Ladung'], [AK.green, 'Gleitender Wert (3 Monate)']], alt: 'Akku-Schätzung je Ladung' }) + NOTE('Einzelwerte streuen durch Rundung des Akku-% und Temperatur. Aussagekräftig ist die Veränderung über lange Zeit.'); }
+  const pp2 = ent.filter(e => unitOf(e.r) > 0 && Number.isFinite(e.t)); if (pp2.length >= 3) { const col = { home: AK.green, bosch: AK.sky, away: AK.amber }, ser = PLACE_KEYS.map(k => ({ kind: 'dots', pts: pp2.filter(e => placeOf(e.r) === k).map(e => [e.t, unitOf(e.r) * 100]), color: col[k], r: 6 })).filter(x => x.pts.length);
+    h += CAP('Strompreis je Ladung (ct/kWh)') + akXY({ series: ser, ref: kwh > 0 ? [{ y: laden / kwh * 100, label: 'Ø ' + fmt(laden / kwh * 100, 1), color: AK.rose }] : [], xmin: Math.min(...pp2.map(e => e.t)), xmax: Math.max(...pp2.map(e => e.t)), xFmt: D1, yFmt: (v, d) => fmt(v, d), legend: PLACE_KEYS.filter(k => pp2.some(e => placeOf(e.r) === k)).map(k => [col[k], PLACES[k]]), alt: 'Strompreis je Ladung' }); }
+  /* Monatsübersicht */
+  if (months.length) { const sum = months.reduce((a, x) => ({ km: a.km + x.km, n: a.n + x.n, kwh: a.kwh + x.kwh, laden: a.laden + x.laden, other: a.other + x.other, income: a.income + x.income }), { km: 0, n: 0, kwh: 0, laden: 0, other: 0, income: 0 });
+    h += H2('Monatsübersicht') + tbl(['Monat', 'km', 'Ladungen', 'kWh', 'kWh/100 km', 'Laden', 'Sonstige', 'Einnahmen'], months.map(x => [x.label, x.km ? fmt(x.km, 0) : '–', fmt(x.n, 0), x.kwh ? fmt(x.kwh, 0) : '–', x.k100 != null ? fmt(x.k100, 1) : '–', eur(x.laden), eur(x.other), x.income ? eur(x.income) : '–']).concat([Object.assign(['Summe', fmt(sum.km, 0), fmt(sum.n, 0), fmt(sum.kwh, 0), tot && tot.km ? fmt(tot.kwh100, 1) : '–', eur(sum.laden), eur(sum.other), sum.income ? eur(sum.income) : '–'], { bold: true })]), [1, 2, 3, 4, 5, 6, 7], 11); }
+  /* Rekorde */
+  const withK = ent.filter(e => e.st.kwh100 != null && !e.st.rough), withC = ent.filter(e => e.c > 0 && e.r.cost > 0), rec = [];
+  if (withK.length) { const lo = withK.reduce((a, e) => e.st.kwh100 < a.st.kwh100 ? e : a), hi = withK.reduce((a, e) => e.st.kwh100 > a.st.kwh100 ? e : a); rec.push(['Niedrigster Verbrauch', fmt(lo.st.kwh100, 1) + ' kWh/100 km', D1(lo.t)], ['Höchster Verbrauch', fmt(hi.st.kwh100, 1) + ' kWh/100 km', D1(hi.t)]); }
+  if (withC.length) { const lo = withC.reduce((a, e) => e.r.cost / e.c < a.r.cost / a.c ? e : a), hi = withC.reduce((a, e) => e.r.cost / e.c > a.r.cost / a.c ? e : a), big = withC.reduce((a, e) => e.c > a.c ? e : a), cheap = withC.reduce((a, e) => e.r.cost < a.r.cost ? e : a), dear = withC.reduce((a, e) => e.r.cost > a.r.cost ? e : a);
+    rec.push(['Günstigster Strompreis', fmt(lo.r.cost / lo.c * 100, 1) + ' ct/kWh', D1(lo.t)], ['Höchster Strompreis', fmt(hi.r.cost / hi.c * 100, 1) + ' ct/kWh', D1(hi.t)], ['Größte Ladung', fmt(big.c, 1) + ' kWh', D1(big.t)], ['Günstigste Ladung', eur(cheap.r.cost), D1(cheap.t)], ['Teuerste Ladung', eur(dear.r.cost), D1(dear.t)]); }
+  if (rec.length) h += H2('Rekorde') + tbl(['Kennzahl', 'Wert', 'Datum'], rec, [1]);
+  /* Wartung, Kosten, Plan */
   const svc = cs.filter(c => costAmt(c) > 0 && AKTE_SERVICE.test((c.category || '') + ' ' + (c.title || ''))).sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
-  h += H2('Wartung und Service') + (svc.length ? tbl(['Datum', 'km-Stand', 'Bezeichnung', 'Kategorie', 'Betrag'], svc.map(c => [wrDY(Date.parse(c.date)), c.odometerKm > 0 ? fmt(c.odometerKm, 0) : '–', esc(c.title || ''), esc(c.category || '–'), eur(costAmt(c))]), [1, 4]) : '<p style="font-size:12px;color:#475569;margin:0">Keine Einträge in Kategorien wie Service, Wartung, Reifen oder Reparatur gefunden.</p>');
+  h += H2('Wartung und Service') + (svc.length ? tbl(['Datum', 'km-Stand', 'Bezeichnung', 'Kategorie', 'Betrag'], svc.map(c => [D1(Date.parse(c.date)), c.odometerKm > 0 ? fmt(c.odometerKm, 0) : '–', esc(c.title || ''), esc(c.category || '–'), eur(costAmt(c))]).concat([Object.assign(['Summe', '', '', '', eur(svc.reduce((a, c) => a + costAmt(c), 0))], { bold: true })]), [1, 4]) : '<p style="font-size:12px;color:#475569;margin:0">Keine Einträge in Kategorien wie Service, Wartung, Reifen oder Reparatur gefunden.</p>');
   const cat = new Map(); cs.forEach(c => { const a = costAmt(c); if (a <= 0) return; const k = c.category || 'Ohne Kategorie', o = cat.get(k) || { n: 0, s: 0 }; o.n++; o.s += a; cat.set(k, o); });
   if (cat.size || laden) h += H2('Kosten nach Kategorie') + tbl(['Kategorie', 'Anzahl', 'Summe'], [['Laden (Strom)', fmt(n, 0), eur(laden)]].concat([...cat.entries()].sort((a, b) => b[1].s - a[1].s).map(([k, o]) => [esc(k), fmt(o.n, 0), eur(o.s)])), [1, 2]);
   const rem = getReminders().slice().sort((a, b) => String(a.dueDate || '9999').localeCompare(String(b.dueDate || '9999')));
-  if (rem.length) h += H2('Wartungsplan (Erinnerungen)') + tbl(['Titel', 'Fällig am', 'Fällig bei'], rem.map(r => [esc(r.title || ''), r.dueDate ? wrDY(Date.parse(r.dueDate + 'T12:00:00')) : '–', r.dueKm > 0 ? fmt(r.dueKm, 0) + ' km' : '–']));
-  h += '<p style="font-size:11px;color:#64748b;margin:24px 0 0;border-top:1px solid #cbd5e1;padding-top:8px">Diese Akte wurde am ' + wrDY(now) + ' aus den eigenen Aufzeichnungen der App erzeugt. Sie ist kein Gutachten und ersetzt weder das Serviceheft noch Herstellernachweise.</p></div>';
+  if (rem.length) h += H2('Wartungsplan (Erinnerungen)') + tbl(['Titel', 'Fällig am', 'Fällig bei'], rem.map(r => [esc(r.title || ''), r.dueDate ? D1(Date.parse(r.dueDate + 'T12:00:00')) : '–', r.dueKm > 0 ? fmt(r.dueKm, 0) + ' km' : '–']));
+  h += '<p style="font-size:11px;color:#64748b;margin:24px 0 0;border-top:1px solid #cbd5e1;padding-top:8px">Diese Akte wurde am ' + D1(now) + ' aus den eigenen Aufzeichnungen der App erzeugt. Kaufkilometer und Kaufpreis sind Angaben des Halters und fließen nicht in die Kostenrechnung ein. Die Akte ist kein Gutachten und ersetzt weder das Serviceheft noch Herstellernachweise.</p></div>';
   return h;
 }
 $('btn-akte').addEventListener('click', () => {
@@ -4104,6 +4195,25 @@ $('btn-wrap-preview').addEventListener('click', () => {
 });
 try { renderWrapCard(); } catch (e) { }
 
+/* =====================================================================
+   Cloud-Abgleich von WLTP-Wert und Wetter-Standort (Dokument enyaqStrom/<uid>/settings/prefs, gleiche Regel wie Anbieter und Kategorien).
+   Erster Abgleich: Was die Cloud hat, gilt; fehlt dort etwas und ist lokal vorhanden, wird es hochgeladen. Danach gilt die Cloud (Änderung auf einem Gerät wirkt auf allen).
+   ===================================================================== */
+function pushPrefs() {
+  if (!window.cloud?.isSignedIn()) return;
+  const w = Number(getSettings().wltp);
+  window.cloud.setPrefs({ wltp: w > 0 ? w : null, wxLoc: wxLoc() || null }).catch(() => { });
+}
+window.onCloudPrefs = (d, first, uid) => {
+  if (first) checkCacheUid(uid);
+  const lw = Number(getSettings().wltp) > 0 ? Number(getSettings().wltp) : null, ll = wxLoc();
+  let nw = d && Number(d.wltp) > 0 ? Number(d.wltp) : null, nl = d && d.wxLoc && Number.isFinite(d.wxLoc.lat) && Number.isFinite(d.wxLoc.lon) ? { lat: d.wxLoc.lat, lon: d.wxLoc.lon, label: String(d.wxLoc.label || '') } : null, up = false;
+  if (first) { if (nw == null && lw != null) { nw = lw; up = true; } if (nl == null && ll) { nl = ll; up = true; } }
+  if (nw !== lw) { const raw = load(KEY_SETTINGS, {}) || {}; if (nw == null) delete raw.wltp; else raw.wltp = nw; save(KEY_SETTINGS, raw); if (document.activeElement !== $('set-wltp')) $('set-wltp').value = nw != null ? String(nw).replace('.', ',') : ''; }
+  if (JSON.stringify(nl) !== JSON.stringify(ll || null)) { if (nl) save(KEY_WXLOC, nl); else localStorage.removeItem(KEY_WXLOC); localStorage.removeItem(KEY_WXCACHE); renderWxLoc(); }
+  if (up) window.cloud.setPrefs({ wltp: nw, wxLoc: nl }).catch(() => { });
+};
+
 initStatImg();                                           // Statistik-Bild laden (asynchron)
 showView('dashboard');
 </script>
@@ -4120,12 +4230,13 @@ const app = initializeApp({
 });
 const auth = getAuth(app);
 const db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });   // Offline-Queue
-let user = null, unsub = null, unsubP = null, unsubC = null, unsubK = null, unsubR = null, unsubG = null;
+let user = null, unsub = null, unsubP = null, unsubC = null, unsubK = null, unsubR = null, unsubG = null, unsubF = null;
 const col = () => collection(db, 'enyaqStrom', user.uid, 'readings');
 const costsCol = () => collection(db, 'enyaqStrom', user.uid, 'costs');                // Kosten (Service, Wäsche, Versicherung …)
 const remCol = () => collection(db, 'enyaqStrom', user.uid, 'reminders');                // Erinnerungen (Wartung, Service nach Datum/km)
 const recCol = () => collection(db, 'enyaqStrom', user.uid, 'recurring');                // wiederkehrende Kosten (Vorlagen)
 const catDoc = () => doc(db, 'enyaqStrom', user.uid, 'settings', 'categories');      // Liste der Kosten-Kategorien
+const prefDoc = () => doc(db, 'enyaqStrom', user.uid, 'settings', 'prefs');         // WLTP-Wert + Wetter-Standort
 const provDoc = () => doc(db, 'enyaqStrom', user.uid, 'settings', 'providers');     // eigenes Dokument für die Anbieter-Liste
 const sig = (r) => [r.id, r.date, r.totalReading, r.consumedSinceLast, r.cost, r.odometerKm, r.socStart, r.socEnd, r.capacityKwh, r.chargeStart, r.chargeEnd, r.avgPowerKw, r.meterReset, r.place, r.pricePerKwh, r.provider, r.fee].join('|');
 
@@ -4169,6 +4280,7 @@ window.cloud = {
   pushReminders: (prev, next) => diffPush(remCol, remSig, prev, next),
   pushRecurring: (prev, next) => diffPush(recCol, recSig, prev, next),
   isSignedIn: () => !!user,
+  setPrefs: (o) => user ? setDoc(prefDoc(), { ...o, updatedAt: new Date().toISOString() }) : Promise.resolve(),
   setProviders: (list) => user ? setDoc(provDoc(), { list, updatedAt: new Date().toISOString() }) : Promise.resolve(),
   token: () => user ? user.getIdToken() : Promise.resolve(null),       // Anmelde-Token für die Vercel-Funktionen
   login: () => signInWithPopup(auth, new GoogleAuthProvider()),
@@ -4177,12 +4289,15 @@ window.cloud = {
 };
 
 onAuthStateChanged(auth, (u) => {
-  user = u; if (unsub) { unsub(); unsub = null; } if (unsubP) { unsubP(); unsubP = null; } if (unsubC) { unsubC(); unsubC = null; } if (unsubK) { unsubK(); unsubK = null; } if (unsubR) { unsubR(); unsubR = null; } if (unsubG) { unsubG(); unsubG = null; }
+  user = u; if (unsub) { unsub(); unsub = null; } if (unsubP) { unsubP(); unsubP = null; } if (unsubC) { unsubC(); unsubC = null; } if (unsubK) { unsubK(); unsubK = null; } if (unsubR) { unsubR(); unsubR = null; } if (unsubG) { unsubG(); unsubG = null; } if (unsubF) { unsubF(); unsubF = null; }
   window.onCloudStatus?.(u ? { email: u.email || u.displayName || 'Konto', uid: u.uid } : null);
   if (!u) return;
   let firstP = true;
   unsubP = onSnapshot(provDoc(), (snap) => { window.onCloudProviders?.(snap.exists() ? snap.data().list : null, firstP, u.uid); firstP = false; },
     (err) => window.onCloudStatus?.({ error: 'Anbieter-Liste: ' + (err.code === 'permission-denied' ? 'Keine Berechtigung für enyaqStrom/<uid>/settings (Firestore-Regel ergänzen)' : err.message) }));
+  let firstF = true;
+  unsubF = onSnapshot(prefDoc(), (snap) => { window.onCloudPrefs?.(snap.exists() ? snap.data() : null, firstF, u.uid); firstF = false; },
+    (err) => window.onCloudStatus?.({ error: 'Einstellungen (WLTP, Standort): ' + (err.code === 'permission-denied' ? 'Keine Berechtigung für enyaqStrom/<uid>/settings/prefs (Firestore-Regel ergänzen)' : err.message) }));
   let firstK = true, firstC = true;
   unsubK = onSnapshot(catDoc(), (snap) => { window.onCloudCategories?.(snap.exists() ? snap.data().list : null, firstK, u.uid); firstK = false; },
     (err) => window.onCloudStatus?.({ error: 'Kategorien: ' + (err.code === 'permission-denied' ? 'Keine Berechtigung für enyaqStrom/<uid>/settings (Firestore-Regel ergänzen)' : err.message) }));
