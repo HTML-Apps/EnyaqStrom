@@ -7,12 +7,12 @@
   "description": "SkodaEnyaqiV",
   "icons": [
     {
-      "src": "car.png",
+      "src": "car-v2.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "car.png",
+      "src": "car-v2.png",
       "sizes": "512x512",
       "type": "image/png"
     }
