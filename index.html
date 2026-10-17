@@ -839,11 +839,14 @@
           <p id="trips-last" class="mt-1.5 text-xs text-slate-500 dark:text-slate-400"></p>
           <p id="trips-msg" class="hidden text-sm mt-1.5"></p>
         </div>
-        <div class="py-4 first:pt-4 last:pb-0">
-          <p class="text-sm font-semibold text-slate-800 dark:text-slate-200">Orte</p>
+        <details id="tplace-det" class="group py-4 first:pt-4 last:pb-0">
+          <summary class="flex cursor-pointer list-none items-center justify-between gap-3 select-none [&::-webkit-details-marker]:hidden">
+            <span class="text-sm font-semibold text-slate-800 dark:text-slate-200">Orte</span>
+            <span class="flex items-center gap-2"><span id="tplace-count" class="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-xs font-semibold tabular-nums text-slate-600 dark:text-slate-300">0</span><svg class="w-5 h-5 text-slate-400 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span>
+          </summary>
           <div id="tplace-list" class="flex flex-wrap gap-1.5 mt-2"></div>
           <p class="mt-1.5 text-xs text-slate-500 dark:text-slate-400">Neue Orte legst du in der Historie unter „Fahrten“ an, indem du eine Adresse antippst. „Zuhause“ und „Arbeit“ ergeben automatisch das Etikett Arbeitsweg.</p>
-        </div>
+        </details>
         <div class="py-4 first:pt-4 last:pb-0">
           <p class="text-sm font-semibold text-slate-800 dark:text-slate-200">Etiketten</p>
           <div id="tlab-list" class="flex flex-wrap gap-1.5 mt-2"></div>
@@ -856,8 +859,11 @@
         <select id="tlab-def" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></select>
           <p class="mt-1.5 text-xs text-slate-500 dark:text-slate-400">Farbpunkt antippen = Farbe wechseln (jede Farbe nur einmal), Namen antippen = umbenennen.</p>
         </div>
-        <div class="py-4 first:pt-4 last:pb-0">
-          <p class="text-sm font-semibold text-slate-800 dark:text-slate-200">Automatische Etiketten (Regeln)</p>
+        <details id="trule-det" class="group py-4 first:pt-4 last:pb-0">
+          <summary class="flex cursor-pointer list-none items-center justify-between gap-3 select-none [&::-webkit-details-marker]:hidden">
+            <span class="text-sm font-semibold text-slate-800 dark:text-slate-200">Automatische Etiketten (Regeln)</span>
+            <span class="flex items-center gap-2"><span id="trule-count" class="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-xs font-semibold tabular-nums text-slate-600 dark:text-slate-300">0</span><svg class="w-5 h-5 text-slate-400 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span>
+          </summary>
           <ul id="trule-list" class="mt-2 space-y-1.5"></ul>
         <div id="trule-form" class="mt-2 grid grid-cols-2 gap-2">
           <div><label for="trule-a" class="text-xs text-slate-500 dark:text-slate-400">Von</label><select id="trule-a" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></select></div>
@@ -866,7 +872,7 @@
           <div class="flex items-end"><button id="btn-trule-add" type="button" class="w-full h-[46px] rounded-xl bg-emerald-600 text-white text-sm font-semibold active:scale-95 transition">Regel anlegen</button></div>
         </div>
           <p class="mt-1.5 text-xs text-slate-500 dark:text-slate-400">Schneller geht es direkt in der Historie: Etikett einer Fahrt antippen und „Für alle Fahrten dieser Strecke“ angehakt lassen. Gilt in beide Richtungen, Umkreis 300 m, einzelne Fahrten bleiben änderbar.</p>
-        </div>
+        </details>
       </div>
     </div>
     <div class="rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
@@ -4772,6 +4778,7 @@ function renderTLabelSettings() {
   el.innerHTML = ls.map(l => `<span class="inline-flex items-center gap-1 pl-1 pr-1 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 text-sm max-w-full"><button type="button" data-tlcol="${esc(l.id)}" aria-label="Farbe von ${esc(l.name)} wechseln" class="w-7 h-7 shrink-0 flex items-center justify-center"><span class="block w-4 h-4 rounded-full" style="background:${esc(l.color)}"></span></button><button type="button" data-tlren="${esc(l.id)}" class="truncate">${esc(l.name)}</button><button type="button" data-tldel="${esc(l.id)}" aria-label="${esc(l.name)} entfernen" class="w-6 h-6 shrink-0 rounded-lg text-slate-500 hover:text-red-600 active:scale-95">×</button></span>`).join('');
   $('tlab-def').innerHTML = ls.map(l => `<option value="${esc(l.id)}" ${l.id === defLabelId() ? 'selected' : ''}>${esc(l.name)}</option>`).join('');
   const rules = getTRules();
+  $('trule-count').textContent = rules.length;
   $('trule-list').innerHTML = rules.length ? rules.map(r => { const l = labelById(r.label); return `<li class="flex items-center justify-between gap-2 rounded-xl bg-slate-100 dark:bg-slate-800 pl-3 pr-1 py-1.5 text-sm"><span class="min-w-0 truncate">${esc(placeName(r.a.addr, r.a.lat + ',' + r.a.lon))} ↔ ${esc(placeName(r.b.addr, r.b.lat + ',' + r.b.lon))} → <span style="color:${l ? esc(l.color) : '#94a3b8'}" aria-hidden="true">●</span> ${l ? esc(l.name) : 'gelöschtes Etikett'}</span><button type="button" data-trdel="${esc(r.id)}" aria-label="Regel entfernen" class="w-6 h-6 shrink-0 rounded-lg text-slate-500 hover:text-red-600 active:scale-95">×</button></li>`; }).join('')
     : '<li class="text-xs text-slate-500 dark:text-slate-400">Noch keine Regeln.</li>';
   const pl = getTPlaces(), opt = pl.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
@@ -4834,6 +4841,7 @@ function setTPlaces(list) {
 }
 function renderTPlaceList() {
   const el = $('tplace-list'); if (!el) return; const l = getTPlaces(), K = { home: ' · Zuhause', work: ' · Arbeit' };
+  $('tplace-count').textContent = l.length;                                   // Anzahl im zugeklappten Kopf
   el.innerHTML = l.length ? l.map(p => `<span class="inline-flex items-center gap-1 pl-3 pr-1 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 text-sm max-w-full"><span class="truncate">${esc(p.name)}${K[p.kind] || ''}</span><button type="button" data-del="${esc(p.id)}" aria-label="${esc(p.name)} entfernen" class="w-6 h-6 shrink-0 rounded-lg text-slate-500 hover:text-red-600 active:scale-95">×</button></span>`).join('')
     : '<span class="text-xs text-slate-500 dark:text-slate-400">Noch keine Orte benannt.</span>';
 }
