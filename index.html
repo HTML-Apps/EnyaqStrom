@@ -54,6 +54,11 @@
   .spinner { width:22px;height:22px;border:3px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
   :root { color-scheme: light dark; }
+  /* Heller Modus: Segment-Leisten und graue Buttons ohne eigene Textfarbe erben sonst die helle Schrift des Body */
+  @media (prefers-color-scheme: light) {
+    .bg-slate-100:not([class*="text-"]), .bg-slate-200:not([class*="text-"]), .bg-white:not([class*="text-"]) { color: #0f172a; }
+    #cap-place button:not(.bg-white), #hist-filter button:not(.bg-white), #rep-mode button:not(.bg-white), #rep-place button:not(.bg-white), #dash-place button:not(.bg-white), #range-switch button:not(.bg-white) { color: #475569; }
+  }
   /* Statistik: Zahl groß, Einheit klein daneben, alles in einer Zeile */
   .st-u { font-size: .75rem; font-weight: 500; margin-left: .25rem; color: #64748b; }
   .st-big .st-u { font-size: .875rem; }
@@ -125,6 +130,10 @@
     <div id="setup-hint" class="hidden rounded-2xl p-3 text-sm bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-200">Willkommen! Trage über das Profil-Symbol oben rechts unter „Einstellungen“ zuerst Strompreis, Nettokapazität der Batterie und Ladeleistung deines Autos ein, damit alle Berechnungen stimmen.</div>
     <div id="key-warn" class="hidden rounded-2xl p-3 text-sm"></div>
     <button id="report-banner" type="button" class="hidden w-full text-left rounded-2xl p-3 text-sm bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200 flex items-center justify-between gap-2 active:scale-95 transition"><span id="report-banner-text"></span><span aria-hidden="true">›</span></button>
+    <div id="trips-banner" class="hidden w-full rounded-2xl p-3 text-sm bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-200 flex items-center justify-between gap-2">
+      <button id="trips-banner-go" type="button" class="min-w-0 flex-1 text-left active:opacity-70"><span id="trips-banner-text" class="block"></span><span class="block text-xs opacity-75">MyŠkoda-App → Fahrtenbuch → Export, dann hier hochladen</span></button>
+      <button id="trips-banner-x" type="button" aria-label="Für diesen Monat ausblenden" class="w-9 h-9 shrink-0 rounded-xl text-lg active:scale-95 transition hover:bg-black/5 dark:hover:bg-white/10">×</button>
+    </div>
 
     <div class="rounded-3xl bg-white dark:bg-[#141414]/80 dark:backdrop-blur-md dark:border dark:border-white/5 text-slate-900 dark:text-slate-100 shadow-sm p-4">
       <div class="flex items-center justify-between h-7 mb-2">
@@ -368,7 +377,7 @@
   <!-- ============ VIEW: KOSTEN ============ -->
   <section id="view-costs" class="view hidden space-y-4">
     <div class="-mt-2 flex h-[60px] items-center justify-between gap-3 -mb-[14px]">
-      <h1 class="min-w-0 truncate font-barlow font-semibold text-2xl uppercase tracking-[0.14em] text-white">Kosten erfassen</h1>
+      <h1 class="min-w-0 truncate font-barlow font-semibold text-2xl uppercase tracking-[0.14em] text-white">Kosten</h1>
       <button id="cost-to-hist" type="button" class="shrink-0 text-sm font-medium text-emerald-400 active:opacity-70">Alle ansehen ›</button>
     </div>
 
@@ -468,7 +477,7 @@
     <div id="trips-wrap" class="hidden space-y-3">
       <div class="flex items-center justify-between gap-2">
         <p id="trips-info" class="min-w-0 text-xs text-slate-500 dark:text-slate-400"></p>
-        <button id="trips-csv" type="button" class="shrink-0 inline-flex items-center gap-1.5 h-10 px-3.5 rounded-xl bg-slate-200 dark:bg-slate-800 text-sm font-semibold active:scale-95 transition"><svg class="w-[18px] h-[18px]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>CSV</button>
+        <button id="trips-csv" type="button" class="text-slate-900 dark:text-slate-100 shrink-0 inline-flex items-center gap-1.5 h-10 px-3.5 rounded-xl bg-slate-200 dark:bg-slate-800 text-sm font-semibold active:scale-95 transition"><svg class="w-[18px] h-[18px]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>CSV</button>
       </div>
       <div id="trips-kpi" class="grid grid-cols-3 gap-2"></div>
       <div id="trips-empty" class="hidden rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-5 text-center">
@@ -477,7 +486,7 @@
         <button id="trips-go-set" type="button" class="mt-3 w-full rounded-xl bg-emerald-600 py-2.5 text-sm font-semibold text-white active:scale-95 transition">Zu den Einstellungen</button>
       </div>
       <div id="trips-list" class="space-y-4"></div>
-      <button id="trips-more" type="button" class="hidden w-full py-3 rounded-2xl bg-slate-200 dark:bg-slate-800 text-sm font-medium active:scale-95 transition">Ältere Fahrten anzeigen</button>
+      <button id="trips-more" type="button" class="text-slate-900 dark:text-slate-100 hidden w-full py-3 rounded-2xl bg-slate-200 dark:bg-slate-800 text-sm font-medium active:scale-95 transition">Ältere Fahrten anzeigen</button>
       <p class="text-xs text-slate-500 dark:text-slate-400 text-center">Etikett antippen = ändern, auf Wunsch für die ganze Strecke merken. Ort antippen = Namen vergeben (z. B. Zuhause, Bosch). Fahrten unter 1 km sind ausgeblendet.</p>
     </div>
   </section>
@@ -695,7 +704,7 @@
           <div id="rf-top"></div>
         </div>
         <div class="print:hidden grid grid-cols-2 gap-2">
-          <button id="rf-csv" type="button" class="py-3 rounded-2xl bg-slate-200 dark:bg-slate-800 text-sm font-medium active:scale-95 transition">Monat als CSV</button>
+          <button id="rf-csv" type="button" class="text-slate-900 dark:text-slate-100 py-3 rounded-2xl bg-slate-200 dark:bg-slate-800 text-sm font-medium active:scale-95 transition">Monat als CSV</button>
           <button id="rf-all" type="button" class="py-3 rounded-2xl bg-emerald-600 text-white text-sm font-semibold active:scale-95 transition">Alle Fahrten ansehen</button>
         </div>
         <p class="text-xs text-slate-500 dark:text-slate-400 text-center">Daten aus dem Fahrtenbuch der MyŠkoda-App. Der Verbrauch laut Auto enthält keine Ladeverluste und liegt deshalb unter dem Wert aus deinen Ladungen.</p>
@@ -936,7 +945,7 @@
     <div class="rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
       <div class="flex items-start gap-3 pb-3 border-b-2 border-emerald-500/70">
         <svg class="w-6 h-6 mt-0.5 shrink-0 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3"/></svg>
-        <div class="min-w-0"><h2 class="text-lg font-bold leading-6">Datensicherung</h2><p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Zählerstände, Kosten, Erinnerungen und wiederkehrende Kosten als Datei.</p></div>
+        <div class="min-w-0"><h2 class="text-lg font-bold leading-6">Datensicherung</h2><p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Zählerstände, Kosten, Erinnerungen, wiederkehrende Kosten und Fahrtenbuch als Datei.</p></div>
       </div>
       <div class="divide-y divide-slate-200 dark:divide-slate-800">
         <div class="py-4 first:pt-4 last:pb-0">
@@ -961,7 +970,7 @@
       <p id="vehicle-status" class="text-sm text-slate-500 dark:text-slate-400"></p>
       <div class="grid grid-cols-2 gap-2">
         <button id="btn-cloud" class="w-full px-2 py-3 rounded-2xl bg-slate-900 dark:bg-slate-700 text-white text-sm font-medium active:scale-95 transition">Mit Google anmelden</button>
-        <button id="btn-help" class="w-full px-2 py-3 rounded-2xl bg-slate-200 dark:bg-slate-800 text-sm font-medium active:scale-95 transition">Anleitung</button>
+        <button id="btn-help" class="w-full px-2 py-3 rounded-2xl bg-slate-200 dark:bg-slate-800 text-sm font-medium active:scale-95 transition">Vercel-Vorlage</button>
       </div>
           </div>
         </div>
@@ -1186,7 +1195,7 @@ const providerOptions = (selected) => {              // <option>-Liste: leer + A
   const list = getProviders(); if (selected && !list.includes(selected)) list.push(selected);
   return '<option value="">–</option>' + list.map(n => `<option value="${esc(n)}" ${n === selected ? 'selected' : ''}>${esc(n)}</option>`).join('');
 };
-/* Kosten: { id, date, title, amount (negativ = Einnahme), category, note?, odometerKm?, guid? (Fuelio-Import) } */
+/* Kosten: { id, date, title, amount (negativ = Einnahme), category, note?, odometerKm?, guid? (aus früherem Import, wird nur mitgeführt) } */
 const DEFAULT_CATEGORIES = ['Service', 'Wartung', 'Versicherung', 'Anmeldung', 'Fahrzeugwäsche', 'Parken', 'Maut', 'Strafzettel/Gebühren', 'Tuning', 'Sonstiges'];
 const getCosts = () => { const l = load(KEY_COSTS, []); return Array.isArray(l) ? l : []; };
 const getCategories = () => { const l = load(KEY_CATEGORIES, null); return Array.isArray(l) ? l.filter(n => typeof n === 'string' && n.trim()) : DEFAULT_CATEGORIES.slice(); };
@@ -2226,7 +2235,7 @@ function renderDashboard() {
   renderEfficiency();
   renderLossChart();
   renderKeyWarning();
-  renderReportBanner();
+  renderReportBanner(); renderTripsBanner();
 }
 document.querySelectorAll('.dash-place-btn').forEach(b => b.addEventListener('click', () => { dashPlace = b.dataset.place; renderDashboard(); }));
 document.querySelectorAll('.range-btn').forEach(b => b.addEventListener('click', () => { range = b.dataset.range; renderChart(); }));
@@ -2598,12 +2607,13 @@ if (document.fonts) document.fonts.ready.then(fitSeg);
 const EXPORT_APP_ID = 'enyaq-ladekosten';
 
 $('btn-export').addEventListener('click', () => {
-  const readings = getReadings(), costs = getCosts(), reminders = getReminders(), recurring = getRecurring();
-  if (!readings.length && !costs.length && !reminders.length && !recurring.length) { flash($('io-msg'), 'Keine Daten zum Exportieren vorhanden.', false); return; }
+  const readings = getReadings(), costs = getCosts(), reminders = getReminders(), recurring = getRecurring(), trips = getTrips();
+  if (!readings.length && !costs.length && !reminders.length && !recurring.length && !trips.length) { flash($('io-msg'), 'Keine Daten zum Exportieren vorhanden.', false); return; }
   const payload = {
     app: EXPORT_APP_ID, version: 1, exportedAt: new Date().toISOString(), chargePowerKw: chargePowerKw(),
     readings: readings.map(r => ({ ...r, chargeDuration: isHome(r) ? chargeDurationOf(r) : undefined })),     // Ladedauer als hh:mm (nur Zuhause)
-    costs, categories: getCategories(), reminders, recurring
+    costs, categories: getCategories(), reminders, recurring,
+    trips, tripPrefs: { places: getTPlaces(), labels: getTLabels(), rules: getTRules(), defLabel: defLabelId() }   // Fahrtenbuch (seit Version mit Fahrten)
   };
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
@@ -2692,8 +2702,9 @@ $('import-file').addEventListener('change', async (e) => {
     if (irc.length) { const curRc = getRecurring(); commitRecurring(curRc.filter(c => !irc.some(i => sameId(c, i))).concat(irc)); bookRecurring(); }
     const newCats = ic.categories.filter(n => !getCategories().some(m => m.toLowerCase() === n.toLowerCase()));
     if (newCats.length) setCategories(getCategories().concat(newCats));
+    const nT = importTripsFromBackup(text);                // Fahrten + Orte/Etiketten/Regeln (ältere Dateien haben sie nicht)
     stopLive(false);                                     // Live-Basis wäre veraltet
-    flash($('io-msg'), fresh.length + ' neue Ladungen, ' + freshC.length + ' neue Kosten und ' + freshR.length + ' neue Erinnerungen importiert.', true);
+    flash($('io-msg'), fresh.length + ' neue Ladungen, ' + freshC.length + ' neue Kosten, ' + freshR.length + ' neue Erinnerungen' + (nT ? ' und ' + nT + ' neue Fahrten' : '') + ' importiert.', true);
   } catch (err) {
     flash($('io-msg'), 'Import fehlgeschlagen: ' + err.message, false);
   }
@@ -2832,10 +2843,7 @@ $('btn-cost-save').addEventListener('click', () => {
   if (files.length) { dvPend.set('form', []); dvRefreshForm(); dvAfterSave(entry, files, tokP, msg, text); }
 });
 
-/* =====================================================================
-   Fuelio-Import (CSV-Export "vehicle-…-sync.csv"): übernimmt Kosten und Erinnerungen. Tankungen/Ladungen werden bewusst ignoriert.
-   Doppelte Importe sind ungefährlich: jede Fuelio-Zeile hat eine guid, die am Eintrag gespeichert wird.
-   ===================================================================== */
+/* CSV-Leser (wird vom Fahrtenbuch-Import genutzt) */
 function parseCsv(text) {                                // RFC-4180: Anführungszeichen, "" als Maskierung, Zeilenumbrüche in Feldern
   text = text.replace(/^\uFEFF/, ''); const rows = []; let row = [], f = '', q = false;
   for (let i = 0; i < text.length; i++) {
@@ -2849,35 +2857,11 @@ function parseCsv(text) {                                // RFC-4180: Anführung
   if (f !== '' || row.length) { row.push(f); rows.push(row); }
   return rows.filter(r => !(r.length === 1 && r[0] === ''));
 }
-function parseFuelio(text) {
-  const rows = parseCsv(text), sections = {}; let cur = null;
-  rows.forEach(r => { if (r[0] && r[0].startsWith('## ')) { cur = r[0].slice(3).trim(); sections[cur] = { head: null, rows: [] }; } else if (cur) { if (!sections[cur].head) sections[cur].head = r; else sections[cur].rows.push(r); } });
-  if (!sections.Costs?.head) throw new Error('Das ist keine Fuelio-Datei mit Kosten (Abschnitt „## Costs“ fehlt).');
-  const toObj = (sec, r) => Object.fromEntries(sec.head.map((h, i) => [h, r[i] ?? '']));
-  const catName = new Map((sections.CostCategories?.rows || []).map(r => { const o = toObj(sections.CostCategories, r); return [o.CostTypeID, o.Name.trim()]; }));
-  const res = { costs: [], categories: [...catName.values()].filter(Boolean), logs: sections.Log?.rows.length || 0, reminders: 0, reminderItems: [], templates: 0, zero: 0, incomes: 0 };
-  const t0 = Date.now();
-  sections.Costs.rows.forEach(r => {
-    const o = toObj(sections.Costs, r), year = Number((o.RemindDate || '').slice(0, 4));
-    if (Number(o.RepeatMonths) > 0 || Number(o.RepeatOdo) > 0 || Number(o.RemindOdo) > 0 || year > 2011) { res.reminders++; const rem = fuelioReminder(o, t0 + 100000 + res.reminderItems.length, catName); if (rem) res.reminderItems.push(rem); return; }   // Erinnerung
-    if (o.isTemplate === '1') { res.templates++; return; }
-    const m = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2}))?/.exec(o.Date || ''), amt = parseFloat(o.Cost);
-    if (!m || !isFinite(amt) || amt === 0) { res.zero++; return; }
-    const d = new Date(+m[1], +m[2] - 1, +m[3], m[4] ? +m[4] : 12, m[5] ? +m[5] : 0);       // nur Datum -> 12:00 Uhr
-    const income = o.isIncome === '1'; if (income) res.incomes++;
-    const c = { id: t0 + res.costs.length, date: d.toISOString(), title: (o.CostTitle || '').trim().slice(0, 80) || 'Kosten', amount: Math.round(amt * 100) / 100 * (income ? -1 : 1), category: catName.get(o.CostTypeID) || '' };
-    const note = (o.Notes || '').trim(); if (note) c.note = note.slice(0, 300);
-    const odo = parseFloat(o.Odo); if (odo > 0 && odo <= 999999) c.odometerKm = odo;
-    const g = o.guid || o.UniqueId; if (g) c.guid = String(g).slice(0, 64);
-    res.costs.push(c);
-  });
-  return res;
-}
 
 /* =====================================================================
    Erinnerungen (Wartung, Service, Prüfungen) nach Datum und/oder km
    Eintrag: { id, title, category?, note?, dueDate? ('JJJJ-MM-TT'), dueKm?, startDate ('JJJJ-MM-TT', Beginn des Fortschrittsbalkens), startKm?,
-              repeatMonths?, repeatKm?, doneAt? (ISO, nur bei einmaligen), lastDoneAt?, lastDoneKm?, guid? (Fuelio-Import) }
+              repeatMonths?, repeatKm?, doneAt? (ISO, nur bei einmaligen), lastDoneAt?, lastDoneKm?, guid? (aus früherem Import) }
    Fortschritt: Anteil der Strecke von startDate/startKm bis dueDate/dueKm; gilt der größere der beiden Anteile (es zählt, was zuerst erreicht wird).
    Wiederkehrende Erinnerungen werden mit „Erledigt“ ab dem Erledigt-Datum (und -km) neu angesetzt, einmalige wandern in die Liste „Erledigt“.
    Den aktuellen km-Stand liefert lastKnownKm() (jüngster Wert aus Ladungen und Kosten).
@@ -3153,24 +3137,6 @@ window.onCloudReminders = (cloud, isFirst, uid) => {
   refreshViews(); touchSync();
 };
 
-/** Fuelio: eine Zeile aus „## Costs“, die eine Erinnerung ist (RemindDate / RemindOdo / Wiederholung) -> Erinnerung der App oder null. */
-function fuelioReminder(o, id, catName) {
-  const mB = /^(\d{4})-(\d{2})-(\d{2})/.exec(o.Date || ''), base = mB ? new Date(+mB[1], +mB[2] - 1, +mB[3], 12) : null;
-  const mD = /^(\d{4})-(\d{2})-(\d{2})/.exec(o.RemindDate || ''), hasDue = !!mD && +mD[1] > 2011;
-  const rm = parseInt(o.RepeatMonths) || 0, rk = parseInt(o.RepeatOdo) || 0, od = parseFloat(o.RemindOdo) || 0;
-  const due = hasDue ? new Date(+mD[1], +mD[2] - 1, +mD[3], 12) : (rm > 0 && base ? addMonths(base, rm) : null);
-  if (!due && !(od > 0)) return null;
-  const r = { id, title: (o.CostTitle || '').trim().slice(0, 80) || 'Erinnerung', category: catName.get(o.CostTypeID) || undefined };
-  const note = (o.Notes || '').trim(); if (note) r.note = note.slice(0, 300);
-  if (due) r.dueDate = ymd(due);
-  if (od > 0) r.dueKm = od;
-  if (rm > 0) r.repeatMonths = rm;
-  if (rk > 0) r.repeatKm = rk;
-  r.startDate = due && rm > 0 ? ymd(addMonths(due, -rm)) : base && (!due || base < due) ? ymd(base) : todayYMD();      // Beginn des aktuellen Zeitraums (bei Wiederholung Fälligkeit minus Intervall)
-  const odo = parseFloat(o.Odo); if (od > 0) { const sk = rk > 0 ? od - rk : (odo > 0 && odo < od ? odo : null); if (sk != null && sk >= 0) r.startKm = sk; }
-  const g = o.guid || o.UniqueId; if (g) r.guid = String(g).slice(0, 64);
-  return cleanRem(r);
-}
 
 /** Erinnerungen aus einer Export-Datei (optional, ältere Dateien haben sie nicht). Wirft bei ungültigen Einträgen. */
 function parseImportReminders(text) {
@@ -3775,6 +3741,19 @@ function renderReportBanner() {
   el.classList.toggle('hidden', !show);
   if (show) $('report-banner-text').textContent = 'Dein Bericht für ' + MONTHS_LONG[p.getMonth()] + ' ist fertig';
 }
+/** Import-Erinnerung Fahrtenbuch: ab dem 1. eines Monats, solange die neueste Fahrt älter als die letzten 3 Tage des Vormonats ist
+    (= Vormonat noch nicht importiert). Nur wenn das Fahrtenbuch schon genutzt wird; „×“ blendet sie für den laufenden Monat aus. */
+const KEY_TRIPS_NAG = 'enyaq.tripsNagHidden';
+function renderTripsBanner() {
+  const el = $('trips-banner'); if (!el || typeof getTrips !== 'function') return;
+  const n = new Date(), mKey = ymKey(n.getFullYear(), n.getMonth()), trips = getTrips();
+  const newest = trips.reduce((a, t) => Math.max(a, Date.parse(t.e) || 0), 0), cut = new Date(n.getFullYear(), n.getMonth(), 1).getTime() - 3 * 864e5;
+  const show = trips.length > 0 && newest < cut && load(KEY_TRIPS_NAG, '') !== mKey;
+  el.classList.toggle('hidden', !show);
+  if (show) { const p = prevMonthOf(); $('trips-banner-text').textContent = 'Fahrtenbuch für ' + MONTHS_LONG[p.getMonth()] + ' importieren'; }
+}
+$('trips-banner-go').addEventListener('click', () => { showView('settings'); setTimeout(() => $('btn-trips').scrollIntoView({ behavior: 'smooth', block: 'center' }), 80); });
+$('trips-banner-x').addEventListener('click', () => { const n = new Date(); save(KEY_TRIPS_NAG, ymKey(n.getFullYear(), n.getMonth())); renderTripsBanner(); });
 $('report-banner').addEventListener('click', () => { const p = prevMonthOf(); reportYM = { y: p.getFullYear(), m: p.getMonth() }; showView('report'); });
 
 /** km, die im Monat gefahren wurden: aus den km-Ständen von Ladungen und Kosten (letzter Stand im Monat minus letzter Stand davor). */
@@ -4944,6 +4923,21 @@ function renderTripReport(y, m) {
 $('rf-csv').addEventListener('click', () => { const ym = reportYM.y + '-' + pad2(reportYM.m + 1); tripsCsv(getTrips().filter(t => tripYM(t) === ym && tripVisible(t)), 'fahrtenbuch-' + ym + '.csv'); });
 $('rf-all').addEventListener('click', () => { histFilter = 'fahrten'; showView('history'); });
 
+/** Datensicherung: Fahrten zusammenführen (gleiche ID = vorhanden, eigenes Etikett bleibt) und Orte/Regeln/Etiketten ergänzen. Liefert die Zahl neuer Fahrten. */
+function importTripsFromBackup(text) {
+  let d; try { d = JSON.parse(text); } catch (e) { return 0; }
+  const list = Array.isArray(d.trips) ? d.trips.filter(t => t && typeof t.id === 'string' && !isNaN(Date.parse(t.s)) && !isNaN(Date.parse(t.e))) : [];
+  const cur = getTrips(), ids = new Set(cur.map(t => t.id)), fresh = list.filter(t => !ids.has(t.id));
+  if (fresh.length) commitTrips(cur.concat(fresh));
+  const pf = d.tripPrefs; if (pf && typeof pf === 'object') {
+    const pl = getTPlaces(), ru = getTRules(), np = Array.isArray(pf.places) ? pf.places.filter(p => p && p.id && isFinite(p.lat) && isFinite(p.lon) && !pl.some(q => q.id === p.id)) : [];
+    const nr = Array.isArray(pf.rules) ? pf.rules.filter(r => r && r.id && r.a && r.b && !ru.some(q => q.id === r.id)) : [];
+    const cl = getTLabels(), nl = Array.isArray(pf.labels) ? pf.labels.filter(l => l && l.id && l.name && !cl.some(q => q.id === l.id)) : [];
+    if (np.length) save(KEY_TPLACES, pl.concat(np));
+    if (nr.length || nl.length) setTripPrefs({ rules: ru.concat(nr), labels: cl.concat(nl).slice(0, LABEL_COLORS.length) }); else if (np.length) { renderTPlaceList(); pushTripPrefs(); }
+  }
+  return fresh.length;
+}
 /* ---- Cloud-Abgleich ---- */
 window.onCloudTrips = (months, first, uid) => {                    // months = { 'JJJJ-MM': [Fahrten] }
   if (first) checkCacheUid(uid);
