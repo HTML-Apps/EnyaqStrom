@@ -4045,7 +4045,7 @@ function wxRender(data, l) {
   else h += '<p class="text-[24px] font-bold leading-tight">Kein trockener Tag</p><p class="mt-0.5 text-sm ' + WX_MUTED + '">In den nächsten 7 Tagen liegt die Regenwahrscheinlichkeit überall bei ' + WX_DRY + ' % oder mehr.</p>';
   h += '<div class="relative mt-3 h-[190px]"><canvas id="wx-chart" role="img" aria-label="Regenwahrscheinlichkeit der nächsten 7 Tage"></canvas></div>';
   const more = dry.slice(1).map(x => { const n = wxDay(x.d); return n.wd + ' ' + n.dm + ' (' + x.p + ' %)'; });
-  h += '<p class="mt-2 text-xs ' + WX_MUTED + '">Zahlen = Regenwahrscheinlichkeit in %, gestrichelte Linie = ' + WX_DRY + ' %.' + (more.length ? ' Außerdem trocken: ' + more.join(', ') + '.' : '') + '</p>';
+  h += '<p class="mt-2 text-xs ' + WX_MUTED + '">Regenwahrscheinlichkeit in %, Grenze = ' + WX_DRY + ' %.' + (more.length ? ' Außerdem trocken: ' + more.join(', ') + '.' : '') + '</p>';
   const st = data.stale ? ' · offline, Stand ' + new Date(data.t).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : '';
   h += '<p class="mt-1 text-[11px] ' + WX_MUTED + '">' + esc(l.label) + ' · Open-Meteo' + st + '</p>';
   wxBody(h); wxDraw(days, isDry);
