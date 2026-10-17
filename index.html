@@ -268,7 +268,7 @@
       <h2 class="shrink-0 font-barlow text-xl font-bold uppercase tracking-[0.1em] text-white">Trends</h2>
       <span class="h-0.5 flex-1 rounded-full bg-gradient-to-r from-emerald-500/80 to-white/10" aria-hidden="true"></span>
     </div>
-    <div id="trends" class="flex snap-x snap-mandatory gap-4 overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-roledescription="Karussell" aria-label="Trends der letzten 6 Monate"></div>
+    <div id="trends" class="flex snap-x snap-mandatory gap-4 overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-roledescription="Karussell" aria-label="Trends der letzten 8 Monate"></div>
     <div id="trends-dots" class="!mt-2 flex justify-center gap-2" aria-hidden="true"></div>
     <div id="hero-bg" aria-hidden="true" class="absolute -top-5 -inset-x-4 -z-10 h-[620px] pointer-events-none !mt-0" style="background:radial-gradient(ellipse 72% 190px at 50% 190px,rgba(80,150,255,.40),rgba(80,150,255,0) 70%),linear-gradient(180deg,#000 0,#000 28px,#030b24 70px,#061a52 160px,#0b2f8a 280px,#0a2466 370px,#050f2e 470px,#000 600px)"></div>
   </section>
@@ -2261,7 +2261,7 @@ function renderLossChart() {
 }
 
 /* =====================================================================
-   Trends (Start): drei Karten zum Wischen – Laufleistung, Stromkosten, Gesamtkosten der letzten 6 Monate.
+   Trends (Start): drei Karten zum Wischen – Laufleistung, Stromkosten, Gesamtkosten der letzten 8 Monate.
    „Letzter Monat“ = letzter abgeschlossener Monat, Ø = Durchschnitt der abgeschlossenen Monate mit Daten, Änderung = letzter Monat gegenüber Ø.
    Der laufende Monat steht hell rechts (Zwischenstand) und zählt nicht in Ø und Änderung.
    ===================================================================== */
@@ -2270,7 +2270,7 @@ let trendIdx = 0;
 function renderTrends() {
   const box = $('trends'); if (!box) return;
   const n = new Date(), months = [];
-  for (let k = 5; k >= 0; k--) { const d = new Date(n.getFullYear(), n.getMonth() - k, 1); months.push({ y: d.getFullYear(), m: d.getMonth(), cur: k === 0 }); }
+  for (let k = 7; k >= 0; k--) { const d = new Date(n.getFullYear(), n.getMonth() - k, 1); months.push({ y: d.getFullYear(), m: d.getMonth(), cur: k === 0 }); }
   const defs = [
     { key: 'km', title: 'Monatliche Laufleistung', unit: 'km', dec: 0, val: (y, m) => kmDrivenIn(y, m) || 0, goodDown: null },
     { key: 'strom', title: 'Monatliche Kosten (Strom)', unit: '€', dec: 2, val: (y, m) => monthReport(y, m, 'all').cost || 0, goodDown: true },
@@ -2281,26 +2281,26 @@ function renderTrends() {
     const max = Math.max(...vals.map(x => x.v), avg, 1), ch = avg > 0 && last.v > 0 ? (last.v - avg) / avg * 100 : null;
     const chCls = ch == null || d.goodDown == null || Math.abs(ch) < 0.05 ? 'text-slate-700 dark:text-slate-200' : (ch < 0) === d.goodDown ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400';
     const num = (v) => v > 0 ? fmt(v, d.dec) : '–', ul = '<span class="ml-1 text-xs font-medium text-slate-500 dark:text-slate-400">' + d.unit + '</span>';
-    const stat = (l, v, cls = '') => `<div><p class="text-xs text-slate-500 dark:text-slate-400">${l}</p><p class="text-xl font-semibold tabular-nums leading-tight ${cls}">${v}</p></div>`;
+    const stat = (l, v, cls = '') => `<div><p class="text-xs text-slate-500 dark:text-slate-400">${l}</p><p class="text-lg font-semibold tabular-nums leading-tight whitespace-nowrap ${cls}">${v}</p></div>`;
     const empty = !vals.some(x => x.v > 0);
     return `<article class="snap-center snap-always shrink-0 w-full rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4" aria-label="${d.title}">
       <p class="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-700 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300"><svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true">${TREND_ICONS[d.key]}</svg>${d.title}</p>
-      ${empty ? '<p class="py-12 text-center text-sm text-slate-500 dark:text-slate-400">Noch keine Daten in den letzten 6 Monaten.</p>' : `
-      <div class="mt-4 flex gap-4">
-        <div class="w-[38%] shrink-0 space-y-3">
+      ${empty ? '<p class="py-12 text-center text-sm text-slate-500 dark:text-slate-400">Noch keine Daten in den letzten 8 Monaten.</p>' : `
+      <div class="mt-4 flex gap-3">
+        <div class="w-[31%] shrink-0 space-y-3">
           ${stat(MONTHS_LONG[last.m], num(last.v) + (last.v > 0 ? ul : ''))}
           ${stat('Durchschnitt', num(avg) + (avg > 0 ? ul : ''))}
           ${stat('Änderung', ch == null ? '–' : (ch >= 0.05 ? '+' : '') + fmt(Math.abs(ch) < 0.05 ? 0 : ch, 1) + ' %', chCls)}
         </div>
         <div class="min-w-0 flex-1 flex flex-col">
-          <div class="relative flex-1 min-h-[150px] flex items-end gap-1.5">
+          <div class="relative flex-1 min-h-[150px] flex items-end gap-1">
             ${avg > 0 ? `<div class="absolute inset-x-0 border-t-2 border-dashed border-emerald-500/70 pointer-events-none" style="bottom:${(avg / max * 100).toFixed(1)}%" title="Durchschnitt ${num(avg)} ${d.unit}"></div>` : ''}
-            ${vals.map(x => `<div class="relative flex-1 h-full flex items-end" title="${MONTHS_LONG[x.m]} ${x.y}: ${num(x.v)} ${d.unit}${x.cur ? ' (Zwischenstand)' : ''}"><div class="w-full rounded-t-md ${x.cur ? 'bg-emerald-300/80 dark:bg-emerald-300/70' : 'bg-emerald-600 dark:bg-emerald-500/80'}" style="height:${x.v > 0 ? Math.max(3, x.v / max * 100).toFixed(1) : 1.5}%"></div></div>`).join('')}
+            ${vals.map(x => `<div class="relative flex-1 h-full flex items-end" title="${MONTHS_LONG[x.m]} ${x.y}: ${num(x.v)} ${d.unit}${x.cur ? ' (Zwischenstand)' : ''}"><div class="w-full rounded-t ${x.cur ? 'bg-emerald-300/80 dark:bg-emerald-300/70' : 'bg-emerald-600 dark:bg-emerald-500/80'}" style="height:${x.v > 0 ? Math.max(3, x.v / max * 100).toFixed(1) : 1.5}%"></div></div>`).join('')}
           </div>
-          <div class="mt-1.5 flex gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">${vals.map(x => `<span class="flex-1 text-center">${MONTHS[x.m]}</span>`).join('')}</div>
+          <div class="mt-1.5 flex gap-1 text-[10px] text-slate-500 dark:text-slate-400">${vals.map(x => `<span class="flex-1 text-center">${MONTHS[x.m]}</span>`).join('')}</div>
         </div>
       </div>
-      <p class="mt-3 text-[11px] text-slate-500 dark:text-slate-400">Letzte 6 Monate · heller Balken = ${MONTHS_LONG[n.getMonth()]} (Zwischenstand) · gestrichelt = Ø</p>`}
+      <p class="mt-3 text-[11px] text-slate-500 dark:text-slate-400">Letzte 8 Monate · heller Balken = ${MONTHS_LONG[n.getMonth()]} (Zwischenstand) · gestrichelt = Ø</p>`}
     </article>`; }).join('');
   $('trends-dots').innerHTML = defs.map((_, i) => `<span class="block h-2 rounded-full transition-all ${i === trendIdx ? 'w-5 bg-emerald-500' : 'w-2 bg-slate-500/60'}"></span>`).join('');
   if (trendIdx) box.scrollLeft = trendIdx * (box.firstElementChild.offsetWidth + 16);
