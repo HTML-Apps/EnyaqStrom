@@ -264,6 +264,12 @@
       <p id="loss-empty" class="hidden text-center text-sm text-slate-500 py-6">Noch keine Ladungen mit Akku-Start und -Ende erfasst.</p>
       <p id="loss-note" class="text-xs text-slate-500 dark:text-slate-400 mt-3 text-center"></p>
     </div>
+    <div class="!mt-7 flex items-center gap-3" role="presentation">
+      <h2 class="shrink-0 font-barlow text-xl font-bold uppercase tracking-[0.1em] text-white">Trends</h2>
+      <span class="h-0.5 flex-1 rounded-full bg-gradient-to-r from-emerald-500/80 to-white/10" aria-hidden="true"></span>
+    </div>
+    <div id="trends" class="flex snap-x snap-mandatory gap-3 overflow-x-auto -mx-4 px-4 scroll-px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-roledescription="Karussell" aria-label="Trends der letzten 6 Monate"></div>
+    <div id="trends-dots" class="!mt-2 flex justify-center gap-2" aria-hidden="true"></div>
     <div id="hero-bg" aria-hidden="true" class="absolute -top-5 -inset-x-4 -z-10 h-[620px] pointer-events-none !mt-0" style="background:radial-gradient(ellipse 72% 190px at 50% 190px,rgba(80,150,255,.40),rgba(80,150,255,0) 70%),linear-gradient(180deg,#000 0,#000 28px,#030b24 70px,#061a52 160px,#0b2f8a 280px,#0a2466 370px,#050f2e 470px,#000 600px)"></div>
   </section>
 
@@ -771,6 +777,17 @@
         <div class="py-4 first:pt-4 last:pb-0">
           <label for="set-title" class="block text-sm font-medium text-slate-700 dark:text-slate-300">App-Titel</label>
           <input id="set-title" type="text" inputmode="text" autocapitalize="sentences" placeholder="z. B. Skoda Enyaq | Ladekosten" autocomplete="off" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+        </div>
+        <div class="py-4 first:pt-4 last:pb-0">
+          <div class="grid grid-cols-2 gap-3">
+            <div><label for="set-brand" class="block text-sm font-medium text-slate-700 dark:text-slate-300">Marke</label><input id="set-brand" type="text" maxlength="30" autocomplete="off" autocapitalize="words" placeholder="z. B. Škoda" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
+            <div><label for="set-model" class="block text-sm font-medium text-slate-700 dark:text-slate-300">Modell</label><input id="set-model" type="text" maxlength="40" autocomplete="off" autocapitalize="words" placeholder="z. B. Enyaq iV 50" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
+            <div><label for="set-plate" class="block text-sm font-medium text-slate-700 dark:text-slate-300">Kennzeichen</label><input id="set-plate" type="text" maxlength="15" autocomplete="off" autocapitalize="characters" placeholder="z. B. NK-AB 123" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500 uppercase"></div>
+            <div><label for="set-year" class="block text-sm font-medium text-slate-700 dark:text-slate-300">Baujahr</label><input id="set-year" type="text" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="z. B. 2023" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
+          </div>
+          <label for="set-vin" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mt-3">Fahrgestellnummer (FIN)</label>
+          <input id="set-vin" type="text" maxlength="17" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="17 Zeichen" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500 uppercase font-mono tracking-wider">
+          <p class="mt-1.5 text-xs text-slate-500 dark:text-slate-400">Erscheint in der Fahrzeugakte.</p>
         </div>
         <div class="py-4 first:pt-4 last:pb-0">
           <p class="block text-sm font-medium text-slate-700 dark:text-slate-300">Hintergrundfarbe der Start-Seite</p>
@@ -1798,6 +1815,7 @@ function fillSettings() {
   $('set-price').value = String(s.price).replace('.', ',');
   $('set-battery').value = String(batteryKwh()).replace('.', ',');
   $('set-title').value = s.title || DEFAULT_TITLE;
+  $('set-brand').value = s.brand || ''; $('set-model').value = s.model || ''; $('set-plate').value = s.plate || ''; $('set-year').value = s.year || ''; $('set-vin').value = s.vin || '';
   $('set-power').value = String(chargePowerKw()).replace('.', ',');
   renderDvInfo(); $('set-purchase').value = purchaseDay(); $('set-purchase-km').value = s.purchaseKm != null ? fmt(s.purchaseKm, 0) : ''; $('set-purchase-price').value = s.purchasePrice != null ? fmt(s.purchasePrice, 2) : ''; $('set-wltp').value = s.wltp ? String(s.wltp).replace('.', ',') : ''; renderWxLoc();
   $('set-rem-days').value = String(remWarn().days); $('set-rem-km').value = String(remWarn().km);
@@ -1855,7 +1873,11 @@ $('btn-save-settings').addEventListener('click', () => {
   if (pk !== undefined && !(pk >= 0 && pk <= 2e6)) { alert('Bitte den Kilometerstand bei Kauf als Zahl eingeben (z. B. 16.969) oder das Feld leer lassen.'); return; }
   if (pp !== undefined && !(pp >= 0 && pp <= 1e7)) { alert('Bitte den Kaufpreis in Euro als Zahl eingeben (z. B. 32.500) oder das Feld leer lassen.'); return; }
   if (wl !== undefined && !(wl > 5 && wl < 40)) { alert('Bitte den WLTP-Verbrauch in kWh/100 km eingeben (z. B. 16,0) oder das Feld leer lassen.'); return; }
-  if (save(KEY_SETTINGS, { title: $('set-title').value.trim() || DEFAULT_TITLE, price, battery, power, remDays, remKm, purchase, wltp: wl, purchaseKm: pk !== undefined ? Math.round(pk) : undefined, purchasePrice: pp !== undefined ? Math.round(pp * 100) / 100 : undefined })) {
+  const vin = $('set-vin').value.trim().toUpperCase().replace(/\s+/g, ''), yr = $('set-year').value.trim();
+  if (vin && !/^[A-HJ-NPR-Z0-9]{17}$/.test(vin)) { alert('Die Fahrgestellnummer (FIN) hat 17 Zeichen aus Ziffern und Buchstaben (ohne I, O und Q). Bitte prüfen oder das Feld leer lassen.'); return; }
+  if (yr && !(/^\d{4}$/.test(yr) && +yr >= 1990 && +yr <= new Date().getFullYear() + 1)) { alert('Bitte das Baujahr vierstellig eingeben (z. B. 2023) oder das Feld leer lassen.'); return; }
+  const txt = (id, n) => $(id).value.trim().replace(/\s+/g, ' ').slice(0, n) || undefined;
+  if (save(KEY_SETTINGS, { title: $('set-title').value.trim() || DEFAULT_TITLE, brand: txt('set-brand', 30), model: txt('set-model', 40), plate: (txt('set-plate', 15) || '').toUpperCase() || undefined, year: yr || undefined, vin: vin || undefined, price, battery, power, remDays, remKm, purchase, wltp: wl, purchaseKm: pk !== undefined ? Math.round(pk) : undefined, purchasePrice: pp !== undefined ? Math.round(pp * 100) / 100 : undefined })) {
     renderReminderBadges(); renderHeroStats(); pushPrefs();
     $('settings-msg').classList.remove('hidden'); setTimeout(() => $('settings-msg').classList.add('hidden'), 2500);
   }
@@ -2227,8 +2249,57 @@ function renderLossChart() {
   });
 }
 
+/* =====================================================================
+   Trends (Start): drei Karten zum Wischen – Laufleistung, Stromkosten, Gesamtkosten der letzten 6 Monate.
+   „Letzter Monat“ = letzter abgeschlossener Monat, Ø = Durchschnitt der abgeschlossenen Monate mit Daten, Änderung = letzter Monat gegenüber Ø.
+   Der laufende Monat steht hell rechts (Zwischenstand) und zählt nicht in Ø und Änderung.
+   ===================================================================== */
+const TREND_ICONS = { km: '<path d="M4 18a8 8 0 1 1 16 0"/><path d="M12 18l4-6"/>', strom: '<path d="M13 2L4 14h7l-1 8 9-12h-7l1-8Z"/>', ges: '<circle cx="12" cy="12" r="9"/><path d="M15.5 8.5A4.5 4.5 0 0 0 8 10m0 4a4.5 4.5 0 0 0 7.5 1.5M7 11h6M7 13h6"/>' };
+let trendIdx = 0;
+function renderTrends() {
+  const box = $('trends'); if (!box) return;
+  const n = new Date(), months = [];
+  for (let k = 5; k >= 0; k--) { const d = new Date(n.getFullYear(), n.getMonth() - k, 1); months.push({ y: d.getFullYear(), m: d.getMonth(), cur: k === 0 }); }
+  const defs = [
+    { key: 'km', title: 'Monatliche Laufleistung', unit: 'km', dec: 0, val: (y, m) => kmDrivenIn(y, m) || 0, goodDown: null },
+    { key: 'strom', title: 'Monatliche Kosten (Strom)', unit: '€', dec: 2, val: (y, m) => monthReport(y, m, 'all').cost || 0, goodDown: true },
+    { key: 'ges', title: 'Monatliche Kosten (Gesamt)', unit: '€', dec: 2, val: (y, m) => Math.max(0, costTotals(y, m).total || 0), goodDown: true }];
+  box.innerHTML = defs.map(d => {
+    const vals = months.map(mo => ({ ...mo, v: d.val(mo.y, mo.m) })), done = vals.filter(x => !x.cur && x.v > 0);
+    const last = vals[vals.length - 2], avg = done.length ? done.reduce((a, x) => a + x.v, 0) / done.length : 0;
+    const max = Math.max(...vals.map(x => x.v), avg, 1), ch = avg > 0 && last.v > 0 ? (last.v - avg) / avg * 100 : null;
+    const chCls = ch == null || d.goodDown == null || Math.abs(ch) < 0.05 ? 'text-slate-700 dark:text-slate-200' : (ch < 0) === d.goodDown ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400';
+    const num = (v) => v > 0 ? fmt(v, d.dec) : '–', ul = '<span class="ml-1 text-xs font-medium text-slate-500 dark:text-slate-400">' + d.unit + '</span>';
+    const stat = (l, v, cls = '') => `<div><p class="text-xs text-slate-500 dark:text-slate-400">${l}</p><p class="text-xl font-semibold tabular-nums leading-tight ${cls}">${v}</p></div>`;
+    const empty = !vals.some(x => x.v > 0);
+    return `<article class="snap-center shrink-0 w-full rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4" aria-label="${d.title}">
+      <p class="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-700 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300"><svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true">${TREND_ICONS[d.key]}</svg>${d.title}</p>
+      ${empty ? '<p class="py-12 text-center text-sm text-slate-500 dark:text-slate-400">Noch keine Daten in den letzten 6 Monaten.</p>' : `
+      <div class="mt-4 flex gap-4">
+        <div class="w-[38%] shrink-0 space-y-3">
+          ${stat(MONTHS_LONG[last.m], num(last.v) + (last.v > 0 ? ul : ''))}
+          ${stat('Durchschnitt', num(avg) + (avg > 0 ? ul : ''))}
+          ${stat('Änderung', ch == null ? '–' : (ch >= 0.05 ? '+' : '') + fmt(Math.abs(ch) < 0.05 ? 0 : ch, 1) + ' %', chCls)}
+        </div>
+        <div class="min-w-0 flex-1 flex flex-col">
+          <div class="relative flex-1 min-h-[150px] flex items-end gap-1.5">
+            ${avg > 0 ? `<div class="absolute inset-x-0 border-t-2 border-dashed border-emerald-500/70 pointer-events-none" style="bottom:${(avg / max * 100).toFixed(1)}%" title="Durchschnitt ${num(avg)} ${d.unit}"></div>` : ''}
+            ${vals.map(x => `<div class="relative flex-1 h-full flex items-end" title="${MONTHS_LONG[x.m]} ${x.y}: ${num(x.v)} ${d.unit}${x.cur ? ' (Zwischenstand)' : ''}"><div class="w-full rounded-t-md ${x.cur ? 'bg-emerald-300/80 dark:bg-emerald-300/70' : 'bg-emerald-600 dark:bg-emerald-500/80'}" style="height:${x.v > 0 ? Math.max(3, x.v / max * 100).toFixed(1) : 1.5}%"></div></div>`).join('')}
+          </div>
+          <div class="mt-1.5 flex gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">${vals.map(x => `<span class="flex-1 text-center">${MONTHS[x.m]}</span>`).join('')}</div>
+        </div>
+      </div>
+      <p class="mt-3 text-[11px] text-slate-500 dark:text-slate-400">Letzte 6 Monate · heller Balken = ${MONTHS_LONG[n.getMonth()]} (Zwischenstand) · gestrichelt = Ø</p>`}
+    </article>`; }).join('');
+  $('trends-dots').innerHTML = defs.map((_, i) => `<span class="block h-2 rounded-full transition-all ${i === trendIdx ? 'w-5 bg-emerald-500' : 'w-2 bg-slate-500/60'}"></span>`).join('');
+  if (trendIdx) box.scrollLeft = trendIdx * (box.firstElementChild.offsetWidth + 12);
+}
+$('trends').addEventListener('scroll', () => {
+  const box = $('trends'), w = box.firstElementChild ? box.firstElementChild.offsetWidth + 12 : 1, i = Math.round(box.scrollLeft / w);
+  if (i !== trendIdx) { trendIdx = i; [...$('trends-dots').children].forEach((d, k) => d.className = 'block h-2 rounded-full transition-all ' + (k === i ? 'w-5 bg-emerald-500' : 'w-2 bg-slate-500/60')); }
+}, { passive: true });
 function renderDashboard() {
-  applyTitle(); renderSetupHint();
+  applyTitle(); renderSetupHint(); renderTrends();
   const readings = getReadings(), last = lastHome(readings);                   // Zählerstand und letzte Ladung: immer vom Zähler zuhause
   $('dash-reading').textContent = (last ? last.totalReading : 0).toFixed(1).padStart(8, '0');   // 6 Stellen + Komma + 1 Nachkommastelle
   $('dash-last-cost').textContent = last ? eur(last.cost) : '–';
@@ -4251,7 +4322,8 @@ function akteHtml() {
   let h = '<div style="max-width:720px;margin:0 auto;font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#111;line-height:1.35"><h1 style="font-size:26px;margin:0">Fahrzeugakte</h1><p style="margin:2px 0 0;font-size:15px;color:#475569">' + esc(name) + ' · erstellt am ' + D1(now) + '</p>';
   h += kpi([[['Kilometerstand', km != null ? fmt(km, 0) + ' km' : '–'], ['Geladen', fmt(kwh, 0) + ' kWh'], ['Ø Verbrauch', tot && tot.km ? fmt(tot.kwh100, 1) + ' kWh/100 km' : '–']], [['Ø Strompreis', kwh > 0 ? fmt(laden / kwh * 100, 1) + ' ct/kWh' : '–'], ['Betriebskosten gesamt', eur(total)], ['Betriebskosten pro km', driven > 0 ? fmt(total / driven * 100, 1) + ' ct/km' : '–']]]);
   const yrs = (now - P0) / (365.25 * 864e5), sincePk = pk != null && km != null ? km - pk : null;
-  h += H2('Fahrzeug') + kv([['Kauftag', D1(P0)], ['Nutzungsdauer', fmt((now - P0) / 864e5 / 30.4375, 1) + ' Monate'], pk != null ? ['Kilometerstand bei Kauf', fmt(pk, 0) + ' km'] : null, pp != null ? ['Kaufpreis', eur(pp)] : null, ['Aktueller km-Stand', km != null ? fmt(km, 0) + ' km' : '–'], sincePk != null ? ['Gefahren seit Kauf', fmt(sincePk, 0) + ' km' + (yrs >= .25 ? ' (Ø ' + fmt(sincePk / yrs, 0) + ' km pro Jahr)' : '')] : null, driven != null ? ['Aufgezeichnet', fmt(driven, 0) + ' km seit ' + D1(Date.parse(od[0].date))] : null, ['Batterie (Nettokapazität laut Einstellung)', fmt(batteryKwh(), 0) + ' kWh'], rs.length ? ['Aufzeichnung', D1(Date.parse(rs[0].date)) + ' bis ' + D1(Date.parse(rs[rs.length - 1].date))] : null]);
+  const SV = getSettings(), mm = [SV.brand, SV.model].filter(Boolean).join(' ');
+  h += H2('Fahrzeug') + kv([mm ? ['Fahrzeug', esc(mm)] : null, SV.year ? ['Baujahr', esc(SV.year)] : null, SV.plate ? ['Kennzeichen', esc(SV.plate)] : null, SV.vin ? ['Fahrgestellnummer (FIN)', esc(SV.vin)] : null, ['Kauftag', D1(P0)], ['Nutzungsdauer', fmt((now - P0) / 864e5 / 30.4375, 1) + ' Monate'], pk != null ? ['Kilometerstand bei Kauf', fmt(pk, 0) + ' km'] : null, pp != null ? ['Kaufpreis', eur(pp)] : null, ['Aktueller km-Stand', km != null ? fmt(km, 0) + ' km' : '–'], sincePk != null ? ['Gefahren seit Kauf', fmt(sincePk, 0) + ' km' + (yrs >= .25 ? ' (Ø ' + fmt(sincePk / yrs, 0) + ' km pro Jahr)' : '')] : null, driven != null ? ['Aufgezeichnet', fmt(driven, 0) + ' km seit ' + D1(Date.parse(od[0].date))] : null, ['Batterie (Nettokapazität laut Einstellung)', fmt(batteryKwh(), 0) + ' kWh'], rs.length ? ['Aufzeichnung', D1(Date.parse(rs[0].date)) + ' bis ' + D1(Date.parse(rs[rs.length - 1].date))] : null]);
   h += H2('Betrieb und Kosten gesamt') + kv([['Ladungen', fmt(n, 0)], ['Geladene Energie', fmt(kwh, 0) + ' kWh'], tot && tot.km ? ['Ø Verbrauch inkl. Ladeverluste', fmt(tot.kwh100, 1) + ' kWh/100 km (WLTP-Angabe ' + fmt(wltpVal(), 1) + ')'] : null, loss != null ? ['Ø Ladeverlust', fmt(loss, 1) + ' %'] : null, kwh > 0 ? ['Ø Strompreis', fmt(laden / kwh * 100, 1) + ' ct/kWh'] : null, ['Ladekosten', eur(laden)], ['Sonstige Kosten (Service, Reifen, …)', eur(other)], income ? ['Einnahmen und Erstattungen', eur(income)] : null, ['Betriebskosten gesamt (ohne Kaufpreis)', eur(total)], driven > 0 ? ['Betriebskosten pro km', fmt(total / driven * 100, 1) + ' ct/km'] : null]);
   const placeRows = PLACE_KEYS.filter(k => pl[k].kwh > 0 || pl[k].n > 0).map(k => [PLACES[k], fmt(pl[k].n, 0), fmt(pl[k].kwh, 0), kwh ? fmt(pl[k].kwh / kwh * 100, 0) + ' %' : '–', eur(pl[k].cost), pl[k].ck > 0 ? fmt(pl[k].cost / pl[k].ck * 100, 1) : '–']);
   if (placeRows.length) h += CAP('Ladeorte') + tbl(['Ort', 'Ladungen', 'kWh', 'Anteil', 'Kosten', 'ct/kWh'], placeRows, [1, 2, 3, 4, 5]);
