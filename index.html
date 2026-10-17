@@ -12,8 +12,8 @@
 <!-- Apple Touch Icon für iOS -->
 <link rel="apple-touch-icon" href="/car.png">
 <!-- Manifest verlinken -->
-<link rel="manifest" href="/manifest.json"> 
-  
+<link rel="manifest" href="/manifest.json">
+
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -5006,7 +5006,20 @@ segSwipe($('range-switch').parentElement, $('range-switch'));               // S
 segSwipe(document.querySelector('.stat-btn').closest('.rounded-3xl'), document.querySelector('.stat-btn').parentElement);   // Start: Ø Ladungen
 
 initStatImg();                                           // Statistik-Bild laden (asynchron)
-showView('dashboard');
+/* Direktlinks (z. B. per NFC-Tag am Stromzähler): …/?go=laden öffnet „Laden“ mit Zuhause.
+   Weitere Ziele: laden-bosch, laden-unterwegs, kosten, historie, fahrten, berichte, einstellungen. Der Parameter wird danach aus der Adresse entfernt,
+   damit ein Neuladen wieder auf Start beginnt. */
+function openDeepLink() {
+  const q = new URLSearchParams(location.search), go = (q.get('go') || location.hash.replace(/^#/, '') || '').toLowerCase();
+  const T = { 'laden': ['capture', () => setCapPlace('home')], 'laden-zuhause': ['capture', () => setCapPlace('home')], 'laden-bosch': ['capture', () => setCapPlace('bosch')],
+    'laden-unterwegs': ['capture', () => setCapPlace('away')], 'kosten': ['costs'], 'historie': ['history', () => { histFilter = 'all'; }], 'fahrten': ['history', () => { histFilter = 'fahrten'; }],
+    'berichte': ['report'], 'einstellungen': ['settings'] };
+  const t = T[go];
+  if (t) { if (t[1]) t[1](); showView(t[0]); if (t[1]) t[1](); if (t[0] === 'history') applyHistFilter(); } else showView('dashboard');   // Ziel vor und nach dem Seitenwechsel setzen (showView setzt teils Standardwerte)
+  if (go) history.replaceState(null, '', location.pathname);
+  return !!t;
+}
+openDeepLink();
 </script>
 <script type="module">
 /* Firebase (modular SDK). Die Konfiguration ist kein Geheimnis – geschützt wird über Auth + Firestore-Regeln. */
