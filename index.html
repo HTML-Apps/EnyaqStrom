@@ -268,7 +268,7 @@
       <h2 class="shrink-0 font-barlow text-xl font-bold uppercase tracking-[0.1em] text-white">Trends</h2>
       <span class="h-0.5 flex-1 rounded-full bg-gradient-to-r from-emerald-500/80 to-white/10" aria-hidden="true"></span>
     </div>
-    <div id="trends" class="flex snap-x snap-mandatory gap-3 overflow-x-auto -mx-4 px-4 scroll-px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-roledescription="Karussell" aria-label="Trends der letzten 6 Monate"></div>
+    <div id="trends" class="flex snap-x snap-mandatory gap-4 overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-roledescription="Karussell" aria-label="Trends der letzten 6 Monate"></div>
     <div id="trends-dots" class="!mt-2 flex justify-center gap-2" aria-hidden="true"></div>
     <div id="hero-bg" aria-hidden="true" class="absolute -top-5 -inset-x-4 -z-10 h-[620px] pointer-events-none !mt-0" style="background:radial-gradient(ellipse 72% 190px at 50% 190px,rgba(80,150,255,.40),rgba(80,150,255,0) 70%),linear-gradient(180deg,#000 0,#000 28px,#030b24 70px,#061a52 160px,#0b2f8a 280px,#0a2466 370px,#050f2e 470px,#000 600px)"></div>
   </section>
@@ -783,7 +783,7 @@
             <div><label for="set-brand" class="block text-sm font-medium text-slate-700 dark:text-slate-300">Marke</label><input id="set-brand" type="text" maxlength="30" autocomplete="off" autocapitalize="words" placeholder="z. B. Škoda" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
             <div><label for="set-model" class="block text-sm font-medium text-slate-700 dark:text-slate-300">Modell</label><input id="set-model" type="text" maxlength="40" autocomplete="off" autocapitalize="words" placeholder="z. B. Enyaq iV 50" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
             <div><label for="set-plate" class="block text-sm font-medium text-slate-700 dark:text-slate-300">Kennzeichen</label><input id="set-plate" type="text" maxlength="15" autocomplete="off" autocapitalize="characters" placeholder="z. B. NK-AB 123" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500 uppercase"></div>
-            <div><label for="set-year" class="block text-sm font-medium text-slate-700 dark:text-slate-300">Baujahr</label><input id="set-year" type="text" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="z. B. 2023" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
+            <div><label for="set-year" class="block text-sm font-medium text-slate-700 dark:text-slate-300">Baujahr</label><input id="set-year" type="text" inputmode="numeric" maxlength="7" autocomplete="off" placeholder="MM/JJJJ" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
           </div>
           <label for="set-vin" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mt-3">Fahrgestellnummer (FIN)</label>
           <input id="set-vin" type="text" maxlength="17" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="17 Zeichen" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500 uppercase font-mono tracking-wider">
@@ -1856,6 +1856,12 @@ window.onCloudProviders = (list, first, uid) => {
   if (first && (uploadCutoff(uid) === 0 || !Array.isArray(list))) { const merged = next.concat(local.filter(n => !next.some(m => m.toLowerCase() === n.toLowerCase()))); if (merged.length !== next.length || !Array.isArray(list)) { next = merged; if (next.length) window.cloud.setProviders(next).catch(() => {}); } }
   if (JSON.stringify(next) !== JSON.stringify(local)) { save(KEY_PROVIDERS, next); renderProviders(); if (capPlace === 'away') setCapPlace('away'); }
 };
+$('set-year').addEventListener('input', (e) => {
+  const el = e.target, del = e.inputType && e.inputType.startsWith('delete'), raw = /^[1-9]\//.test(el.value) ? '0' + el.value : el.value;   // „1/“ → „01/“
+  let d = raw.replace(/\D/g, '').slice(0, 6);
+  if (d.length === 1 && +d > 1) d = '0' + d;                                          // „5“ → „05“
+  el.value = d.length > 2 || (d.length === 2 && !del) ? d.slice(0, 2) + '/' + d.slice(2) : d;
+});
 $('btn-save-settings').addEventListener('click', () => {
   const price = parseNum($('set-price').value);
   if (!isFinite(price) || price < 0) { alert('Bitte einen gültigen Strompreis eingeben (z. B. 0,307).'); return; }
@@ -1875,7 +1881,11 @@ $('btn-save-settings').addEventListener('click', () => {
   if (wl !== undefined && !(wl > 5 && wl < 40)) { alert('Bitte den WLTP-Verbrauch in kWh/100 km eingeben (z. B. 16,0) oder das Feld leer lassen.'); return; }
   const vin = $('set-vin').value.trim().toUpperCase().replace(/\s+/g, ''), yr = $('set-year').value.trim();
   if (vin && !/^[A-HJ-NPR-Z0-9]{17}$/.test(vin)) { alert('Die Fahrgestellnummer (FIN) hat 17 Zeichen aus Ziffern und Buchstaben (ohne I, O und Q). Bitte prüfen oder das Feld leer lassen.'); return; }
-  if (yr && !(/^\d{4}$/.test(yr) && +yr >= 1990 && +yr <= new Date().getFullYear() + 1)) { alert('Bitte das Baujahr vierstellig eingeben (z. B. 2023) oder das Feld leer lassen.'); return; }
+  if (yr) {                                                                         // Baujahr immer als MM/JJJJ, nicht in der Zukunft
+    const m = /^(0[1-9]|1[0-2])\/(\d{4})$/.exec(yr), now = new Date();
+    if (!m) { alert('Bitte das Baujahr im Format MM/JJJJ eingeben (z. B. 11/2023) oder das Feld leer lassen.'); $('set-year').focus(); return; }
+    if (+m[2] < 1990 || +m[2] * 12 + +m[1] > now.getFullYear() * 12 + now.getMonth() + 1) { alert('Das Baujahr ' + yr + ' kann nicht stimmen: Es muss zwischen 01/1990 und ' + String(now.getMonth() + 1).padStart(2, '0') + '/' + now.getFullYear() + ' liegen.'); $('set-year').focus(); return; }
+  }
   const txt = (id, n) => $(id).value.trim().replace(/\s+/g, ' ').slice(0, n) || undefined;
   if (save(KEY_SETTINGS, { title: $('set-title').value.trim() || DEFAULT_TITLE, brand: txt('set-brand', 30), model: txt('set-model', 40), plate: (txt('set-plate', 15) || '').toUpperCase() || undefined, year: yr || undefined, vin: vin || undefined, price, battery, power, remDays, remKm, purchase, wltp: wl, purchaseKm: pk !== undefined ? Math.round(pk) : undefined, purchasePrice: pp !== undefined ? Math.round(pp * 100) / 100 : undefined })) {
     renderReminderBadges(); renderHeroStats(); pushPrefs();
@@ -2272,7 +2282,7 @@ function renderTrends() {
     const num = (v) => v > 0 ? fmt(v, d.dec) : '–', ul = '<span class="ml-1 text-xs font-medium text-slate-500 dark:text-slate-400">' + d.unit + '</span>';
     const stat = (l, v, cls = '') => `<div><p class="text-xs text-slate-500 dark:text-slate-400">${l}</p><p class="text-xl font-semibold tabular-nums leading-tight ${cls}">${v}</p></div>`;
     const empty = !vals.some(x => x.v > 0);
-    return `<article class="snap-center shrink-0 w-full rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4" aria-label="${d.title}">
+    return `<article class="snap-center snap-always shrink-0 w-full rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4" aria-label="${d.title}">
       <p class="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-700 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300"><svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true">${TREND_ICONS[d.key]}</svg>${d.title}</p>
       ${empty ? '<p class="py-12 text-center text-sm text-slate-500 dark:text-slate-400">Noch keine Daten in den letzten 6 Monaten.</p>' : `
       <div class="mt-4 flex gap-4">
@@ -2292,10 +2302,10 @@ function renderTrends() {
       <p class="mt-3 text-[11px] text-slate-500 dark:text-slate-400">Letzte 6 Monate · heller Balken = ${MONTHS_LONG[n.getMonth()]} (Zwischenstand) · gestrichelt = Ø</p>`}
     </article>`; }).join('');
   $('trends-dots').innerHTML = defs.map((_, i) => `<span class="block h-2 rounded-full transition-all ${i === trendIdx ? 'w-5 bg-emerald-500' : 'w-2 bg-slate-500/60'}"></span>`).join('');
-  if (trendIdx) box.scrollLeft = trendIdx * (box.firstElementChild.offsetWidth + 12);
+  if (trendIdx) box.scrollLeft = trendIdx * (box.firstElementChild.offsetWidth + 16);
 }
 $('trends').addEventListener('scroll', () => {
-  const box = $('trends'), w = box.firstElementChild ? box.firstElementChild.offsetWidth + 12 : 1, i = Math.round(box.scrollLeft / w);
+  const box = $('trends'), w = box.firstElementChild ? box.firstElementChild.offsetWidth + 16 : 1, i = Math.round(box.scrollLeft / w);
   if (i !== trendIdx) { trendIdx = i; [...$('trends-dots').children].forEach((d, k) => d.className = 'block h-2 rounded-full transition-all ' + (k === i ? 'w-5 bg-emerald-500' : 'w-2 bg-slate-500/60')); }
 }, { passive: true });
 function renderDashboard() {
