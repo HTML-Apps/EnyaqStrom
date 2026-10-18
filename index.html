@@ -100,6 +100,12 @@
   }
   #cost-date::-webkit-calendar-picker-indicator { display: none; }
   #cost-date::-webkit-datetime-edit { padding: 0; }
+  /* Jahrestag-Festkarte: Konfetti */
+  #bd-conf i { position: absolute; top: -16px; width: 7px; height: 11px; border-radius: 2px; opacity: .95; animation: bdfall var(--d, 6s) linear var(--w, 0s) infinite; }
+  @keyframes bdfall { 0% { transform: translate3d(0, -20px, 0) rotate(0deg); } 100% { transform: translate3d(var(--x, 20px), 105vh, 0) rotate(var(--r, 540deg)); } }
+  @keyframes bdin { from { opacity: 0; transform: translateY(16px) scale(.96); } to { opacity: 1; transform: none; } }
+  #bd-card { animation: bdin .45s cubic-bezier(.2,.8,.2,1) both; }
+  @media (prefers-reduced-motion: reduce) { #bd-conf i { animation: none; top: var(--y, 10%); } #bd-card { animation: none; } }
 </style>
 </head>
 <body class="bg-black text-slate-100 min-h-screen">
@@ -1020,6 +1026,23 @@
 <div id="akte-print"></div>
 
 <!-- Rückblick als Story (Vollbild) -->
+<!-- Jahrestag des Kaufs: Festkarte (erscheint am Jahrestag bei jedem Öffnen der App) -->
+<div id="bd-ov" class="hidden fixed inset-0 z-[85] overflow-hidden bg-black/80 backdrop-blur-[2px]" role="dialog" aria-modal="true" aria-labelledby="bd-h">
+  <div class="relative flex min-h-full items-center justify-center px-4" style="padding-top:max(16px,env(safe-area-inset-top));padding-bottom:max(16px,env(safe-area-inset-bottom))">
+    <div id="bd-card" class="w-full max-w-sm rounded-3xl bg-slate-900 text-slate-100 p-5 shadow-2xl">
+      <p id="bd-date" class="text-center text-sm font-semibold uppercase tracking-[0.12em] text-amber-300"></p>
+      <h2 id="bd-h" class="mt-1 text-center font-barlow text-[34px] font-bold uppercase leading-9 tracking-[0.06em] text-white">Alles Gute,<br><span id="bd-name">Enyaq</span>!</h2>
+      <img id="bd-img" alt="" decoding="async" draggable="false" class="mx-auto mt-2 hidden h-[170px] w-full object-contain select-none">
+      <div id="bd-tiles" class="mt-3 grid grid-cols-2 gap-2">
+        <div class="rounded-2xl bg-slate-800/70 p-3 text-center"><p class="text-xs text-slate-400">bei dir</p><p id="bd-own" class="font-barlow text-[40px] font-bold leading-10 text-emerald-400"></p><p id="bd-own-s" class="mt-0.5 text-xs text-slate-400"></p></div>
+        <div id="bd-age-tile" class="rounded-2xl bg-slate-800/70 p-3 text-center"><p class="text-xs text-slate-400">Fahrzeugalter</p><p id="bd-age" class="font-barlow text-[40px] font-bold leading-10 text-white"></p><p id="bd-age-s" class="mt-0.5 text-xs text-slate-400"></p></div>
+      </div>
+      <p id="bd-stats" class="mt-3 hidden text-center text-sm text-slate-300"></p>
+      <button id="bd-close" type="button" class="mt-4 h-12 w-full rounded-2xl bg-emerald-600 font-semibold text-white active:scale-[0.98] transition">Danke, weiter</button>
+    </div>
+  </div>
+  <div id="bd-conf" class="pointer-events-none absolute inset-0 z-10" aria-hidden="true"></div>
+</div>
 <div id="wr-ov" class="hidden fixed inset-0 z-[80] overflow-hidden" role="dialog" aria-modal="true" aria-label="Rückblick" style="background:#022c22;touch-action:none"><div id="wr-page" class="relative mx-auto flex h-full max-w-[34rem] flex-col text-white" style="padding:max(20px,env(safe-area-inset-top)) 24px max(20px,env(safe-area-inset-bottom))"></div></div>
 
 <!-- Wetter-Pop-up (Klick auf die Überschrift): trockene Tage der nächsten 7 Tage -->
@@ -4083,6 +4106,64 @@ $('scan-card').classList.toggle('hidden', !ENABLE_AI_SCAN);
 setCapPlace(capPlace);                                   // Reiter "Zuhause" gleich beim Start hervorheben
 bookRecurring();                                         // fällige wiederkehrende Kosten nachbuchen
 initCarousel();                                          // Enyaq1–3 laden (asynchron)
+
+/* =====================================================================
+   Jahrestag des Kaufs: Festkarte mit Konfetti. Erscheint am Jahrestag des Kauftags (ab dem 1. Jahr)
+   bei jedem Öffnen der App und wenn die App nach mindestens 5 Minuten wieder in den Vordergrund kommt.
+   Kauf am 29.02.: in Nicht-Schaltjahren am 28.02. Fahrzeugalter monatsgenau ab Baujahr (MM/JJJJ).
+   ===================================================================== */
+const BD_ORD = ['ersten', 'zweiten', 'dritten', 'vierten', 'fünften', 'sechsten', 'siebten', 'achten', 'neunten', 'zehnten'];
+function bdInfo(today = new Date()) {
+  const [py, pm, pd] = purchaseDay().split('-').map(Number), y = today.getFullYear(), years = y - py;
+  if (years < 1) return null;
+  const last = new Date(y, pm, 0).getDate(), day = Math.min(pd, last);
+  if (today.getMonth() + 1 !== pm || today.getDate() !== day) return null;
+  const ym = /^(0[1-9]|1[0-2])\/(\d{4})$/.exec((getSettings().year || '').trim());
+  const ageM = ym ? (y * 12 + pm) - (+ym[2] * 12 + +ym[1]) : null;
+  return { years, py, pm, pd, ym: ym ? ym[0] : null, ageM, from: new Date(y - 1, pm - 1, Math.min(pd, new Date(y - 1, pm, 0).getDate())).getTime(), to: new Date(y, pm - 1, day).getTime() };
+}
+const bdUnit = (n, one, many) => n + ' <span class="text-xl">' + (n === 1 ? one : many) + '</span>';
+let bdShown = 0, bdHidden = 0;
+async function showBirthday() {
+  const b = bdInfo(); if (!b || !$('wr-ov').classList.contains('hidden')) return;
+  const set = getSettings(), name = (set.model || '').trim() || 'Enyaq';
+  $('bd-name').textContent = name.split(/\s+/)[0] || 'Enyaq';
+  $('bd-date').textContent = new Date().toLocaleDateString('de-DE', { day: 'numeric', month: 'long', year: 'numeric' });
+  $('bd-own').innerHTML = bdUnit(b.years, 'Jahr', 'Jahre');
+  $('bd-own-s').textContent = 'seit ' + String(b.pd).padStart(2, '0') + '.' + String(b.pm).padStart(2, '0') + '.' + b.py;
+  const hasAge = b.ageM != null && b.ageM >= 0;
+  $('bd-age-tile').classList.toggle('hidden', !hasAge); $('bd-tiles').classList.toggle('grid-cols-2', hasAge);
+  if (hasAge) {
+    const J = Math.floor(b.ageM / 12), M = b.ageM % 12;
+    $('bd-age').innerHTML = J && M ? J + ' <span class="text-xl">J.</span> ' + M + ' <span class="text-xl">Mon.</span>' : J ? bdUnit(J, 'Jahr', 'Jahre') : bdUnit(M, 'Monat', 'Monate');
+    $('bd-age-s').textContent = 'Baujahr ' + b.ym;
+  }
+  /* Bilanz des zurückliegenden Jahres: Kilometer und Ladungen */
+  const km = rangeKm(b.from, b.to), rs = getReadings();
+  let n = 0; rs.forEach((r, i) => { const t = Date.parse(r.date); if (t >= b.from && t < b.to && isCharge(rs, i)) n++; });
+  const parts = []; if (km) parts.push('<b class="text-white">' + fmt(km, 0) + ' km</b>'); if (n) parts.push('<b class="text-white">' + n + (n === 1 ? ' Ladung' : ' Ladungen') + '</b>');
+  $('bd-stats').innerHTML = parts.length ? 'Im ' + (BD_ORD[b.years - 1] ? BD_ORD[b.years - 1] + ' ' : b.years + '. ') + 'gemeinsamen Jahr: ' + parts.join(' · ') : '';
+  $('bd-stats').classList.toggle('hidden', !parts.length);
+  /* Konfetti */
+  const box = $('bd-conf'), cols = ['#34d399', '#fbbf24', '#f472b6', '#38bdf8', '#a78bfa', '#fb7185'];
+  box.textContent = '';
+  for (let i = 0; i < 46; i++) {
+    const c = document.createElement('i'), r = Math.random;
+    c.style.cssText = 'left:' + (r() * 100).toFixed(1) + '%;background:' + cols[i % cols.length] + ';--d:' + (4.5 + r() * 4).toFixed(2) + 's;--w:' + (-r() * 8).toFixed(2) + 's;--x:' + ((r() - 0.5) * 120).toFixed(0) + 'px;--r:' + ((r() < 0.5 ? -1 : 1) * (360 + r() * 540)).toFixed(0) + 'deg;--y:' + (r() * 30).toFixed(0) + '%;' + (r() < 0.3 ? 'width:9px;height:9px;border-radius:50%;' : '');
+    box.appendChild(c);
+  }
+  $('bd-ov').classList.remove('hidden'); document.body.style.overflow = 'hidden'; bdShown = Date.now();
+  const img = $('bd-img'); if (!img.src) { const src = await findHeroImg(1); if (src) { img.src = (await cutWhite(src)).src; img.alt = 'Dein ' + name; img.classList.remove('hidden'); } }
+}
+function hideBirthday() { $('bd-ov').classList.add('hidden'); $('bd-conf').textContent = ''; document.body.style.overflow = ''; }
+$('bd-close').addEventListener('click', hideBirthday);
+$('bd-ov').addEventListener('click', (e) => { if (e.target === e.currentTarget || e.target.parentElement === e.currentTarget) hideBirthday(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('bd-ov').classList.contains('hidden')) hideBirthday(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { bdHidden = Date.now(); return; }
+  if (bdHidden && Date.now() - bdHidden >= 5 * 60 * 1000 && $('bd-ov').classList.contains('hidden')) showBirthday();
+});
+setTimeout(showBirthday, 700);                           // nach dem Start, damit Daten und Bild bereitstehen
 /* =====================================================================
    Wetter-Pop-up: Klick auf die Überschrift zeigt, an welchen der nächsten 7 Tage (ab morgen)
    die Regenwahrscheinlichkeit unter 10 % liegt. Daten und Ortssuche: Open-Meteo (kostenlos, ohne Anmeldung).
