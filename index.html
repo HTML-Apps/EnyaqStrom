@@ -2112,8 +2112,13 @@ const liveInputs = () => [optNum($('live-soc0').value), optNum($('live-soc1').va
 const liveValid = ([a, b]) => a != null && b != null && isFinite(a) && isFinite(b) && a >= 0 && b <= 100 && b > a;
 function updateLiveForecast() {
   const v = liveInputs();
-  $('live-forecast').textContent = !liveValid(v) ? '' : (f => 'ca. ' + fmtHM(f.hours * 3600) + ' h · ' + fmt(f.kwh, 1) + ' kWh · ca. ' + eur(f.cost) +
-    ' (Wirkungsgrad ' + Math.round(f.eff * 100) + ' % ' + (f.hist ? 'aus Historie' : '– Standardwert') + ')')(liveForecast(v[0], v[1]));
+  /* Kurzform, passt in eine Zeile: „~ 0:53 h · 6,2 kWh · ca. 1,91 € (η = 96 % historisch)“; η = Wirkungsgrad (Ersatzschriften, falls die Systemschrift kein η hat) */
+  const ETA = '<span style="font-family:system-ui,Roboto,\'Noto Sans\',\'Segoe UI\',\'DejaVu Sans\',\'Times New Roman\',serif" title="Wirkungsgrad">η</span>';
+  $('live-forecast').innerHTML = !liveValid(v) ? '' : (f => '~ ' + fmtHM(f.hours * 3600) + ' h · ' + fmt(f.kwh, 1) + ' kWh · ca. ' + eur(f.cost) +
+    ' (' + ETA + ' = ' + Math.round(f.eff * 100) + ' % ' + (f.hist ? 'historisch' : 'Standard') + ')')(liveForecast(v[0], v[1]));
+  const el = $('live-forecast'); el.style.whiteSpace = 'nowrap'; el.style.fontSize = '';                    // eine Zeile: bei Bedarf Schrift leicht verkleinern
+  for (const fs of [11.5, 11, 10.5, 10]) { if (el.scrollWidth <= el.clientWidth) break; el.style.fontSize = fs + 'px'; }
+  if (el.scrollWidth > el.clientWidth) { el.style.whiteSpace = ''; el.style.fontSize = ''; }               // sehr schmale Geräte: lieber umbrechen als abschneiden
 }
 /** Holt Akku-%, Ziel-% und km-Stand über die Vercel-Funktion /api/vehicle vom Škoda-Server und füllt das Live-Panel. */
 let carData = null;
