@@ -4142,7 +4142,7 @@ async function showBirthday() {
   const km = rangeKm(b.from, b.to), rs = getReadings();
   let n = 0; rs.forEach((r, i) => { const t = Date.parse(r.date); if (t >= b.from && t < b.to && isCharge(rs, i)) n++; });
   const parts = []; if (km) parts.push('<b class="text-white">' + fmt(km, 0) + ' km</b>'); if (n) parts.push('<b class="text-white">' + n + (n === 1 ? ' Ladung' : ' Ladungen') + '</b>');
-  $('bd-stats').innerHTML = parts.length ? 'Im ' + (BD_ORD[b.years - 1] ? BD_ORD[b.years - 1] + ' ' : b.years + '. ') + 'gemeinsamen Jahr: ' + parts.join(' · ') : '';
+  $('bd-stats').innerHTML = parts.length ? 'Im ' + (BD_ORD[b.years - 1] ? BD_ORD[b.years - 1] + ' ' : b.years + '. ') + 'gemeinsamen Jahr:<br>' + parts.join(' · ') : '';
   $('bd-stats').classList.toggle('hidden', !parts.length);
   /* Konfetti */
   const box = $('bd-conf'), cols = ['#34d399', '#fbbf24', '#f472b6', '#38bdf8', '#a78bfa', '#fb7185'];
