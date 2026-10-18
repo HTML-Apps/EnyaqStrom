@@ -654,7 +654,7 @@
     <div id="rep-akku" class="hidden space-y-4">
       <div class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4"><img src="/Bilder/Enyaq_4.webp" alt="Škoda Enyaq im Schnitt mit Hochvolt-Akku im Unterboden" width="966" height="745" decoding="async" draggable="false" class="mx-auto block max-h-48 w-auto object-contain select-none"></div>
       <div class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
-        <p class="text-sm text-slate-500 dark:text-slate-400">Akku-Kapazität (geschätzt) · Langzeitwert</p>
+        <p class="text-sm text-slate-500 dark:text-slate-400">Netto-Akkukapazität (geschätzt) <span class="whitespace-nowrap">· Langzeitwert</span></p>
         <div id="bat-value" class="hidden">
           <p class="mt-1 text-5xl font-semibold tabular-nums text-emerald-600 dark:text-emerald-400"><span id="bat-net">–</span> <span class="text-3xl font-medium">kWh</span></p>
           <p class="text-sm mt-1">nutzbar im Auto je 100 % Akku</p>
@@ -3558,7 +3558,7 @@ $('hero-swatches').addEventListener('click', (e) => { const b = e.target.closest
 applyHeroColor();
 
 /* =====================================================================
-   Akku-Kapazität (geschätzt) – Langzeitwert in den Berichten (Tab „Akku“)
+   Netto-Akkukapazität (geschätzt) – Langzeitwert in den Berichten (Tab „Akku“)
    Messgröße: Steckdosen-kWh je 100 % Akku, K = Σ kWh ÷ Σ (Akku-Hub/100). Summe über Summe statt Mittel der Einzelwerte, damit große Ladehübe stärker zählen
    (der Rundungsfehler des Akku-% von ±0,5 je Ende wiegt bei 60 % Hub halb so schwer wie bei 30 %). Sinkt K bei gleichem Ladeverlust, fasst der Akku weniger.
    Verwendet nur Wechselstrom-Ladungen Zuhause und Bosch (gleiche Ladetechnik, Zähler bzw. Wallbox), mit Akku-Start/-Ende, Hub ≥ 30 %, Ende < 99 %
@@ -3604,7 +3604,8 @@ function renderBattery() {
   if (ok) {
     $('bat-net').textContent = fmt(fit.K * BAT.eta, 1);
     $('bat-k').textContent = fmt(fit.K, 1); $('bat-ci').textContent = '± ' + fmt(fit.ci, 1);
-    $('bat-c').textContent = 'Spanne ' + fmt(fit.K * BAT.etaLo, 1) + ' – ' + fmt(fit.K * BAT.etaHi, 1) + ' kWh · bei ' + Math.round(BAT.eta * 100) + ' % Ladewirkungsgrad (' + Math.round(BAT.etaLo * 100) + '–' + Math.round(BAT.etaHi * 100) + ' %)';
+    const eta = '<span style="font-family:system-ui,Roboto,\'Noto Sans\',\'Segoe UI\',\'DejaVu Sans\',\'Times New Roman\',serif" title="Ladewirkungsgrad">η</span>';
+    $('bat-c').innerHTML = 'Spanne ' + fmt(fit.K * BAT.etaLo, 1) + ' – ' + fmt(fit.K * BAT.etaHi, 1) + ' kWh · bei ' + eta + ' = ' + Math.round(BAT.eta * 100) + ' % (' + Math.round(BAT.etaLo * 100) + '–' + Math.round(BAT.etaHi * 100) + ' %)';
     $('bat-basis').textContent = 'Basis: ' + fit.n + ' Ladungen Zuhause/Bosch · ' + fmtDate(new Date(fit.use[0].t).toISOString()) + ' bis ' + fmtDate(new Date(fit.use[fit.use.length - 1].t).toISOString()) + (fit.out ? ' · ' + fit.out + (fit.out === 1 ? ' Ausreißer' : ' Ausreißer') + ' ausgeschlossen' : '');
   }
   /* Trend */
