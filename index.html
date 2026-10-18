@@ -3405,7 +3405,7 @@ function renderHeroReminder() {
 }
 $('hero-rem').addEventListener('click', () => showView('reminders'));
 const probeImg = (src) => new Promise(res => { const i = new Image(); i.onload = () => res(src); i.onerror = () => res(null); i.src = src; });
-const HERO_VER = '3';                                    // bei neuen Bildern hochzählen (umgeht den Browser- und Service-Worker-Cache)
+const HERO_VER = '4';                                    // bei neuen Bildern hochzählen (umgeht den Browser- und Service-Worker-Cache)
 async function findHeroImg(n) { for (const e of ['png', 'webp', 'jpg', 'jpeg']) { const ok = await probeImg('Enyaq' + n + '.' + e + '?v=' + HERO_VER); if (ok) return ok; } return null; }
 /** Bereitet ein Karussell-Bild auf: (1) opaker weißer Rand wird transparent gemacht (nicht wirklich freigestellte Bilder), (2) transparenter Rand wird weggeschnitten,
     damit das Auto den Bildbereich ausfüllt. Liefert { src, aspect, extra }: Seitenverhältnis des zugeschnittenen Bilds und den Anteil der Bildhöhe unterhalb der Aufstandslinie
@@ -3438,7 +3438,7 @@ async function cutWhite(src) {
     return { src: o.toDataURL('image/png'), aspect: cw / ch, extra };
   } catch { return { src, aspect: null, extra: 0 }; }
 }
-const CAR_COUNT = 2, CAR_AUTO_MS = 30000;                               // Enyaq1 … Enyaq2; automatischer Wechsel alle 30 Sekunden
+const CAR_COUNT = 3, CAR_AUTO_MS = 30000;                               // Enyaq1 … Enyaq3; automatischer Wechsel alle 30 Sekunden
 async function initCarousel() {
   const box = $('car-scroll'), dash = $('car-dashes'); if (!box) return;
   let srcs = (await Promise.all(Array.from({ length: CAR_COUNT }, (_, i) => findHeroImg(i + 1)))).filter(Boolean);
@@ -4054,7 +4054,7 @@ if (getLive()) tickLive();                              // Live-Modus nach Neula
 $('scan-card').classList.toggle('hidden', !ENABLE_AI_SCAN);
 setCapPlace(capPlace);                                   // Reiter "Zuhause" gleich beim Start hervorheben
 bookRecurring();                                         // fällige wiederkehrende Kosten nachbuchen
-initCarousel();                                          // Enyaq1–2 laden (asynchron)
+initCarousel();                                          // Enyaq1–3 laden (asynchron)
 /* =====================================================================
    Wetter-Pop-up: Klick auf die Überschrift zeigt, an welchen der nächsten 7 Tage (ab morgen)
    die Regenwahrscheinlichkeit unter 10 % liegt. Daten und Ortssuche: Open-Meteo (kostenlos, ohne Anmeldung).
