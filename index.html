@@ -61,6 +61,8 @@
   .spinner { width:22px;height:22px;border:3px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
   :root { color-scheme: light dark; }
+  /* Live-Modus auf Start: Erinnerungen, Bildpunkte und Hinweis-Banner ausblenden, damit die Zählerkarte ohne Scrollen sichtbar ist */
+  #view-dashboard.live-mode #hero-rem-wrap, #view-dashboard.live-mode #car-dashes, #view-dashboard.live-mode #report-banner, #view-dashboard.live-mode #trips-banner { display: none !important; }
   /* Heller Modus: Segment-Leisten und graue Buttons ohne eigene Textfarbe erben sonst die helle Schrift des Body */
   @media (prefers-color-scheme: light) {
     .bg-slate-100:not([class*="text-"]), .bg-slate-200:not([class*="text-"]), .bg-white:not([class*="text-"]) { color: #0f172a; }
@@ -130,7 +132,7 @@
         <div id="car-live" class="absolute inset-0 flex items-end justify-center opacity-0 pointer-events-none transition-opacity duration-500" aria-hidden="true"><img src="/Bilder/Enyaq_live.webp" alt="Enyaq lädt" width="1074" height="584" decoding="async" draggable="false" class="max-h-full w-full object-contain object-bottom select-none"></div>
       </div>
       <div id="car-dashes" class="mt-1 flex justify-center gap-1 min-h-[22px]" aria-hidden="true"></div>
-      <div class="mt-4 text-center">
+      <div id="hero-rem-wrap" class="mt-4 text-center">
         <button id="hero-rem" type="button" class="inline-flex items-center gap-1.5 font-barlow font-bold text-[22px] uppercase tracking-[0.1em] text-white active:scale-95 transition">Erinnerungen prüfen<svg class="w-[18px] h-[18px]" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
         <p id="hero-rem-sub" class="mt-px px-2 truncate font-barlow font-bold text-[0.7rem] leading-4 tracking-[0.05em] text-white/80"></p>
       </div>
@@ -3445,6 +3447,7 @@ function setLiveHero(on) {
   $('car-live').classList.toggle('opacity-0', !on); $('car-live').setAttribute('aria-hidden', String(!on));
   $('car-scroll').classList.toggle('opacity-0', on); $('car-scroll').classList.toggle('pointer-events-none', on);
   $('car-dashes').classList.toggle('invisible', on);
+  $('view-dashboard').classList.toggle('live-mode', on);                 // Zählerkarte rückt nach oben
 }
 const CAR_COUNT = 3, CAR_AUTO_MS = 30000;                               // Enyaq1 … Enyaq3; automatischer Wechsel alle 30 Sekunden
 async function initCarousel() {
