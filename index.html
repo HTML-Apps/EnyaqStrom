@@ -62,6 +62,7 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   :root { color-scheme: light dark; }
   /* Live-Modus auf Start: Erinnerungen, Bildpunkte und Hinweis-Banner ausblenden, damit die Zählerkarte ohne Scrollen sichtbar ist */
+  #view-dashboard.live-setup-open #hero-rem-wrap,                       /* schon beim Öffnen der Live-Eingabe */
   #view-dashboard.live-mode #hero-rem-wrap, #view-dashboard.live-mode #car-dashes, #view-dashboard.live-mode #report-banner, #view-dashboard.live-mode #trips-banner { display: none !important; }
   /* Heller Modus: Segment-Leisten und graue Buttons ohne eigene Textfarbe erben sonst die helle Schrift des Body */
   @media (prefers-color-scheme: light) {
@@ -3454,6 +3455,9 @@ function setLiveHero(on) {
   $('car-dashes').classList.toggle('invisible', on);
   $('view-dashboard').classList.toggle('live-mode', on);                 // Zählerkarte rückt nach oben
 }
+/* Live-Eingabe (Start-/Ziel-%) geöffnet: „Erinnerungen prüfen“ schon jetzt ausblenden, damit mehr Platz ist */
+new MutationObserver(() => $('view-dashboard').classList.toggle('live-setup-open', !$('live-setup').classList.contains('hidden')))
+  .observe($('live-setup'), { attributes: true, attributeFilter: ['class'] });
 const CAR_COUNT = 3, CAR_AUTO_MS = 30000;                               // Enyaq1 … Enyaq3; automatischer Wechsel alle 30 Sekunden
 async function initCarousel() {
   const box = $('car-scroll'), dash = $('car-dashes'); if (!box) return;
