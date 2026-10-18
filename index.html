@@ -4110,17 +4110,22 @@ initCarousel();                                          // Enyaq1–3 laden (as
 /* =====================================================================
    Jahrestag des Kaufs: Festkarte mit Konfetti. Erscheint am Jahrestag des Kauftags (ab dem 1. Jahr)
    bei jedem Öffnen der App und wenn die App nach mindestens 5 Minuten wieder in den Vordergrund kommt.
+   Wurde sie am Jahrestag nicht gesehen, erscheint sie innerhalb von 7 Tagen einmal nachträglich.
    Kauf am 29.02.: in Nicht-Schaltjahren am 28.02. Fahrzeugalter monatsgenau ab Baujahr (MM/JJJJ).
    ===================================================================== */
+const BD_LATE = 7, KEY_BDSEEN = 'enyaq.bdSeen';            // Frist für die nachträgliche Gratulation (Tage)
 const BD_ORD = ['ersten', 'zweiten', 'dritten', 'vierten', 'fünften', 'sechsten', 'siebten', 'achten', 'neunten', 'zehnten'];
 function bdInfo(today = new Date()) {
-  const [py, pm, pd] = purchaseDay().split('-').map(Number), y = today.getFullYear(), years = y - py;
-  if (years < 1) return null;
-  const last = new Date(y, pm, 0).getDate(), day = Math.min(pd, last);
-  if (today.getMonth() + 1 !== pm || today.getDate() !== day) return null;
+  const [py, pm, pd] = purchaseDay().split('-').map(Number), t0 = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const ann = (y) => new Date(y, pm - 1, Math.min(pd, new Date(y, pm, 0).getDate()));   // Jahrestag im Jahr y (29.02. → 28.02.)
+  let y = today.getFullYear(), A = ann(y); if (A > t0) { y--; A = ann(y); }               // letzter Jahrestag bis heute
+  const years = y - py, late = Math.round((t0 - A) / 864e5);
+  if (years < 1 || late > BD_LATE) return null;
+  const key = y + '-' + pm;
+  if (late > 0 && load(KEY_BDSEEN, '') === key) return null;                              // nachträglich nur einmal
   const ym = /^(0[1-9]|1[0-2])\/(\d{4})$/.exec((getSettings().year || '').trim());
   const ageM = ym ? (y * 12 + pm) - (+ym[2] * 12 + +ym[1]) : null;
-  return { years, py, pm, pd, ym: ym ? ym[0] : null, ageM, from: new Date(y - 1, pm - 1, Math.min(pd, new Date(y - 1, pm, 0).getDate())).getTime(), to: new Date(y, pm - 1, day).getTime() };
+  return { years, py, pm, pd, ym: ym ? ym[0] : null, ageM, late, key, day: A, from: ann(y - 1).getTime(), to: A.getTime() };
 }
 const bdUnit = (n, one, many) => n + ' <span class="text-xl">' + (n === 1 ? one : many) + '</span>';
 let bdShown = 0, bdHidden = 0;
@@ -4128,7 +4133,8 @@ async function showBirthday() {
   const b = bdInfo(); if (!b || !$('wr-ov').classList.contains('hidden')) return;
   const set = getSettings(), name = (set.model || '').trim() || 'Enyaq';
   $('bd-name').textContent = name.split(/\s+/)[0] || 'Enyaq';
-  $('bd-date').textContent = new Date().toLocaleDateString('de-DE', { day: 'numeric', month: 'long', year: 'numeric' });
+  $('bd-date').textContent = (b.late ? 'Nachträglich · ' : '') + b.day.toLocaleDateString('de-DE', { day: 'numeric', month: 'long', year: 'numeric' });
+  save(KEY_BDSEEN, b.key);
   $('bd-own').innerHTML = bdUnit(b.years, 'Jahr', 'Jahre');
   $('bd-own-s').textContent = 'seit ' + String(b.pd).padStart(2, '0') + '.' + String(b.pm).padStart(2, '0') + '.' + b.py;
   const hasAge = b.ageM != null && b.ageM >= 0;
