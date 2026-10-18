@@ -98,6 +98,8 @@
     .cv-src { display: none !important; } .cv-print { display: block !important; }
     #view-report .rcard * { color: #111 !important; }
   }
+  #cost-date::-webkit-calendar-picker-indicator { display: none; }
+  #cost-date::-webkit-datetime-edit { padding: 0; }
 </style>
 </head>
 <body class="bg-black text-slate-100 min-h-screen">
@@ -418,8 +420,8 @@
     <div class="rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4 space-y-3">
       <div><label for="cost-title" class="text-xs font-medium text-slate-500 dark:text-slate-400">Titel</label><input id="cost-title" type="text" maxlength="80" autocomplete="off" placeholder="z. B. SB-Wäsche" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
       <div class="grid grid-cols-2 gap-2">
-        <div><label for="cost-date" class="text-xs font-medium text-slate-500 dark:text-slate-400">Datum und Zeit</label><input id="cost-date" type="datetime-local" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"></div>
-        <div><label for="cost-km" class="text-xs font-medium text-slate-500 dark:text-slate-400">km-Stand (optional)</label><input id="cost-km" type="text" inputmode="decimal" autocomplete="off" placeholder="" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
+        <div><label for="cost-date" class="text-xs font-medium text-slate-500 dark:text-slate-400">Datum und Zeit</label><input id="cost-date" type="datetime-local" onclick="try{this.showPicker()}catch(e){}" class="mt-1 block h-11 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-2 py-0 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-xs tabular-nums"></div>
+        <div><label for="cost-km" class="text-xs font-medium text-slate-500 dark:text-slate-400">km-Stand (optional)</label><input id="cost-km" type="text" inputmode="decimal" autocomplete="off" placeholder="" class="mt-1 block h-11 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-0 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
       </div>
       <div><label for="cost-note" class="text-xs font-medium text-slate-500 dark:text-slate-400">Notiz (optional)</label><textarea id="cost-note" rows="2" maxlength="300" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></textarea></div>
       <div><p class="text-xs font-medium text-slate-500 dark:text-slate-400">Belege (optional, werden in Google Drive abgelegt)</p><div id="cost-belege" data-dv-block="form" class="mt-1"></div></div>
