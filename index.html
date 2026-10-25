@@ -861,7 +861,7 @@
 
   <!-- ============ VIEW 3: EINSTELLUNGEN ============ -->
   <section id="view-settings" class="view hidden space-y-5">
-    <div class="-mt-2 flex h-[60px] items-center justify-between gap-3 -mb-[18px]"><h1 class="min-w-0 truncate font-barlow font-semibold text-2xl uppercase tracking-[0.14em] text-white">Einstellungen</h1></div>
+    <div id="set-head" class="-mt-2 flex h-[60px] items-center gap-2 -mb-[18px]"><button id="set-burger" type="button" aria-label="Bereiche der Einstellungen" aria-expanded="false" aria-controls="set-drawer" class="-ml-2 h-11 w-11 shrink-0 rounded-xl text-white flex items-center justify-center active:scale-95 transition"><svg class="h-7 w-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button><h1 id="set-h" class="min-w-0 truncate font-barlow font-semibold text-2xl uppercase tracking-[0.14em] text-white">Einstellungen</h1></div>
     <div class="rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
       <div class="flex items-start gap-3 pb-3 border-b-2 border-emerald-500/70">
         <svg class="w-6 h-6 mt-0.5 shrink-0 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>
@@ -1111,6 +1111,25 @@
 <div id="akte-print"></div>
 
 <!-- Rückblick als Story (Vollbild) -->
+<!-- Einstellungen: Seitenleiste (Burger-Menü) -->
+<div id="set-drawer" class="fixed inset-0 z-[70] pointer-events-none" aria-hidden="true">
+  <div id="set-drawer-bg" class="absolute inset-0 bg-black/60 opacity-0 transition-opacity duration-300"></div>
+  <nav id="set-drawer-panel" aria-label="Einstellungen" class="absolute inset-y-0 left-0 w-[284px] max-w-[85vw] -translate-x-full overflow-y-auto bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-2xl transition-transform duration-300 ease-out" style="padding:max(16px,env(safe-area-inset-top)) 12px max(16px,env(safe-area-inset-bottom))">
+    <button type="button" data-sec="konto" class="flex w-full items-center gap-3 rounded-2xl p-2 text-left active:bg-slate-100 dark:active:bg-slate-800">
+      <span id="sd-avatar" class="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-emerald-700 text-white font-bold">?</span>
+      <span class="min-w-0"><span id="sd-name" class="block truncate font-semibold">Nicht angemeldet</span><span id="sd-sub" class="block truncate text-xs text-slate-500 dark:text-slate-400">Konto &amp; Cloud</span></span>
+    </button>
+    <p class="mt-5 mb-1 px-3 text-[11px] uppercase tracking-wider text-slate-500">Einstellungen</p>
+    <div id="sd-list" class="space-y-0.5 text-[15px]"></div>
+    <p class="mt-4 mb-1 px-3 text-[11px] uppercase tracking-wider text-slate-500">Mehr</p>
+    <div class="space-y-0.5 text-[15px]">
+      <button type="button" data-go="providers" class="sd-item flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left active:bg-slate-100 dark:active:bg-slate-800"><span class="w-6 text-center">🔌</span>Ladeanbieter</button>
+      <button type="button" data-go="badges" class="sd-item flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left active:bg-slate-100 dark:active:bg-slate-800"><span class="w-6 text-center">🏅</span>Daten &amp; Abzeichen</button>
+      <button type="button" data-go="reminders" class="sd-item flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left active:bg-slate-100 dark:active:bg-slate-800"><span class="w-6 text-center">📋</span>Erinnerungen ansehen</button>
+      <button type="button" data-sec="gefahr" class="sd-item flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-red-600 dark:text-red-300 active:bg-slate-100 dark:active:bg-slate-800"><span class="w-6 text-center">⚠️</span>Alle Daten löschen</button>
+    </div>
+  </nav>
+</div>
 <!-- Neues Abzeichen: Pop-up mit Konfetti (wie die Festkarte) -->
 <div id="bdg-ov" class="hidden fixed inset-0 z-[86] overflow-hidden bg-black/80 backdrop-blur-[2px]" role="dialog" aria-modal="true" aria-labelledby="bdg-ov-h">
   <div class="relative flex min-h-full items-center justify-center px-4" style="padding-top:max(16px,env(safe-area-inset-top));padding-bottom:max(16px,env(safe-area-inset-bottom))">
@@ -1771,7 +1790,7 @@ function showView(name) {
   if (name === 'capture') { if (ENABLE_AI_SCAN) startCamera(); updateCaptureDefaults(); } else stopCamera();
   if (name === 'dashboard') { renderDashboard(); try { renderBakBanner(); renderFrost(); } catch (e) { } }
   if (name === 'report') renderReport(); else reportYM = null;           // beim Verlassen zurück auf den Standardmonat
-  if (name === 'settings') { fillSettings(); try { renderBakInfo(); } catch (e) { } }
+  if (name === 'settings') { fillSettings(); try { renderBakInfo(); setSettingsSec(setSec); const nd = window.setNoDrawer; window.setNoDrawer = false; if (!nd) setTimeout(openSetDrawer, 60); } catch (e) { } } else { try { closeSetDrawer(); } catch (e) { } }
   if (name === 'costs') renderCostsView();
   if (name === 'reminders') renderReminders();
   if (name === 'providers') renderProvidersView();
@@ -4439,7 +4458,7 @@ function renderTripsBanner() {
   el.classList.toggle('hidden', !show);
   if (show) { const p = prevMonthOf(); $('trips-banner-text').textContent = 'Fahrtenbuch für ' + MONTHS_LONG[p.getMonth()] + ' importieren'; }
 }
-$('trips-banner-go').addEventListener('click', () => { showView('settings'); setTimeout(() => $('btn-trips').scrollIntoView({ behavior: 'smooth', block: 'center' }), 80); });
+$('trips-banner-go').addEventListener('click', () => { openSettings('fahrten'); setTimeout(() => $('btn-trips').scrollIntoView({ behavior: 'smooth', block: 'center' }), 80); });
 $('trips-banner-x').addEventListener('click', () => { const n = new Date(); save(KEY_TRIPS_NAG, ymKey(n.getFullYear(), n.getMonth())); renderTripsBanner(); });
 $('report-banner').addEventListener('click', () => { const p = prevMonthOf(); reportYM = { y: p.getFullYear(), m: p.getMonth() }; showView('report'); });
 
@@ -4841,7 +4860,7 @@ async function wxOpen() {
   const c = card.getBoundingClientRect(); $('wx-caret').style.left = Math.min(Math.max(t.left - c.left + 15, 21), c.width - 35) + 'px';   // Pfeil zeigt auf die Überschrift
   if (!l) {
     wxBody('<p class="pr-10 text-[13px] ' + WX_MUTED + '">Wetter</p><p class="text-xl font-bold leading-tight">Kein Standort hinterlegt</p><p class="mt-1 text-sm ' + WX_MUTED + '">Trage in den Einstellungen einen Ort oder eine Postleitzahl ein.</p><button id="wx-go" type="button" class="mt-3 w-full rounded-xl bg-emerald-600 py-2.5 text-sm font-semibold text-white active:scale-95 transition">Standort eintragen</button>');
-    $('wx-go').addEventListener('click', () => { wxClose(); showView('settings'); $('wx-q').scrollIntoView({ block: 'center' }); $('wx-q').focus({ preventScroll: true }); });
+    $('wx-go').addEventListener('click', () => { wxClose(); openSettings('wetter'); $('wx-q').scrollIntoView({ block: 'center' }); $('wx-q').focus({ preventScroll: true }); });
     wxArm(); return;
   }
   wxBody('<p class="pr-10 text-[13px] ' + WX_MUTED + '">Wetter</p><p class="text-xl font-bold leading-tight">Wird geladen …</p>');
@@ -5744,7 +5763,7 @@ function renderTrips() {
   $('trips-more').classList.toggle('hidden', days.length <= tripDays);
 }
 $('trips-more').addEventListener('click', () => { tripDays += 30; renderTrips(); });
-$('trips-go-set').addEventListener('click', () => showView('settings'));
+$('trips-go-set').addEventListener('click', () => openSettings('fahrten'));
 $('trips-list').addEventListener('click', (e) => {
   const tg = e.target.closest('[data-ttag]');
   if (tg) { const list = getTrips(), t = list.find(x => x.id === tg.dataset.ttag); if (!t) return;
@@ -5922,6 +5941,73 @@ function segSwipe(area, seg, ignore = '') {
 }
 segSwipe($('view-capture'), $('cap-place'));                               // Laden: Zuhause | Bosch | Unterwegs (ganze Seite)
 segSwipe($('view-history'), $('hist-filter'));                             // Historie: Alle | Laden | Kosten | Fahrten (ganze Seite)
+/* =====================================================================
+   Einstellungen als Bereiche mit Seitenleiste (Burger-Menü). Die vorhandenen Karten werden anhand ihrer Überschrift einem Bereich zugeordnet;
+   sichtbar ist immer nur ein Bereich. Beim Öffnen der Einstellungen erscheint die Seitenleiste zur Auswahl.
+   ===================================================================== */
+const SET_SECS = [
+  { k: 'fahrzeug', e: '🚗', t: 'Fahrzeug & Kauf', h: ['Allgemein', 'Kauf'], save: true },
+  { k: 'laden', e: '⚡', t: 'Laden & Akku', h: ['Fahrzeug und Laden'], save: true },
+  { k: 'erinnerungen', e: '🔔', t: 'Erinnerungen', h: ['Erinnerungen'], save: true },
+  { k: 'fahrten', e: '🧭', t: 'Fahrtenbuch', h: ['Fahrtenbuch'] },
+  { k: 'listen', e: '🏷️', t: 'Anbieter & Kategorien', h: ['Listen'] },
+  { k: 'wetter', e: '⛅', t: 'Wetter', h: ['Wetter'] },
+  { k: 'daten', e: '☁️', t: 'Sicherung & Belege', h: ['Belege', 'Datensicherung'] },
+  { k: 'konto', e: '👤', t: 'Konto & Cloud', h: ['Cloud-Sync'], hidden: true },
+  { k: 'gefahr', e: '⚠️', t: 'Alle Daten löschen', h: ['Gefahrenzone'], hidden: true }
+];
+const KEY_SETSEC = 'enyaq.setSec';
+let setSec = (() => { try { return localStorage.getItem(KEY_SETSEC) || 'fahrzeug'; } catch (e) { return 'fahrzeug'; } })();
+(function tagSettingsCards() {
+  [...$('view-settings').children].forEach(el => {
+    if (el.id === 'set-head') return;
+    if (el.querySelector('#btn-save-settings')) { el.dataset.secs = SET_SECS.filter(x => x.save).map(x => x.k).join(' '); return; }
+    const h = (el.querySelector('h2')?.textContent || '').trim(), sec = SET_SECS.find(x => x.h.includes(h));
+    el.dataset.secs = sec ? sec.k : 'fahrzeug';
+  });
+  $('sd-list').innerHTML = SET_SECS.filter(x => !x.hidden).map(x => `<button type="button" data-sec="${x.k}" class="sd-item flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left active:bg-slate-100 dark:active:bg-slate-800"><span class="w-6 text-center">${x.e}</span><span class="min-w-0 truncate">${esc(x.t)}</span></button>`).join('');
+})();
+function setSettingsSec(k) {
+  const sec = SET_SECS.find(x => x.k === k) || SET_SECS[0]; setSec = sec.k; try { localStorage.setItem(KEY_SETSEC, sec.k); } catch (e) { }
+  [...$('view-settings').children].forEach(el => { if (el.dataset.secs) el.classList.toggle('hidden', !el.dataset.secs.split(' ').includes(sec.k)); });
+  $('set-h').textContent = sec.t;
+  document.querySelectorAll('#set-drawer [data-sec]').forEach(b => { if (!b.classList.contains('sd-item')) return; const on = b.dataset.sec === sec.k; b.classList.toggle('bg-emerald-600/15', on); b.classList.toggle('text-emerald-700', on); b.classList.toggle('dark:text-emerald-300', on); b.classList.toggle('font-semibold', on); });
+  window.scrollTo(0, 0);
+}
+function renderDrawerUser() {
+  const u = window.cloud?.userInfo?.(), av = $('sd-avatar');
+  $('sd-name').textContent = u ? (u.name || u.email || 'Angemeldet') : 'Nicht angemeldet';
+  $('sd-sub').textContent = u ? 'Cloud ✓' + (typeof apiEnabled === 'function' && apiEnabled() ? ' · Fahrzeugdaten verbunden' : '') : 'Konto & Cloud – antippen zum Anmelden';
+  const ini = u ? (u.name || u.email || '?').split(/[\s@.]+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('') : '?';
+  av.innerHTML = u && u.photo ? '<img src="' + esc(u.photo) + '" alt="" referrerpolicy="no-referrer" class="h-full w-full object-cover">' : esc(ini);
+}
+function openSetDrawer() {
+  renderDrawerUser();
+  const d = $('set-drawer'); d.classList.remove('pointer-events-none'); d.setAttribute('aria-hidden', 'false'); $('set-burger').setAttribute('aria-expanded', 'true');
+  $('set-drawer-bg').classList.replace('opacity-0', 'opacity-100'); $('set-drawer-panel').classList.replace('-translate-x-full', 'translate-x-0');
+}
+function closeSetDrawer() {
+  const d = $('set-drawer'); d.classList.add('pointer-events-none'); d.setAttribute('aria-hidden', 'true'); $('set-burger').setAttribute('aria-expanded', 'false');
+  $('set-drawer-bg').classList.replace('opacity-100', 'opacity-0'); $('set-drawer-panel').classList.replace('translate-x-0', '-translate-x-full');
+}
+$('set-burger').addEventListener('click', openSetDrawer);
+$('set-drawer-bg').addEventListener('click', closeSetDrawer);
+$('set-drawer').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-sec],[data-go]'); if (!b) return;
+  closeSetDrawer();
+  if (b.dataset.sec) { openSettings(b.dataset.sec); return; }
+  const g = b.dataset.go;
+  if (g === 'badges') { repMode = 'stat'; setDpTab('badges', false); showView('report'); } else showView(g);
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('set-drawer').getAttribute('aria-hidden') === 'false') closeSetDrawer(); });
+/* Wischen: vom linken Rand nach rechts öffnet, nach links schließt */
+(() => { let sx = 0, sy = 0, on = false;
+  document.addEventListener('touchstart', (e) => { const t = e.touches[0], open = $('set-drawer').getAttribute('aria-hidden') === 'false'; on = currentView === 'settings' && (open || t.clientX < 40); sx = t.clientX; sy = t.clientY; }, { passive: true });
+  document.addEventListener('touchend', (e) => { if (!on) return; on = false; const t = e.changedTouches[0], dx = t.clientX - sx, dy = t.clientY - sy; if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return; const open = $('set-drawer').getAttribute('aria-hidden') === 'false'; if (dx > 0 && !open) openSetDrawer(); else if (dx < 0 && open) closeSetDrawer(); }, { passive: true });
+})();
+setSettingsSec(setSec);
+/** Einstellungen direkt in einem Bereich öffnen (ohne Seitenleiste). */
+function openSettings(sec) { window.setNoDrawer = true; if (currentView !== 'settings') showView('settings'); else window.setNoDrawer = false; setSettingsSec(sec); }
 segSwipe($('view-report'), $('rep-mode'), '#rep-place,#dp-panes,#dp-seg');   // Berichte: Laden | Kosten | Akku | Datenpool | Fahrten (ganze Seite; im Datenpool wischen die Unter-Tabs)
 /* ---- Datenpool (Berichte, früher „Statistik“): Unter-Tabs Statistik | Abzeichen | Fahrzeugakte, per Antippen oder Wischen ---- */
 let dpTab = 'stat';
@@ -6027,6 +6113,7 @@ window.cloud = {
     driveTok = cred.accessToken; driveExp = Date.now() + 50 * 60 * 1000; return driveTok;
   },
   isSignedIn: () => !!user,
+  userInfo: () => user ? { name: user.displayName || '', email: user.email || '', photo: user.photoURL || '' } : null,
   setPrefs: (o) => user ? setDoc(prefDoc(), { ...o, updatedAt: new Date().toISOString() }) : Promise.resolve(),
   pushTrips: (prev, next) => pushTripMonths(prev, next),
   setTripPrefs: (o) => user ? setDoc(placesDoc(), { ...o, updatedAt: new Date().toISOString() }) : Promise.resolve(),
