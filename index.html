@@ -63,7 +63,7 @@
   :root { color-scheme: light dark; }
   /* Live-Modus auf Start: Erinnerungen, Bildpunkte und Hinweis-Banner ausblenden, damit die Zählerkarte ohne Scrollen sichtbar ist */
   #view-dashboard.live-setup-open #hero-rem-wrap,                       /* schon beim Öffnen der Live-Eingabe */
-  #view-dashboard.live-mode #hero-rem-wrap, #view-dashboard.live-mode #car-dashes, #view-dashboard.live-mode #report-banner, #view-dashboard.live-mode #trips-banner { display: none !important; }
+  #view-dashboard.live-mode #hero-rem-wrap, #view-dashboard.live-mode #car-dashes, #view-dashboard.live-mode #report-banner, #view-dashboard.live-mode #trips-banner, #view-dashboard.live-mode #frost-banner, #view-dashboard.live-mode #bak-banner { display: none !important; }
   /* Heller Modus: Segment-Leisten und graue Buttons ohne eigene Textfarbe erben sonst die helle Schrift des Body */
   @media (prefers-color-scheme: light) {
     .bg-slate-100:not([class*="text-"]), .bg-slate-200:not([class*="text-"]), .bg-white:not([class*="text-"]) { color: #0f172a; }
@@ -101,11 +101,11 @@
   #cost-date::-webkit-calendar-picker-indicator { display: none; }
   #cost-date::-webkit-datetime-edit { padding: 0; }
   /* Jahrestag-Festkarte: Konfetti */
-  #bd-conf i { position: absolute; top: -16px; width: 7px; height: 11px; border-radius: 2px; opacity: .95; animation: bdfall var(--d, 6s) linear var(--w, 0s) infinite; }
+  #bd-conf i, #bdg-conf i { position: absolute; top: -16px; width: 7px; height: 11px; border-radius: 2px; opacity: .95; animation: bdfall var(--d, 6s) linear var(--w, 0s) infinite; }
   @keyframes bdfall { 0% { transform: translate3d(0, -20px, 0) rotate(0deg); } 100% { transform: translate3d(var(--x, 20px), 105vh, 0) rotate(var(--r, 540deg)); } }
   @keyframes bdin { from { opacity: 0; transform: translateY(16px) scale(.96); } to { opacity: 1; transform: none; } }
-  #bd-card { animation: bdin .45s cubic-bezier(.2,.8,.2,1) both; }
-  @media (prefers-reduced-motion: reduce) { #bd-conf i { animation: none; top: var(--y, 10%); } #bd-card { animation: none; } }
+  #bd-card, #bdg-card { animation: bdin .45s cubic-bezier(.2,.8,.2,1) both; }
+  @media (prefers-reduced-motion: reduce) { #bd-conf i, #bdg-conf i { animation: none; top: var(--y, 10%); } #bd-card, #bdg-card { animation: none; } }
 </style>
 </head>
 <body class="bg-black text-slate-100 min-h-screen">
@@ -153,6 +153,11 @@
       <button id="bak-banner-go" type="button" class="min-w-0 flex-1 text-left active:opacity-70"><span class="block font-medium">Monatliche Sicherung fällig</span><span id="bak-banner-sub" class="block text-xs opacity-75">Antippen: alle Daten in Google Drive sichern</span></button>
       <button id="bak-banner-x" type="button" aria-label="Heute nicht mehr anzeigen" class="w-9 h-9 shrink-0 rounded-xl text-lg active:scale-95 transition hover:bg-black/5 dark:hover:bg-white/10">×</button>
     </div>
+    <div id="frost-banner" class="hidden w-full rounded-2xl p-3 text-sm bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-100 flex gap-3">
+      <div class="h-10 w-10 shrink-0 rounded-xl bg-sky-500/20 flex items-center justify-center text-sky-600 dark:text-sky-300"><svg class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20M4.9 6l14.2 12M19.1 6L4.9 18M9 3.5l3 2 3-2M9 20.5l3-2 3 2"/></svg></div>
+      <div class="min-w-0 flex-1"><p id="frost-h" class="font-semibold"></p><p id="frost-t" class="mt-0.5 text-xs opacity-80"></p></div>
+      <button id="frost-x" type="button" aria-label="Bis morgen ausblenden" class="w-9 h-9 shrink-0 -mt-1 -mr-1 rounded-xl text-lg active:scale-95 transition hover:bg-black/5 dark:hover:bg-white/10">×</button>
+    </div>
     <div id="trips-banner" class="hidden w-full rounded-2xl p-3 text-sm bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-200 flex items-center justify-between gap-2">
       <button id="trips-banner-go" type="button" class="min-w-0 flex-1 text-left active:opacity-70"><span id="trips-banner-text" class="block"></span><span class="block text-xs opacity-75">MyŠkoda-App → Fahrtenbuch → Export, dann hier hochladen</span></button>
       <button id="trips-banner-x" type="button" aria-label="Für diesen Monat ausblenden" class="w-9 h-9 shrink-0 rounded-xl text-lg active:scale-95 transition hover:bg-black/5 dark:hover:bg-white/10">×</button>
@@ -197,6 +202,7 @@
         </div>
         <p id="batt-note" class="text-xs text-slate-500 dark:text-slate-400 mt-1 text-center"></p>
         <p id="live-sync" class="text-[11px] text-slate-500 dark:text-slate-400 mt-1 text-center"></p>
+        <div id="live-warn" class="hidden mt-2 rounded-2xl border border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-700/50 dark:bg-amber-950/70 dark:text-amber-100 p-3 text-left"><p class="text-sm font-semibold">Lädt deutlich langsamer als sonst</p><p id="live-warn-t" class="mt-1 text-xs opacity-90"></p></div>
       </div>
       <div class="grid grid-cols-2 gap-3 mt-4">
         <div class="rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 p-3 flex flex-col justify-between">
@@ -228,6 +234,10 @@
     </button>
     <button id="go-prov" type="button" class="flex w-full items-center justify-between rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm px-4 py-3 active:scale-[0.99] transition">
       <span class="flex items-center gap-3 font-medium"><svg class="w-6 h-6 text-emerald-500" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 9.5h19M6 15h4"/><path d="M16.5 12.5l-1.5 2.5h2l-1.5 2.5"/></svg>Ladeanbieter</span>
+      <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+    </button>
+    <button id="go-badges" type="button" class="flex w-full items-center justify-between rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm px-4 py-3 active:scale-[0.99] transition">
+      <span class="flex items-center gap-3 font-medium"><svg class="w-6 h-6 text-emerald-500" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="9" r="6"/><path d="M8.5 14l-1.5 7 5-3 5 3-1.5-7"/></svg>Abzeichen<span id="go-badges-n" class="text-sm font-normal text-slate-500 dark:text-slate-400"></span></span>
       <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
     </button>
 
@@ -672,6 +682,11 @@
         </div>
         <p class="mt-3 text-xs text-slate-500 dark:text-slate-400">Laden + sonstige Kosten − Einnahmen. Kaufpreis und Wertverlust sind nicht enthalten.</p>
       </div>
+      <div id="st-badge-card" class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
+        <div class="flex items-baseline justify-between"><p class="font-barlow text-xl font-bold uppercase tracking-[0.08em]">Abzeichen</p><span id="bdg-count" class="text-xs text-slate-500 dark:text-slate-400"></span></div>
+        <div id="bdg-grid" class="mt-3 grid grid-cols-3 gap-2.5 text-center"></div>
+        <p id="bdg-info" class="mt-3 min-h-[2.5rem] rounded-xl bg-slate-100 dark:bg-slate-800/60 px-3 py-2 text-xs text-slate-600 dark:text-slate-300">Antippen zeigt Datum bzw. was noch fehlt.</p>
+      </div>
       <div id="st-akte-card" class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
         <p class="font-barlow text-xl font-bold uppercase tracking-[0.08em]">Fahrzeugakte</p>
         <img src="/Bilder/fahrzeugakte.webp" alt="" aria-hidden="true" width="620" height="456" loading="lazy" decoding="async" class="mx-auto mt-3 mb-2 block h-auto w-full max-w-[260px] select-none pointer-events-none">
@@ -703,6 +718,10 @@
             <div><p id="bat-p2t" class="text-xs text-slate-500 dark:text-slate-400"></p><div class="mt-1 h-2 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden"><div id="bat-p2" class="h-2 rounded-full bg-emerald-500" style="width:0%"></div></div></div>
           </div>
         </div>
+      </div>
+      <div id="care-card" class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
+        <p class="text-sm text-slate-500 dark:text-slate-400">Akku-Pflege · letzte 90 Tage</p>
+        <div id="care-body"></div>
       </div>
       <div id="bat-trend-card" class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
         <p class="text-sm text-slate-500 dark:text-slate-400">Veränderung</p>
@@ -758,6 +777,22 @@
           <button id="rf-all" type="button" class="py-3 rounded-2xl bg-emerald-600 text-white text-sm font-semibold active:scale-95 transition">Alle Fahrten ansehen</button>
         </div>
         <p class="text-xs text-slate-500 dark:text-slate-400 text-center">Daten aus dem Fahrtenbuch der MyŠkoda-App. Der Verbrauch laut Auto enthält keine Ladeverluste und liegt deshalb unter dem Wert aus deinen Ladungen.</p>
+      </div>
+      <div id="tax-card" class="hidden rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
+        <div class="flex items-center justify-between gap-2"><p class="text-sm text-slate-500 dark:text-slate-400">Arbeitsweg für die Steuer</p>
+          <div class="flex items-center rounded-lg bg-slate-100 dark:bg-slate-800 text-sm print:hidden"><button id="tax-prev" type="button" aria-label="Vorheriges Jahr" class="px-2.5 py-1 active:opacity-60">‹</button><span id="tax-y" class="tabular-nums font-medium">–</span><button id="tax-next" type="button" aria-label="Nächstes Jahr" class="px-2.5 py-1 active:opacity-60">›</button></div></div>
+        <p class="mt-1 font-barlow text-[48px] font-bold leading-none text-emerald-600 dark:text-emerald-400"><span id="tax-days">0</span> <span class="text-2xl text-slate-900 dark:text-white">Arbeitstage</span></p>
+        <p id="tax-sub" class="text-xs text-slate-500 dark:text-slate-400 mt-1"></p>
+        <dl class="mt-3 rounded-2xl bg-slate-100 dark:bg-slate-800/60 px-3 text-sm divide-y divide-slate-200 dark:divide-slate-700/70">
+          <div class="flex items-center justify-between gap-3 py-2"><dt class="text-slate-500 dark:text-slate-400">Einfache Entfernung</dt><dd class="flex items-center gap-1"><input id="tax-km" type="text" inputmode="numeric" maxlength="3" aria-label="Einfache Entfernung in km" class="w-14 rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent px-2 py-1 text-right tabular-nums focus:outline-none focus:ring-2 focus:ring-emerald-500"> km</dd></div>
+          <div class="flex justify-between gap-3 py-2"><dt id="tax-rate-l" class="text-slate-500 dark:text-slate-400">Pauschale</dt><dd id="tax-sum" class="font-semibold tabular-nums">–</dd></div>
+          <div class="flex justify-between gap-3 py-2"><dt class="text-slate-500 dark:text-slate-400">Deine echten Kosten</dt><dd id="tax-real" class="tabular-nums">–</dd></div>
+        </dl>
+        <p id="tax-formula" class="mt-2 text-xs text-slate-500 dark:text-slate-400"></p>
+        <p id="tax-gap" class="hidden mt-2 rounded-xl bg-amber-50 dark:bg-amber-950/50 px-3 py-2 text-xs text-amber-800 dark:text-amber-300"></p>
+        <details id="tax-list" class="mt-3 group"><summary class="flex cursor-pointer list-none items-center gap-1 text-sm font-medium text-slate-600 dark:text-slate-300 [&::-webkit-details-marker]:hidden">Tage ansehen<svg class="h-4 w-4 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></summary><div id="tax-months" class="mt-2 space-y-2 text-xs"></div></details>
+        <button id="tax-pdf" type="button" class="print:hidden mt-3 w-full py-3 rounded-2xl bg-emerald-600 text-white text-sm font-semibold active:scale-95 transition">Für die Steuererklärung (PDF)</button>
+        <p class="mt-2 text-[11px] text-slate-500 dark:text-slate-400">Werbungskosten nach Entfernungspauschale aus deinem Fahrtenbuch (Etikett „Arbeitsweg“). Keine Steuerberatung – Arbeitstage bitte mit deinen Unterlagen abgleichen.</p>
       </div>
     </div>
 
@@ -1054,6 +1089,20 @@
 <div id="akte-print"></div>
 
 <!-- Rückblick als Story (Vollbild) -->
+<!-- Neues Abzeichen: Pop-up mit Konfetti (wie die Festkarte) -->
+<div id="bdg-ov" class="hidden fixed inset-0 z-[86] overflow-hidden bg-black/80 backdrop-blur-[2px]" role="dialog" aria-modal="true" aria-labelledby="bdg-ov-h">
+  <div class="relative flex min-h-full items-center justify-center px-4" style="padding-top:max(16px,env(safe-area-inset-top));padding-bottom:max(16px,env(safe-area-inset-bottom))">
+    <div id="bdg-card" class="w-full max-w-sm rounded-3xl bg-slate-900 text-slate-100 p-5 text-center shadow-2xl">
+      <p class="text-sm font-semibold uppercase tracking-[0.12em] text-amber-300">Neues Abzeichen</p>
+      <div id="bdg-ov-icon" class="mx-auto mt-4 flex h-28 w-28 items-center justify-center rounded-[32px] text-6xl shadow-lg"></div>
+      <h2 id="bdg-ov-h" class="mt-4 font-barlow text-[32px] font-bold uppercase leading-9 tracking-[0.06em]"></h2>
+      <p id="bdg-ov-t" class="mt-1 text-sm text-slate-300"></p>
+      <p id="bdg-ov-more" class="mt-2 text-xs text-slate-400"></p>
+      <button id="bdg-ov-ok" type="button" class="mt-5 h-12 w-full rounded-2xl bg-emerald-600 font-semibold text-white active:scale-[0.98] transition">Super!</button>
+    </div>
+  </div>
+  <div id="bdg-conf" class="pointer-events-none absolute inset-0 z-10" aria-hidden="true"></div>
+</div>
 <!-- Jahrestag des Kaufs: Festkarte (erscheint am Jahrestag bei jedem Öffnen der App) -->
 <div id="bd-ov" class="hidden fixed inset-0 z-[85] overflow-hidden bg-black/80 backdrop-blur-[2px]" role="dialog" aria-modal="true" aria-labelledby="bd-h">
   <div class="relative flex min-h-full items-center justify-center px-4" style="padding-top:max(16px,env(safe-area-inset-top));padding-bottom:max(16px,env(safe-area-inset-bottom))">
@@ -1683,7 +1732,7 @@ function showView(name) {
     b.classList.toggle('text-slate-500', !active);
   });
   if (name === 'capture') { if (ENABLE_AI_SCAN) startCamera(); updateCaptureDefaults(); } else stopCamera();
-  if (name === 'dashboard') { renderDashboard(); try { renderBakBanner(); } catch (e) { } }
+  if (name === 'dashboard') { renderDashboard(); try { renderBakBanner(); renderFrost(); } catch (e) { } }
   if (name === 'report') renderReport(); else reportYM = null;           // beim Verlassen zurück auf den Standardmonat
   if (name === 'settings') { fillSettings(); try { renderBakInfo(); } catch (e) { } }
   if (name === 'costs') renderCostsView();
@@ -1845,6 +1894,7 @@ $('btn-save').addEventListener('click', () => {
   if (home) stopLive(false);                             // echter Wert erfasst -> Simulation beenden
 
   flash($('save-msg'), msg + (window.cloud?.isSignedIn() ? ' · Cloud: wird übertragen …' : ' · nur lokal (nicht bei Google angemeldet)'), true);
+  setTimeout(() => checkBadges(false), 600);                              // neues Abzeichen? (Pop-up mit Konfetti)
   status.then(s => {                                     // Ergebnis der Cloud-Übertragung sichtbar machen
     if (s === 'cloud') flash($('save-msg'), msg + ' · Cloud ✓', true);
     else if (s.startsWith('error:')) flash($('save-msg'), msg + ' · Cloud-Fehler: ' + s.slice(6), false);
@@ -1982,7 +2032,7 @@ $('btn-save-settings').addEventListener('click', () => {
     if (+m[2] < 1990 || +m[2] * 12 + +m[1] > now.getFullYear() * 12 + now.getMonth() + 1) { alert('Das Baujahr ' + yr + ' kann nicht stimmen: Es muss zwischen 01/1990 und ' + String(now.getMonth() + 1).padStart(2, '0') + '/' + now.getFullYear() + ' liegen.'); $('set-year').focus(); return; }
   }
   const txt = (id, n) => $(id).value.trim().replace(/\s+/g, ' ').slice(0, n) || undefined;
-  if (save(KEY_SETTINGS, { title: $('set-title').value.trim() || DEFAULT_TITLE, brand: txt('set-brand', 30), model: txt('set-model', 40), plate: (txt('set-plate', 15) || '').toUpperCase() || undefined, year: yr || undefined, vin: vin || undefined, price, battery, power, remDays, remKm, purchase, wltp: wl, purchaseKm: pk !== undefined ? Math.round(pk) : undefined, purchasePrice: pp !== undefined ? Math.round(pp * 100) / 100 : undefined })) {
+  if (save(KEY_SETTINGS, { title: $('set-title').value.trim() || DEFAULT_TITLE, brand: txt('set-brand', 30), model: txt('set-model', 40), plate: (txt('set-plate', 15) || '').toUpperCase() || undefined, year: yr || undefined, vin: vin || undefined, price, battery, power, remDays, remKm, purchase, wltp: wl, purchaseKm: pk !== undefined ? Math.round(pk) : undefined, purchasePrice: pp !== undefined ? Math.round(pp * 100) / 100 : undefined, commuteKm: getSettings().commuteKm || undefined })) {   // commuteKm: im Steuerhelfer (Berichte → Fahrten) gepflegt
     renderReminderBadges(); renderHeroStats(); pushPrefs();
     $('settings-msg').classList.remove('hidden'); setTimeout(() => $('settings-msg').classList.add('hidden'), 2500);
   }
@@ -2127,6 +2177,11 @@ function renderLive() {
   $('dash-title').textContent = !on ? 'Aktueller Zählerstand' : done ? 'Ladung abgeschlossen' : 'Live-Simulation · ' + livePower(live) + ' kW';
   $('live-info').classList.toggle('hidden', !on);
   setLiveHero(on);                                                          // Live-Modus: statisches Ladebild statt Karussell
+  /* Wallbox-Wächter: letzte Leistung laut Auto (höchstens 15 Min. alt) gegen den üblichen Wert; nicht kurz vor Ende (Leistung sinkt dort normal) */
+  const smp = on && charging && live.powerSamples && live.powerSamples[live.powerSamples.length - 1], usual = smp ? wbUsualLive() : null;
+  const slow = !!smp && Date.now() - smp[0] < 15 * 60000 && usual != null && smp[1] > 0.3 && smp[1] < usual * WB_SLOW && !(hasT && live.socTarget > 90 && kwh > live.kwhTarget * 0.85);
+  $('live-warn').classList.toggle('hidden', !slow);
+  if (slow) $('live-warn-t').innerHTML = 'Jetzt ' + fmt(smp[1], 1) + ' kW statt üblich ' + fmt(usual, 1) + ' kW' + (smp[1] < usual * 0.45 ? ' – typisch für <b>nur eine Phase</b>' : '') + '. Prüfe Sicherung, Kabel und die Ladestrom-Einstellung im Auto.';
   if (!on) return;
 
   const finishAt = hasT ? (live.anchorT ?? live.startedAt) + (live.kwhTarget - (live.anchorKwh ?? 0)) / livePower(live) * 3600000 / LIVE_SPEED : null;
@@ -2444,6 +2499,18 @@ const toLocalInput = (iso) => {                       // ISO-Datum -> Wert für 
 const fmtDuration = (kwh) => { const m = Math.round(kwh / chargePowerKw() * 60); return pad2(Math.floor(m / 60)) + ':' + pad2(m % 60); };
 const durHm = (ms) => { const m = Math.round(ms / 60000); return pad2(Math.floor(m / 60)) + ':' + pad2(m % 60); };
 const realMsOf = (r) => { const ms = r.chargeStart && r.chargeEnd ? Date.parse(r.chargeEnd) - Date.parse(r.chargeStart) : 0; return ms > 0 ? ms : 0; };   // gemessene Ladedauer
+/* ---- Wallbox-Wächter: Ø Leistung einer Ladung Zuhause (Zähler-kWh / gemessene Dauer, sonst Wert vom Auto) und üblicher Wert (Median der letzten 10) ---- */
+const WB_SLOW = 0.6;                                                    // Hinweis unter 60 % der üblichen Leistung
+const homePowerOf = (r) => { const ms = realMsOf(r); return ms && r.consumedSinceLast > 0 ? r.consumedSinceLast / (ms / 3600000) : (r.avgPowerKw > 0 ? r.avgPowerKw : null); };
+const wbMedian = (a) => { if (a.length < 3) return null; const x = a.slice().sort((p, q) => p - q), m = x.length >> 1; return x.length % 2 ? x[m] : (x[m - 1] + x[m]) / 2; };
+/** Je Eintrag (Index) die Leistung und den üblichen Wert der bis zu 10 vorherigen Ladungen Zuhause. */
+function wbFlags(rs) {
+  const out = new Map(), prev = [];
+  rs.forEach((r, i) => { if (!isHome(r)) return; const kw = homePowerOf(r); if (!(kw > 0.3)) return; const usual = wbMedian(prev.slice(-10)); out.set(i, { kw, usual, slow: usual != null && kw < usual * WB_SLOW }); prev.push(kw); });
+  return out;
+}
+/** Üblicher Wert vom Auto (für den Live-Vergleich mit der Leistung laut MyŠkoda), sonst aus dem Zähler. */
+function wbUsualLive() { const h = getReadings().filter(isHome), car = h.map(r => r.avgPowerKw).filter(v => v > 0.3).slice(-10); return wbMedian(car) ?? wbMedian(h.map(homePowerOf).filter(v => v > 0.3).slice(-10)); }
 const chargeDurationOf = (r) => realMsOf(r) ? durHm(realMsOf(r)) : isHome(r) ? fmtDuration(r.consumedSinceLast) : '–';
 const unitPriceOf = (r) => isHome(r) && r.consumedSinceLast > 0 ? r.cost / r.consumedSinceLast : getSettings().price;
 const cell = (i, f) => $('history-list').querySelector(`li[data-idx="${i}"] [data-f="${f}"]`);
@@ -2464,6 +2531,7 @@ function renderHistory() {
   $('btn-edit').classList.toggle('hidden', editMode || readings.length + costs.length === 0);
   const lbl = 'text-xs text-slate-500 dark:text-slate-400';
 
+  const wbF = wbFlags(readings);
   const rHtml = readings.map((r, i) => {
     const d = new Date(r.date), place = placeOf(r), home = place === 'home';
     const pj = prevHomeIdx(readings, i), oldVal = pj >= 0 ? readings[pj].totalReading : null;     // alter Stand = Wert des Vorgängers am Zähler (Bosch/Unterwegs zählen nicht)
@@ -2482,6 +2550,7 @@ function renderHistory() {
     const durRows = realMs && r.consumedSinceLast > 0
       ? row('Ladedauer <span class="text-xs">(gemessen)</span>', durHm(realMs) + ' h') +
         row('Ø Leistung am Zähler', (r.avgPowerKw != null ? '<span class="' + faint + '">(Auto: ' + fmt(r.avgPowerKw, 1) + ' kW)</span> ' : '') + fmt(r.consumedSinceLast / (realMs / 3600000), 1) + ' kW')
+        + (home && wbF.get(i)?.slow ? '<p class="text-xs text-amber-700 dark:text-amber-300 mt-1 text-right">Deutlich langsamer als üblich (' + fmt(wbF.get(i).usual, 1) + ' kW) – nur eine Phase? Sicherung, Kabel und Ladestrom im Auto prüfen.</p>' : '')
       : `<div class="flex justify-between items-baseline mt-2">
         <span class="text-sm text-slate-500 dark:text-slate-400">Ladedauer <span class="text-xs">(bei ${chargePowerKw()} kW)</span></span>
         <span class="text-lg font-semibold">${isStart ? '–' : fmtDuration(r.consumedSinceLast) + ' h'}</span>
@@ -2535,8 +2604,9 @@ function renderHistory() {
 
     const date = d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }) +
                  ', ' + d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + ' Uhr';
+    const wf = home ? wbF.get(i) : null;
     const head = `<div class="flex justify-between items-baseline">
-        <span class="font-semibold">${WEEKDAYS[d.getDay()]}</span>
+        <span class="font-semibold">${WEEKDAYS[d.getDay()]}${wf && wf.slow ? ` <span class="ml-1 rounded-lg bg-amber-100 dark:bg-amber-900/50 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-300" title="Deutlich langsamer als üblich (${fmt(wf.usual, 1)} kW)">⚠ ${fmt(wf.kw, 1)} kW</span>` : ''}</span>
         <span class="text-sm text-slate-500 dark:text-slate-400">${date}</span>
       </div>`;
     if (!home) {                                       // Bosch / Unterwegs: gleiche Reihenfolge wie Zuhause (Kacheln -> Kosten -> km/Ladestand/Verbrauch), nur ohne Zähler
@@ -3733,7 +3803,41 @@ function batTrend(rows, now) {
   }
   return { state: 'few', months };
 }
+/* =====================================================================
+   Akku-Schonung-Score (Berichte → Akku): alle Ladungen der letzten 90 Tage mit Akku-Start und -Ende.
+   100 − 50 × Anteil Ladeende über 80 % − 40 × min(1, 3 × Anteil Start unter 10 %) − 10 × Anteil Vollladungen (≥ 98 %).
+   ===================================================================== */
+function batCare(now = Date.now()) {
+  const rs = getReadings().filter(r => Number.isFinite(r.socStart) && Number.isFinite(r.socEnd) && r.socEnd > r.socStart && now - Date.parse(r.date) <= 90 * 864e5);
+  const n = rs.length; if (n < 5) return { n };
+  const hi = rs.filter(r => r.socEnd > 80).length, lo = rs.filter(r => r.socStart < 10).length, full = rs.filter(r => r.socEnd >= 98).length;
+  const score = Math.max(0, Math.min(100, Math.round(100 - 50 * hi / n - 40 * Math.min(1, 3 * lo / n) - 10 * full / n)));
+  const avg = (k) => rs.reduce((a, r) => a + r[k], 0) / n;
+  return { n, score, ok80: (n - hi) / n, lo, full, s0: avg('socStart'), s1: avg('socEnd') };
+}
+function renderCare() {
+  const c = batCare(), el = $('care-body'); if (!el) return;
+  if (c.score == null) { el.innerHTML = '<p class="mt-1 text-xl font-semibold">Noch zu wenige Daten</p><p class="text-sm mt-1 text-slate-600 dark:text-slate-300">Die Bewertung braucht mindestens 5 Ladungen der letzten 90 Tage mit Akku-Start und -Ende (bisher ' + c.n + ').</p>'; return; }
+  const lvl = c.score >= 90 ? ['Sehr gut', 'Dein Akku wird schonend behandelt.', '#10b981'] : c.score >= 75 ? ['Gut', 'Kleine Verbesserungen sind möglich.', '#22c55e'] : c.score >= 60 ? ['Okay', 'Mit zwei Gewohnheiten holst du mehr heraus.', '#f59e0b'] : ['Verbesserbar', 'Der Akku wird öfter stark gefordert.', '#ef4444'];
+  const len = 97.4, dash = (c.score / 100 * len).toFixed(1);
+  const tip = (1 - c.ok80) > 0.3 ? 'Lade im Alltag bis 80 % – 100 % nur vor langen Fahrten. Das spart Zellstress und kaum Reichweite.'
+    : c.lo ? 'Vermeide es, unter 10 % zu fahren – lieber etwas früher anstecken.'
+    : c.full ? 'Deine ' + (c.full === 1 ? 'Vollladung' : c.full + ' Vollladungen') + ' in den letzten 90 Tagen ' + (c.full === 1 ? 'ist' : 'sind') + ' in Ordnung, solange du danach bald losfährst.'
+    : 'Weiter so – zwischen 20 und 80 % fühlt sich der Akku am wohlsten.';
+  const bar = (w, col) => `<div class="mt-1 h-1.5 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden"><div class="h-full rounded-full" style="width:${Math.round(w * 100)}%;background:${col}"></div></div>`;
+  el.innerHTML = `<div class="mt-3 flex items-center gap-4">
+      <div class="relative h-24 w-24 shrink-0"><svg viewBox="0 0 36 36" class="h-24 w-24 -rotate-90" aria-hidden="true"><circle cx="18" cy="18" r="15.5" fill="none" stroke="currentColor" class="text-slate-200 dark:text-slate-800" stroke-width="3.5"/><circle cx="18" cy="18" r="15.5" fill="none" stroke="${lvl[2]}" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="${dash} ${len}"/></svg>
+        <div class="absolute inset-0 flex flex-col items-center justify-center"><span class="font-barlow text-[34px] font-bold leading-none">${c.score}</span><span class="text-[10px] text-slate-500 dark:text-slate-400">von 100</span></div></div>
+      <div><p class="text-lg font-semibold" style="color:${lvl[2]}">${lvl[0]}</p><p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">${lvl[1]}</p><p class="text-xs text-slate-500 dark:text-slate-400 mt-1">${c.n} Ladungen</p></div></div>
+    <div class="mt-4 space-y-2.5 text-sm">
+      <div><div class="flex justify-between"><span class="text-slate-600 dark:text-slate-300">Ladeende bis 80 %</span><span>${Math.round(c.ok80 * 100)} %</span></div>${bar(c.ok80, '#10b981')}</div>
+      <div><div class="flex justify-between"><span class="text-slate-600 dark:text-slate-300">Nicht unter 10 %</span><span>${c.lo ? c.lo + ' × darunter' : 'nie darunter'}</span></div>${bar(1 - Math.min(1, 3 * c.lo / c.n), c.lo ? '#f59e0b' : '#10b981')}</div>
+      <div><div class="flex justify-between"><span class="text-slate-600 dark:text-slate-300">Ø Ladebereich</span><span>${Math.round(c.s0)} → ${Math.round(c.s1)} %</span></div><div class="relative mt-1 h-1.5 rounded-full bg-slate-200 dark:bg-slate-800"><div class="absolute h-full rounded-full bg-sky-500" style="left:${c.s0}%;width:${Math.max(2, c.s1 - c.s0)}%"></div></div></div>
+    </div>
+    <div class="mt-4 rounded-2xl bg-slate-100 dark:bg-slate-800/70 p-3 text-xs text-slate-600 dark:text-slate-300"><b class="text-slate-900 dark:text-white">Tipp:</b> ${tip}</div>`;
+}
 function renderBattery() {
+  try { renderCare(); } catch (e) { console.error(e); }
   const rows = batRows(), fit = batFit(rows), now = Date.now(), ok = !!fit && fit.n >= BAT.minN && fit.sumHub >= BAT.minHub;
   $('bat-value').classList.toggle('hidden', !ok); $('bat-few').classList.toggle('hidden', ok);
   const hubSum = rows.reduce((a, x) => a + x.hub, 0);
@@ -3787,7 +3891,88 @@ function renderBattery() {
    (Akku-Entnahme unter 3 kWh). Kosten pro km, Tag und Monat beziehen sich auf die Ladekosten (Strom); Einnahmen und sonstige Kosten stehen im Kosten-Tab.
    Ø pro Tag/Monat: Laufleistung vom ersten bis zum letzten km-Stand, Ladekosten vom ersten Eintrag bis heute.
    ===================================================================== */
+/* =====================================================================
+   Abzeichen (Berichte → Statistik, Start-Button): werden aus den vorhandenen Daten berechnet. Freigeschaltet-Datum lokal in enyaq.badges = { <id>: ISO }.
+   Erster Lauf (noch nichts gespeichert): alle bereits verdienten still eintragen. Danach: neues Abzeichen → Pop-up mit Konfetti (eins nach dem anderen).
+   ===================================================================== */
+const KEY_BADGES = 'enyaq.badges';
+function bdgCtx() {
+  const rs = getReadings(), charges = rs.filter((r, i) => isCharge(rs, i)), kwh = charges.reduce((a, r) => a + (r.consumedSinceLast > 0 ? r.consumedSinceLast : 0), 0);
+  const pk = Number(getSettings().purchaseKm), od = rs.filter(r => r.odometerKm > 0), last = lastKnownKm(), base = pk > 0 ? pk : od.length ? od[0].odometerKm : null;
+  const km = last != null && base != null ? Math.max(0, last - base) : 0;
+  /* Monatswerte (mind. 300 km): bester Verbrauch und beste Kosten je 100 km */
+  const byM = {}; rs.forEach((r, i) => { const k = String(r.date).slice(0, 7); (byM[k] = byM[k] || []).push(i); });
+  let best100 = null, bestC100 = null;
+  Object.values(byM).forEach(idx => { try { const t = consumptionTotals(rs, idx); if (t && t.km >= 300) { if (t.kwh100 != null) best100 = Math.min(best100 ?? 99, t.kwh100); if (t.cost100 != null) bestC100 = Math.min(bestC100 ?? 99, t.cost100); } } catch (e) { } });
+  /* Winter: Ladungen im Dezember, Januar und Februar derselben Saison */
+  const seasons = {}; charges.forEach(r => { const d = new Date(r.date), m = d.getMonth(); if (m === 11 || m <= 1) { const k = m === 11 ? d.getFullYear() : d.getFullYear() - 1; (seasons[k] = seasons[k] || new Set()).add(m); } });
+  const winter = Object.values(seasons).some(x => x.size === 3), winterPart = Math.max(0, ...Object.values(seasons).map(x => x.size)) / 3;
+  const provs = new Set(rs.filter(r => placeOf(r) === 'away' && r.provider).map(r => r.provider.toLowerCase())); if (rs.some(r => placeOf(r) === 'bosch')) provs.add('bosch');
+  const [py, pm, pd] = purchaseDay().split('-').map(Number), years = (Date.now() - new Date(py, pm - 1, pd).getTime()) / (365.25 * 864e5);
+  let care = null; try { care = batCare().score ?? null; } catch (e) { }
+  let work = 0; try { const ys = taxYears(); work = Math.max(0, ...ys.map(y => taxData(y).days.length)); } catch (e) { }
+  return { n: charges.length, kwh, km, best100, bestC100, winter, winterPart, provs: provs.size, years, care, work };
+}
+const BADGES = [
+  { id: 'c1', e: '🔌', t: 'Erste Ladung', g: 'from-emerald-400 to-teal-600', v: c => c.n / 1, txt: 'Die erste Ladung ist erfasst.' },
+  { id: 'c10', e: '⚡', t: '10 Ladungen', g: 'from-amber-300 to-orange-500', v: c => c.n / 10, txt: '10 Ladungen erfasst.' },
+  { id: 'c50', e: '⚡', t: '50 Ladungen', g: 'from-amber-400 to-orange-600', v: c => c.n / 50, txt: '50 Ladungen erfasst.' },
+  { id: 'c100', e: '🔋', t: '100 Ladungen', g: 'from-orange-400 to-red-600', v: c => c.n / 100, txt: '100 Ladungen erfasst.' },
+  { id: 'c250', e: '🏆', t: '250 Ladungen', g: 'from-yellow-300 to-amber-600', v: c => c.n / 250, txt: '250 Ladungen erfasst.' },
+  { id: 'e1000', e: '🔆', t: '1 MWh geladen', g: 'from-lime-300 to-green-600', v: c => c.kwh / 1000, txt: '1.000 kWh geladen.' },
+  { id: 'k1000', e: '🚗', t: '1.000 km', g: 'from-sky-300 to-sky-600', v: c => c.km / 1000, txt: '1.000 km elektrisch gefahren.' },
+  { id: 'k5000', e: '🛣️', t: '5.000 km', g: 'from-sky-400 to-blue-600', v: c => c.km / 5000, txt: '5.000 km elektrisch gefahren.' },
+  { id: 'k10000', e: '🛣️', t: '10.000 km', g: 'from-emerald-400 to-teal-600', v: c => c.km / 10000, txt: '10.000 km elektrisch gefahren.', next: 'Nächstes Ziel: 25.000 km' },
+  { id: 'k25000', e: '🗺️', t: '25.000 km', g: 'from-teal-400 to-cyan-700', v: c => c.km / 25000, txt: '25.000 km elektrisch gefahren.', next: 'Nächstes Ziel: einmal um die Erde' },
+  { id: 'earth', e: '🌍', t: 'Einmal um die Erde', g: 'from-blue-400 to-indigo-700', v: c => c.km / 40075, txt: '40.075 km – einmal um den Äquator.' },
+  { id: 'winter', e: '❄️', t: 'Winterheld', g: 'from-sky-400 to-indigo-600', v: c => c.winter ? 1 : c.winterPart, txt: 'Einen ganzen Winter (Dez–Feb) elektrisch gefahren.' },
+  { id: 'eco', e: '🌿', t: 'Sparfuchs < 15', g: 'from-fuchsia-400 to-purple-600', v: c => c.best100 == null ? 0 : c.best100 < 15 ? 1 : Math.max(0, Math.min(0.95, 15 / c.best100)), txt: 'Ein Monat unter 15 kWh/100 km (inkl. Ladeverluste).' },
+  { id: 'cheap', e: '💶', t: 'Unter 5 €/100 km', g: 'from-green-300 to-emerald-700', v: c => c.bestC100 == null ? 0 : c.bestC100 < 5 ? 1 : Math.max(0, Math.min(0.95, 5 / c.bestC100)), txt: 'Ein Monat mit Ladekosten unter 5 € je 100 km.' },
+  { id: 'care', e: '🛡️', t: 'Akku-Profi 90+', g: 'from-emerald-300 to-green-700', v: c => c.care == null ? 0 : c.care >= 90 ? 1 : c.care / 90, txt: 'Akku-Pflege-Wert von 90 oder mehr.' },
+  { id: 'prov', e: '🧭', t: '3 Ladeanbieter', g: 'from-violet-400 to-indigo-600', v: c => c.provs / 3, txt: 'Bei drei verschiedenen Anbietern geladen.' },
+  { id: 'work', e: '💼', t: '100 Arbeitstage', g: 'from-slate-300 to-slate-600', v: c => c.work / 100, txt: '100 Arbeitstage in einem Jahr mit dem Enyaq.' },
+  { id: 'y1', e: '🎂', t: '1 Jahr', g: 'from-rose-400 to-red-600', v: c => c.years / 1, txt: 'Ein Jahr gemeinsam unterwegs.' }
+];
+let bdgQueue = [], bdgSel = null;
+function bdgState() { const c = bdgCtx(); return BADGES.map(b => { const v = Math.max(0, Math.min(1, b.v(c) || 0)); return { b, v, done: v >= 1 }; }); }
+function checkBadges(silent) {
+  let st; try { st = bdgState(); } catch (e) { console.error(e); return; }
+  const got = load(KEY_BADGES, null), first = !got || typeof got !== 'object', out = first ? {} : { ...got }, now = new Date().toISOString(), fresh = [];
+  st.forEach(x => { if (x.done && !out[x.b.id]) { out[x.b.id] = now; if (!first && !silent) fresh.push(x.b); } });
+  if (first || fresh.length || Object.keys(out).length !== Object.keys(got || {}).length) save(KEY_BADGES, out);
+  bdgQueue.push(...fresh); showNextBadge(); renderBadgesCount(st);
+}
+function renderBadgesCount(st = bdgState()) { const n = st.filter(x => x.done).length; $('go-badges-n').textContent = ' · ' + n + ' von ' + BADGES.length; }
+function showNextBadge() {
+  if (!bdgQueue.length || !$('bdg-ov').classList.contains('hidden') || !$('bd-ov').classList.contains('hidden') || !$('wr-ov').classList.contains('hidden')) return;
+  const b = bdgQueue.shift();
+  $('bdg-ov-icon').className = 'mx-auto mt-4 flex h-28 w-28 items-center justify-center rounded-[32px] text-6xl shadow-lg bg-gradient-to-br ' + b.g; $('bdg-ov-icon').textContent = b.e;
+  $('bdg-ov-h').textContent = b.t; $('bdg-ov-t').textContent = b.txt; $('bdg-ov-more').textContent = b.next || (bdgQueue.length ? 'Noch ' + bdgQueue.length + ' weitere' + (bdgQueue.length === 1 ? 's' : '') + ' …' : '');
+  const box = $('bdg-conf'), cols = ['#34d399', '#fbbf24', '#f472b6', '#38bdf8', '#a78bfa', '#fb7185']; box.textContent = '';
+  for (let i = 0; i < 40; i++) { const c = document.createElement('i'), r = Math.random; c.style.cssText = 'left:' + (r() * 100).toFixed(1) + '%;background:' + cols[i % cols.length] + ';--d:' + (4.5 + r() * 4).toFixed(2) + 's;--w:' + (-r() * 8).toFixed(2) + 's;--x:' + ((r() - 0.5) * 120).toFixed(0) + 'px;--r:' + ((r() < 0.5 ? -1 : 1) * (360 + r() * 540)).toFixed(0) + 'deg;--y:' + (r() * 30).toFixed(0) + '%;' + (r() < 0.3 ? 'width:9px;height:9px;border-radius:50%;' : ''); box.appendChild(c); }
+  $('bdg-ov').classList.remove('hidden'); document.body.style.overflow = 'hidden';
+}
+function hideBadgeOv() { $('bdg-ov').classList.add('hidden'); $('bdg-conf').textContent = ''; document.body.style.overflow = ''; setTimeout(showNextBadge, 350); }
+$('bdg-ov-ok').addEventListener('click', hideBadgeOv);
+$('bdg-ov').addEventListener('click', (e) => { if (e.target === e.currentTarget || e.target.parentElement === e.currentTarget) hideBadgeOv(); });
+function renderBadges() {
+  const st = bdgState(), got = load(KEY_BADGES, {}) || {}, n = st.filter(x => x.done).length;
+  $('bdg-count').textContent = n + ' von ' + BADGES.length;
+  const order = st.slice().sort((a, b) => (b.done - a.done) || (a.done ? String(got[a.b.id] || '').localeCompare(String(got[b.b.id] || '')) : b.v - a.v));
+  $('bdg-grid').innerHTML = order.map(x => x.done
+    ? `<button type="button" data-bdg="${x.b.id}" class="rounded-2xl bg-gradient-to-br ${x.b.g} p-2.5 text-white shadow-sm active:scale-95 transition"><p class="text-2xl leading-8">${x.b.e}</p><p class="mt-1 text-[11px] font-semibold leading-tight [text-shadow:0_1px_2px_rgba(0,0,0,.35)]">${esc(x.b.t)}</p></button>`
+    : `<button type="button" data-bdg="${x.b.id}" class="rounded-2xl bg-slate-100 dark:bg-slate-800 p-2.5 text-slate-500 dark:text-slate-400 active:scale-95 transition"><p class="text-2xl leading-8 grayscale opacity-40">${x.b.e}</p><p class="mt-1 text-[11px] font-semibold leading-tight">${esc(x.b.t)}</p><div class="mt-1.5 h-1 rounded-full bg-slate-300 dark:bg-slate-700"><div class="h-full rounded-full bg-slate-500 dark:bg-slate-400" style="width:${Math.round(x.v * 100)}%"></div></div></button>`).join('');
+  if (bdgSel) bdgInfo(bdgSel);
+}
+function bdgInfo(id) {
+  bdgSel = id; const x = bdgState().find(y => y.b.id === id), got = load(KEY_BADGES, {}) || {}; if (!x) return;
+  $('bdg-info').innerHTML = '<b class="text-slate-900 dark:text-white">' + esc(x.b.t) + '</b> · ' + esc(x.b.txt) + ' ' + (x.done ? (got[id] ? 'Erreicht am ' + fmtDate(got[id]) + '.' : 'Erreicht.') : 'Noch ' + (100 - Math.round(x.v * 100)) + ' % bis zum Ziel.');
+}
+$('bdg-grid').addEventListener('click', (e) => { const b = e.target.closest('[data-bdg]'); if (b) bdgInfo(b.dataset.bdg); });
+$('go-badges').addEventListener('click', () => { repMode = 'stat'; showView('report'); setTimeout(() => $('st-badge-card').scrollIntoView({ behavior: 'smooth', block: 'start' }), 120); });
+setTimeout(() => checkBadges(false), 2500);
 function renderStat() {
+  try { renderBadges(); } catch (e) { console.error(e); }
   const rs = getReadings(), now = new Date(), cy = now.getFullYear(), cm = now.getMonth(), D = 864e5, MON = 30.4375;
   const kmT = (v) => v != null ? fmt(v, 0) + ' km' : '–', pts = rs.filter(r => r.odometerKm > 0).map(r => [Date.parse(r.date), r.odometerKm])
     .concat(getCosts().filter(c => c.odometerKm > 0).map(c => [Date.parse(c.date), c.odometerKm])).filter(q => Number.isFinite(q[0])).sort((a, b) => a[0] - b[0]);
@@ -4422,7 +4607,7 @@ async function showBirthday() {
   $('bd-ov').classList.remove('hidden'); document.body.style.overflow = 'hidden'; bdShown = Date.now();
   const img = $('bd-img'); if (!img.src) { const src = await findHeroImg(1); if (src) { img.src = (await cutWhite(src)).src; img.alt = 'Dein ' + name; img.classList.remove('hidden'); } }
 }
-function hideBirthday() { $('bd-ov').classList.add('hidden'); $('bd-conf').textContent = ''; document.body.style.overflow = ''; }
+function hideBirthday() { $('bd-ov').classList.add('hidden'); $('bd-conf').textContent = ''; document.body.style.overflow = ''; setTimeout(() => { try { showNextBadge(); } catch (e) { } }, 350); }
 $('bd-close').addEventListener('click', hideBirthday);
 $('bd-ov').addEventListener('click', (e) => { if (e.target === e.currentTarget || e.target.parentElement === e.currentTarget) hideBirthday(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('bd-ov').classList.contains('hidden')) hideBirthday(); });
@@ -4482,6 +4667,37 @@ async function wxForecast(l) {
   } catch (e) { if (same) return { ...c, stale: true }; throw e; }
 }
 
+/* =====================================================================
+   Frost-Hinweis (Start, ab 16 Uhr): Tiefstwert morgen zwischen 5 und 9 Uhr am Wetter-Standort unter 0 °C.
+   Reichweite: Netto-Akku ÷ (Ø Verbrauch inkl. Ladeverluste × 0,92); Winter-Abschlag als Faustwert 10 % + 1,5 % je Grad unter 0 (max. 35 %).
+   Vorhersage stündlich (Open-Meteo), 1 Stunde zwischengespeichert. × blendet bis zum nächsten Tag aus.
+   ===================================================================== */
+const KEY_FROST = 'enyaq.frost';                 // { lat, lon, t, day ('JJJJ-MM-TT' = morgen), min } + snooze
+async function frostMin() {
+  const l = wxLoc(); if (!l) return null;
+  const tm = new Date(Date.now() + 864e5), day = wxIso(tm), c = load(KEY_FROST, null);
+  if (c && c.lat === l.lat && c.lon === l.lon && c.day === day && Date.now() - c.t < 3600e3) return c.min;
+  const r = await fetch('https://api.open-meteo.com/v1/forecast?latitude=' + l.lat + '&longitude=' + l.lon + '&hourly=temperature_2m&timezone=auto&forecast_days=3');
+  if (!r.ok) return c && c.day === day ? c.min : null;
+  const j = await r.json(), v = j.hourly.time.map((t, i) => [t, j.hourly.temperature_2m[i]]).filter(([t]) => t.slice(0, 10) === day && +t.slice(11, 13) >= 5 && +t.slice(11, 13) <= 9).map(x => x[1]).filter(Number.isFinite);
+  const min = v.length ? Math.min(...v) : null;
+  save(KEY_FROST, { ...(c || {}), lat: l.lat, lon: l.lon, t: Date.now(), day, min }); return min;
+}
+async function renderFrost() {
+  const el = $('frost-banner'); if (!el) return;
+  const h = new Date().getHours(), snooze = (load(KEY_FROST, {}) || {}).snooze;
+  if (h < 16 || snooze === todayYMD() || liveHero) { el.classList.add('hidden'); return; }
+  let min = null; try { min = await frostMin(); } catch (e) { }
+  if (min == null || min >= 0) { el.classList.add('hidden'); return; }
+  const loss = Math.min(35, Math.round(10 + Math.max(0, -min) * 1.5)), rs = getReadings();
+  let k100 = null; try { const t = rs.length ? consumptionTotals(rs, rs.map((_, i) => i)) : null; k100 = t && t.km ? t.kwh100 : null; } catch (e) { }
+  const full = k100 ? batteryKwh() / (k100 * 0.92) * 100 : null;
+  $('frost-h').textContent = 'Morgen früh ' + fmt(min, 0).replace('-', '−') + ' °C';
+  $('frost-t').textContent = 'Reichweite ca. ' + loss + ' % geringer' + (full ? ' (volle Ladung ≈ ' + fmt(Math.round(full * (1 - loss / 100) / 5) * 5, 0) + ' statt ' + fmt(Math.round(full / 5) * 5, 0) + ' km)' : '') + '. Heute Abend anstecken: Vorklimatisieren aus dem Netz schont den Akku.';
+  el.classList.remove('hidden');
+}
+$('frost-x').addEventListener('click', () => { const c = load(KEY_FROST, {}) || {}; c.snooze = todayYMD(); save(KEY_FROST, c); $('frost-banner').classList.add('hidden'); });
+setTimeout(() => renderFrost(), 1500); setInterval(() => { if (!document.hidden && currentView === 'dashboard') renderFrost(); }, 15 * 60 * 1000);
 let wxTimer = null, wxTok = 0, wxChart = null;
 function wxKill() { if (wxChart) { wxChart.destroy(); wxChart = null; } }
 function wxClose() { wxTok++; clearTimeout(wxTimer); wxKill(); $('wx-pop').classList.add('hidden'); }
@@ -4985,7 +5201,7 @@ try { renderWrapCard(); } catch (e) { }
    im Dokument enyaqStrom/<uid>/settings/prefs, gleiche Regel wie Anbieter und Kategorien. Die PIN bleibt nur auf dem Gerät.
    Erster Abgleich: Was die Cloud hat, gilt; fehlt dort etwas und ist lokal vorhanden, wird es hochgeladen. Danach gilt die Cloud (Änderung auf einem Gerät wirkt auf allen).
    ===================================================================== */
-const SYNC_SET_KEYS = ['title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice'];
+const SYNC_SET_KEYS = ['title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm'];
 /** Einstellungen für die Cloud: feste Reihenfolge, ohne leere Werte (Firestore verbietet undefined). null = nichts vorhanden. */
 function syncSet(src) {
   const o = {}; if (src && typeof src === 'object') SYNC_SET_KEYS.forEach(k => { const v = src[k]; if (v != null && v !== '' && !(typeof v === 'number' && !isFinite(v))) o[k] = v; });
@@ -5445,7 +5661,75 @@ function tripsCsv(list, name) {
 $('trips-csv').addEventListener('click', () => tripsCsv(getTrips().filter(tripVisible), 'fahrtenbuch-' + todayYMD() + '.csv'));
 
 /* ---- Berichte → Fahrten ---- */
+/* =====================================================================
+   Steuerhelfer Arbeitsweg (Berichte → Fahrten): Arbeitstage = Kalendertage mit mindestens einer Fahrt mit Etikett „Arbeitsweg“.
+   Entfernungspauschale: ab 2026 0,38 € je Entfernungs-km ab dem 1. km; bis 2025 0,30 € (1.–20. km) und 0,38 € ab dem 21. km.
+   Einfache Entfernung: eigene Angabe (Einstellung commuteKm) oder der Median der Arbeitsweg-Fahrten, auf ganze km abgerundet.
+   ===================================================================== */
+let taxY = new Date().getFullYear();
+const isCommute = (t) => { const l = tripLabel(t).lab; return l && (l.id === 'arbeitsweg' || /arbeit/i.test(l.name || '')); };
+const taxRate = (y, km) => y >= 2026 ? km * 0.38 : Math.min(km, 20) * 0.30 + Math.max(0, km - 20) * 0.38;
+function taxData(y) {
+  const trips = getTrips().filter(t => tripVisible(t) && new Date(t.s).getFullYear() === y), com = trips.filter(isCommute);
+  const days = new Map(); com.forEach(t => { const d = new Date(t.s), k = ymd(d); const o = days.get(k) || { d, n: 0, km: 0 }; o.n++; o.km += t.km || 0; days.set(k, o); });
+  const med = wbMedian(com.map(t => t.km || 0).filter(v => v > 0)) ?? (com.length ? com[0].km : null);
+  const own = Number(getSettings().commuteKm) > 0 ? Number(getSettings().commuteKm) : null, dist = own ?? (med ? Math.floor(med) : null);
+  const comKm = com.reduce((a, t) => a + (t.km || 0), 0);
+  /* echte Kosten: Arbeitsweg-km × Ø Verbrauch inkl. Ladeverluste × Ø Strompreis des Jahres (sonst Gesamtwerte) */
+  const rs = getReadings(), inY = rs.map((r, i) => i).filter(i => new Date(rs[i].date).getFullYear() === y), all = rs.map((_, i) => i);
+  const tc = (idx) => { try { const t = idx.length ? consumptionTotals(rs, idx) : null; return t && t.km ? t.kwh100 : null; } catch (e) { return null; } };
+  const pr = (idx) => { let e = 0, c = 0; idx.forEach(i => { const r = rs[i]; if (r.consumedSinceLast > 0 && r.cost > 0) { e += r.consumedSinceLast; c += r.cost; } }); return e > 0 ? c / e : null; };
+  const k100 = tc(inY) ?? tc(all), price = pr(inY) ?? pr(all), real = k100 != null && price != null ? comKm * k100 / 100 * price : null;
+  /* Lücken: Monate (ab Kaufmonat, bis heute) ohne jede Fahrt im Fahrtenbuch */
+  const [py, pm] = purchaseMonth().split('-').map(Number), now = new Date(), gaps = [];
+  for (let m = 0; m < 12; m++) { if (y < py || (y === py && m < pm - 1) || y > now.getFullYear() || (y === now.getFullYear() && m > now.getMonth())) continue; if (!trips.some(t => new Date(t.s).getMonth() === m)) gaps.push(m); }
+  return { y, days: [...days.values()].sort((a, b) => a.d - b.d), dist, own: own != null, med, sum: dist ? days.size * taxRate(y, dist) : null, comKm, real, gaps, n: com.length };
+}
+const MON_S = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
+function taxYears() { const ys = new Set(getTrips().filter(isCommute).map(t => new Date(t.s).getFullYear())); return [...ys].sort(); }
+function renderTax() {
+  const ys = taxYears(), card = $('tax-card'); card.classList.toggle('hidden', !ys.length); if (!ys.length) return;
+  if (!ys.includes(taxY)) taxY = ys[ys.length - 1];
+  const d = taxData(taxY), i = ys.indexOf(taxY);
+  $('tax-y').textContent = taxY; $('tax-prev').disabled = i <= 0; $('tax-next').disabled = i >= ys.length - 1;
+  $('tax-prev').classList.toggle('opacity-30', i <= 0); $('tax-next').classList.toggle('opacity-30', i >= ys.length - 1);
+  $('tax-days').textContent = d.days.length;
+  $('tax-sub').textContent = 'Tage mit mindestens einer Fahrt „Arbeitsweg“ · ' + d.n + (d.n === 1 ? ' Fahrt' : ' Fahrten') + ', ' + fmt(d.comKm, 0) + ' km';
+  if (document.activeElement !== $('tax-km')) { $('tax-km').value = d.dist ?? ''; $('tax-km').placeholder = d.med ? String(Math.floor(d.med)) : '–'; }
+  $('tax-rate-l').textContent = taxY >= 2026 ? 'Pauschale (0,38 €/km)' : 'Pauschale (0,30/0,38 €/km)';
+  $('tax-sum').textContent = d.sum != null ? eur(d.sum) : '–';
+  $('tax-real').textContent = d.real != null ? eur(d.real) : '–';
+  $('tax-formula').textContent = d.dist ? d.days.length + ' Tage × ' + (taxY >= 2026 ? d.dist + ' km × 0,38 €' : (d.dist <= 20 ? d.dist + ' km × 0,30 €' : '(20 km × 0,30 € + ' + (d.dist - 20) + ' km × 0,38 €)')) + (d.own ? ' · Entfernung selbst eingetragen' : ' · Entfernung aus deinen Fahrten (Median), änderbar') : 'Trage die einfache Entfernung zur Arbeit ein.';
+  $('tax-gap').classList.toggle('hidden', !d.gaps.length);
+  if (d.gaps.length) $('tax-gap').textContent = 'Ohne Fahrtenbuch-Daten: ' + d.gaps.map(m => MON_S[m]).join(', ') + ' – dort können Arbeitstage fehlen. Fahrtenbuch für diese Monate importieren.';
+  const byM = {}; d.days.forEach(x => { (byM[x.d.getMonth()] = byM[x.d.getMonth()] || []).push(x); });
+  $('tax-months').innerHTML = Object.keys(byM).map(Number).sort((a, b) => a - b).map(m => `<div><p class="font-semibold text-slate-700 dark:text-slate-200">${MON_S[m]} · ${byM[m].length} ${byM[m].length === 1 ? 'Tag' : 'Tage'}</p><p class="text-slate-500 dark:text-slate-400 leading-5">${byM[m].map(x => pad2(x.d.getDate()) + '.').join(' ')}</p></div>`).join('') || '<p class="text-slate-500">Keine Arbeitstage.</p>';
+}
+$('tax-prev').addEventListener('click', () => { const ys = taxYears(), i = ys.indexOf(taxY); if (i > 0) { taxY = ys[i - 1]; renderTax(); } });
+$('tax-next').addEventListener('click', () => { const ys = taxYears(), i = ys.indexOf(taxY); if (i < ys.length - 1) { taxY = ys[i + 1]; renderTax(); } });
+$('tax-km').addEventListener('change', (e) => {
+  const v = parseInt(e.target.value, 10), raw = load(KEY_SETTINGS, {}) || {};
+  if (v > 0 && v < 1000) raw.commuteKm = v; else delete raw.commuteKm;
+  save(KEY_SETTINGS, raw); pushPrefs(); renderTax();
+});
+$('tax-pdf').addEventListener('click', async () => {
+  const d = taxData(taxY), st = getSettings(), mm = [st.brand, st.model].filter(Boolean).join(' '), box = $('akte-print');
+  const byM = {}; d.days.forEach(x => { (byM[x.d.getMonth()] = byM[x.d.getMonth()] || []).push(x); });
+  const TD = 'padding:5px 8px;border-bottom:1px solid #e2e8f0;font-size:12px;vertical-align:top';
+  let h = '<div style="max-width:720px;margin:0 auto;font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#111;line-height:1.4"><h1 style="font-size:24px;margin:0">Wege zur ersten Tätigkeitsstätte ' + taxY + '</h1>'
+    + '<p style="margin:2px 0 14px;color:#475569;font-size:14px">' + esc(mm || 'Fahrzeug') + (st.plate ? ' · ' + esc(st.plate) : '') + ' · erstellt am ' + fmtDate(new Date().toISOString()) + '</p>'
+    + '<table style="width:100%;border-collapse:collapse;margin-bottom:16px">'
+    + [['Arbeitstage (Tage mit Fahrt „Arbeitsweg“)', d.days.length], ['Einfache Entfernung', d.dist ? d.dist + ' km' : '–'], ['Entfernungspauschale', taxY >= 2026 ? '0,38 € je km ab dem 1. km' : '0,30 € (1.–20. km), 0,38 € ab dem 21. km'], ['Betrag', d.sum != null ? '<b>' + eur(d.sum) + '</b>' : '–'], ['Gefahrene Arbeitsweg-km (laut Fahrtenbuch)', fmt(d.comKm, 0) + ' km']]
+      .map(([k, v]) => '<tr><td style="' + TD + ';color:#475569">' + k + '</td><td style="' + TD + ';text-align:right">' + v + '</td></tr>').join('') + '</table>'
+    + '<h2 style="font-size:16px;margin:0 0 6px">Arbeitstage je Monat</h2><table style="width:100%;border-collapse:collapse"><thead><tr><th style="' + TD + ';text-align:left">Monat</th><th style="' + TD + ';text-align:right">Tage</th><th style="' + TD + ';text-align:left">Daten</th></tr></thead><tbody>'
+    + Object.keys(byM).map(Number).sort((a, b) => a - b).map(m => '<tr style="break-inside:avoid"><td style="' + TD + '">' + MON_S[m] + '</td><td style="' + TD + ';text-align:right">' + byM[m].length + '</td><td style="' + TD + '">' + byM[m].map(x => pad2(x.d.getDate()) + '.' + pad2(m + 1) + '.').join(', ') + '</td></tr>').join('') + '</tbody></table>'
+    + (d.gaps.length ? '<p style="font-size:12px;color:#92400e;margin-top:10px">Hinweis: Für ' + d.gaps.map(m => MON_S[m]).join(', ') + ' liegen keine Fahrtenbuch-Daten vor.</p>' : '')
+    + '<p style="font-size:11px;color:#64748b;margin:20px 0 0;border-top:1px solid #cbd5e1;padding-top:8px">Aus dem Fahrtenbuch der MyŠkoda-App (Etikett „Arbeitsweg“) erstellt. Keine Steuerberatung; Angaben vor der Verwendung prüfen.</p></div>';
+  box.innerHTML = '<div id="akte-bar"><button type="button" data-akte="close" style="background:#e2e8f0;color:#0f172a">Schließen</button><button type="button" data-akte="print" style="background:#059669;color:#fff">Drucken / als PDF</button></div>' + h;
+  akteOldTitle = document.title; document.title = 'Arbeitsweg ' + taxY; document.body.classList.add('print-akte'); window.scrollTo(0, 0);
+});
 function renderTripReport(y, m) {
+  try { renderTax(); } catch (e) { console.error(e); }
   const ym = y + '-' + pad2(m + 1), list = getTrips().filter(t => tripYM(t) === ym && tripVisible(t)), empty = !list.length;
   $('rf-empty').classList.toggle('hidden', !empty); $('rf-body').classList.toggle('hidden', empty);
   $('rep-sub').textContent = 'Fahrtenbuch · aus der MyŠkoda-App'; if (empty) return;
