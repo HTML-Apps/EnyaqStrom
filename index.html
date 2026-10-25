@@ -110,10 +110,10 @@
   @keyframes dpinR { from { opacity: 0; transform: translateX(-36px); } to { opacity: 1; transform: none; } }
   .dp-inL { animation: dpinL .32s cubic-bezier(.2,.8,.2,1) both; } .dp-inR { animation: dpinR .32s cubic-bezier(.2,.8,.2,1) both; }
   /* Erklärende Texte (grau, klein) im Blocksatz mit Silbentrennung; zentrierte/rechtsbündige und einzeilige Texte bleiben unverändert */
-  p.text-xs.text-slate-500:not(.text-center):not(.text-right):not(.truncate),
-  p.text-sm.text-slate-500:not(.text-center):not(.text-right):not(.truncate),
-  p.text-sm.text-slate-600:not(.text-center):not(.text-right):not(.truncate),
-  p.text-\[11px\].text-slate-500:not(.text-center):not(.text-right):not(.truncate),
+  p.text-xs.text-slate-500:not(.text-center):not(.text-right):not(.text-left):not(.truncate),
+  p.text-sm.text-slate-500:not(.text-center):not(.text-right):not(.text-left):not(.truncate),
+  p.text-sm.text-slate-600:not(.text-center):not(.text-right):not(.text-left):not(.truncate),
+  p.text-\[11px\].text-slate-500:not(.text-center):not(.text-right):not(.text-left):not(.truncate),
   #care-body .rounded-2xl.text-xs, #tax-gap, #pv-hint, #bak-msg + p { text-align: justify; hyphens: auto; -webkit-hyphens: auto; hyphenate-limit-chars: 6 3 3; }
   #dp-panes { overflow-x: clip; overflow-clip-margin: 16px; }   /* hereingleitender Tab darf nicht über den Bildschirmrand ragen (Chrome vergrößert sonst die Seite) */
   @media (prefers-reduced-motion: reduce) { .dp-inL, .dp-inR { animation: none; } }
@@ -772,6 +772,11 @@
         <p class="text-sm text-slate-500 dark:text-slate-400">Akku-Temperatur</p>
         <div id="temp-body"></div>
       </div>
+      <div id="tc-card" class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
+        <div class="flex items-center justify-between gap-2"><p class="min-w-0 text-left text-sm text-slate-500 dark:text-slate-400">Nach Temperatur</p>
+          <div id="tc-seg" class="flex shrink-0 whitespace-nowrap rounded-lg bg-slate-100 dark:bg-slate-800 p-0.5 text-[11px]"><button type="button" data-tc="akku" class="tc-btn rounded-md px-2 py-0.5 font-medium">Akku °C</button><button type="button" data-tc="aussen" class="tc-btn rounded-md px-2 py-0.5 font-medium">Außen °C</button></div></div>
+        <div id="tc-body"></div>
+      </div>
       <div id="bat-trend-card" class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
         <p class="text-sm text-slate-500 dark:text-slate-400">Veränderung</p>
         <p id="bat-trend-h" class="mt-1 text-xl font-semibold"></p>
@@ -940,6 +945,14 @@
           <label for="set-wltp" class="block text-sm font-medium text-slate-700 dark:text-slate-300">WLTP-Verbrauch [kWh/100 km]</label>
           <input id="set-wltp" type="text" inputmode="decimal" placeholder="z. B. 16,0" autocomplete="off" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500">
           <p class="mt-1.5 text-xs text-slate-500 dark:text-slate-400">Für den Vergleich im Rückblick. Škoda Enyaq iV 50: ca. 15,8 bis 16,1. Leer = 16,0.</p>
+        </div>
+        <div class="py-4 first:pt-4 last:pb-0">
+          <p class="text-sm font-medium text-slate-700 dark:text-slate-300">Referenzbereich Akku-Temperatur [°C]</p>
+          <div class="mt-1.5 grid grid-cols-2 gap-2">
+            <div><label for="set-ref-lo" class="text-xs text-slate-500 dark:text-slate-400">von</label><input id="set-ref-lo" type="text" inputmode="text" placeholder="15" autocomplete="off" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
+            <div><label for="set-ref-hi" class="text-xs text-slate-500 dark:text-slate-400">bis unter</label><input id="set-ref-hi" type="text" inputmode="text" placeholder="22" autocomplete="off" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
+          </div>
+          <p class="mt-1.5 text-xs text-slate-500 dark:text-slate-400">Akku-Temperatur ohne Heizung und Klima. Der Verbrauch in diesem Bereich ist die Referenz für den Mehrverbrauch bei Kälte und Hitze (Berichte → Akku). Leer = 15 bis 22 °C.</p>
         </div>
       </div>
     </div>
@@ -2079,6 +2092,7 @@ function fillSettings() {
   $('set-title').value = s.title || DEFAULT_TITLE;
   $('set-brand').value = s.brand || ''; $('set-model').value = s.model || ''; $('set-plate').value = s.plate || ''; $('set-year').value = s.year || ''; $('set-vin').value = s.vin || '';
   $('set-power').value = String(chargePowerKw()).replace('.', ',');
+  $('set-ref-lo').value = s.refLo != null ? String(s.refLo).replace('.', ',') : ''; $('set-ref-hi').value = s.refHi != null ? String(s.refHi).replace('.', ',') : '';
   renderDvInfo(); $('set-purchase').value = purchaseDay(); $('set-purchase-km').value = s.purchaseKm != null ? fmt(s.purchaseKm, 0) : ''; $('set-purchase-price').value = s.purchasePrice != null ? fmt(s.purchasePrice, 2) : ''; $('set-wltp').value = s.wltp ? String(s.wltp).replace('.', ',') : ''; renderWxLoc();
   $('set-rem-days').value = String(remWarn().days); $('set-rem-km').value = String(remWarn().km);
 }
@@ -2136,6 +2150,10 @@ $('btn-save-settings').addEventListener('click', () => {
   if (!Number.isInteger(remKm) || remKm < 0 || remKm > 20000) { alert('Bitte die Vorwarnung in km als ganze Zahl von 0 bis 20000 eingeben.'); return; }
   const pd = $('set-purchase').value, purchase = /^\d{4}-\d{2}-\d{2}$/.test(pd) && !isNaN(Date.parse(pd)) ? pd : '2026-06-08';
   const wl = $('set-wltp').value.trim() === '' ? undefined : parseFloat($('set-wltp').value.replace(',', '.'));
+  const tnum = (id) => { const t = $(id).value.trim().replace('−', '-').replace(',', '.'); return t === '' ? undefined : Number(t); };
+  const rlo = tnum('set-ref-lo'), rhi = tnum('set-ref-hi');
+  if ([rlo, rhi].some(v => v !== undefined && !(Number.isFinite(v) && v >= -20 && v <= 45)) || (rlo !== undefined) !== (rhi !== undefined) || (rlo !== undefined && rhi - rlo < 2)) {
+    alert('Bitte beim Referenzbereich der Akku-Temperatur beide Werte eintragen (−20 bis 45 °C, „bis“ mindestens 2 °C über „von“) oder beide Felder leer lassen.'); return; }
   const deNum = (v) => { const t = v.trim(); if (t === '') return undefined; return Number((/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(t) ? t.replace(/\./g, '') : t).replace(',', '.')); };   // 16.969 = sechzehntausend…, 32.500,50 = Euro mit Cent
   const pk = deNum($('set-purchase-km').value), pp = deNum($('set-purchase-price').value);
   if (pk !== undefined && !(pk >= 0 && pk <= 2e6)) { alert('Bitte den Kilometerstand bei Kauf als Zahl eingeben (z. B. 16.969) oder das Feld leer lassen.'); return; }
@@ -2149,7 +2167,7 @@ $('btn-save-settings').addEventListener('click', () => {
     if (+m[2] < 1990 || +m[2] * 12 + +m[1] > now.getFullYear() * 12 + now.getMonth() + 1) { alert('Das Baujahr ' + yr + ' kann nicht stimmen: Es muss zwischen 01/1990 und ' + String(now.getMonth() + 1).padStart(2, '0') + '/' + now.getFullYear() + ' liegen.'); $('set-year').focus(); return; }
   }
   const txt = (id, n) => $(id).value.trim().replace(/\s+/g, ' ').slice(0, n) || undefined;
-  if (save(KEY_SETTINGS, { title: $('set-title').value.trim() || DEFAULT_TITLE, brand: txt('set-brand', 30), model: txt('set-model', 40), plate: (txt('set-plate', 15) || '').toUpperCase() || undefined, year: yr || undefined, vin: vin || undefined, price, battery, power, remDays, remKm, purchase, wltp: wl, purchaseKm: pk !== undefined ? Math.round(pk) : undefined, purchasePrice: pp !== undefined ? Math.round(pp * 100) / 100 : undefined, commuteKm: getSettings().commuteKm || undefined })) {   // commuteKm: im Steuerhelfer (Berichte → Fahrten) gepflegt
+  if (save(KEY_SETTINGS, { title: $('set-title').value.trim() || DEFAULT_TITLE, brand: txt('set-brand', 30), model: txt('set-model', 40), plate: (txt('set-plate', 15) || '').toUpperCase() || undefined, year: yr || undefined, vin: vin || undefined, price, battery, power, remDays, remKm, purchase, wltp: wl, purchaseKm: pk !== undefined ? Math.round(pk) : undefined, purchasePrice: pp !== undefined ? Math.round(pp * 100) / 100 : undefined, commuteKm: getSettings().commuteKm || undefined, refLo: rlo, refHi: rhi })) {   // commuteKm: im Steuerhelfer (Berichte → Fahrten) gepflegt
     renderReminderBadges(); renderHeroStats(); pushPrefs();
     $('settings-msg').classList.remove('hidden'); setTimeout(() => $('settings-msg').classList.add('hidden'), 2500);
   }
@@ -3996,7 +4014,67 @@ function renderTempCard() {
   const loss = bins.some(b => b.n) ? `<p class="mt-4 text-sm font-medium">Ø Ladeverlust nach Akku-Temperatur</p><div class="mt-2 space-y-2">${bins.map(b => `<div class="flex items-center gap-2 text-sm"><span class="w-16 shrink-0 text-slate-600 dark:text-slate-300">${b.l}</span><div class="h-2.5 flex-1 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden"><div class="h-full rounded-full bg-sky-500" style="width:${b.m != null ? Math.round(b.m / mx * 100) : 0}%"></div></div><span class="w-20 shrink-0 text-right tabular-nums">${b.m != null ? fmt(b.m, 1) + ' %' : '–'}<span class="text-[11px] text-slate-500 dark:text-slate-400"> (${b.n})</span></span></div>`).join('')}</div><p class="mt-2 text-xs text-slate-500 dark:text-slate-400">Verlust aus Zähler-kWh und Akku-%; bei kaltem Akku heizt das Auto beim Laden mit.</p>` : '';
   el.innerHTML = `<p class="mt-1 text-xs text-slate-500 dark:text-slate-400">${withT.length} Ladungen mit Temperatur · Ø ${fmt(withT.reduce((a, r) => a + r.battTemp, 0) / withT.length, 0)} °C</p>` + cap + loss;
 }
+/* =====================================================================
+   Mehrverbrauch nach Temperatur (Berichte → Akku): Fahrverbrauch je Strecke zwischen zwei Ladungen aus Akku-% × Kapazität (ohne Ladeverluste),
+   gruppiert nach der Akku-Temperatur beim Anstecken (Ende der Strecke) bzw. der Ø Außentemperatur der Tage dieser Strecke.
+   Referenz = einstellbarer Bereich (Standard 15 bis unter 22 °C); darunter und darüber 5-°C-Bereiche. Verbrauch je Bereich = Σ kWh ÷ Σ km.
+   Hochrechnung: km je Bereich × (Verbrauch − Referenz), in Steckdosen-kWh (÷ Ø Wirkungsgrad) und € (× Ø Strompreis).
+   ===================================================================== */
+let tcMode = 'akku', tcTok = 0;
+const TC_MIN_KM = 150, TC_MIN_REF = 3;
+function tcRange() { const s = getSettings(), lo = Number(s.refLo), hi = Number(s.refHi); return Number.isFinite(lo) && Number.isFinite(hi) && hi > lo ? [lo, hi] : [15, 22]; }
+function tcBins(lo, hi) {
+  const f = (v) => String(v).replace('-', '−');
+  return [{ k: 'h3', a: hi + 10, b: 99, l: '≥ ' + f(hi + 10) + ' °C' }, { k: 'h2', a: hi + 5, b: hi + 10, l: f(hi + 5) + '–' + f(hi + 10) + ' °C' }, { k: 'h1', a: hi, b: hi + 5, l: f(hi) + '–' + f(hi + 5) + ' °C' },
+    { k: 'ref', a: lo, b: hi, l: f(lo) + '–' + f(hi) + ' °C' },
+    { k: 'c1', a: lo - 5, b: lo, l: f(lo - 5) + '–' + f(lo) + ' °C' }, { k: 'c2', a: lo - 10, b: lo - 5, l: f(lo - 10) + '–' + f(lo - 5) + ' °C' }, { k: 'c3', a: lo - 15, b: lo - 10, l: f(lo - 15) + '–' + f(lo - 10) + ' °C' }, { k: 'c4', a: -99, b: lo - 15, l: '< ' + f(lo - 15) + ' °C' }];
+}
+function tcSegments() {
+  const rs = getReadings(), out = [];
+  rs.forEach((r, i) => { if (i < 1) return; const s = entryStats(rs, i); if (s.method !== 'soc' || s.rough || !(s.usedBat > 0) || !(s.km >= 10)) return; out.push({ i, km: s.km, bat: s.usedBat, bt: Number.isFinite(r.battTemp) ? r.battTemp : null, a: wxIso(new Date(rs[i - 1].date)), b: wxIso(new Date(r.date)) }); });
+  return out;
+}
+async function renderTcCard() {
+  const tok = ++tcTok, el = $('tc-body'); if (!el) return;
+  document.querySelectorAll('.tc-btn').forEach(b => { const on = b.dataset.tc === tcMode; b.classList.toggle('bg-white', on); b.classList.toggle('dark:bg-slate-600', on); b.classList.toggle('shadow-sm', on); b.classList.toggle('text-slate-500', !on); });
+  const [lo, hi] = tcRange(), bins = tcBins(lo, hi), segs = tcSegments(); let pts = [];
+  if (tcMode === 'akku') pts = segs.filter(x => x.bt != null).map(x => ({ ...x, t: x.bt }));
+  else {
+    const l = wxLoc(); if (!l) { el.innerHTML = '<p class="mt-2 text-sm text-slate-600 dark:text-slate-300">Für die Außentemperatur bitte in den Einstellungen unter „Wetter“ einen Standort eintragen.</p>'; return; }
+    if (!segs.length) { el.innerHTML = '<p class="mt-2 text-sm text-slate-600 dark:text-slate-300">Noch keine Strecken mit Akku-Start/-Ende und km-Stand.</p>'; return; }
+    el.innerHTML = '<p class="mt-2 text-sm text-slate-500 dark:text-slate-400">Temperaturen werden geladen …</p>';
+    let days = {}; try { days = await wxTemps(l, segs.reduce((m, x) => x.a < m ? x.a : m, segs[0].a), segs.reduce((m, x) => x.b > m ? x.b : m, segs[0].b)); } catch (e) { }
+    if (tok !== tcTok) return;
+    segs.forEach(x => { let sum = 0, n = 0; for (let t = Date.parse(x.a + 'T12:00:00'), e = Date.parse(x.b + 'T12:00:00'); t <= e; t += 864e5) { const v = days[wxIso(new Date(t))]; if (v != null) { sum += v; n++; } } if (n) pts.push({ ...x, t: sum / n }); });
+  }
+  bins.forEach(b => { b.km = 0; b.bat = 0; b.n = 0; });
+  pts.forEach(x => { const b = bins.find(y => x.t >= y.a && x.t < y.b); if (b) { b.km += x.km; b.bat += x.bat; b.n++; } });
+  bins.forEach(b => { b.rate = b.km > 0 ? b.bat / b.km * 100 : null; });
+  const ref = bins.find(b => b.k === 'ref'), src = tcMode === 'akku' ? 'Akku-Temperatur' : 'Außentemperatur';
+  if (ref.n < TC_MIN_REF) {
+    el.innerHTML = `<p class="mt-2 text-xl font-semibold">Noch zu wenige Referenz-Strecken</p><p class="text-sm mt-1 text-slate-600 dark:text-slate-300">Für die Referenz braucht es mindestens ${TC_MIN_REF} Strecken mit ${src} zwischen ${String(lo).replace('-', '−')} und ${String(hi).replace('-', '−')} °C (bisher ${ref.n}). Gezählt werden Strecken zwischen zwei Ladungen mit Akku-Start/-Ende und km-Stand${tcMode === 'akku' ? ' und eingetragener Akku-Temperatur' : ''}.</p>`;
+    return;
+  }
+  bins.forEach(b => { b.pct = b.rate != null && b.k !== 'ref' ? (b.rate / ref.rate - 1) * 100 : null; });
+  const span = Math.max(25, ...bins.filter(b => b.pct != null).map(b => Math.abs(b.pct)));
+  const eta = (v => v >= 0.75 && v <= 0.98 ? v : BAT.eta)(avgEff(getReadings())), rsAll = getReadings(); let e = 0, c = 0; rsAll.forEach(r => { if (r.consumedSinceLast > 0 && r.cost > 0) { e += r.consumedSinceLast; c += r.cost; } }); const price = e > 0 ? c / e : Number(getSettings().price) || 0;
+  const extra = (ks) => bins.filter(b => ks.includes(b.k[0]) && b.rate != null).reduce((a, b) => a + b.km * (b.rate - ref.rate) / 100, 0) / eta;
+  const xc = extra(['c']), xh = extra(['h']), fx = (v) => (v >= 0 ? '+' : '−') + fmt(Math.abs(v), 0) + ' kWh · ' + (v >= 0 ? '' : '−') + eur(Math.abs(v) * price).replace(/,\d\d\s?€/, ' €');
+  const row = (b) => {
+    if (b.k === 'ref') return `<div class="grid items-center gap-2 rounded-lg bg-emerald-50 dark:bg-emerald-600/10 py-0.5" style="grid-template-columns:64px 1fr 96px"><span class="pl-1 text-emerald-700 dark:text-emerald-300 font-semibold">${b.l}</span><div class="relative h-4"><div class="absolute left-1/2 top-0 bottom-0 w-0.5 bg-emerald-500"></div></div><span class="text-right text-emerald-700 dark:text-emerald-300 font-semibold">Referenz</span></div>`;
+    const weak = b.km < TC_MIN_KM, w = b.pct != null ? Math.min(50, Math.abs(b.pct) / span * 50) : 0, cold = b.k[0] === 'c', col = cold ? ['#7dd3fc', '#38bdf8', '#0ea5e9', '#0369a1'][+b.k[1] - 1] : ['#fdba74', '#fb923c', '#ea580c'][+b.k[1] - 1];
+    const bar = b.pct != null ? `<div class="absolute top-0.5 bottom-0.5 ${b.pct >= 0 ? 'rounded-r' : 'rounded-l'}" style="${b.pct >= 0 ? 'left:50%' : 'right:50%'};width:${w.toFixed(1)}%;background:${col};${weak ? 'opacity:.45' : ''}"></div>` : '';
+    return `<div class="grid items-center gap-2" style="grid-template-columns:64px 1fr 96px"><span class="pl-1 text-slate-600 dark:text-slate-300">${b.l}</span><div class="relative h-4"><div class="absolute left-1/2 top-0 bottom-0 w-px bg-slate-300 dark:bg-slate-600"></div>${bar}</div><span class="text-right tabular-nums">${b.pct != null ? (b.pct >= 0 ? '+' : '−') + fmt(Math.abs(b.pct), 0) + ' %' + (weak ? '*' : '') : '–'} <span class="text-[11px] text-slate-500 dark:text-slate-400">(${b.n})</span></span></div>`;
+  };
+  el.innerHTML = `<div class="mt-3 flex items-center justify-between rounded-2xl bg-emerald-50 dark:bg-emerald-600/15 p-3"><div><p class="text-xs font-semibold text-emerald-700 dark:text-emerald-300">Referenz · ${src.split('-')[0] === 'Akku' ? 'Akku' : 'außen'} ${ref.l}</p><p class="text-left text-[11px] text-slate-500 dark:text-slate-400">${ref.n} Strecken · ${fmt(ref.km, 0)} km · ohne Ladeverluste</p></div><p class="text-2xl font-bold tabular-nums">${fmt(ref.rate, 1)}<span class="text-xs font-medium text-slate-500 dark:text-slate-400"> kWh/100</span></p></div>
+    <div class="mt-3 space-y-1.5 text-[13px]">${bins.map(row).join('')}</div>
+    <p class="mt-2 text-left text-[11px] text-slate-500 dark:text-slate-400">(n) = Strecken · * unsicher, unter ${TC_MIN_KM} km Datenbasis · Balken nach rechts = Mehrverbrauch</p>
+    <div class="mt-3 grid grid-cols-2 gap-2 text-center"><div class="rounded-2xl bg-slate-100 dark:bg-slate-800/70 p-2.5"><p class="text-[11px] text-slate-500 dark:text-slate-400">Mehrverbrauch Kälte</p><p class="font-semibold tabular-nums">${fx(xc)}</p></div><div class="rounded-2xl bg-slate-100 dark:bg-slate-800/70 p-2.5"><p class="text-[11px] text-slate-500 dark:text-slate-400">Mehrverbrauch Hitze</p><p class="font-semibold tabular-nums">${fx(xh)}</p></div></div>
+    <p class="mt-2 text-[11px] text-slate-500 dark:text-slate-400">Hochrechnung über alle erfassten Strecken: km je Bereich × (Verbrauch − Referenz), an der Steckdose (Ø Wirkungsgrad ${fmt(eta * 100, 0)} %) × Ø Strompreis ${fmt(price, 3)} €/kWh. Referenzbereich änderbar unter Einstellungen → Laden &amp; Akku.</p>`;
+}
+$('tc-seg').addEventListener('click', (e) => { const b = e.target.closest('[data-tc]'); if (b && b.dataset.tc !== tcMode) { tcMode = b.dataset.tc; renderTcCard(); } });
 function renderBattery() {
+  try { renderTcCard(); } catch (e) { console.error(e); }
   try { renderTempCard(); } catch (e) { console.error(e); }
   try { renderCare(); } catch (e) { console.error(e); }
   const rows = batRows(), fit = batFit(rows), now = Date.now(), ok = !!fit && fit.n >= BAT.minN && fit.sumHub >= BAT.minHub;
@@ -5555,7 +5633,7 @@ try { renderWrapCard(); } catch (e) { }
    im Dokument enyaqStrom/<uid>/settings/prefs, gleiche Regel wie Anbieter und Kategorien. Die PIN bleibt nur auf dem Gerät.
    Erster Abgleich: Was die Cloud hat, gilt; fehlt dort etwas und ist lokal vorhanden, wird es hochgeladen. Danach gilt die Cloud (Änderung auf einem Gerät wirkt auf allen).
    ===================================================================== */
-const SYNC_SET_KEYS = ['title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm'];
+const SYNC_SET_KEYS = ['title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi'];
 /** Einstellungen für die Cloud: feste Reihenfolge, ohne leere Werte (Firestore verbietet undefined). null = nichts vorhanden. */
 function syncSet(src) {
   const o = {}; if (src && typeof src === 'object') SYNC_SET_KEYS.forEach(k => { const v = src[k]; if (v != null && v !== '' && !(typeof v === 'number' && !isFinite(v))) o[k] = v; });
