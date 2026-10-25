@@ -474,7 +474,7 @@
       <p class="text-sm text-slate-500 dark:text-slate-400">Günstigste Karte unterwegs</p>
       <div id="pv-best-grid" class="mt-2 grid grid-cols-2 gap-2 text-center"></div>
     </div>
-    <p class="px-1 text-xs text-slate-500 dark:text-slate-400">Preise kommen aus deinen Ladungen (Ø je kWh, Unterwegs mit Anbieter). Fehlt ein Preis oder willst du AC/DC getrennt angeben: Karte antippen und eintragen. Zuhause gilt der Strompreis aus den Einstellungen.</p>
+    <p class="px-1 text-xs text-slate-500 dark:text-slate-400">Preise kommen aus deinen Ladungen (Ø je kWh: Unterwegs mit Anbieter, Bosch über den dort hinterlegten Anbieter). Fehlt ein Preis oder willst du AC/DC getrennt angeben: Karte antippen und eintragen. Zuhause gilt der Strompreis aus den Einstellungen.</p>
   </section>
 
   <section id="view-reminders" class="view hidden space-y-3">
@@ -3794,11 +3794,15 @@ $('go-trips').addEventListener('click', () => { histFilter = 'fahrten'; tripDays
    Ladeanbieter (Start → „Ladeanbieter“): Liste aller Anbieter aus den Einstellungen plus Stromanbieter Zuhause.
    Preise: aus der Historie (Ø €/kWh der Unterwegs-Ladungen mit diesem Anbieter, nach kWh gewichtet); eigene Angaben (AC, DC, Grundgebühr, Tarif)
    haben Vorrang und werden in enyaq.provInfo gespeichert (+ Cloud-Dokument settings/prefs). Zuhause: Preis immer aus den Einstellungen.
-   provInfo = { home: { name }, p: { <Anbietername>: { tariff?, ac?, dc?, fee? } } }
+   provInfo = { home: { name }, bosch: { name?, tariff?, ac?, dc?, fee? }, p: { <Anbietername>: { tariff?, ac?, dc?, fee? } } }
+   Bosch: alle Ladungen am Ort „Bosch“ gehören zum dort hinterlegten Anbieter (z. B. Lichtblick); gibt es denselben Namen auch in der Anbieter-Liste,
+   zählen dessen Unterwegs-Ladungen mit und die Zeile erscheint nur einmal (als Bosch-Karte).
    ===================================================================== */
 const KEY_PROVINFO = 'enyaq.provInfo';
 const PV_COLORS = ['#2563eb', '#0e7490', '#7c3aed', '#db2777', '#ea580c', '#059669', '#4f46e5', '#b45309', '#0891b2', '#be123c', '#65a30d', '#475569'];
-const getProvInfo = () => { const o = load(KEY_PROVINFO, {}); return { home: (o && o.home) || {}, p: (o && o.p && typeof o.p === 'object') ? o.p : {} }; };
+const getProvInfo = () => { const o = load(KEY_PROVINFO, {}); return { home: (o && o.home) || {}, bosch: (o && o.bosch) || {}, p: (o && o.p && typeof o.p === 'object') ? o.p : {} }; };
+const pvBoschName = () => (getProvInfo().bosch.name || '').trim();
+const pvSame = (a, b) => !!a && !!b && a.toLowerCase() === b.toLowerCase();
 function setProvInfo(o) { save(KEY_PROVINFO, o); pushPrefs(); }
 const pvHomeName = () => (getProvInfo().home.name || '').trim();
 const pvEur = (v) => fmt(v, v < 1 && Math.round(v * 1000) % 10 ? 3 : 2) + ' €';
@@ -3806,8 +3810,8 @@ const pvEur = (v) => fmt(v, v < 1 && Math.round(v * 1000) % 10 ? 3 : 2) + ' €'
 function pvStats(key) {
   const rs = getReadings(), y0 = new Date(new Date().getFullYear(), 0, 1).getTime(), st = { n: 0, kwh: 0, cost: 0, yn: 0, ykwh: 0, ycost: 0, pk: 0, pc: 0, last: null };
   rs.forEach((r, i) => {
-    const home = key === 'home';
-    if (home ? !(isHome(r) && isCharge(rs, i)) : !(placeOf(r) === 'away' && r.provider === key)) return;
+    const home = key === 'home', pl = placeOf(r);
+    if (home ? !(isHome(r) && isCharge(rs, i)) : key === 'bosch' ? !(pl === 'bosch' || (pl === 'away' && pvSame(r.provider, pvBoschName()))) : !(pl === 'away' && r.provider === key)) return;
     const t = Date.parse(r.date), kwh = r.consumedSinceLast > 0 ? r.consumedSinceLast : 0, cost = r.cost > 0 ? r.cost : 0;
     st.n++; st.kwh += kwh; st.cost += cost;
     if (t >= y0) { st.yn++; st.ykwh += kwh; st.ycost += cost; }
@@ -3819,7 +3823,7 @@ function pvStats(key) {
   return st;
 }
 /** Preise eines Anbieters: eigene Angaben (ac/dc) vor Historie (hist). */
-function pvPrices(name) { const i = getProvInfo().p[name] || {}, st = pvStats(name); return { ac: i.ac > 0 ? i.ac : null, dc: i.dc > 0 ? i.dc : null, fee: i.fee > 0 ? i.fee : null, tariff: i.tariff || '', hist: st.avg, st }; }
+function pvPrices(name) { const I = getProvInfo(), i = (name === 'bosch' ? I.bosch : I.p[name]) || {}, st = pvStats(name); return { ac: i.ac > 0 ? i.ac : null, dc: i.dc > 0 ? i.dc : null, fee: i.fee > 0 ? i.fee : null, tariff: i.tariff || '', hist: st.avg, st }; }
 const pvChip = (lbl, v, sub) => `<span class="whitespace-nowrap rounded-lg bg-slate-100 dark:bg-slate-800 px-2 py-1 text-xs text-slate-700 dark:text-slate-200">${lbl ? '<b>' + lbl + '</b> ' : ''}${pvEur(v)}${sub ? ' <span class="text-slate-500 dark:text-slate-400">' + sub + '</span>' : ''}</span>`;
 const pvBadge = (name, color, dark) => `<div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-lg font-bold ${dark ? 'text-slate-900' : 'text-white'}" style="background:${color}">${esc((name.trim()[0] || '?').toUpperCase())}</div>`;
 function renderProvidersView() {
@@ -3828,7 +3832,16 @@ function renderProvidersView() {
       ${pvBadge(hn || 'Z', '#facc15', true)}
       <span class="min-w-0 flex-1"><span class="flex items-center gap-1.5"><span class="truncate font-semibold">${esc(hn || 'Stromanbieter')}</span><span class="shrink-0 rounded-md bg-emerald-100 dark:bg-emerald-900/60 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Zuhause</span></span><span class="block truncate text-xs text-slate-500 dark:text-slate-400">${hn ? 'Hausstrom · Wallbox' : 'Antippen, um den Namen einzutragen'}</span></span>
       <span class="flex flex-col items-end gap-1">${pvChip('AC', price)}</span></button></li>`];
+  const bn = pvBoschName(), bp = pvPrices('bosch'), bchips = [];
+  if (bp.ac) bchips.push(pvChip('AC', bp.ac)); if (bp.dc) bchips.push(pvChip('DC', bp.dc));
+  if (!bchips.length && bp.hist) bchips.push(pvChip('', bp.hist, 'Ø'));
+  if (!bchips.length) bchips.push('<span class="whitespace-nowrap rounded-lg bg-amber-100 dark:bg-amber-900/40 px-2 py-1 text-xs font-medium text-amber-800 dark:text-amber-300">Preis eintragen</span>');
+  rows.push(`<li><button type="button" data-pv="bosch" class="flex w-full items-center gap-3 rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-3.5 text-left active:scale-[0.99] transition">
+      ${pvBadge(bn || 'B', '#0284c7')}
+      <span class="min-w-0 flex-1"><span class="flex items-center gap-1.5"><span class="truncate font-semibold">${esc(bn || 'Ladeanbieter')}</span><span class="shrink-0 rounded-md bg-sky-100 dark:bg-sky-900/60 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-700 dark:text-sky-300">Bosch</span></span><span class="block truncate text-xs text-slate-500 dark:text-slate-400">${esc(bn ? [bp.tariff, bp.fee ? pvEur(bp.fee) + '/Monat' : '', bp.st.n ? bp.st.n + (bp.st.n === 1 ? ' Ladung' : ' Ladungen') : 'noch keine Ladung'].filter(Boolean).join(' · ') : 'Antippen, um den Anbieter einzutragen')}</span></span>
+      <span class="flex flex-col items-end gap-1">${bchips.join('')}</span></button></li>`);
   list.forEach((n, i) => {
+    if (pvSame(n, bn)) return;                                            // gleicher Anbieter wie bei Bosch: nur als Bosch-Karte
     const p = pvPrices(n), chips = [];
     if (p.ac) chips.push(pvChip('AC', p.ac)); if (p.dc) chips.push(pvChip('DC', p.dc));
     if (!chips.length && p.hist) chips.push(pvChip('', p.hist, 'Ø'));
@@ -3839,10 +3852,10 @@ function renderProvidersView() {
       <span class="min-w-0 flex-1"><span class="block truncate font-semibold">${esc(n)}</span><span class="block truncate text-xs text-slate-500 dark:text-slate-400">${esc(sub)}</span></span>
       <span class="flex flex-col items-end gap-1">${chips.join('')}</span></button></li>`);
   });
-  if (!list.length) rows.push('<li class="px-1 py-2 text-sm text-slate-500 dark:text-slate-400">Noch keine Ladeanbieter für unterwegs. Lege sie mit „+ Neu“ an.</li>');
+  if (!list.filter(n => !pvSame(n, bn)).length) rows.push('<li class="px-1 py-2 text-sm text-slate-500 dark:text-slate-400">Noch keine Ladeanbieter für unterwegs. Lege sie mit „+ Neu“ an.</li>');
   $('pv-list').innerHTML = rows.join('');
   /* Günstigste Karte unterwegs: AC und DC; ohne eigene Angaben zählt der Ø-Preis aus der Historie für beide */
-  const best = (k) => { let b = null; list.forEach(n => { const p = pvPrices(n), v = p[k] ?? (p.ac == null && p.dc == null ? p.hist : null); if (v > 0 && (!b || v < b.v)) b = { n, v, h: p[k] == null }; }); return b; };
+  const best = (k) => { let b = null; list.filter(n => !pvSame(n, bn)).forEach(n => { const p = pvPrices(n), v = p[k] ?? (p.ac == null && p.dc == null ? p.hist : null); if (v > 0 && (!b || v < b.v)) b = { n, v, h: p[k] == null }; }); return b; };
   const bA = best('ac'), bD = best('dc'), tile = (lbl, b) => `<div class="rounded-2xl bg-slate-100 dark:bg-slate-800/70 p-2.5"><p class="text-xs text-slate-500 dark:text-slate-400">${lbl}</p><p class="truncate font-semibold">${b ? esc(b.n) : '–'}</p>${b ? '<p class="text-sm tabular-nums">' + pvEur(b.v) + '/kWh</p>' : ''}${b && b.h ? '<p class="text-[11px] text-slate-500 dark:text-slate-400">Ø aus Historie</p>' : ''}</div>`;
   $('pv-best').classList.toggle('hidden', !bA && !bD);
   $('pv-best-grid').innerHTML = tile('AC unterwegs', bA) + tile('DC unterwegs', bD);
@@ -3855,12 +3868,12 @@ function pvCardHtml(name, color, dark, label, big, sub) {
     <div class="mt-auto"><p class="text-xs font-semibold uppercase tracking-wider ${dark ? 'text-slate-700' : 'text-white/75'}">${label}</p><p class="font-barlow text-[40px] font-bold leading-none">${big}</p>${sub ? `<p class="mt-1 text-xs ${dark ? 'text-slate-700' : 'text-white/75'}">${sub}</p>` : ''}</div>`;
 }
 function openProv(key) {
-  pvCur = key; const home = key === 'home', isNew = key === '', card = $('pv-card'), info = getProvInfo();
+  pvCur = key; const home = key === 'home', bosch = key === 'bosch', isNew = key === '', card = $('pv-card'), info = getProvInfo();
   $('pv-msg').classList.add('hidden'); $('pv-edit').classList.toggle('hidden', home);
-  $('pv-name-wrap').classList.toggle('hidden', !home && !isNew);
-  $('pv-name-l').textContent = home ? 'Stromanbieter Zuhause' : 'Name des Ladeanbieters';
-  $('pv-name').placeholder = home ? 'z. B. Vattenfall' : 'z. B. EnBW mobility+';
-  $('pv-name').value = home ? pvHomeName() : '';
+  $('pv-name-wrap').classList.toggle('hidden', !home && !isNew && !bosch);
+  $('pv-name-l').textContent = home ? 'Stromanbieter Zuhause' : bosch ? 'Ladeanbieter bei Bosch' : 'Name des Ladeanbieters';
+  $('pv-name').placeholder = home ? 'z. B. Vattenfall' : bosch ? 'z. B. Lichtblick' : 'z. B. EnBW mobility+';
+  $('pv-name').value = home ? pvHomeName() : bosch ? pvBoschName() : '';
   const dl = (rows) => rows.filter(Boolean).map(([k, v, cls]) => `<div class="flex items-baseline justify-between gap-3 py-2"><dt class="text-slate-500 dark:text-slate-400">${k}</dt><dd class="text-right tabular-nums ${cls || ''}">${v}</dd></div>`).join('');
   const yr = new Date().getFullYear();
   if (home) {
@@ -3874,16 +3887,17 @@ function openProv(key) {
     $('pv-stats').innerHTML = ''; ['pv-tariff', 'pv-ac', 'pv-dc', 'pv-fee'].forEach(id => { $(id).value = ''; });
     $('pv-hint').textContent = 'Preise sind optional. Ohne Angabe nimmt die App den Ø-Preis aus deinen Ladungen mit diesem Anbieter.';
   } else {
-    const i = getProviders().indexOf(key), c = PV_COLORS[(i < 0 ? 0 : i) % PV_COLORS.length], p = pvPrices(key), st = p.st, v = p.dc ?? p.ac ?? p.hist;
+    const i = getProviders().indexOf(key), c = bosch ? '#0284c7' : PV_COLORS[(i < 0 ? 0 : i) % PV_COLORS.length], p = pvPrices(key), st = p.st, v = p.dc ?? p.ac ?? p.hist;
     card.style.background = 'linear-gradient(135deg,' + c + ',#0f172a)'; card.className = card.className.replace(/text-\S+/g, '') + ' text-white';
-    const lab = p.dc != null ? 'Unterwegs · DC' : p.ac != null ? 'Unterwegs · AC' : p.hist ? 'Unterwegs · Ø aus Historie' : 'Unterwegs';
-    card.innerHTML = pvCardHtml(key, c, false, lab, (v ? fmt(v, 2) : '–') + ' <span class="text-lg">€/kWh</span>', [p.tariff, p.fee ? pvEur(p.fee) + '/Monat' : ''].filter(Boolean).join(' · '));
+    const wo = bosch ? 'Bosch' : 'Unterwegs', lab = p.dc != null ? wo + ' · DC' : p.ac != null ? wo + ' · AC' : p.hist ? wo + ' · Ø aus Historie' : wo;
+    card.innerHTML = pvCardHtml(bosch ? (pvBoschName() || 'Ladeanbieter Bosch') : key, c, false, lab, (v ? fmt(v, 2) : '–') + ' <span class="text-lg">€/kWh</span>', [p.tariff, p.fee ? pvEur(p.fee) + '/Monat' : ''].filter(Boolean).join(' · '));
     $('pv-stats').innerHTML = dl([p.ac != null ? ['Preis AC', pvEur(p.ac) + '/kWh'] : null, p.dc != null ? ['Preis DC', pvEur(p.dc) + '/kWh'] : null, ['Ø Preis aus Historie', p.hist ? pvEur(p.hist) + '/kWh' : 'noch keine Daten'],
       st.last ? ['Letzte Ladung', fmtDate(new Date(st.last.t).toISOString()) + (st.last.unit ? ' · ' + pvEur(st.last.unit) + '/kWh' : '')] : null,
       ['Genutzt ' + yr, st.yn + ' × · ' + fmt(st.ykwh, 0) + ' kWh'], ['Kosten ' + yr, eur(st.ycost), 'font-semibold text-emerald-600 dark:text-emerald-400'], st.n > st.yn ? ['Gesamt', st.n + ' × · ' + fmt(st.kwh, 0) + ' kWh · ' + eur(st.cost)] : null]);
-    const inf = info.p[key] || {}, f = (x) => x > 0 ? String(x).replace('.', ',') : '';
+    const inf = (bosch ? info.bosch : info.p[key]) || {}, f = (x) => x > 0 ? String(x).replace('.', ',') : '';
     $('pv-tariff').value = inf.tariff || ''; $('pv-ac').value = f(inf.ac); $('pv-dc').value = f(inf.dc); $('pv-fee').value = f(inf.fee);
-    $('pv-hint').textContent = p.hist ? 'Leere Preisfelder: Die App nimmt den Ø-Preis aus deinen Ladungen (' + pvEur(p.hist) + '/kWh).' : 'Noch keine Ladung mit Preis bei diesem Anbieter – trage die Preise hier ein.';
+    if (bosch) $('pv-hint').textContent = 'Alle Ladungen am Ort „Bosch“ zählen zu diesem Anbieter – auch die bisherigen. ' + (p.hist ? 'Leere Preisfelder: Ø-Preis aus deinen Ladungen (' + pvEur(p.hist) + '/kWh).' : '');
+    else $('pv-hint').textContent = p.hist ? 'Leere Preisfelder: Die App nimmt den Ø-Preis aus deinen Ladungen (' + pvEur(p.hist) + '/kWh).' : 'Noch keine Ladung mit Preis bei diesem Anbieter – trage die Preise hier ein.';
   }
   $('pv-dialog').classList.remove('hidden');
 }
@@ -3895,6 +3909,11 @@ $('pv-save').addEventListener('click', () => {
     const ac = pvNum('pv-ac'), dc = pvNum('pv-dc'), fee = pvNum('pv-fee');
     if ([ac, dc, fee].some(Number.isNaN)) { pvErr('Bitte die Preise prüfen (z. B. 0,59).'); return; }
     let name = pvCur;
+    if (pvCur === 'bosch') {
+      const bnm = $('pv-name').value.trim().replace(/\s+/g, ' ').slice(0, 30), o = { ...(bnm ? { name: bnm } : {}) }, tariff = $('pv-tariff').value.trim().replace(/\s+/g, ' ').slice(0, 30);
+      if (tariff) o.tariff = tariff; if (ac > 0) o.ac = ac; if (dc > 0) o.dc = dc; if (fee > 0) o.fee = fee;
+      info.bosch = o; setProvInfo(info); $('pv-dialog').classList.add('hidden'); renderProvidersView(); return;
+    }
     if (pvCur === '') {
       name = $('pv-name').value.trim().replace(/\s+/g, ' ').slice(0, 30); const l = getProviders();
       if (!name) { pvErr('Bitte einen Namen eingeben.'); return; }
