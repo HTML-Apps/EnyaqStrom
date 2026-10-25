@@ -93,7 +93,7 @@
     #view-report .rcard { background: #fff !important; box-shadow: none !important; border: 0 !important; border-top: 1px solid #94a3b8 !important; border-radius: 0 !important; padding: 10px 0 !important; break-inside: avoid; }
     #view-report .rtile { background: transparent !important; border-radius: 0 !important; }
     #view-report .space-y-4 > * { margin-top: 0 !important; }
-    #st-img-card, #st-wrap-card, #st-akte-card { display: none !important; }
+    #st-img-card, #st-wrap-card, #st-akte-card, #dp-seg, #dp-badges, #dp-akte { display: none !important; } #dp-stat { display: block !important; }
     #st-heat-scroll { overflow: visible !important; } #st-heat, #st-heat-wd { max-width: 100% !important; height: auto !important; }
     .cv-src { display: none !important; } .cv-print { display: block !important; }
     #view-report .rcard * { color: #111 !important; }
@@ -105,6 +105,11 @@
   @keyframes bdfall { 0% { transform: translate3d(0, -20px, 0) rotate(0deg); } 100% { transform: translate3d(var(--x, 20px), 105vh, 0) rotate(var(--r, 540deg)); } }
   @keyframes bdin { from { opacity: 0; transform: translateY(16px) scale(.96); } to { opacity: 1; transform: none; } }
   #bd-card, #bdg-card { animation: bdin .45s cubic-bezier(.2,.8,.2,1) both; }
+  /* Datenpool: Wechsel zwischen Statistik | Abzeichen | Fahrzeugakte gleitet von der Seite herein */
+  @keyframes dpinL { from { opacity: 0; transform: translateX(36px); } to { opacity: 1; transform: none; } }
+  @keyframes dpinR { from { opacity: 0; transform: translateX(-36px); } to { opacity: 1; transform: none; } }
+  .dp-inL { animation: dpinL .32s cubic-bezier(.2,.8,.2,1) both; } .dp-inR { animation: dpinR .32s cubic-bezier(.2,.8,.2,1) both; }
+  @media (prefers-reduced-motion: reduce) { .dp-inL, .dp-inR { animation: none; } }
   @media (prefers-reduced-motion: reduce) { #bd-conf i, #bdg-conf i { animation: none; top: var(--y, 10%); } #bd-card, #bdg-card { animation: none; } }
 </style>
 </head>
@@ -217,7 +222,7 @@
     </div>
 
     <button id="go-stat" type="button" class="flex w-full items-center justify-between rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm px-4 py-3 active:scale-[0.99] transition">
-      <span class="flex items-center gap-3 font-medium"><svg class="w-6 h-6 text-emerald-500" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/></svg>Statistik</span>
+      <span class="flex items-center gap-3 font-medium"><svg class="w-6 h-6 text-emerald-500" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/></svg>Datenpool</span>
       <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
     </button>
     <button id="btn-wrap-preview" type="button" class="flex w-full items-center justify-between rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm px-4 py-3 active:scale-[0.99] transition">
@@ -547,7 +552,7 @@
 
   <!-- ============ VIEW: BERICHTE ============ -->
   <section id="view-report" class="view hidden space-y-4">
-    <div id="rep-mode" class="print:hidden flex bg-slate-200 dark:bg-slate-800 rounded-xl p-1"><button type="button" data-mode="laden" class="rep-mode-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Laden</button><button type="button" data-mode="kosten" class="rep-mode-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Kosten</button><button type="button" data-mode="akku" class="rep-mode-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Akku</button><button type="button" data-mode="stat" class="rep-mode-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Statistik</button><button type="button" data-mode="fahrten" class="rep-mode-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Fahrten</button></div>
+    <div id="rep-mode" class="print:hidden flex bg-slate-200 dark:bg-slate-800 rounded-xl p-1"><button type="button" data-mode="laden" class="rep-mode-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Laden</button><button type="button" data-mode="kosten" class="rep-mode-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Kosten</button><button type="button" data-mode="akku" class="rep-mode-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Akku</button><button type="button" data-mode="stat" class="rep-mode-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Datenpool</button><button type="button" data-mode="fahrten" class="rep-mode-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Fahrten</button></div>
     <div id="rep-head" class="flex items-center justify-between">
       <button id="rep-prev" type="button" aria-label="Vorheriger Monat" class="print:invisible w-10 h-10 rounded-xl bg-slate-200 dark:bg-slate-800 flex items-center justify-center active:scale-95 transition disabled:opacity-30"><svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
       <div class="text-center">
@@ -623,6 +628,9 @@
         <div id="st-wrap-list" class="mt-1 flex flex-col"></div>
       </div>
       <div id="st-img-card" class="hidden rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4"><img id="st-img" alt="Statistik" draggable="false" class="mx-auto block max-h-44 w-auto object-contain"></div>
+      <div id="dp-seg" class="print:hidden flex bg-slate-200 dark:bg-slate-800 rounded-xl p-1"><button type="button" data-dp="stat" class="dp-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Statistik</button><button type="button" data-dp="badges" class="dp-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Abzeichen</button><button type="button" data-dp="akte" class="dp-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Fahrzeugakte</button></div>
+      <div id="dp-panes">
+      <div id="dp-stat" class="dp-pane space-y-4">
       <div class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
         <p class="text-sm text-slate-500 dark:text-slate-400">Letzter Tachostand</p>
         <p id="st-odo" class="st-v st-big whitespace-nowrap text-2xl font-semibold tabular-nums">–</p>
@@ -682,18 +690,24 @@
         </div>
         <p class="mt-3 text-xs text-slate-500 dark:text-slate-400">Laden + sonstige Kosten − Einnahmen. Kaufpreis und Wertverlust sind nicht enthalten.</p>
       </div>
+      <p id="st-note" class="text-xs text-slate-500 dark:text-slate-400 px-1"></p>
+      </div>
+      <div id="dp-badges" class="dp-pane hidden space-y-4">
       <div id="st-badge-card" class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
         <div class="flex items-baseline justify-between"><p class="font-barlow text-xl font-bold uppercase tracking-[0.08em]">Abzeichen</p><span id="bdg-count" class="text-xs text-slate-500 dark:text-slate-400"></span></div>
         <div id="bdg-grid" class="mt-3 grid grid-cols-3 gap-2.5 text-center"></div>
         <p id="bdg-info" class="mt-3 min-h-[2.5rem] rounded-xl bg-slate-100 dark:bg-slate-800/60 px-3 py-2 text-xs text-slate-600 dark:text-slate-300">Antippen zeigt Datum bzw. was noch fehlt.</p>
       </div>
+      </div>
+      <div id="dp-akte" class="dp-pane hidden space-y-4">
       <div id="st-akte-card" class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
         <p class="font-barlow text-xl font-bold uppercase tracking-[0.08em]">Fahrzeugakte</p>
         <img src="/Bilder/fahrzeugakte.webp" alt="" aria-hidden="true" width="620" height="456" loading="lazy" decoding="async" class="mx-auto mt-3 mb-2 block h-auto w-full max-w-[260px] select-none pointer-events-none">
         <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Lückenlose Historie als PDF, zum Beispiel für den Verkauf: Eckdaten mit Kaufangaben, Diagramme zu km, Verbrauch, Kosten, Akku und Strompreis, Monatsübersicht, AC-/DC-Aufteilung, Rekorde, Wartung und Service sowie Wartungsplan.</p>
         <button id="btn-akte" type="button" class="mt-3 w-full rounded-xl bg-emerald-600 py-3 text-sm font-semibold text-white active:scale-95 transition">Fahrzeugakte als PDF erstellen</button>
       </div>
-      <p id="st-note" class="text-xs text-slate-500 dark:text-slate-400 px-1"></p>
+      </div>
+      </div>
     </div>
 
     <div id="rep-akku" class="hidden space-y-4">
@@ -3992,7 +4006,7 @@ function bdgInfo(id) {
   $('bdg-info').innerHTML = '<b class="text-slate-900 dark:text-white">' + esc(x.b.t) + '</b> · ' + esc(x.b.txt) + ' ' + (x.done ? (got[id] ? 'Erreicht am ' + fmtDate(got[id]) + '.' : 'Erreicht.') : 'Noch ' + (100 - Math.round(x.v * 100)) + ' % bis zum Ziel.');
 }
 $('bdg-grid').addEventListener('click', (e) => { const b = e.target.closest('[data-bdg]'); if (b) bdgInfo(b.dataset.bdg); });
-$('go-badges').addEventListener('click', () => { repMode = 'stat'; showView('report'); setTimeout(() => $('st-badge-card').scrollIntoView({ behavior: 'smooth', block: 'start' }), 120); });
+$('go-badges').addEventListener('click', () => { repMode = 'stat'; setDpTab('badges', false); showView('report'); });
 setTimeout(() => checkBadges(false), 2500);
 function renderStat() {
   try { renderBadges(); } catch (e) { console.error(e); }
@@ -4038,7 +4052,7 @@ function renderStat() {
   });
   $('st-note').textContent = 'Verbrauch inkl. Ladeverlusten (' + tot.n + ' Ladungen mit km-Stand' + (tot.approx ? ', grob ohne Akku-%' : '') + '). Kosten pro km, Tag und Monat sind reine Ladekosten – Einnahmen und sonstige Kosten findest du im Kosten-Tab.';
 }
-$('go-stat').addEventListener('click', () => { repMode = 'stat'; showView('report'); });
+$('go-stat').addEventListener('click', () => { repMode = 'stat'; setDpTab('stat', false); showView('report'); });
 $('go-akku').addEventListener('click', () => { repMode = 'akku'; showView('report'); });
 /** Start-Button „Akku“: Netto-Kapazität (wie im Akku-Bericht) und Akku-Pflege der letzten 90 Tage, z. B. „Akku · 48,3 kWh (netto) · 73/100“. */
 function renderAkkuBtn() {
@@ -5863,7 +5877,22 @@ function segSwipe(area, seg, ignore = '') {
 }
 segSwipe($('view-capture'), $('cap-place'));                               // Laden: Zuhause | Bosch | Unterwegs (ganze Seite)
 segSwipe($('view-history'), $('hist-filter'));                             // Historie: Alle | Laden | Kosten | Fahrten (ganze Seite)
-segSwipe($('view-report'), $('rep-mode'), '#rep-place');                   // Berichte: Laden | Kosten | Akku | Statistik | Fahrten (ganze Seite)
+segSwipe($('view-report'), $('rep-mode'), '#rep-place,#dp-panes,#dp-seg');   // Berichte: Laden | Kosten | Akku | Datenpool | Fahrten (ganze Seite; im Datenpool wischen die Unter-Tabs)
+/* ---- Datenpool (Berichte, früher „Statistik“): Unter-Tabs Statistik | Abzeichen | Fahrzeugakte, per Antippen oder Wischen ---- */
+let dpTab = 'stat';
+const DP_TABS = ['stat', 'badges', 'akte'];
+function setDpTab(t, anim = true) {
+  if (!DP_TABS.includes(t)) t = 'stat';
+  const dir = DP_TABS.indexOf(t) - DP_TABS.indexOf(dpTab); dpTab = t;
+  segPaintKey('.dp-btn', 'dp', t);
+  DP_TABS.forEach(k => { const el = $('dp-' + k), on = k === t; el.classList.toggle('hidden', !on); el.classList.remove('dp-inL', 'dp-inR'); if (on && anim && dir) { void el.offsetWidth; el.classList.add(dir > 0 ? 'dp-inL' : 'dp-inR'); } });
+  if (t === 'badges') { try { renderBadges(); } catch (e) { } }
+}
+document.querySelectorAll('.dp-btn').forEach(b => b.addEventListener('click', () => setDpTab(b.dataset.dp)));
+segSwipe($('dp-panes'), $('dp-seg'));                                     // im Datenpool wechselt Wischen die Unter-Tabs
+segSwipe($('dp-seg'), $('dp-seg'));
+setDpTab('stat', false);
+
 segSwipe($('rep-place'), $('rep-place'));                                   // Berichte → Laden: Ort direkt auf der Tab-Leiste wischen
 segSwipe($('dash-place'), $('dash-place'));                                 // Start: Ort auf der Tab-Leiste (die Seite selbst hat das Bilder-Karussell)
 segSwipe($('range-switch').parentElement, $('range-switch'));               // Start: Diagramm Woche | Monat | Jahr (ganze Karte)
