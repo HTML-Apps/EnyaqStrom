@@ -400,7 +400,12 @@
           <button id="s1-plus" type="button" aria-label="Ende erhöhen" class="w-10 h-9 shrink-0 rounded-lg bg-white dark:bg-slate-700 text-xl leading-none font-medium active:scale-95 transition select-none touch-manipulation">+</button>
         </div>
       </div>
-      <input id="soc0-input" type="hidden"><input id="soc1-input" type="hidden">
+      <div class="mt-2 flex items-center justify-between bg-slate-100 dark:bg-slate-800 rounded-xl p-1">
+        <button id="bt-minus" type="button" aria-label="Akku-Temperatur verringern" class="w-10 h-9 shrink-0 rounded-lg bg-white dark:bg-slate-700 text-xl leading-none font-medium active:scale-95 transition select-none touch-manipulation">−</button>
+        <button id="bt-clear" type="button" class="min-w-0 flex-1 text-center text-sm" title="Antippen: Wert entfernen"><span class="block text-[11px] text-slate-500 dark:text-slate-400">Akku °C beim Anstecken</span><span id="bt-val" class="font-medium">–</span></button>
+        <button id="bt-plus" type="button" aria-label="Akku-Temperatur erhöhen" class="w-10 h-9 shrink-0 rounded-lg bg-white dark:bg-slate-700 text-xl leading-none font-medium active:scale-95 transition select-none touch-manipulation">+</button>
+      </div>
+      <input id="soc0-input" type="hidden"><input id="soc1-input" type="hidden"><input id="bt-input" type="hidden">
     </div>
 
     <button id="btn-save" class="w-full py-3 rounded-2xl bg-emerald-600 text-white font-semibold active:scale-95 transition">Speichern</button>
@@ -762,6 +767,10 @@
         <div class="flex items-center justify-between gap-2"><p class="text-sm text-slate-500 dark:text-slate-400">Akku-Pflege</p>
           <div id="care-seg" class="flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 text-xs"><button type="button" data-care="90" class="care-btn rounded-lg px-2.5 py-1 font-medium">90 Tage</button><button type="button" data-care="kauf" class="care-btn rounded-lg px-2.5 py-1 font-medium">Seit Kauf</button></div></div>
         <div id="care-body"></div>
+      </div>
+      <div id="temp-card" class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
+        <p class="text-sm text-slate-500 dark:text-slate-400">Akku-Temperatur</p>
+        <div id="temp-body"></div>
       </div>
       <div id="bat-trend-card" class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
         <p class="text-sm text-slate-500 dark:text-slate-400">Veränderung</p>
@@ -1533,7 +1542,19 @@ function paintBatt() {
   $('s0-val').textContent = has0 ? a + ' %' : '–'; $('s1-val').textContent = has1 ? b + ' %' : '–';
   $('batt-add').textContent = has0 && has1 && b > a ? '+' + (b - a) + ' % ≈ ' + fmt((b - a) / 100 * batteryKwh(), 1) + ' kWh' : '';
 }
-function paintCapture() { paintReading(); paintBatt(); }
+function paintCapture() { paintReading(); paintBatt(); paintBattTemp(); }
+/* Akku-Temperatur (optional, Infotainment ab ME3.8): Stepper −/+ in 1-°C-Schritten, erster Tipp startet bei 20 °C, Mitte antippen = leeren */
+const BT_MIN = -30, BT_MAX = 60;
+function paintBattTemp() { const v = optNum($('bt-input').value); $('bt-val').textContent = v == null || Number.isNaN(v) ? '–' : String(v).replace('-', '−') + ' °C'; }
+(() => {
+  const step = (d) => { const v = optNum($('bt-input').value); const n = v == null || Number.isNaN(v) ? 20 : Math.max(BT_MIN, Math.min(BT_MAX, v + d)); $('bt-input').value = String(n); paintBattTemp(); };
+  [['bt-minus', -1], ['bt-plus', 1]].forEach(([id, d]) => {
+    const b = $(id); let t1 = 0, t2 = 0; const stop = () => { clearTimeout(t1); clearInterval(t2); };
+    b.addEventListener('pointerdown', (e) => { e.preventDefault(); step(d); t1 = setTimeout(() => { t2 = setInterval(() => step(d), 110); }, 450); });
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => b.addEventListener(ev, stop)); b.addEventListener('contextmenu', e => e.preventDefault());
+  });
+  $('bt-clear').addEventListener('click', () => { $('bt-input').value = ''; paintBattTemp(); });
+})();
 
 $('reading-input').addEventListener('input', e => { delete e.target.dataset.live; paintReading(); });
 /* =====================================================================
@@ -1975,6 +1996,7 @@ $('btn-save').addEventListener('click', () => {
   if (s0 != null) entry.socStart = s0;
   entry.capacityKwh = batteryKwh();                      // Kapazität zum Zeitpunkt der Ladung festhalten
   if (s1 != null) entry.socEnd = s1;
+  { const bt = optNum($('bt-input').value); if (bt != null && !Number.isNaN(bt)) entry.battTemp = bt; }   // Akku-Temperatur beim Anstecken (optional)
   const live = home ? getLive() : null;                  // abgeschlossene Live-Ladung (nur Zuhause): echte Start-/Endzeit und Leistung festhalten
   if (live && live.kwhTarget != null && liveKwh(live) >= live.kwhTarget) {
     const end = Math.min(Date.now(), liveFinishAt(live));
@@ -1994,7 +2016,7 @@ $('btn-save').addEventListener('click', () => {
     else if (s.startsWith('error:')) flash($('save-msg'), msg + ' · Cloud-Fehler: ' + s.slice(6), false);
   });
   $('save-msg').classList.remove('hidden');
-  ['reading-input', 'km-input', 'soc0-input', 'soc1-input', 'kwh-input', 'price-input', 'prov-input', 'fee-input'].forEach(id => { $(id).value = ''; delete $(id).dataset.live; delete $(id).dataset.manual; delete $(id).dataset.auto; });
+  ['reading-input', 'km-input', 'soc0-input', 'soc1-input', 'bt-input', 'kwh-input', 'price-input', 'prov-input', 'fee-input'].forEach(id => { $(id).value = ''; delete $(id).dataset.live; delete $(id).dataset.manual; delete $(id).dataset.auto; });
   closeKmEdit(); setCapPlace('home');                    // nächste Erfassung startet wieder bei Zuhause
 });
 
@@ -2635,6 +2657,7 @@ function renderHistory() {
     const st = entryStats(readings, i);
     const row = (k, v) => `<div class="flex justify-between items-baseline mt-2"><span class="text-sm text-slate-500 dark:text-slate-400">${k}</span><span class="font-medium text-right">${v}</span></div>`;
     const extra = (r.odometerKm != null ? row('Kilometerstand', (st.km ? '<span class="text-xs font-normal text-slate-500">(+' + fmt(st.km, 0) + ' km)</span> ' : '') + fmt(r.odometerKm, 0) + ' km') : '') +
+      (r.battTemp != null ? row('Akku-Temperatur', String(r.battTemp).replace('-', '−') + ' °C') : '') +
       (r.socStart != null && r.socEnd != null ? row('Ladestand', (st.loss != null && st.loss >= 0 && st.loss < 60 ? '<span class="text-xs font-normal text-slate-500">(Verlust ≈ ' + fmt(st.loss, 0) + ' %)</span> ' : '') + r.socStart + ' % → ' + r.socEnd + ' %') + row('Batteriekapazität', fmt(capOf(r), 1) + ' kWh') : '') +
       (st.kwh100 != null ? row('Verbrauch/100 km', (st.method === 'charge' ? '≈ ' : '') + fmt(st.kwh100, 1) + ' kWh' + (st.cost100 != null ? ' · ' + eur(st.cost100) : ''))
         + (st.method === 'charge' ? '<p class="text-xs text-slate-500 mt-1 text-right">grob: ohne Akku-% der letzten Ladung aus den geladenen kWh berechnet</p>' : st.rough ? '<p class="text-xs text-slate-500 mt-1 text-right">kleine Akku-Entnahme – Wert ungenau</p>' : '')
@@ -2691,6 +2714,7 @@ function renderHistory() {
         </div>
         <div class="mt-3 grid grid-cols-3 gap-2 text-center">
           <div><p class="text-xs text-slate-500 dark:text-slate-400 mb-1">Kapazität kWh</p><input data-f="cap" type="text" inputmode="decimal" value="${capOf(r)}" class="${INPUT_CLS}"></div>
+          <div><p class="text-xs text-slate-500 dark:text-slate-400 mb-1">Akku °C</p><input data-f="bt" type="text" inputmode="text" value="${r.battTemp ?? ''}" placeholder="–" class="${INPUT_CLS}"></div>
         </div>
         <label class="g-home${gh} mt-3 flex items-center gap-2 text-sm"><input type="checkbox" data-f="reset" class="accent-emerald-500 w-4 h-4" ${r.meterReset ? 'checked' : ''}> Zähler wurde zurückgesetzt (Verbrauch = Zählerstand)</label>
         <button data-f="delbtn" data-del="0" class="mt-3 w-full py-2 rounded-xl border border-red-500 text-red-600 dark:text-red-400 text-sm font-medium">Eintrag löschen</button>
@@ -2870,7 +2894,7 @@ $('btn-edit-save').addEventListener('click', () => {
   const stored = getReadings(), currentPrice = getSettings().price;
   const all = stored.map((r, i) => ({
     r, date: new Date(cell(i, 'date').value), place: domPlace(i), neu: Math.round(parseNum(cell(i, 'new').value) * 10) / 10,
-    cap: parseNum(cell(i, 'cap').value), reset: cell(i, 'reset')?.checked === true, km: optNum(cell(i, 'km').value), s0: optNum(cell(i, 's0').value), s1: optNum(cell(i, 's1').value),
+    cap: parseNum(cell(i, 'cap').value), reset: cell(i, 'reset')?.checked === true, km: optNum(cell(i, 'km').value), s0: optNum(cell(i, 's0').value), s1: optNum(cell(i, 's1').value), bt: optNum((cell(i, 'bt')?.value ?? '').replace('−', '-')),
     kwh: optNum(cell(i, 'kwh').value), price: optNum(cell(i, 'price').value), prov: cell(i, 'prov')?.value || '', fee: optNum(cell(i, 'fee')?.value ?? ''), del: cell(i, 'delbtn').dataset.del === '1'
   }));
   const live = all.filter(x => !x.del);
@@ -2879,6 +2903,7 @@ $('btn-edit-save').addEventListener('click', () => {
   if (all.some(x => [x.km, x.s0, x.s1].some(Number.isNaN) || (x.km != null && x.km < 0) || [x.s0, x.s1].some(v => v != null && (v < 0 || v > 100)) || (x.s0 != null && x.s1 != null && x.s1 <= x.s0))) {
     alert('Bitte km-Stand und Akku-Prozente prüfen (0–100 %, Ende größer als Start).'); return;
   }
+  if (all.some(x => Number.isNaN(x.bt) || (x.bt != null && (x.bt < BT_MIN || x.bt > BT_MAX)))) { alert('Bitte die Akku-Temperatur prüfen (' + BT_MIN + ' bis ' + BT_MAX + ' °C) oder das Feld leer lassen.'); return; }
   if (all.some(x => !isFinite(x.cap) || x.cap < 10 || x.cap > 200)) { alert('Bitte eine gültige Batteriekapazität in kWh eingeben (10 bis 200).'); return; }
   const storedCosts = getCosts();                        // Kosten-Karten (dieselbe Bearbeiten-Ansicht)
   const callC = storedCosts.map((c, j) => ({ c, date: new Date(ccell(j, 'date')?.value), cat: ccell(j, 'cat')?.value ?? c.category ?? '', title: (ccell(j, 'title')?.value ?? c.title ?? '').trim(),
@@ -2917,6 +2942,7 @@ $('btn-edit-save').addEventListener('click', () => {
     if (x.km != null) out.odometerKm = x.km; else delete out.odometerKm;       // geleerte Felder wirklich entfernen
     if (x.s0 != null) out.socStart = x.s0; else delete out.socStart;
     if (x.s1 != null) out.socEnd = x.s1; else delete out.socEnd;
+    if (x.bt != null) out.battTemp = Math.round(x.bt * 10) / 10; else delete out.battTemp;
     out.capacityKwh = x.cap;
     return out;
   });
@@ -3033,6 +3059,7 @@ function parseImport(text) {
       if (typeof r[k] !== 'number' || !isFinite(r[k]) || r[k] < 0 || (k === 'capacityKwh' ? (r[k] < 10 || r[k] > 200) : (k !== 'odometerKm' && r[k] > 100))) throw new Error('Feld ' + k + ' in Eintrag ' + (i + 1) + ' ist ungültig.');
       out[k] = r[k];
     }
+    if (r.battTemp != null) { if (typeof r.battTemp !== 'number' || !isFinite(r.battTemp) || r.battTemp < -30 || r.battTemp > 60) throw new Error('Feld battTemp in Eintrag ' + (i + 1) + ' ist ungültig.'); out.battTemp = r.battTemp; }
     for (const k of ['chargeStart', 'chargeEnd']) {
       if (r[k] == null) continue;
       if (isNaN(Date.parse(r[k]))) throw new Error('Feld ' + k + ' in Eintrag ' + (i + 1) + ' ist ungültig.');
@@ -3882,7 +3909,7 @@ const median = (a) => { const s = a.slice().sort((x, y) => x - y), m = s.length 
 const tCrit = (df) => df < 1 ? Infinity : df <= 15 ? [0, 12.71, 4.30, 3.18, 2.78, 2.57, 2.45, 2.36, 2.31, 2.26, 2.23, 2.20, 2.18, 2.16, 2.14, 2.13][df] : df <= 20 ? 2.09 : df <= 30 ? 2.04 : 1.96;
 function batRows() {
   return getReadings().filter(r => (placeOf(r) === 'home' || placeOf(r) === 'bosch') && Number.isFinite(r.socStart) && Number.isFinite(r.socEnd) && r.socEnd - r.socStart >= BAT.hub && r.socEnd <= BAT.endMax && r.consumedSinceLast > 0)
-    .map(r => { const hub = r.socEnd - r.socStart; return { t: Date.parse(r.date), hub, e: r.consumedSinceLast, k: r.consumedSinceLast / (hub / 100) }; })
+    .map(r => { const hub = r.socEnd - r.socStart; return { t: Date.parse(r.date), hub, e: r.consumedSinceLast, k: r.consumedSinceLast / (hub / 100), bt: Number.isFinite(r.battTemp) ? r.battTemp : null }; })
     .filter(x => Number.isFinite(x.t)).sort((a, b) => a.t - b.t);
 }
 function batFit(rows) {
@@ -3942,7 +3969,34 @@ function renderCare() {
     <div class="mt-4 rounded-2xl bg-slate-100 dark:bg-slate-800/70 p-3 text-xs text-slate-600 dark:text-slate-300"><b class="text-slate-900 dark:text-white">Tipp:</b> ${tip}</div>`;
 }
 $('care-seg').addEventListener('click', (e) => { const b = e.target.closest('[data-care]'); if (b && b.dataset.care !== careMode) { careMode = b.dataset.care; renderCare(); } });
+/* =====================================================================
+   Akku-Temperatur (Berichte → Akku): Auswertung der optional erfassten Temperatur beim Anstecken (ab 10 Ladungen).
+   1) Strom an der Steckdose je 100 % Akku: warm (≥ 15 °C) gegen kalt (< 15 °C), je mind. 3 passende Ladungen. Kapazität und Verluste
+      lassen sich dabei nicht trennen – der Mehrbedarf bei Kälte ist v. a. Heizung/Verlust, deshalb wird er so (und nicht als Kapazität) beschriftet.  2) Ø Ladeverlust nach Temperaturbereich (Zuhause/Bosch)
+   ===================================================================== */
+const TEMP_MIN_N = 10, TEMP_SPLIT = 15;
+function renderTempCard() {
+  const rs = getReadings(), withT = rs.filter(r => Number.isFinite(r.battTemp)), el = $('temp-body'); if (!el) return;
+  if (withT.length < TEMP_MIN_N) {
+    el.innerHTML = `<p class="mt-1 text-xl font-semibold">Noch ${TEMP_MIN_N - withT.length} ${TEMP_MIN_N - withT.length === 1 ? 'Ladung' : 'Ladungen'} bis zur Auswertung</p>
+      <p class="text-sm mt-1 text-slate-600 dark:text-slate-300">Trage beim Erfassen einer Ladung die Akku-Temperatur ein, die das Infotainment beim Anstecken zeigt. Ab ${TEMP_MIN_N} Ladungen zeigt diese Karte, wie Kälte die nutzbare Kapazität und die Ladeverluste beeinflusst.</p>
+      <div class="mt-3"><p class="text-xs text-slate-500 dark:text-slate-400">${withT.length} von ${TEMP_MIN_N} Ladungen mit Temperatur</p><div class="mt-1 h-2 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden"><div class="h-2 rounded-full bg-emerald-500" style="width:${Math.round(withT.length / TEMP_MIN_N * 100)}%"></div></div></div>`;
+    return;
+  }
+  const rows = batRows().filter(x => x.bt != null), warm = batFit(rows.filter(x => x.bt >= TEMP_SPLIT)), cold = batFit(rows.filter(x => x.bt < TEMP_SPLIT));
+  let cap = '';
+  if (warm && cold) { const d = (cold.K / warm.K - 1) * 100; cap = `<p class="mt-3 text-sm font-medium">Strom je 100 % Akku nach Akku-Temperatur</p><div class="mt-2 grid grid-cols-2 gap-2 text-center">
+      <div class="rounded-2xl bg-slate-100 dark:bg-slate-800/70 p-2.5"><p class="text-xs text-slate-500 dark:text-slate-400">Akku ≥ ${TEMP_SPLIT} °C</p><p class="text-lg font-semibold tabular-nums">${fmt(warm.K, 1)} kWh</p><p class="text-[11px] text-slate-500 dark:text-slate-400">${warm.n} Ladungen</p></div>
+      <div class="rounded-2xl bg-slate-100 dark:bg-slate-800/70 p-2.5"><p class="text-xs text-slate-500 dark:text-slate-400">Akku &lt; ${TEMP_SPLIT} °C</p><p class="text-lg font-semibold tabular-nums">${fmt(cold.K, 1)} kWh</p><p class="text-[11px] text-slate-500 dark:text-slate-400">${cold.n} Ladungen</p></div></div>
+      <p class="mt-2 text-xs text-slate-500 dark:text-slate-400">Strom an der Steckdose je 100 % Akku. ${Math.abs(d) < 2 ? 'Kaum Unterschied zwischen warmem und kaltem Akku.' : d > 0 ? 'Mit kaltem Akku brauchst du ' + fmt(d, 1) + ' % mehr Strom für dieselbe Akkufüllung – das Auto heizt beim Laden mit. Das ist normal und kein Zeichen von Alterung.' : 'Mit kaltem Akku lädst du ' + fmt(-d, 1) + ' % weniger Strom je 100 % – kalte Zellen zeigen oft etwas weniger nutzbare Kapazität an; im Sommer gleicht sich das wieder aus.'}</p>`; }
+  else cap = `<p class="mt-2 text-xs text-slate-500 dark:text-slate-400">Für den Vergleich warm/kalt braucht es je mindestens 3 Ladungen mit Akku-Start und -Ende über 30 % Hub (bisher ${rows.filter(x => x.bt >= TEMP_SPLIT).length} warm, ${rows.filter(x => x.bt < TEMP_SPLIT).length} kalt).</p>`;
+  const bins = [['< 10 °C', -99, 10], ['10–20 °C', 10, 20], ['≥ 20 °C', 20, 99]].map(([l, a, b]) => { const v = []; rs.forEach((r, i) => { if (!Number.isFinite(r.battTemp) || r.battTemp < a || r.battTemp >= b) return; const st = entryStats(rs, i); if (st.loss != null && st.loss >= 0 && st.loss < 40) v.push(st.loss); }); return { l, n: v.length, m: v.length ? v.reduce((x, y) => x + y, 0) / v.length : null }; });
+  const mx = Math.max(10, ...bins.map(b => b.m || 0));
+  const loss = bins.some(b => b.n) ? `<p class="mt-4 text-sm font-medium">Ø Ladeverlust nach Akku-Temperatur</p><div class="mt-2 space-y-2">${bins.map(b => `<div class="flex items-center gap-2 text-sm"><span class="w-16 shrink-0 text-slate-600 dark:text-slate-300">${b.l}</span><div class="h-2.5 flex-1 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden"><div class="h-full rounded-full bg-sky-500" style="width:${b.m != null ? Math.round(b.m / mx * 100) : 0}%"></div></div><span class="w-20 shrink-0 text-right tabular-nums">${b.m != null ? fmt(b.m, 1) + ' %' : '–'}<span class="text-[11px] text-slate-500 dark:text-slate-400"> (${b.n})</span></span></div>`).join('')}</div><p class="mt-2 text-xs text-slate-500 dark:text-slate-400">Verlust aus Zähler-kWh und Akku-%; bei kaltem Akku heizt das Auto beim Laden mit.</p>` : '';
+  el.innerHTML = `<p class="mt-1 text-xs text-slate-500 dark:text-slate-400">${withT.length} Ladungen mit Temperatur · Ø ${fmt(withT.reduce((a, r) => a + r.battTemp, 0) / withT.length, 0)} °C</p>` + cap + loss;
+}
 function renderBattery() {
+  try { renderTempCard(); } catch (e) { console.error(e); }
   try { renderCare(); } catch (e) { console.error(e); }
   const rows = batRows(), fit = batFit(rows), now = Date.now(), ok = !!fit && fit.n >= BAT.minN && fit.sumHub >= BAT.minHub;
   $('bat-value').classList.toggle('hidden', !ok); $('bat-few').classList.toggle('hidden', ok);
@@ -6267,7 +6321,7 @@ async function pushTripMonths(prev, next) {
   for (let i = 0; i < ops.length; i += 400) { const bt = writeBatch(db); ops.slice(i, i + 400).forEach(([t, k]) => t === 'set' ? bt.set(doc(tripCol(), k), { list: b[k], updatedAt: new Date().toISOString() }) : bt.delete(doc(tripCol(), k))); await bt.commit(); }
   return ops.length;
 }
-const sig = (r) => [r.id, r.date, r.totalReading, r.consumedSinceLast, r.cost, r.odometerKm, r.socStart, r.socEnd, r.capacityKwh, r.chargeStart, r.chargeEnd, r.avgPowerKw, r.meterReset, r.place, r.pricePerKwh, r.provider, r.fee].join('|');
+const sig = (r) => [r.id, r.date, r.totalReading, r.consumedSinceLast, r.cost, r.odometerKm, r.socStart, r.socEnd, r.capacityKwh, r.chargeStart, r.chargeEnd, r.avgPowerKw, r.meterReset, r.place, r.pricePerKwh, r.provider, r.fee, r.battTemp].join('|');
 
 const remSig = (r) => [r.id, r.title, r.category, r.note, r.dueDate, r.dueKm, r.startDate, r.startKm, r.repeatMonths, r.repeatKm, r.doneAt, r.lastDoneAt, r.lastDoneKm, r.guid].join('|');
 const recSig = (t) => [t.id, t.title, t.amount, t.category, t.note, t.intervalMonths, t.startDate, t.nextIdx].join('|');
