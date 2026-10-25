@@ -222,6 +222,10 @@
       <span class="flex items-center gap-3 font-medium"><svg class="w-6 h-6 text-emerald-500" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="6" r="2.5"/><path d="M8.5 18H15a3 3 0 0 0 0-6H9a3 3 0 0 1 0-6h6.5"/></svg>Fahrtenbuch</span>
       <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
     </button>
+    <button id="go-prov" type="button" class="flex w-full items-center justify-between rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm px-4 py-3 active:scale-[0.99] transition">
+      <span class="flex items-center gap-3 font-medium"><svg class="w-6 h-6 text-emerald-500" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 9.5h19M6 15h4"/><path d="M16.5 12.5l-1.5 2.5h2l-1.5 2.5"/></svg>Ladeanbieter</span>
+      <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+    </button>
 
     <div class="!mt-7 flex items-center gap-3" role="presentation">
       <h2 class="shrink-0 font-barlow text-xl font-bold uppercase tracking-[0.1em] text-white">Verbräuche &amp; Effizienz</h2>
@@ -459,6 +463,20 @@
   </section>
 
   <!-- ============ VIEW: ERINNERUNGEN ============ -->
+  <!-- ============ LADEANBIETER (Start → „Ladeanbieter“) ============ -->
+  <section id="view-providers" class="view hidden space-y-3">
+    <div class="-mt-2 flex h-[60px] items-center justify-between gap-3 -mb-[10px]">
+      <h1 class="min-w-0 truncate font-barlow font-semibold text-2xl uppercase tracking-[0.14em] text-white">Ladeanbieter</h1>
+      <button id="pv-add" type="button" class="px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-semibold active:scale-95 transition">+ Neu</button>
+    </div>
+    <ul id="pv-list" class="space-y-2.5"></ul>
+    <div id="pv-best" class="hidden rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
+      <p class="text-sm text-slate-500 dark:text-slate-400">Günstigste Karte unterwegs</p>
+      <div id="pv-best-grid" class="mt-2 grid grid-cols-2 gap-2 text-center"></div>
+    </div>
+    <p class="px-1 text-xs text-slate-500 dark:text-slate-400">Preise kommen aus deinen Ladungen (Ø je kWh, Unterwegs mit Anbieter). Fehlt ein Preis oder willst du AC/DC getrennt angeben: Karte antippen und eintragen. Zuhause gilt der Strompreis aus den Einstellungen.</p>
+  </section>
+
   <section id="view-reminders" class="view hidden space-y-3">
     <div class="-mt-2 flex h-[60px] items-center justify-between gap-3 -mb-[10px]">
       <h1 class="min-w-0 truncate font-barlow font-semibold text-2xl uppercase tracking-[0.14em] text-white">Erinnerungen</h1>
@@ -1098,6 +1116,28 @@
   </div>
 </div>
 
+<!-- Ladeanbieter: Detailkarte (Antippen in der Liste) -->
+<div id="pv-dialog" class="hidden fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-3">
+  <div class="w-full max-w-sm max-h-[92vh] overflow-y-auto rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 p-4 space-y-3">
+    <div id="pv-card" class="cc-card relative flex flex-col rounded-3xl p-4 shadow-xl" style="aspect-ratio:1.586/1"></div>
+    <div id="pv-name-wrap"><label for="pv-name" class="text-xs text-slate-500 dark:text-slate-400" id="pv-name-l">Name</label><input id="pv-name" type="text" maxlength="30" autocomplete="off" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
+    <dl id="pv-stats" class="rounded-2xl bg-slate-100 dark:bg-slate-800/60 px-3 text-sm divide-y divide-slate-200 dark:divide-slate-700/70"></dl>
+    <div id="pv-edit" class="space-y-2">
+      <div><label for="pv-tariff" class="text-xs text-slate-500 dark:text-slate-400">Tarif (optional)</label><input id="pv-tariff" type="text" maxlength="30" autocomplete="off" placeholder="z. B. Tarif S" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
+      <div class="grid grid-cols-3 gap-2">
+        <div><label for="pv-ac" class="text-xs text-slate-500 dark:text-slate-400">AC €/kWh</label><input id="pv-ac" type="text" inputmode="decimal" autocomplete="off" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
+        <div><label for="pv-dc" class="text-xs text-slate-500 dark:text-slate-400">DC €/kWh</label><input id="pv-dc" type="text" inputmode="decimal" autocomplete="off" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
+        <div><label for="pv-fee" class="text-xs text-slate-500 dark:text-slate-400">€/Monat</label><input id="pv-fee" type="text" inputmode="decimal" autocomplete="off" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
+      </div>
+      <p id="pv-hint" class="text-xs text-slate-500 dark:text-slate-400"></p>
+    </div>
+    <p id="pv-msg" class="hidden text-sm text-red-600 dark:text-red-400"></p>
+    <div class="grid grid-cols-2 gap-2 pt-1">
+      <button id="pv-cancel" type="button" class="py-3 rounded-2xl bg-slate-200 dark:bg-slate-800 font-medium active:scale-95 transition">Schließen</button>
+      <button id="pv-save" type="button" class="py-3 rounded-2xl bg-emerald-600 text-white font-semibold active:scale-95 transition">Speichern</button>
+    </div>
+  </div>
+</div>
 <div id="done-dialog" class="hidden fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-3">
   <div class="w-full max-w-sm max-h-[92vh] overflow-y-auto rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 p-5 space-y-3">
     <p class="font-semibold">Als erledigt markieren</p>
@@ -1638,6 +1678,7 @@ function showView(name) {
   if (name === 'settings') fillSettings();
   if (name === 'costs') renderCostsView();
   if (name === 'reminders') renderReminders();
+  if (name === 'providers') renderProvidersView();
   if (name !== 'history' && editMode) setEditMode(false);
   if (name === 'history') renderHistory();
   updateHistFab();
@@ -3748,6 +3789,131 @@ function renderStat() {
 $('go-stat').addEventListener('click', () => { repMode = 'stat'; showView('report'); });
 $('go-akku').addEventListener('click', () => { repMode = 'akku'; showView('report'); });          // Berichte → Akku
 $('go-trips').addEventListener('click', () => { histFilter = 'fahrten'; tripDays = 21; showView('history'); });   // Historie → Fahrten
+
+/* =====================================================================
+   Ladeanbieter (Start → „Ladeanbieter“): Liste aller Anbieter aus den Einstellungen plus Stromanbieter Zuhause.
+   Preise: aus der Historie (Ø €/kWh der Unterwegs-Ladungen mit diesem Anbieter, nach kWh gewichtet); eigene Angaben (AC, DC, Grundgebühr, Tarif)
+   haben Vorrang und werden in enyaq.provInfo gespeichert (+ Cloud-Dokument settings/prefs). Zuhause: Preis immer aus den Einstellungen.
+   provInfo = { home: { name }, p: { <Anbietername>: { tariff?, ac?, dc?, fee? } } }
+   ===================================================================== */
+const KEY_PROVINFO = 'enyaq.provInfo';
+const PV_COLORS = ['#2563eb', '#0e7490', '#7c3aed', '#db2777', '#ea580c', '#059669', '#4f46e5', '#b45309', '#0891b2', '#be123c', '#65a30d', '#475569'];
+const getProvInfo = () => { const o = load(KEY_PROVINFO, {}); return { home: (o && o.home) || {}, p: (o && o.p && typeof o.p === 'object') ? o.p : {} }; };
+function setProvInfo(o) { save(KEY_PROVINFO, o); pushPrefs(); }
+const pvHomeName = () => (getProvInfo().home.name || '').trim();
+const pvEur = (v) => fmt(v, v < 1 && Math.round(v * 1000) % 10 ? 3 : 2) + ' €';
+/** Kennzahlen aus der Historie: Zuhause (key 'home') oder ein Anbieter (Unterwegs). Gesamt und laufendes Jahr. */
+function pvStats(key) {
+  const rs = getReadings(), y0 = new Date(new Date().getFullYear(), 0, 1).getTime(), st = { n: 0, kwh: 0, cost: 0, yn: 0, ykwh: 0, ycost: 0, pk: 0, pc: 0, last: null };
+  rs.forEach((r, i) => {
+    const home = key === 'home';
+    if (home ? !(isHome(r) && isCharge(rs, i)) : !(placeOf(r) === 'away' && r.provider === key)) return;
+    const t = Date.parse(r.date), kwh = r.consumedSinceLast > 0 ? r.consumedSinceLast : 0, cost = r.cost > 0 ? r.cost : 0;
+    st.n++; st.kwh += kwh; st.cost += cost;
+    if (t >= y0) { st.yn++; st.ykwh += kwh; st.ycost += cost; }
+    const unit = home ? (kwh > 0 ? cost / kwh : null) : (r.pricePerKwh > 0 ? r.pricePerKwh : (kwh > 0 && cost > 0 ? (cost - (r.fee || 0)) / kwh : null));
+    if (unit > 0 && kwh > 0) { st.pk += kwh; st.pc += unit * kwh; }
+    if (!st.last || t > st.last.t) st.last = { t, unit };
+  });
+  st.avg = st.pk > 0 ? Math.round(st.pc / st.pk * 100) / 100 : null;   // Ø €/kWh, auf Cent gerundet
+  return st;
+}
+/** Preise eines Anbieters: eigene Angaben (ac/dc) vor Historie (hist). */
+function pvPrices(name) { const i = getProvInfo().p[name] || {}, st = pvStats(name); return { ac: i.ac > 0 ? i.ac : null, dc: i.dc > 0 ? i.dc : null, fee: i.fee > 0 ? i.fee : null, tariff: i.tariff || '', hist: st.avg, st }; }
+const pvChip = (lbl, v, sub) => `<span class="whitespace-nowrap rounded-lg bg-slate-100 dark:bg-slate-800 px-2 py-1 text-xs text-slate-700 dark:text-slate-200">${lbl ? '<b>' + lbl + '</b> ' : ''}${pvEur(v)}${sub ? ' <span class="text-slate-500 dark:text-slate-400">' + sub + '</span>' : ''}</span>`;
+const pvBadge = (name, color, dark) => `<div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-lg font-bold ${dark ? 'text-slate-900' : 'text-white'}" style="background:${color}">${esc((name.trim()[0] || '?').toUpperCase())}</div>`;
+function renderProvidersView() {
+  const list = getProviders(), price = Number(getSettings().price) || 0, hn = pvHomeName();
+  const rows = [`<li><button type="button" data-pv="home" class="flex w-full items-center gap-3 rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-3.5 text-left active:scale-[0.99] transition">
+      ${pvBadge(hn || 'Z', '#facc15', true)}
+      <span class="min-w-0 flex-1"><span class="flex items-center gap-1.5"><span class="truncate font-semibold">${esc(hn || 'Stromanbieter')}</span><span class="shrink-0 rounded-md bg-emerald-100 dark:bg-emerald-900/60 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Zuhause</span></span><span class="block truncate text-xs text-slate-500 dark:text-slate-400">${hn ? 'Hausstrom · Wallbox' : 'Antippen, um den Namen einzutragen'}</span></span>
+      <span class="flex flex-col items-end gap-1">${pvChip('AC', price)}</span></button></li>`];
+  list.forEach((n, i) => {
+    const p = pvPrices(n), chips = [];
+    if (p.ac) chips.push(pvChip('AC', p.ac)); if (p.dc) chips.push(pvChip('DC', p.dc));
+    if (!chips.length && p.hist) chips.push(pvChip('', p.hist, 'Ø'));
+    if (!chips.length) chips.push('<span class="whitespace-nowrap rounded-lg bg-amber-100 dark:bg-amber-900/40 px-2 py-1 text-xs font-medium text-amber-800 dark:text-amber-300">Preis eintragen</span>');
+    const sub = [p.tariff, p.fee ? pvEur(p.fee) + '/Monat' : '', p.st.n ? p.st.n + (p.st.n === 1 ? ' Ladung' : ' Ladungen') : 'noch keine Ladung'].filter(Boolean).join(' · ');
+    rows.push(`<li><button type="button" data-pv="${esc(n)}" class="flex w-full items-center gap-3 rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-3.5 text-left active:scale-[0.99] transition">
+      ${pvBadge(n, PV_COLORS[i % PV_COLORS.length])}
+      <span class="min-w-0 flex-1"><span class="block truncate font-semibold">${esc(n)}</span><span class="block truncate text-xs text-slate-500 dark:text-slate-400">${esc(sub)}</span></span>
+      <span class="flex flex-col items-end gap-1">${chips.join('')}</span></button></li>`);
+  });
+  if (!list.length) rows.push('<li class="px-1 py-2 text-sm text-slate-500 dark:text-slate-400">Noch keine Ladeanbieter für unterwegs. Lege sie mit „+ Neu“ an.</li>');
+  $('pv-list').innerHTML = rows.join('');
+  /* Günstigste Karte unterwegs: AC und DC; ohne eigene Angaben zählt der Ø-Preis aus der Historie für beide */
+  const best = (k) => { let b = null; list.forEach(n => { const p = pvPrices(n), v = p[k] ?? (p.ac == null && p.dc == null ? p.hist : null); if (v > 0 && (!b || v < b.v)) b = { n, v, h: p[k] == null }; }); return b; };
+  const bA = best('ac'), bD = best('dc'), tile = (lbl, b) => `<div class="rounded-2xl bg-slate-100 dark:bg-slate-800/70 p-2.5"><p class="text-xs text-slate-500 dark:text-slate-400">${lbl}</p><p class="truncate font-semibold">${b ? esc(b.n) : '–'}</p>${b ? '<p class="text-sm tabular-nums">' + pvEur(b.v) + '/kWh</p>' : ''}${b && b.h ? '<p class="text-[11px] text-slate-500 dark:text-slate-400">Ø aus Historie</p>' : ''}</div>`;
+  $('pv-best').classList.toggle('hidden', !bA && !bD);
+  $('pv-best-grid').innerHTML = tile('AC unterwegs', bA) + tile('DC unterwegs', bD);
+}
+/* ---- Detailkarte ---- */
+let pvCur = null;                                                         // 'home' | Anbietername | '' (neu)
+const pvNum = (id) => { const v = $(id).value.trim(); if (!v) return null; const n = parseNum(v); return isFinite(n) && n >= 0 && n < 100 ? n : NaN; };
+function pvCardHtml(name, color, dark, label, big, sub) {
+  return `<div class="flex items-start justify-between gap-2"><span class="min-w-0 truncate text-lg font-bold">${esc(name)}</span>${dark ? '<svg class="h-6 w-6 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>' : '<svg class="h-6 w-6 shrink-0 opacity-80" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8Z"/></svg>'}</div>
+    <div class="mt-auto"><p class="text-xs font-semibold uppercase tracking-wider ${dark ? 'text-slate-700' : 'text-white/75'}">${label}</p><p class="font-barlow text-[40px] font-bold leading-none">${big}</p>${sub ? `<p class="mt-1 text-xs ${dark ? 'text-slate-700' : 'text-white/75'}">${sub}</p>` : ''}</div>`;
+}
+function openProv(key) {
+  pvCur = key; const home = key === 'home', isNew = key === '', card = $('pv-card'), info = getProvInfo();
+  $('pv-msg').classList.add('hidden'); $('pv-edit').classList.toggle('hidden', home);
+  $('pv-name-wrap').classList.toggle('hidden', !home && !isNew);
+  $('pv-name-l').textContent = home ? 'Stromanbieter Zuhause' : 'Name des Ladeanbieters';
+  $('pv-name').placeholder = home ? 'z. B. Vattenfall' : 'z. B. EnBW mobility+';
+  $('pv-name').value = home ? pvHomeName() : '';
+  const dl = (rows) => rows.filter(Boolean).map(([k, v, cls]) => `<div class="flex items-baseline justify-between gap-3 py-2"><dt class="text-slate-500 dark:text-slate-400">${k}</dt><dd class="text-right tabular-nums ${cls || ''}">${v}</dd></div>`).join('');
+  const yr = new Date().getFullYear();
+  if (home) {
+    const price = Number(getSettings().price) || 0, st = pvStats('home');
+    card.style.background = 'linear-gradient(135deg,#fde047,#eab308)'; card.className = card.className.replace(/text-\S+/g, '') + ' text-slate-900';
+    card.innerHTML = pvCardHtml(pvHomeName() || 'Stromanbieter', '', true, 'Zuhause · AC', fmt(price, 3) + ' <span class="text-lg">€/kWh</span>', 'Strompreis aus den Einstellungen');
+    $('pv-stats').innerHTML = dl([['Preis AC', pvEur(price) + '/kWh'], ['Genutzt ' + yr, st.yn + ' × · ' + fmt(st.ykwh, 0) + ' kWh'], ['Kosten ' + yr, eur(st.ycost), 'font-semibold text-emerald-600 dark:text-emerald-400'], ['Gesamt', st.n + ' × · ' + fmt(st.kwh, 0) + ' kWh · ' + eur(st.cost)]]);
+  } else if (isNew) {
+    card.style.background = 'linear-gradient(135deg,#334155,#0f172a)'; card.className = card.className.replace(/text-\S+/g, '') + ' text-white';
+    card.innerHTML = pvCardHtml('Neue Ladekarte', '', false, 'Unterwegs', '– <span class="text-lg">€/kWh</span>', '');
+    $('pv-stats').innerHTML = ''; ['pv-tariff', 'pv-ac', 'pv-dc', 'pv-fee'].forEach(id => { $(id).value = ''; });
+    $('pv-hint').textContent = 'Preise sind optional. Ohne Angabe nimmt die App den Ø-Preis aus deinen Ladungen mit diesem Anbieter.';
+  } else {
+    const i = getProviders().indexOf(key), c = PV_COLORS[(i < 0 ? 0 : i) % PV_COLORS.length], p = pvPrices(key), st = p.st, v = p.dc ?? p.ac ?? p.hist;
+    card.style.background = 'linear-gradient(135deg,' + c + ',#0f172a)'; card.className = card.className.replace(/text-\S+/g, '') + ' text-white';
+    const lab = p.dc != null ? 'Unterwegs · DC' : p.ac != null ? 'Unterwegs · AC' : p.hist ? 'Unterwegs · Ø aus Historie' : 'Unterwegs';
+    card.innerHTML = pvCardHtml(key, c, false, lab, (v ? fmt(v, 2) : '–') + ' <span class="text-lg">€/kWh</span>', [p.tariff, p.fee ? pvEur(p.fee) + '/Monat' : ''].filter(Boolean).join(' · '));
+    $('pv-stats').innerHTML = dl([p.ac != null ? ['Preis AC', pvEur(p.ac) + '/kWh'] : null, p.dc != null ? ['Preis DC', pvEur(p.dc) + '/kWh'] : null, ['Ø Preis aus Historie', p.hist ? pvEur(p.hist) + '/kWh' : 'noch keine Daten'],
+      st.last ? ['Letzte Ladung', fmtDate(new Date(st.last.t).toISOString()) + (st.last.unit ? ' · ' + pvEur(st.last.unit) + '/kWh' : '')] : null,
+      ['Genutzt ' + yr, st.yn + ' × · ' + fmt(st.ykwh, 0) + ' kWh'], ['Kosten ' + yr, eur(st.ycost), 'font-semibold text-emerald-600 dark:text-emerald-400'], st.n > st.yn ? ['Gesamt', st.n + ' × · ' + fmt(st.kwh, 0) + ' kWh · ' + eur(st.cost)] : null]);
+    const inf = info.p[key] || {}, f = (x) => x > 0 ? String(x).replace('.', ',') : '';
+    $('pv-tariff').value = inf.tariff || ''; $('pv-ac').value = f(inf.ac); $('pv-dc').value = f(inf.dc); $('pv-fee').value = f(inf.fee);
+    $('pv-hint').textContent = p.hist ? 'Leere Preisfelder: Die App nimmt den Ø-Preis aus deinen Ladungen (' + pvEur(p.hist) + '/kWh).' : 'Noch keine Ladung mit Preis bei diesem Anbieter – trage die Preise hier ein.';
+  }
+  $('pv-dialog').classList.remove('hidden');
+}
+function pvErr(t) { $('pv-msg').textContent = t; $('pv-msg').classList.remove('hidden'); }
+$('pv-save').addEventListener('click', () => {
+  const info = getProvInfo();
+  if (pvCur === 'home') { const n = $('pv-name').value.trim().replace(/\s+/g, ' ').slice(0, 30); info.home = n ? { name: n } : {}; setProvInfo(info); }
+  else {
+    const ac = pvNum('pv-ac'), dc = pvNum('pv-dc'), fee = pvNum('pv-fee');
+    if ([ac, dc, fee].some(Number.isNaN)) { pvErr('Bitte die Preise prüfen (z. B. 0,59).'); return; }
+    let name = pvCur;
+    if (pvCur === '') {
+      name = $('pv-name').value.trim().replace(/\s+/g, ' ').slice(0, 30); const l = getProviders();
+      if (!name) { pvErr('Bitte einen Namen eingeben.'); return; }
+      if (l.some(n => n.toLowerCase() === name.toLowerCase())) { pvErr('„' + name + '“ gibt es schon.'); return; }
+      if (l.length >= 20) { pvErr('Maximal 20 Anbieter.'); return; }
+      setProviders(l.concat(name));
+    }
+    const o = {}, tariff = $('pv-tariff').value.trim().replace(/\s+/g, ' ').slice(0, 30);
+    if (tariff) o.tariff = tariff; if (ac > 0) o.ac = ac; if (dc > 0) o.dc = dc; if (fee > 0) o.fee = fee;
+    if (Object.keys(o).length) info.p[name] = o; else delete info.p[name];
+    setProvInfo(info);
+  }
+  $('pv-dialog').classList.add('hidden'); renderProvidersView();
+});
+$('pv-cancel').addEventListener('click', () => $('pv-dialog').classList.add('hidden'));
+$('pv-dialog').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden'); });
+$('pv-list').addEventListener('click', (e) => { const b = e.target.closest('[data-pv]'); if (b) openProv(b.dataset.pv); });
+$('pv-add').addEventListener('click', () => openProv(''));
+$('go-prov').addEventListener('click', () => showView('providers'));
 /** Bild oben auf der Statistik-Seite: Statistik.png/.webp/.jpg/.jpeg im Ordner „Bilder“ (freigestellt, auf dem Kartenhintergrund der App); fehlt es, bleibt die Karte weg. */
 const STAT_IMG_VER = '2';                                 // bei neuem Bild hochzählen (umgeht Browser- und Service-Worker-Cache); v2 = bei Canva freigestelltes PNG
 async function initStatImg() {
@@ -4754,7 +4920,7 @@ try { renderWrapCard(); } catch (e) { }
 function pushPrefs() {
   if (!window.cloud?.isSignedIn()) return;
   const w = Number(getSettings().wltp);
-  window.cloud.setPrefs({ wltp: w > 0 ? w : null, wxLoc: wxLoc() || null }).catch(() => { });
+  window.cloud.setPrefs({ wltp: w > 0 ? w : null, wxLoc: wxLoc() || null, provInfo: load(KEY_PROVINFO, null) }).catch(() => { });
 }
 window.onCloudPrefs = (d, first, uid) => {
   if (first) checkCacheUid(uid);
@@ -4763,7 +4929,11 @@ window.onCloudPrefs = (d, first, uid) => {
   if (first) { if (nw == null && lw != null) { nw = lw; up = true; } if (nl == null && ll) { nl = ll; up = true; } }
   if (nw !== lw) { const raw = load(KEY_SETTINGS, {}) || {}; if (nw == null) delete raw.wltp; else raw.wltp = nw; save(KEY_SETTINGS, raw); if (document.activeElement !== $('set-wltp')) $('set-wltp').value = nw != null ? String(nw).replace('.', ',') : ''; }
   if (JSON.stringify(nl) !== JSON.stringify(ll || null)) { if (nl) save(KEY_WXLOC, nl); else localStorage.removeItem(KEY_WXLOC); localStorage.removeItem(KEY_WXCACHE); renderWxLoc(); }
-  if (up) window.cloud.setPrefs({ wltp: nw, wxLoc: nl }).catch(() => { });
+  /* Ladeanbieter-Angaben (Name Zuhause, Tarife, Preise): wie WLTP – beim ersten Abgleich lokal hochladen, wenn die Cloud noch nichts hat */
+  const lp = load(KEY_PROVINFO, null); let np = d && d.provInfo && typeof d.provInfo === 'object' ? d.provInfo : null;
+  if (first && np == null && lp) { np = lp; up = true; }
+  if (JSON.stringify(np) !== JSON.stringify(lp)) { if (np) save(KEY_PROVINFO, np); else localStorage.removeItem(KEY_PROVINFO); if (currentView === 'providers') renderProvidersView(); }
+  if (up) window.cloud.setPrefs({ wltp: nw, wxLoc: nl, provInfo: np }).catch(() => { });
 };
 
 /* =====================================================================
