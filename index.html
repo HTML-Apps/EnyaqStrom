@@ -4981,13 +4981,20 @@ $('btn-wrap-preview').addEventListener('click', () => {
 try { renderWrapCard(); } catch (e) { }
 
 /* =====================================================================
-   Cloud-Abgleich von WLTP-Wert und Wetter-Standort (Dokument enyaqStrom/<uid>/settings/prefs, gleiche Regel wie Anbieter und Kategorien).
+   Cloud-Abgleich von WLTP-Wert, Wetter-Standort, Ladeanbieter-Angaben und Einstellungen (Fahrzeugdaten, Strompreis, Akku, Kauf …)
+   im Dokument enyaqStrom/<uid>/settings/prefs, gleiche Regel wie Anbieter und Kategorien. Die PIN bleibt nur auf dem Gerät.
    Erster Abgleich: Was die Cloud hat, gilt; fehlt dort etwas und ist lokal vorhanden, wird es hochgeladen. Danach gilt die Cloud (Änderung auf einem Gerät wirkt auf allen).
    ===================================================================== */
+const SYNC_SET_KEYS = ['title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice'];
+/** Einstellungen für die Cloud: feste Reihenfolge, ohne leere Werte (Firestore verbietet undefined). null = nichts vorhanden. */
+function syncSet(src) {
+  const o = {}; if (src && typeof src === 'object') SYNC_SET_KEYS.forEach(k => { const v = src[k]; if (v != null && v !== '' && !(typeof v === 'number' && !isFinite(v))) o[k] = v; });
+  return Object.keys(o).length ? o : null;
+}
 function pushPrefs() {
   if (!window.cloud?.isSignedIn()) return;
   const w = Number(getSettings().wltp);
-  window.cloud.setPrefs({ wltp: w > 0 ? w : null, wxLoc: wxLoc() || null, provInfo: load(KEY_PROVINFO, null) }).catch(() => { });
+  window.cloud.setPrefs({ wltp: w > 0 ? w : null, wxLoc: wxLoc() || null, provInfo: load(KEY_PROVINFO, null), settings: syncSet(load(KEY_SETTINGS, {})) }).catch(() => { });
 }
 window.onCloudPrefs = (d, first, uid) => {
   if (first) checkCacheUid(uid);
@@ -5000,7 +5007,16 @@ window.onCloudPrefs = (d, first, uid) => {
   const lp = load(KEY_PROVINFO, null); let np = d && d.provInfo && typeof d.provInfo === 'object' ? d.provInfo : null;
   if (first && np == null && lp) { np = lp; up = true; }
   if (JSON.stringify(np) !== JSON.stringify(lp)) { if (np) save(KEY_PROVINFO, np); else localStorage.removeItem(KEY_PROVINFO); if (currentView === 'providers') renderProvidersView(); }
-  if (up) window.cloud.setPrefs({ wltp: nw, wxLoc: nl, provInfo: np }).catch(() => { });
+  /* Einstellungen (Fahrzeugdaten, Strompreis, Akku, Kauf …): beim ersten Abgleich gilt die Cloud; hat sie noch nichts, werden die lokalen hochgeladen */
+  const ls = syncSet(load(KEY_SETTINGS, {})); let ns = d ? syncSet(d.settings) : null;
+  if (first && ns == null && ls) { ns = ls; up = true; }
+  if (ns && JSON.stringify(ns) !== JSON.stringify(ls)) {
+    const raw = load(KEY_SETTINGS, {}) || {}; SYNC_SET_KEYS.forEach(k => delete raw[k]); save(KEY_SETTINGS, { ...raw, ...ns });   // PIN, WLTP usw. bleiben
+    applyTitle(); renderReminderBadges(); renderHeroStats();
+    if (currentView === 'settings' && !$('view-settings').contains(document.activeElement)) fillSettings();   // nicht mitten in eine Eingabe schreiben
+    if (currentView === 'dashboard') renderDashboard();
+  }
+  if (up) window.cloud.setPrefs({ wltp: nw, wxLoc: nl, provInfo: np, settings: ns }).catch(() => { });
 };
 
 /* =====================================================================
