@@ -3930,10 +3930,11 @@ function renderBattery() {
    Ø pro Tag/Monat: Laufleistung vom ersten bis zum letzten km-Stand, Ladekosten vom ersten Eintrag bis heute.
    ===================================================================== */
 /* =====================================================================
-   Abzeichen (Berichte → Statistik, Start-Button): werden aus den vorhandenen Daten berechnet. Freigeschaltet-Datum lokal in enyaq.badges = { <id>: ISO }.
+   Abzeichen (Berichte → Datenpool → Abzeichen, Start-Button; 36 Stück): werden aus den vorhandenen Daten berechnet. Freigeschaltet-Datum lokal in enyaq.badges = { <id>: ISO }.
    Erster Lauf (noch nichts gespeichert): alle bereits verdienten still eintragen. Danach: neues Abzeichen → Pop-up mit Konfetti (eins nach dem anderen).
    ===================================================================== */
 const KEY_BADGES = 'enyaq.badges';
+const ICE = { l100: 7.5, co2PerL: 2.37, eurPerL: 1.75, gridCo2: 0.363 };   // Vergleichs-Benziner und Strommix (kg CO₂/kWh)
 function bdgCtx() {
   const rs = getReadings(), charges = rs.filter((r, i) => isCharge(rs, i)), kwh = charges.reduce((a, r) => a + (r.consumedSinceLast > 0 ? r.consumedSinceLast : 0), 0);
   const pk = Number(getSettings().purchaseKm), od = rs.filter(r => r.odometerKm > 0), last = lastKnownKm(), base = pk > 0 ? pk : od.length ? od[0].odometerKm : null;
@@ -3949,7 +3950,19 @@ function bdgCtx() {
   const [py, pm, pd] = purchaseDay().split('-').map(Number), years = (Date.now() - new Date(py, pm - 1, pd).getTime()) / (365.25 * 864e5);
   let care = null; try { care = batCare().score ?? null; } catch (e) { }
   let work = 0; try { const ys = taxYears(); work = Math.max(0, ...ys.map(y => taxData(y).days.length)); } catch (e) { }
-  return { n: charges.length, kwh, km, best100, bestC100, winter, winterPart, provs: provs.size, years, care, work };
+  /* Vergleich mit einem Benziner (Hyundai Tucson 1.6 T-GDi, real 7,5 l/100 km): 2,37 kg CO₂ je Liter → 178 g/km; Strom: deutscher Strommix 2024 (UBA) 363 g/kWh; Super 1,75 €/l */
+  const cost = charges.reduce((a, r) => a + (r.cost > 0 ? r.cost : 0), 0);
+  const co2 = Math.max(0, km * ICE.l100 / 100 * ICE.co2PerL - kwh * ICE.gridCo2), saved = km * ICE.l100 / 100 * ICE.eurPerL - cost;
+  /* Sommer: Ladungen im Juni, Juli und August desselben Jahres */
+  const summ = {}; charges.forEach(r => { const d = new Date(r.date), m = d.getMonth(); if (m >= 5 && m <= 7) (summ[d.getFullYear()] = summ[d.getFullYear()] || new Set()).add(m); });
+  const summer = Object.values(summ).some(x => x.size === 3), summerPart = Math.max(0, ...Object.values(summ).map(x => x.size)) / 3;
+  /* Anteil Zuhause (kWh) im besten Kalenderjahr mit mind. 1.000 kWh */
+  const yk = {}; charges.forEach(r => { const y = new Date(r.date).getFullYear(), o = yk[y] = yk[y] || { h: 0, t: 0 }, e = r.consumedSinceLast > 0 ? r.consumedSinceLast : 0; o.t += e; if (isHome(r)) o.h += e; });
+  const homeShare = Math.max(0, ...Object.values(yk).filter(o => o.t >= 1000).map(o => o.h / o.t));
+  const away = charges.filter(r => placeOf(r) === 'away').length;
+  let maint = 0; try { getReminders().forEach(r => { maint += remLog(r).length; }); } catch (e) { }
+  const maxTrip = getTrips().reduce((a, t) => Math.max(a, t.km || 0), 0);
+  return { n: charges.length, kwh, km, best100, bestC100, winter, winterPart, provs: provs.size, years, care, work, co2, saved, summer, summerPart, homeShare, away, maint, maxTrip };
 }
 const BADGES = [
   { id: 'c1', e: '🔌', t: 'Erste Ladung', g: 'from-emerald-400 to-teal-600', v: c => c.n / 1, txt: 'Die erste Ladung ist erfasst.' },
@@ -3969,7 +3982,26 @@ const BADGES = [
   { id: 'care', e: '🛡️', t: 'Akku-Profi 90+', g: 'from-emerald-300 to-green-700', v: c => c.care == null ? 0 : c.care >= 90 ? 1 : c.care / 90, txt: 'Akku-Pflege-Wert von 90 oder mehr.' },
   { id: 'prov', e: '🧭', t: '3 Ladeanbieter', g: 'from-violet-400 to-indigo-600', v: c => c.provs / 3, txt: 'Bei drei verschiedenen Anbietern geladen.' },
   { id: 'work', e: '💼', t: '100 Arbeitstage', g: 'from-slate-300 to-slate-600', v: c => c.work / 100, txt: '100 Arbeitstage in einem Jahr mit dem Enyaq.' },
-  { id: 'y1', e: '🎂', t: '1 Jahr', g: 'from-rose-400 to-red-600', v: c => c.years / 1, txt: 'Ein Jahr gemeinsam unterwegs.' }
+  { id: 'y1', e: '🎂', t: '1 Jahr', g: 'from-rose-400 to-red-600', v: c => c.years / 1, txt: 'Ein Jahr gemeinsam unterwegs.' },
+  /* ---- Langfristige Ziele ---- */
+  { id: 'c500', e: '🎖️', t: '500 Ladungen', g: 'from-amber-300 to-yellow-600', v: c => c.n / 500, txt: '500 Ladungen erfasst.' },
+  { id: 'e5000', e: '💡', t: '5 MWh geladen', g: 'from-lime-400 to-emerald-700', v: c => c.kwh / 5000, txt: '5.000 kWh geladen.' },
+  { id: 'e10000', e: '🌩️', t: '10 MWh geladen', g: 'from-yellow-300 to-lime-700', v: c => c.kwh / 10000, txt: '10.000 kWh geladen.' },
+  { id: 'k50000', e: '🏁', t: '50.000 km', g: 'from-cyan-400 to-blue-700', v: c => c.km / 50000, txt: '50.000 km elektrisch gefahren.', next: 'Nächstes Ziel: 2× Erdumrundung' },
+  { id: 'earth2', e: '🛰️', t: '2× Erdumrundung', g: 'from-indigo-400 to-violet-700', v: c => c.km / 80150, txt: '80.150 km – zweimal um den Äquator.' },
+  { id: 'k100000', e: '💯', t: '100.000 km', g: 'from-blue-500 to-indigo-800', v: c => c.km / 100000, txt: '100.000 km elektrisch gefahren.' },
+  { id: 'y3', e: '🎉', t: '3 Jahre', g: 'from-pink-400 to-rose-600', v: c => c.years / 3, txt: 'Drei Jahre gemeinsam unterwegs.' },
+  { id: 'y5', e: '🏅', t: '5 Jahre', g: 'from-amber-400 to-rose-600', v: c => c.years / 5, txt: 'Fünf Jahre gemeinsam unterwegs.' },
+  { id: 'co1', e: '🌳', t: '1 t CO₂ gespart', g: 'from-green-400 to-emerald-700', v: c => c.co2 / 1000, txt: '1 Tonne CO₂ weniger als mit einem Benziner (Tucson 1.6, 7,5 l/100 km; Strommix 363 g/kWh).' },
+  { id: 'co5', e: '🌲', t: '5 t CO₂ gespart', g: 'from-emerald-500 to-green-800', v: c => c.co2 / 5000, txt: '5 Tonnen CO₂ weniger als mit einem Benziner.' },
+  { id: 'co10', e: '🏔️', t: '10 t CO₂ gespart', g: 'from-teal-500 to-slate-700', v: c => c.co2 / 10000, txt: '10 Tonnen CO₂ weniger als mit einem Benziner.' },
+  { id: 'eur1', e: '💰', t: '1.000 € gespart', g: 'from-yellow-300 to-amber-600', v: c => c.saved / 1000, txt: '1.000 € weniger als Tanken (Tucson 1.6, 7,5 l/100 km, 1,75 €/l) – Ladekosten abgezogen.' },
+  { id: 'eur5', e: '🤑', t: '5.000 € gespart', g: 'from-amber-400 to-orange-700', v: c => c.saved / 5000, txt: '5.000 € weniger als Tanken – Ladekosten abgezogen.' },
+  { id: 'summer', e: '🏖️', t: 'Sommerheld', g: 'from-yellow-300 to-orange-500', v: c => c.summer ? 1 : c.summerPart, txt: 'Einen ganzen Sommer (Jun–Aug) elektrisch gefahren.' },
+  { id: 'home90', e: '🏠', t: '90 % Zuhause', g: 'from-yellow-300 to-yellow-600', v: c => c.homeShare >= 0.9 ? 1 : c.homeShare / 0.9, txt: 'Ein Kalenderjahr mit mindestens 90 % der kWh an der eigenen Wallbox (ab 1.000 kWh im Jahr).' },
+  { id: 'away25', e: '🚀', t: '25× unterwegs', g: 'from-violet-400 to-fuchsia-700', v: c => c.away / 25, txt: '25 Ladungen unterwegs.' },
+  { id: 'maint10', e: '🔧', t: '10× Wartung', g: 'from-slate-400 to-zinc-700', v: c => c.maint / 10, txt: '10 erledigte Erinnerungen (Wartung, Service, Reifen …).' },
+  { id: 'trip300', e: '🧳', t: '≥ 300 km Fahrt', g: 'from-sky-400 to-cyan-700', v: c => c.maxTrip / 300, txt: 'Eine einzelne Fahrt mit mindestens 300 km im Fahrtenbuch.' }
 ];
 let bdgQueue = [], bdgSel = null;
 function bdgState() { const c = bdgCtx(); return BADGES.map(b => { const v = Math.max(0, Math.min(1, b.v(c) || 0)); return { b, v, done: v >= 1 }; }); }
