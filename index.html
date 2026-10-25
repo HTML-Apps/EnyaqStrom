@@ -229,7 +229,7 @@
     </div>
 
     <button id="go-stat" type="button" class="flex w-full items-center justify-between rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm px-4 py-3 active:scale-[0.99] transition">
-      <span class="flex items-center gap-3 font-medium"><svg class="w-6 h-6 text-emerald-500" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/></svg>Daten &amp; Abzeichen</span>
+      <span class="flex items-center gap-3 font-medium"><svg class="w-6 h-6 text-emerald-500" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/></svg>Statistik</span>
       <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
     </button>
     <button id="btn-wrap-preview" type="button" class="flex w-full items-center justify-between rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm px-4 py-3 active:scale-[0.99] transition">
@@ -1746,7 +1746,7 @@ async function authHeaders() {                                                  
 function renderVehicleStatus() {
   const el = $('vehicle-status'); if (!el) return;
   el.textContent = !window.cloud?.isSignedIn?.() ? '' : vehicle.ok
-    ? 'Fahrzeugdaten: verbunden' + (keyExpiry() ? ' · Schlüssel gültig bis ' + new Date(keyExpiry() + 'T12:00:00').toLocaleDateString('de-DE') : '')
+    ? 'Škoda-API verbunden' + (keyExpiry() ? ' · Schlüssel gültig bis ' + new Date(keyExpiry() + 'T12:00:00').toLocaleDateString('de-DE') : '')
     : 'Fahrzeugdaten: für dieses Konto nicht eingerichtet (manuelle Eingabe)';
 }
 async function checkVehicle(uid) {                                                  // einmal nach der Anmeldung, ohne Škoda-Abfrage
@@ -5977,7 +5977,7 @@ function setSettingsSec(k) {
 function renderDrawerUser() {
   const u = window.cloud?.userInfo?.(), av = $('sd-avatar');
   $('sd-name').textContent = u ? (u.name || u.email || 'Angemeldet') : 'Nicht angemeldet';
-  $('sd-sub').textContent = u ? 'Cloud ✓' + (typeof apiEnabled === 'function' && apiEnabled() ? ' · Fahrzeugdaten verbunden' : '') : 'Konto & Cloud – antippen zum Anmelden';
+  $('sd-sub').textContent = u ? 'Cloud ✓' + (typeof apiEnabled === 'function' && apiEnabled() ? ' · Škoda-API verbunden' : '') : 'Konto & Cloud – antippen zum Anmelden';
   const ini = u ? (u.name || u.email || '?').split(/[\s@.]+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('') : '?';
   av.innerHTML = u && u.photo ? '<img src="' + esc(u.photo) + '" alt="" referrerpolicy="no-referrer" class="h-full w-full object-cover">' : esc(ini);
 }
