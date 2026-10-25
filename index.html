@@ -252,6 +252,11 @@
       <span class="flex items-center gap-3 font-medium"><svg class="w-6 h-6 text-emerald-500" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="9" r="6"/><path d="M8.5 14l-1.5 7 5-3 5 3-1.5-7"/></svg><span class="min-w-0 truncate">Abzeichen<span id="go-badges-n" class="text-sm font-normal text-slate-500 dark:text-slate-400"></span></span></span>
       <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
     </button>
+    <button id="go-kb" type="button" class="flex w-full items-center justify-between rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm px-4 py-3 active:scale-[0.99] transition">
+      <span class="flex items-center gap-3 font-medium"><svg class="w-6 h-6 text-emerald-500" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 1 6.5 18H20v3H6.5"/></svg><span class="min-w-0 truncate">Wissen<span id="go-kb-n" class="text-sm font-normal text-slate-500 dark:text-slate-400"></span></span></span>
+      <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+    </button>
+    <div id="kb-start-pins" class="hidden flex flex-wrap gap-2"></div>
 
     <div class="!mt-7 flex items-center gap-3" role="presentation">
       <h2 class="shrink-0 font-barlow text-xl font-bold uppercase tracking-[0.1em] text-white">Verbräuche &amp; Effizienz</h2>
@@ -501,6 +506,19 @@
       <div id="pv-best-grid" class="mt-2 grid grid-cols-2 gap-2 text-center"></div>
     </div>
     <p class="px-1 text-xs text-slate-500 dark:text-slate-400">Preise kommen aus deinen Ladungen (Ø je kWh: Unterwegs mit Anbieter, Bosch über den dort hinterlegten Anbieter). Fehlt ein Preis oder willst du AC/DC getrennt angeben: Karte antippen und eintragen. Zuhause gilt der Strompreis aus den Einstellungen.</p>
+  </section>
+
+  <!-- ============ WISSEN (Start → „Wissen“) ============ -->
+  <section id="view-kb" class="view hidden space-y-3">
+    <div class="-mt-2 flex h-[60px] items-center justify-between gap-3 -mb-[10px]">
+      <h1 class="min-w-0 truncate font-barlow font-semibold text-2xl uppercase tracking-[0.14em] text-white">Wissen</h1>
+      <button id="kb-add" type="button" class="px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-semibold active:scale-95 transition">+ Neu</button>
+    </div>
+    <label class="flex items-center gap-2 rounded-xl bg-white dark:bg-slate-800 px-3 text-slate-500 dark:text-slate-400"><svg class="h-4 w-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><input id="kb-q" type="search" autocomplete="off" placeholder="Suchen …" aria-label="Wissen durchsuchen" class="min-w-0 flex-1 bg-transparent py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:outline-none"></label>
+    <div id="kb-cats" class="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-0.5 text-xs font-medium whitespace-nowrap [scrollbar-width:none]"></div>
+    <div id="kb-pin-wrap" class="hidden"><p class="mb-1.5 px-1 text-[11px] uppercase tracking-wider text-slate-500">Angeheftet</p><div id="kb-pins" class="grid grid-cols-2 gap-2.5"></div></div>
+    <div id="kb-list-wrap"><p class="mb-1.5 px-1 text-[11px] uppercase tracking-wider text-slate-500">Alle Einträge</p><ul id="kb-list" class="rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm divide-y divide-slate-200 dark:divide-slate-800 overflow-hidden"></ul></div>
+    <p id="kb-empty" class="hidden px-1 py-6 text-center text-sm text-slate-500 dark:text-slate-400">Noch nichts gespeichert. Lege mit „+ Neu“ zum Beispiel den Link zum Handbuch, Reifendruck-Werte oder die Nummer deiner Werkstatt an.</p>
   </section>
 
   <section id="view-reminders" class="view hidden space-y-3">
@@ -1125,6 +1143,7 @@
     <p class="mt-4 mb-1 px-3 text-[11px] uppercase tracking-wider text-slate-500">Mehr</p>
     <div class="space-y-0.5 text-[15px]">
       <button type="button" data-go="providers" class="sd-item flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left active:bg-slate-100 dark:active:bg-slate-800"><span class="w-6 text-center">🔌</span>Ladeanbieter</button>
+      <button type="button" data-go="kb" class="sd-item flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left active:bg-slate-100 dark:active:bg-slate-800"><span class="w-6 text-center">📘</span>Wissen</button>
       <button type="button" data-go="badges" class="sd-item flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left active:bg-slate-100 dark:active:bg-slate-800"><span class="w-6 text-center">🏅</span>Daten &amp; Abzeichen</button>
       <button type="button" data-go="reminders" class="sd-item flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left active:bg-slate-100 dark:active:bg-slate-800"><span class="w-6 text-center">📋</span>Erinnerungen ansehen</button>
       <button type="button" data-sec="gefahr" class="sd-item flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-red-600 dark:text-red-300 active:bg-slate-100 dark:active:bg-slate-800"><span class="w-6 text-center">⚠️</span>Alle Daten löschen</button>
@@ -1217,6 +1236,23 @@
   </div>
 </div>
 
+<!-- Wissen: Eintrag ansehen / bearbeiten -->
+<div id="kb-dialog" class="hidden fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-3">
+  <div class="w-full max-w-sm max-h-[92vh] overflow-y-auto rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 p-4 space-y-3">
+    <div id="kb-view" class="space-y-3"></div>
+    <div id="kb-edit" class="hidden space-y-3">
+      <p id="kb-edit-h" class="font-semibold">Neuer Eintrag</p>
+      <div><label for="kb-title" class="text-xs text-slate-500 dark:text-slate-400">Titel</label><input id="kb-title" type="text" maxlength="80" autocomplete="off" placeholder="z. B. Bedienungsanleitung" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
+      <div><label for="kb-cat" class="text-xs text-slate-500 dark:text-slate-400">Kategorie</label><select id="kb-cat" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></select></div>
+      <div><label for="kb-text" class="text-xs text-slate-500 dark:text-slate-400">Notiz</label><textarea id="kb-text" rows="5" maxlength="4000" placeholder="Text, Werte, Schritte …" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-y"></textarea></div>
+      <div><div class="flex items-center justify-between"><p class="text-xs text-slate-500 dark:text-slate-400">Links</p><button id="kb-link-add" type="button" class="text-xs font-semibold text-emerald-600 dark:text-emerald-400 px-1.5 py-1">+ Link</button></div><div id="kb-links" class="mt-1 space-y-2"></div></div>
+      <div><p class="text-xs text-slate-500 dark:text-slate-400">Belege (Google Drive)</p><div id="kb-files" class="mt-1 flex flex-wrap gap-1.5"></div><input id="kb-file-in" type="file" accept="image/*,application/pdf" multiple class="hidden"></div>
+      <label class="flex items-center justify-between rounded-2xl bg-slate-100 dark:bg-slate-800/60 px-3.5 py-2.5"><span class="text-sm">Auf Start anheften</span><input id="kb-pin" type="checkbox" class="h-5 w-5 accent-emerald-600"></label>
+      <p id="kb-msg" class="hidden text-sm text-red-600 dark:text-red-400"></p>
+      <div class="grid grid-cols-2 gap-2 pt-1"><button id="kb-cancel" type="button" class="py-3 rounded-2xl bg-slate-200 dark:bg-slate-800 font-medium active:scale-95 transition">Abbrechen</button><button id="kb-save" type="button" class="py-3 rounded-2xl bg-emerald-600 text-white font-semibold active:scale-95 transition">Speichern</button></div>
+    </div>
+  </div>
+</div>
 <!-- Ladeanbieter: Detailkarte (Antippen in der Liste) -->
 <div id="pv-dialog" class="hidden fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-3">
   <div class="w-full max-w-sm max-h-[92vh] overflow-y-auto rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 p-4 space-y-3">
@@ -1795,6 +1831,7 @@ function showView(name) {
   if (name === 'costs') renderCostsView();
   if (name === 'reminders') renderReminders();
   if (name === 'providers') renderProvidersView();
+  if (name === 'kb') renderKb();
   if (name !== 'history' && editMode) setEditMode(false);
   if (name === 'history') renderHistory();
   updateHistFab();
@@ -2931,7 +2968,7 @@ function buildBackup() {
     readings: readings.map(r => ({ ...r, chargeDuration: isHome(r) ? chargeDurationOf(r) : undefined })),     // Ladedauer als hh:mm (nur Zuhause)
     costs: getCosts(), categories: getCategories(), reminders: getReminders(), recurring: getRecurring(),
     trips: getTrips(), tripPrefs: { places: getTPlaces(), labels: getTLabels(), rules: getTRules(), defLabel: defLabelId() },   // Fahrtenbuch (seit Version mit Fahrten)
-    settings: st, providers: getProviders(), provInfo: load(KEY_PROVINFO, null)                                // seit Version mit Ladeanbietern
+    settings: st, providers: getProviders(), provInfo: load(KEY_PROVINFO, null), kb: load('enyaq.kb', null)                                // seit Version mit Ladeanbietern
   };
 }
 $('btn-export').addEventListener('click', () => {
@@ -2954,6 +2991,11 @@ function importPrefsFromBackup(text) {
   if (d.provInfo && typeof d.provInfo === 'object') {                  // fehlende Angaben ergänzen, eigene bleiben
     const cur = getProvInfo(), src = d.provInfo, out = { home: { ...(src.home || {}), ...cur.home }, bosch: { ...(src.bosch || {}), ...cur.bosch }, p: { ...(src.p || {}), ...cur.p } };
     if (JSON.stringify(out) !== JSON.stringify(cur)) setProvInfo(JSON.parse(JSON.stringify(out)));
+  }
+  if (d.kb && Array.isArray(d.kb.items)) {                              // Wissen: fehlende Einträge und Kategorien ergänzen
+    const cur = getKb(), ids = new Set(cur.items.map(x => String(x.id))), add = d.kb.items.filter(x => x && x.title && !ids.has(String(x.id)));
+    const cats = cur.cats.concat((d.kb.cats || []).filter(c => typeof c === 'string' && !cur.cats.includes(c)));
+    if (add.length || cats.length !== cur.cats.length) setKb({ cats, items: cur.items.concat(add) });
   }
   if (d.settings && typeof d.settings === 'object' && Object.keys(d.settings).length && confirm('Die Sicherung enthält auch Einstellungen (Strompreis, Akku, Fahrzeugdaten, Kauftag …).\n\nOK = Einstellungen aus der Sicherung übernehmen\nAbbrechen = aktuelle Einstellungen behalten')) {
     const keep = load(KEY_SETTINGS, {}) || {}, n = { ...d.settings }; delete n.pin; if (keep.pin) n.pin = keep.pin;
@@ -4287,6 +4329,142 @@ $('pv-dialog').addEventListener('click', (e) => { if (e.target === e.currentTarg
 $('pv-list').addEventListener('click', (e) => { const b = e.target.closest('[data-pv]'); if (b) openProv(b.dataset.pv); });
 $('pv-add').addEventListener('click', () => openProv(''));
 $('go-prov').addEventListener('click', () => showView('providers'));
+/* =====================================================================
+   Wissen (Start → „Wissen“): eigene Einträge mit Titel, Kategorie, Notiz, Links und Belegen (Google Drive), optional auf Start angeheftet.
+   Speicher: enyaq.kb = { cats: [Name], items: [{ id, title, cat, text?, links?: [{ url, label? }], files?: [{ id, name, mime }], pin?, at }] }
+   Cloud: im Dokument settings/prefs (Feld kb), Datensicherung: Feld kb.
+   ===================================================================== */
+const KEY_KB = 'enyaq.kb', KB_DEF_CATS = ['Handbuch', 'Tipps', 'Werkstatt', 'Verträge', 'Sonstiges'];
+const KB_ICON = (c) => /hand|anleit|manual/i.test(c) ? '📘' : /tipp|trick|info/i.test(c) ? '💡' : /werk|service|wart/i.test(c) ? '🔧' : /vertr|versich|doku|unterl/i.test(c) ? '📄' : /lade|strom|wallbox/i.test(c) ? '⚡' : /kontakt|tel/i.test(c) ? '📞' : '🗂️';
+const KB_TINT = (c) => ({ '📘': 'bg-sky-100 dark:bg-sky-600/25', '💡': 'bg-amber-100 dark:bg-amber-600/25', '🔧': 'bg-violet-100 dark:bg-violet-600/25', '📄': 'bg-emerald-100 dark:bg-emerald-600/25', '⚡': 'bg-lime-100 dark:bg-lime-600/25', '📞': 'bg-rose-100 dark:bg-rose-600/25' }[KB_ICON(c)] || 'bg-slate-100 dark:bg-slate-700/60');
+function getKb() { const o = load(KEY_KB, null); return { cats: o && Array.isArray(o.cats) && o.cats.length ? o.cats : KB_DEF_CATS.slice(), items: o && Array.isArray(o.items) ? o.items : [] }; }
+function setKb(o) { save(KEY_KB, JSON.parse(JSON.stringify(o))); pushPrefs(); renderKbStart(); if (currentView === 'kb') renderKb(); }
+let kbCat = '', kbCur = null, kbPend = [];
+const kbSub = (x) => [x.links && x.links.length ? (x.links.length === 1 ? 'Link' : x.links.length + ' Links') : '', x.files && x.files.length ? (x.files.length === 1 ? '1 Beleg' : x.files.length + ' Belege') : '', x.text ? x.text.split('\n')[0].slice(0, 60) : ''].filter(Boolean).join(' · ') || x.cat;
+function renderKb() {
+  const kb = getKb(), q = $('kb-q').value.trim().toLowerCase();
+  const n = (c) => kb.items.filter(x => x.cat === c).length;
+  $('kb-cats').innerHTML = [['', 'Alle ' + kb.items.length]].concat(kb.cats.filter(c => n(c)).map(c => [c, KB_ICON(c) + ' ' + c + ' ' + n(c)]))
+    .map(([k, l]) => `<button type="button" data-kbc="${esc(k)}" class="shrink-0 rounded-lg px-2.5 py-1.5 ${k === kbCat ? 'bg-emerald-600/20 text-emerald-700 dark:text-emerald-300 font-semibold' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300'}">${esc(l)}</button>`).join('');
+  const hit = (x) => (!kbCat || x.cat === kbCat) && (!q || [x.title, x.text, x.cat].concat((x.links || []).map(l => l.url + ' ' + (l.label || ''))).join(' ').toLowerCase().includes(q));
+  const list = kb.items.filter(hit).sort((a, b) => a.title.localeCompare(b.title, 'de')), pins = list.filter(x => x.pin), rest = list.filter(x => !x.pin);
+  $('kb-pin-wrap').classList.toggle('hidden', !pins.length);
+  $('kb-pins').innerHTML = pins.map(x => `<button type="button" data-kb="${esc(x.id)}" class="rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-3 text-left active:scale-[0.98] transition">
+      <span class="flex items-center justify-between"><span class="flex h-8 w-8 items-center justify-center rounded-lg ${KB_TINT(x.cat)}">${KB_ICON(x.cat)}</span><svg class="h-4 w-4 text-slate-400" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3l7 7-3 1-4 4 1 5-2 1-4-5-5 5-1-1 5-5-5-4 1-2 5 1 4-4z"/></svg></span>
+      <span class="mt-2 block truncate text-sm font-semibold">${esc(x.title)}</span><span class="mt-0.5 block truncate text-[11px] ${x.links && x.links.length ? 'text-sky-600 dark:text-sky-300' : 'text-slate-500 dark:text-slate-400'}">${x.links && x.links.length ? '↗ Link öffnen' : esc(kbSub(x))}</span></button>`).join('');
+  $('kb-list-wrap').classList.toggle('hidden', !rest.length);
+  $('kb-list').innerHTML = rest.map(x => `<li><button type="button" data-kb="${esc(x.id)}" class="flex w-full items-center gap-3 px-3.5 py-3 text-left active:bg-slate-100 dark:active:bg-slate-800">
+      <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${KB_TINT(x.cat)}">${KB_ICON(x.cat)}</span>
+      <span class="min-w-0 flex-1"><span class="block truncate font-medium">${esc(x.title)}</span><span class="block truncate text-xs text-slate-500 dark:text-slate-400">${esc(kbSub(x))}</span></span><span class="text-slate-400">›</span></button></li>`).join('');
+  $('kb-empty').classList.toggle('hidden', list.length > 0);
+  $('kb-empty').textContent = kb.items.length ? 'Keine Treffer.' : 'Noch nichts gespeichert. Lege mit „+ Neu“ zum Beispiel den Link zum Handbuch, Reifendruck-Werte oder die Nummer deiner Werkstatt an.';
+}
+/* Start: Button-Zusatz und angeheftete Einträge als Chips (Link-Einträge öffnen direkt) */
+function renderKbStart() {
+  const kb = getKb(), n = kb.items.length, pins = kb.items.filter(x => x.pin).sort((a, b) => a.title.localeCompare(b.title, 'de'));
+  $('go-kb-n').textContent = ' · ' + (n ? n + (n === 1 ? ' Eintrag' : ' Einträge') : 'Handbuch, Tipps & mehr');
+  $('kb-start-pins').classList.toggle('hidden', !pins.length);
+  $('kb-start-pins').innerHTML = pins.map(x => x.links && x.links.length
+    ? `<a href="${esc(x.links[0].url)}" target="_blank" rel="noopener" class="inline-flex max-w-full items-center gap-1.5 rounded-xl ${KB_TINT(x.cat)} px-3 py-2 text-sm font-medium text-slate-900 dark:text-slate-100 active:scale-95 transition"><span>${KB_ICON(x.cat)}</span><span class="truncate">${esc(x.title)}</span><span aria-hidden="true">↗</span></a>`
+    : `<button type="button" data-kb="${esc(x.id)}" class="inline-flex max-w-full items-center gap-1.5 rounded-xl ${KB_TINT(x.cat)} px-3 py-2 text-sm font-medium text-slate-900 dark:text-slate-100 active:scale-95 transition"><span>${KB_ICON(x.cat)}</span><span class="truncate">${esc(x.title)}</span></button>`).join('');
+}
+const kbLinkify = (t) => esc(t).replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener" class="underline text-sky-600 dark:text-sky-300 break-all">$1</a>');
+function openKb(id) {
+  const x = getKb().items.find(y => String(y.id) === String(id)); if (!x) return;
+  kbCur = x.id; $('kb-edit').classList.add('hidden'); $('kb-view').classList.remove('hidden');
+  const host = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (e) { return u; } };
+  $('kb-view').innerHTML = `<div class="flex items-center gap-3"><span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-xl ${KB_TINT(x.cat)}">${KB_ICON(x.cat)}</span><div class="min-w-0"><p class="text-lg font-bold leading-tight break-words">${esc(x.title)}</p><p class="text-xs text-slate-500 dark:text-slate-400">${esc(x.cat)}${x.at ? ' · zuletzt geändert ' + fmtDate(x.at) : ''}</p></div></div>
+    ${(x.links || []).map(l => `<a href="${esc(l.url)}" target="_blank" rel="noopener" class="flex items-center justify-between gap-3 rounded-2xl bg-sky-50 dark:bg-sky-600/15 px-3.5 py-3 text-sky-800 dark:text-sky-200"><span class="min-w-0"><span class="block truncate text-sm font-semibold">${esc(l.label || 'Link öffnen')}</span><span class="block truncate text-xs opacity-80">${esc(host(l.url))}</span></span><span aria-hidden="true">↗</span></a>`).join('')}
+    ${x.text ? `<div class="rounded-2xl bg-slate-100 dark:bg-slate-800/60 p-3 text-sm leading-6 whitespace-pre-wrap break-words">${kbLinkify(x.text)}</div>` : ''}
+    ${x.files && x.files.length ? `<div><p class="mb-1.5 text-xs text-slate-500 dark:text-slate-400">Belege</p><div class="flex flex-wrap gap-1.5">${x.files.map(f => `<a href="${dvLink(f.id)}" target="_blank" rel="noopener" class="inline-flex max-w-full items-center gap-1 rounded-lg bg-slate-100 dark:bg-slate-800 px-2.5 py-1.5 text-xs"><span aria-hidden="true">📎</span><span class="truncate">${esc(f.name)}</span></a>`).join('')}</div></div>` : ''}
+    <div class="grid grid-cols-3 gap-2 pt-1"><button type="button" data-kbact="edit" class="py-2.5 rounded-xl bg-slate-200 dark:bg-slate-800 text-sm font-medium active:scale-95 transition">Bearbeiten</button><button type="button" data-kbact="share" class="py-2.5 rounded-xl bg-slate-200 dark:bg-slate-800 text-sm font-medium active:scale-95 transition">Teilen</button><button type="button" data-kbact="del" class="py-2.5 rounded-xl bg-slate-200 dark:bg-slate-800 text-sm font-medium text-red-600 dark:text-red-300 active:scale-95 transition">Löschen</button></div>
+    <button type="button" data-kbact="close" class="w-full py-3 rounded-2xl bg-emerald-600 text-white font-semibold active:scale-95 transition">Schließen</button>`;
+  $('kb-dialog').classList.remove('hidden');
+}
+function kbLinkRow(u = '', l = '') { return `<div class="kb-lrow flex gap-1.5"><input type="url" inputmode="url" autocomplete="off" placeholder="https://…" value="${esc(u)}" aria-label="Adresse" class="kb-lu min-w-0 flex-[3] rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"><input type="text" autocomplete="off" placeholder="Name" value="${esc(l)}" aria-label="Name des Links" class="kb-ll min-w-0 flex-[2] rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"><button type="button" data-kbrm="1" aria-label="Link entfernen" class="w-9 shrink-0 rounded-xl text-slate-500">✕</button></div>`; }
+function kbFilesHtml(files) { return files.map((f, i) => `<span class="inline-flex max-w-full items-center gap-1 rounded-lg bg-slate-100 dark:bg-slate-800 pl-2.5 pr-1 py-1 text-xs"><span class="truncate">📎 ${esc(f.name)}${f.pending ? ' · wird hochgeladen' : ''}</span><button type="button" data-kbf="${i}" aria-label="Beleg entfernen" class="px-1.5 text-slate-500">✕</button></span>`).join('') + '<button type="button" id="kb-file-add" class="rounded-lg border border-dashed border-slate-400 dark:border-slate-600 px-2.5 py-1 text-xs text-slate-500 dark:text-slate-400">+ Beleg</button>'; }
+let kbFiles = [];
+function editKb(id) {
+  const kb = getKb(), x = id != null ? kb.items.find(y => String(y.id) === String(id)) : null;
+  kbCur = x ? x.id : null; kbPend = []; kbFiles = x && x.files ? x.files.slice() : [];
+  $('kb-edit-h').textContent = x ? 'Eintrag bearbeiten' : 'Neuer Eintrag';
+  $('kb-title').value = x ? x.title : ''; $('kb-text').value = x ? x.text || '' : ''; $('kb-pin').checked = !!(x && x.pin);
+  $('kb-cat').innerHTML = kb.cats.map(c => `<option value="${esc(c)}">${KB_ICON(c)} ${esc(c)}</option>`).join('') + '<option value="__new">+ Neue Kategorie …</option>';
+  $('kb-cat').value = x ? x.cat : (kbCat || kb.cats[0]);
+  $('kb-links').innerHTML = (x && x.links && x.links.length ? x.links : [{ url: '' }]).map(l => kbLinkRow(l.url, l.label)).join('');
+  $('kb-files').innerHTML = kbFilesHtml(kbFiles); $('kb-msg').classList.add('hidden');
+  $('kb-view').classList.add('hidden'); $('kb-edit').classList.remove('hidden'); $('kb-dialog').classList.remove('hidden');
+  if (!x) setTimeout(() => $('kb-title').focus(), 50);
+}
+const kbErr = (t) => { $('kb-msg').textContent = t; $('kb-msg').classList.remove('hidden'); };
+$('kb-cat').addEventListener('change', (e) => {
+  if (e.target.value !== '__new') return;
+  const n = (prompt('Name der neuen Kategorie:') || '').trim().replace(/\s+/g, ' ').slice(0, 24), kb = getKb();
+  if (!n) { e.target.value = kb.cats[0]; return; }
+  if (!kb.cats.some(c => c.toLowerCase() === n.toLowerCase())) { kb.cats.push(n); save(KEY_KB, kb); }
+  e.target.innerHTML = getKb().cats.map(c => `<option value="${esc(c)}">${KB_ICON(c)} ${esc(c)}</option>`).join('') + '<option value="__new">+ Neue Kategorie …</option>';
+  e.target.value = getKb().cats.find(c => c.toLowerCase() === n.toLowerCase());
+});
+$('kb-link-add').addEventListener('click', () => { $('kb-links').insertAdjacentHTML('beforeend', kbLinkRow()); });
+$('kb-links').addEventListener('click', (e) => { if (e.target.closest('[data-kbrm]')) e.target.closest('.kb-lrow').remove(); });
+$('kb-files').addEventListener('click', (e) => {
+  if (e.target.id === 'kb-file-add') { if (!window.cloud?.isSignedIn()) { kbErr('Belege brauchen die Anmeldung bei Google (Einstellungen → Konto & Cloud).'); return; } $('kb-file-in').click(); return; }
+  const b = e.target.closest('[data-kbf]'); if (!b) return; const f = kbFiles[+b.dataset.kbf];
+  if (f.pending) kbPend = kbPend.filter(p => p !== f.file); kbFiles.splice(+b.dataset.kbf, 1); $('kb-files').innerHTML = kbFilesHtml(kbFiles);
+});
+$('kb-file-in').addEventListener('change', (e) => { [...e.target.files].forEach(f => { kbPend.push(f); kbFiles.push({ name: f.name, pending: true, file: f }); }); e.target.value = ''; $('kb-files').innerHTML = kbFilesHtml(kbFiles); });
+async function kbUpload(item, files, tokP) {
+  const tok = await (tokP || window.cloud.driveToken()), folder = await dvFolder(tok), out = [];
+  for (let i = 0; i < files.length; i++) {
+    const pr = await dvPrepare(files[i]); if (pr.blob.size > DV_MAX) throw new Error('„' + files[i].name + '“ ist größer als 15 MB.');
+    const name = ('Wissen_' + item.title + (files.length > 1 || (item.files || []).length ? '_' + ((item.files || []).length + i + 1) : '')).replace(/[\\/:*?"<>|]+/g, '-').slice(0, 110) + '.' + pr.ext;
+    const body = new FormData(); body.append('metadata', new Blob([JSON.stringify({ name, parents: [folder], mimeType: pr.mime, appProperties: { kbId: String(item.id) } })], { type: 'application/json' })); body.append('file', pr.blob);
+    const j = await (await dvFetch(tok, 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType', { method: 'POST', body })).json();
+    out.push({ id: j.id, name: j.name, mime: j.mimeType || pr.mime });
+  }
+  return out;
+}
+$('kb-save').addEventListener('click', async () => {
+  const title = $('kb-title').value.trim().replace(/\s+/g, ' ').slice(0, 80), cat = $('kb-cat').value === '__new' ? getKb().cats[0] : $('kb-cat').value;
+  if (!title) { kbErr('Bitte einen Titel eingeben.'); return; }
+  const links = []; for (const r of document.querySelectorAll('#kb-links .kb-lrow')) {
+    let u = r.querySelector('.kb-lu').value.trim(); const l = r.querySelector('.kb-ll').value.trim().slice(0, 60); if (!u) continue;
+    if (!/^[a-z][a-z0-9+.-]*:/i.test(u)) u = 'https://' + u;
+    try { const p = new URL(u); if (!/^(https?|tel|mailto):$/.test(p.protocol)) throw 0; } catch (e) { kbErr('Ungültiger Link: ' + u); return; }
+    const o = { url: u }; if (l) o.label = l; links.push(o);
+  }
+  const kb = getKb(), old = kb.items.find(y => String(y.id) === String(kbCur)), item = { id: old ? old.id : Date.now(), title, cat, at: new Date().toISOString() };
+  const text = $('kb-text').value.trim().slice(0, 4000); if (text) item.text = text; if (links.length) item.links = links; if ($('kb-pin').checked) item.pin = true;
+  const kept = kbFiles.filter(f => !f.pending).map(f => ({ id: f.id, name: f.name, mime: f.mime })); if (kept.length) item.files = kept;
+  const pend = kbPend.slice(), tokP = pend.length ? window.cloud.driveToken() : null; if (tokP) tokP.catch(() => { });   // Google-Fenster direkt nach dem Tipp
+  setKb({ cats: kb.cats, items: old ? kb.items.map(y => String(y.id) === String(old.id) ? item : y) : kb.items.concat(item) });
+  $('kb-dialog').classList.add('hidden');
+  if (pend.length) {
+    try { const up = await kbUpload(item, pend, tokP), k2 = getKb(); setKb({ cats: k2.cats, items: k2.items.map(y => String(y.id) === String(item.id) ? { ...y, files: (y.files || []).concat(up) } : y) }); }
+    catch (e) { if (e && e.status === 401) window.cloud.driveForget(); alert('Beleg-Upload fehlgeschlagen: ' + dvErrText(e)); }
+  }
+});
+$('kb-cancel').addEventListener('click', () => { if (kbCur != null && getKb().items.some(y => String(y.id) === String(kbCur))) openKb(kbCur); else $('kb-dialog').classList.add('hidden'); });
+$('kb-dialog').addEventListener('click', async (e) => {
+  if (e.target === e.currentTarget) { e.currentTarget.classList.add('hidden'); return; }
+  const b = e.target.closest('[data-kbact]'); if (!b) return; const act = b.dataset.kbact, kb = getKb(), x = kb.items.find(y => String(y.id) === String(kbCur));
+  if (act === 'close' || !x) { $('kb-dialog').classList.add('hidden'); return; }
+  if (act === 'edit') editKb(x.id);
+  else if (act === 'del') { if (confirm('„' + x.title + '“ löschen?' + (x.files && x.files.length ? ' Die Belege bleiben in Google Drive.' : ''))) { setKb({ cats: kb.cats, items: kb.items.filter(y => y !== x) }); $('kb-dialog').classList.add('hidden'); } }
+  else if (act === 'share') {
+    const t = [x.title, x.text || ''].concat((x.links || []).map(l => (l.label ? l.label + ': ' : '') + l.url)).filter(Boolean).join('\n');
+    try { if (navigator.share) await navigator.share({ title: x.title, text: t }); else { await navigator.clipboard.writeText(t); b.textContent = 'Kopiert ✓'; } } catch (err) { }
+  }
+});
+$('kb-add').addEventListener('click', () => editKb(null));
+$('kb-q').addEventListener('input', renderKb);
+$('kb-cats').addEventListener('click', (e) => { const b = e.target.closest('[data-kbc]'); if (b) { kbCat = b.dataset.kbc; renderKb(); } });
+$('kb-pins').addEventListener('click', (e) => { const b = e.target.closest('[data-kb]'); if (b) openKb(b.dataset.kb); });
+$('kb-list').addEventListener('click', (e) => { const b = e.target.closest('[data-kb]'); if (b) openKb(b.dataset.kb); });
+$('kb-start-pins').addEventListener('click', (e) => { const b = e.target.closest('button[data-kb]'); if (b) openKb(b.dataset.kb); });
+$('go-kb').addEventListener('click', () => showView('kb'));
+renderKbStart();
+
 /** Bild oben auf der Statistik-Seite: Statistik.png/.webp/.jpg/.jpeg im Ordner „Bilder“ (freigestellt, auf dem Kartenhintergrund der App); fehlt es, bleibt die Karte weg. */
 const STAT_IMG_VER = '2';                                 // bei neuem Bild hochzählen (umgeht Browser- und Service-Worker-Cache); v2 = bei Canva freigestelltes PNG
 async function initStatImg() {
@@ -4327,7 +4505,7 @@ const KEY_CACHE_UID = 'enyaq.cacheUid';                   // Konto (UID), zu dem
 function checkCacheUid(uid) {
   if (!uid) return;
   const prev = localStorage.getItem(KEY_CACHE_UID);
-  if (prev && prev !== uid) { save(KEY_READINGS, []); save(KEY_COSTS, []); save(KEY_REMINDERS, []); save(KEY_RECUR, []); localStorage.removeItem(KEY_PROVIDERS); localStorage.removeItem(KEY_PROVINFO); localStorage.removeItem(KEY_DVBAK); localStorage.removeItem(KEY_CATEGORIES); localStorage.removeItem(KEY_WXLOC); localStorage.removeItem(KEY_WXCACHE); localStorage.removeItem(KEY_TEMPS); localStorage.removeItem(KEY_WRAP); save(KEY_TRIPS, []); localStorage.removeItem(KEY_TPLACES); localStorage.removeItem(KEY_TRIPS_IMP); localStorage.removeItem(KEY_TLABELS); localStorage.removeItem(KEY_TRULES); localStorage.removeItem(KEY_TDEF); const st = load(KEY_SETTINGS, null); if (st && st.wltp !== undefined) { delete st.wltp; save(KEY_SETTINGS, st); } stopLive(false); }
+  if (prev && prev !== uid) { save(KEY_READINGS, []); save(KEY_COSTS, []); save(KEY_REMINDERS, []); save(KEY_RECUR, []); localStorage.removeItem(KEY_PROVIDERS); localStorage.removeItem(KEY_PROVINFO); localStorage.removeItem(KEY_DVBAK); localStorage.removeItem('enyaq.kb'); localStorage.removeItem(KEY_CATEGORIES); localStorage.removeItem(KEY_WXLOC); localStorage.removeItem(KEY_WXCACHE); localStorage.removeItem(KEY_TEMPS); localStorage.removeItem(KEY_WRAP); save(KEY_TRIPS, []); localStorage.removeItem(KEY_TPLACES); localStorage.removeItem(KEY_TRIPS_IMP); localStorage.removeItem(KEY_TLABELS); localStorage.removeItem(KEY_TRULES); localStorage.removeItem(KEY_TDEF); const st = load(KEY_SETTINGS, null); if (st && st.wltp !== undefined) { delete st.wltp; save(KEY_SETTINGS, st); } stopLive(false); }
   localStorage.setItem(KEY_CACHE_UID, uid);
 }
 let deferredCosts = null;
@@ -5331,7 +5509,7 @@ function syncSet(src) {
 function pushPrefs() {
   if (!window.cloud?.isSignedIn()) return;
   const w = Number(getSettings().wltp);
-  window.cloud.setPrefs({ wltp: w > 0 ? w : null, wxLoc: wxLoc() || null, provInfo: load(KEY_PROVINFO, null), settings: syncSet(load(KEY_SETTINGS, {})) }).catch(() => { });
+  window.cloud.setPrefs({ wltp: w > 0 ? w : null, wxLoc: wxLoc() || null, provInfo: load(KEY_PROVINFO, null), settings: syncSet(load(KEY_SETTINGS, {})), kb: load('enyaq.kb', null) }).catch(() => { });
 }
 window.onCloudPrefs = (d, first, uid) => {
   if (first) checkCacheUid(uid);
@@ -5353,7 +5531,11 @@ window.onCloudPrefs = (d, first, uid) => {
     if (currentView === 'settings' && !$('view-settings').contains(document.activeElement)) fillSettings();   // nicht mitten in eine Eingabe schreiben
     if (currentView === 'dashboard') renderDashboard();
   }
-  if (up) window.cloud.setPrefs({ wltp: nw, wxLoc: nl, provInfo: np, settings: ns }).catch(() => { });
+  /* Wissen (Einträge, Kategorien): wie die Ladeanbieter-Angaben */
+  const lk = load('enyaq.kb', null); let nk = d && d.kb && typeof d.kb === 'object' ? d.kb : null;
+  if (first && nk == null && lk) { nk = lk; up = true; }
+  if (JSON.stringify(nk) !== JSON.stringify(lk)) { if (nk) save('enyaq.kb', nk); else localStorage.removeItem('enyaq.kb'); try { renderKbStart(); if (currentView === 'kb') renderKb(); } catch (e) { } }
+  if (up) window.cloud.setPrefs({ wltp: nw, wxLoc: nl, provInfo: np, settings: ns, kb: nk }).catch(() => { });
 };
 
 /* =====================================================================
