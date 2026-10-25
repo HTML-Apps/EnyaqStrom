@@ -365,17 +365,17 @@
       </div>
     </div>
 
-    <div class="rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
-      <p class="flex justify-between items-baseline text-sm text-slate-500 dark:text-slate-400 mb-1"><span>Akku</span><span id="batt-add" class="font-medium text-slate-900 dark:text-slate-100"></span></p>
+    <div class="rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm px-4 pt-3 pb-4">
       <div class="mr-3">
-        <div class="relative h-10">
-          <div id="bt-lab0" class="absolute bottom-0 w-14 -translate-x-1/2 text-center text-xs leading-tight"><span class="block text-slate-500 dark:text-slate-400">Start</span><span id="bt-v0" class="font-semibold text-emerald-700 dark:text-emerald-400"></span></div>
-          <div id="bt-lab1" class="absolute bottom-0 w-14 -translate-x-1/2 text-center text-xs leading-tight"><span class="block text-slate-500 dark:text-slate-400">Ende</span><span id="bt-v1" class="font-semibold"></span></div>
+        <div class="relative h-5 mb-0.5">
+          <div id="bt-lab0" class="absolute bottom-0 -translate-x-1/2 whitespace-nowrap text-center text-xs leading-tight"><span class="text-slate-500 dark:text-slate-400">Start: </span><span id="bt-v0" class="font-semibold text-emerald-700 dark:text-emerald-400"></span></div>
+          <div id="bt-lab1" class="absolute bottom-0 -translate-x-1/2 whitespace-nowrap text-center text-xs leading-tight"><span class="text-slate-500 dark:text-slate-400">Ende: </span><span id="bt-v1" class="font-semibold"></span></div>
         </div>
         <div id="bt-track" class="relative touch-none select-none">
           <div id="bt-bar" class="relative h-[52px] rounded-xl border-2 border-slate-400 dark:border-slate-500 overflow-hidden bg-white dark:bg-slate-800">
             <div id="bt-a" class="absolute top-0 bottom-0 left-0" style="background:#1D9E75"></div>
             <div id="bt-b" class="absolute top-0 bottom-0" style="background:#94A3B8"></div>
+            <span id="batt-add" class="pointer-events-none absolute top-0 bottom-0 flex items-center justify-center whitespace-nowrap text-[11px] font-semibold text-slate-900"></span>
             <div class="absolute top-0 bottom-0 left-1/4 w-px bg-white/40"></div><div class="absolute top-0 bottom-0 left-1/2 w-px bg-white/40"></div><div class="absolute top-0 bottom-0 left-3/4 w-px bg-white/40"></div>
           </div>
           <div class="absolute -right-2 top-4 w-1.5 h-5 rounded-r bg-slate-400 dark:bg-slate-500"></div>
@@ -386,9 +386,9 @@
           <span class="flex items-center justify-center w-7 h-7 rounded-full bg-white dark:bg-slate-900 border-2 border-emerald-700 dark:border-emerald-400 group-focus-visible:ring-2 group-focus-visible:ring-emerald-500"><span class="block w-0.5 h-3 mx-px rounded bg-emerald-700 dark:bg-emerald-400"></span><span class="block w-0.5 h-3 mx-px rounded bg-emerald-700 dark:bg-emerald-400"></span></span>
         </div>
         </div>
-        <div class="flex justify-between text-[11px] text-slate-500 dark:text-slate-400 mt-1"><span>0</span><span>25</span><span>50</span><span>75</span><span>100 %</span></div>
+        <div class="flex justify-between text-[11px] leading-none text-slate-500 dark:text-slate-400 mt-1"><span>0</span><span>25</span><span>50</span><span>75</span><span>100 %</span></div>
       </div>
-      <div class="grid grid-cols-2 gap-2 mt-3">
+      <div class="grid grid-cols-2 gap-2 mt-2">
         <div class="flex items-center justify-between bg-slate-100 dark:bg-slate-800 rounded-xl p-1">
           <button id="s0-minus" type="button" aria-label="Start verringern" class="w-10 h-9 shrink-0 rounded-lg bg-white dark:bg-slate-700 text-xl leading-none font-medium active:scale-95 transition select-none touch-manipulation">−</button>
           <span class="text-center text-sm"><span class="block text-[11px] text-slate-500 dark:text-slate-400">Start</span><span id="s0-val" class="font-medium"></span></span>
@@ -1536,11 +1536,12 @@ function paintBatt() {
   $('bt-b').style.left = a + '%'; $('bt-b').style.width = Math.max(0, b - a) + '%';   // hellgrün: hinzukommende Ladung
   $('bt-h0').style.left = a + '%'; $('bt-h1').style.left = b + '%';        // Griffe auf der Batterie
   $('bt-h0').setAttribute('aria-valuenow', a); $('bt-h1').setAttribute('aria-valuenow', b);
-  const place = (id, pct) => { $(id).style.left = Math.min(92, Math.max(8, pct)) + '%'; };
-  place('bt-lab0', a); place('bt-lab1', Math.max(b, a + 18));              // Beschriftungen nicht übereinander
+  const place = (id, pct) => { $(id).style.left = Math.min(88, Math.max(12, pct)) + '%'; };
+  place('bt-lab0', Math.min(a, 64)); place('bt-lab1', Math.max(b, Math.min(a, 64) + 28));   // einzeilige Beschriftungen nicht übereinander
   $('bt-v0').textContent = has0 ? a + ' %' : '–'; $('bt-v1').textContent = has1 ? b + ' %' : '–';
   $('s0-val').textContent = has0 ? a + ' %' : '–'; $('s1-val').textContent = has1 ? b + ' %' : '–';
-  $('batt-add').textContent = has0 && has1 && b > a ? '+' + (b - a) + ' % ≈ ' + fmt((b - a) / 100 * batteryKwh(), 1) + ' kWh' : '';
+  const ad = $('batt-add'); ad.style.left = a + '%'; ad.style.width = Math.max(0, b - a) + '%';   // im hinzukommenden Teil der Batterie
+  ad.textContent = has0 && has1 && b - a >= 12 ? '+' + (b - a) + ' %' + (b - a >= 40 ? ' ≈ ' + fmt((b - a) / 100 * batteryKwh(), 1) + ' kWh' : '') : '';
 }
 function paintCapture() { paintReading(); paintBatt(); paintBattTemp(); }
 /* Akku-Temperatur (optional, Infotainment ab ME3.8): Stepper −/+ in 1-°C-Schritten, erster Tipp startet bei 20 °C, Mitte antippen = leeren */
