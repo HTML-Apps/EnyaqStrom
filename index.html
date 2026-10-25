@@ -3934,7 +3934,7 @@ function renderBattery() {
    Erster Lauf (noch nichts gespeichert): alle bereits verdienten still eintragen. Danach: neues Abzeichen → Pop-up mit Konfetti (eins nach dem anderen).
    ===================================================================== */
 const KEY_BADGES = 'enyaq.badges';
-const ICE = { l100: 7.5, co2PerL: 2.37, eurPerL: 1.75, gridCo2: 0.363 };   // Vergleichs-Benziner und Strommix (kg CO₂/kWh)
+const ICE = { l100: 7.5, co2PerL: 2.37, eurPerL: 2.0, homeCo2: 0, gridCo2: 0.363 };   // Vergleichs-Benziner; Strom kg CO₂/kWh: Zuhause Ökostrom (0), Bosch/unterwegs Strommix 2024
 function bdgCtx() {
   const rs = getReadings(), charges = rs.filter((r, i) => isCharge(rs, i)), kwh = charges.reduce((a, r) => a + (r.consumedSinceLast > 0 ? r.consumedSinceLast : 0), 0);
   const pk = Number(getSettings().purchaseKm), od = rs.filter(r => r.odometerKm > 0), last = lastKnownKm(), base = pk > 0 ? pk : od.length ? od[0].odometerKm : null;
@@ -3950,9 +3950,11 @@ function bdgCtx() {
   const [py, pm, pd] = purchaseDay().split('-').map(Number), years = (Date.now() - new Date(py, pm - 1, pd).getTime()) / (365.25 * 864e5);
   let care = null; try { care = batCare().score ?? null; } catch (e) { }
   let work = 0; try { const ys = taxYears(); work = Math.max(0, ...ys.map(y => taxData(y).days.length)); } catch (e) { }
-  /* Vergleich mit einem Benziner (Hyundai Tucson 1.6 T-GDi, real 7,5 l/100 km): 2,37 kg CO₂ je Liter → 178 g/km; Strom: deutscher Strommix 2024 (UBA) 363 g/kWh; Super 1,75 €/l */
+  /* Vergleich mit einem Benziner (Hyundai Tucson 1.6 T-GDi, real 7,5 l/100 km): 2,37 kg CO₂ je Liter → 178 g/km; Super 2,00 €/l.
+     Strom: Zuhause Ökostrom = 0 g/kWh, Bosch und unterwegs deutscher Strommix 2024 (UBA) 363 g/kWh */
   const cost = charges.reduce((a, r) => a + (r.cost > 0 ? r.cost : 0), 0);
-  const co2 = Math.max(0, km * ICE.l100 / 100 * ICE.co2PerL - kwh * ICE.gridCo2), saved = km * ICE.l100 / 100 * ICE.eurPerL - cost;
+  const evCo2 = charges.reduce((a, r) => a + (r.consumedSinceLast > 0 ? r.consumedSinceLast : 0) * (isHome(r) ? ICE.homeCo2 : ICE.gridCo2), 0);
+  const co2 = Math.max(0, km * ICE.l100 / 100 * ICE.co2PerL - evCo2), saved = km * ICE.l100 / 100 * ICE.eurPerL - cost;
   /* Sommer: Ladungen im Juni, Juli und August desselben Jahres */
   const summ = {}; charges.forEach(r => { const d = new Date(r.date), m = d.getMonth(); if (m >= 5 && m <= 7) (summ[d.getFullYear()] = summ[d.getFullYear()] || new Set()).add(m); });
   const summer = Object.values(summ).some(x => x.size === 3), summerPart = Math.max(0, ...Object.values(summ).map(x => x.size)) / 3;
@@ -3992,10 +3994,10 @@ const BADGES = [
   { id: 'k100000', e: '💯', t: '100.000 km', g: 'from-blue-500 to-indigo-800', v: c => c.km / 100000, txt: '100.000 km elektrisch gefahren.' },
   { id: 'y3', e: '🎉', t: '3 Jahre', g: 'from-pink-400 to-rose-600', v: c => c.years / 3, txt: 'Drei Jahre gemeinsam unterwegs.' },
   { id: 'y5', e: '🏅', t: '5 Jahre', g: 'from-amber-400 to-rose-600', v: c => c.years / 5, txt: 'Fünf Jahre gemeinsam unterwegs.' },
-  { id: 'co1', e: '🌳', t: '1 t CO₂ gespart', g: 'from-green-400 to-emerald-700', v: c => c.co2 / 1000, txt: '1 Tonne CO₂ weniger als mit einem Benziner (Tucson 1.6, 7,5 l/100 km; Strommix 363 g/kWh).' },
+  { id: 'co1', e: '🌳', t: '1 t CO₂ gespart', g: 'from-green-400 to-emerald-700', v: c => c.co2 / 1000, txt: '1 Tonne CO₂ weniger als mit einem Benziner (Tucson 1.6, 7,5 l/100 km; Zuhause Ökostrom, sonst Strommix 363 g/kWh).' },
   { id: 'co5', e: '🌲', t: '5 t CO₂ gespart', g: 'from-emerald-500 to-green-800', v: c => c.co2 / 5000, txt: '5 Tonnen CO₂ weniger als mit einem Benziner.' },
   { id: 'co10', e: '🏔️', t: '10 t CO₂ gespart', g: 'from-teal-500 to-slate-700', v: c => c.co2 / 10000, txt: '10 Tonnen CO₂ weniger als mit einem Benziner.' },
-  { id: 'eur1', e: '💰', t: '1.000 € gespart', g: 'from-yellow-300 to-amber-600', v: c => c.saved / 1000, txt: '1.000 € weniger als Tanken (Tucson 1.6, 7,5 l/100 km, 1,75 €/l) – Ladekosten abgezogen.' },
+  { id: 'eur1', e: '💰', t: '1.000 € gespart', g: 'from-yellow-300 to-amber-600', v: c => c.saved / 1000, txt: '1.000 € weniger als Tanken (Tucson 1.6, 7,5 l/100 km, 2,00 €/l) – Ladekosten abgezogen.' },
   { id: 'eur5', e: '🤑', t: '5.000 € gespart', g: 'from-amber-400 to-orange-700', v: c => c.saved / 5000, txt: '5.000 € weniger als Tanken – Ladekosten abgezogen.' },
   { id: 'summer', e: '🏖️', t: 'Sommerheld', g: 'from-yellow-300 to-orange-500', v: c => c.summer ? 1 : c.summerPart, txt: 'Einen ganzen Sommer (Jun–Aug) elektrisch gefahren.' },
   { id: 'home90', e: '🏠', t: '90 % Zuhause', g: 'from-yellow-300 to-yellow-600', v: c => c.homeShare >= 0.9 ? 1 : c.homeShare / 0.9, txt: 'Ein Kalenderjahr mit mindestens 90 % der kWh an der eigenen Wallbox (ab 1.000 kWh im Jahr).' },
