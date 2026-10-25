@@ -109,6 +109,7 @@
   @keyframes dpinL { from { opacity: 0; transform: translateX(36px); } to { opacity: 1; transform: none; } }
   @keyframes dpinR { from { opacity: 0; transform: translateX(-36px); } to { opacity: 1; transform: none; } }
   .dp-inL { animation: dpinL .32s cubic-bezier(.2,.8,.2,1) both; } .dp-inR { animation: dpinR .32s cubic-bezier(.2,.8,.2,1) both; }
+  #dp-panes { overflow-x: clip; overflow-clip-margin: 16px; }   /* hereingleitender Tab darf nicht über den Bildschirmrand ragen (Chrome vergrößert sonst die Seite) */
   @media (prefers-reduced-motion: reduce) { .dp-inL, .dp-inR { animation: none; } }
   @media (prefers-reduced-motion: reduce) { #bd-conf i, #bdg-conf i { animation: none; top: var(--y, 10%); } #bd-card, #bdg-card { animation: none; } }
 </style>
