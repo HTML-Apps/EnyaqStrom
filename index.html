@@ -445,7 +445,7 @@
       <div><label for="cost-title" class="text-xs font-medium text-slate-500 dark:text-slate-400">Titel</label><input id="cost-title" type="text" maxlength="80" autocomplete="off" placeholder="z. B. SB-Wäsche" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
       <div class="grid grid-cols-2 gap-2">
         <div><label for="cost-date" class="text-xs font-medium text-slate-500 dark:text-slate-400">Datum und Zeit</label><input id="cost-date" type="datetime-local" onclick="try{this.showPicker()}catch(e){}" class="mt-1 block h-11 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-2 py-0 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-xs tabular-nums"></div>
-        <div><label for="cost-km" class="text-xs font-medium text-slate-500 dark:text-slate-400">km-Stand (optional)</label><input id="cost-km" type="text" inputmode="decimal" autocomplete="off" placeholder="" class="mt-1 block h-11 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-0 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
+        <div><div class="flex items-center justify-between gap-1"><label for="cost-km" class="min-w-0 truncate text-xs font-medium text-slate-500 dark:text-slate-400">km-Stand (optional)</label><button id="cost-km-upd" type="button" title="Aktuellen km-Stand vom Auto holen" class="shrink-0 -my-1 rounded-lg px-1.5 py-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400 active:scale-95 transition">Update</button></div><input id="cost-km" type="text" inputmode="decimal" autocomplete="off" placeholder="" class="mt-1 block h-11 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-0 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
       </div>
       <div><label for="cost-note" class="text-xs font-medium text-slate-500 dark:text-slate-400">Notiz (optional)</label><textarea id="cost-note" rows="2" maxlength="300" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></textarea></div>
       <div><p class="text-xs font-medium text-slate-500 dark:text-slate-400">Belege (optional, werden in Google Drive abgelegt)</p><div id="cost-belege" data-dv-block="form" class="mt-1"></div></div>
@@ -720,7 +720,8 @@
         </div>
       </div>
       <div id="care-card" class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
-        <p class="text-sm text-slate-500 dark:text-slate-400">Akku-Pflege · letzte 90 Tage</p>
+        <div class="flex items-center justify-between gap-2"><p class="text-sm text-slate-500 dark:text-slate-400">Akku-Pflege</p>
+          <div id="care-seg" class="flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 text-xs"><button type="button" data-care="90" class="care-btn rounded-lg px-2.5 py-1 font-medium">90 Tage</button><button type="button" data-care="kauf" class="care-btn rounded-lg px-2.5 py-1 font-medium">Seit Kauf</button></div></div>
         <div id="care-body"></div>
       </div>
       <div id="bat-trend-card" class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
@@ -1577,6 +1578,21 @@ $('btn-odo').addEventListener('click', async () => {                      // km-
   } catch (e) { info.textContent = 'Nicht verfügbar: ' + e.message; info.title = e.message; }
 });
 
+/* Kosten erfassen: aktuellen km-Stand vom Škoda-Server eintragen */
+$('cost-km-upd').addEventListener('click', async () => {
+  const b = $('cost-km-upd'), set = (t, tip) => { b.textContent = t; b.title = tip || 'Aktuellen km-Stand vom Auto holen'; };
+  if (!apiEnabled()) { set('–'); flash($('cost-msg'), 'Keine Fahrzeugdaten eingerichtet (Einstellungen → Fahrzeugdaten).', false); setTimeout(() => set('Update'), 2500); return; }
+  set('…'); b.disabled = true;
+  try {
+    const res = await fetch('/api/vehicle', { headers: await authHeaders() }), d = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(d.error || 'HTTP ' + res.status);
+    if (d.odometerKm == null) throw new Error('Das Auto meldet keinen km-Stand');
+    $('cost-km').value = String(Math.round(d.odometerKm));   // ohne Tausenderpunkt (optNum liest „18.500“ sonst als 18,5)
+    $('cost-km').dispatchEvent(new Event('input', { bubbles: true }));
+    set('✓', 'Vom Auto' + (d.capturedAt ? ' (Stand ' + hhmm(new Date(d.capturedAt).getTime()) + ' Uhr)' : ''));
+  } catch (e) { set('Fehler'); flash($('cost-msg'), 'km-Stand nicht verfügbar: ' + e.message, false); }
+  finally { b.disabled = false; setTimeout(() => set('Update'), 2500); }
+});
 function updateCaptureDefaults() {
   const withKm = getReadings().filter(r => r.odometerKm != null), last = withKm[withKm.length - 1];
   $('km-input').placeholder = last ? String(last.odometerKm) : 'optional';
@@ -3807,8 +3823,10 @@ function batTrend(rows, now) {
    Akku-Schonung-Score (Berichte → Akku): alle Ladungen der letzten 90 Tage mit Akku-Start und -Ende.
    100 − 50 × Anteil Ladeende über 80 % − 40 × min(1, 3 × Anteil Start unter 10 %) − 10 × Anteil Vollladungen (≥ 98 %).
    ===================================================================== */
-function batCare(now = Date.now()) {
-  const rs = getReadings().filter(r => Number.isFinite(r.socStart) && Number.isFinite(r.socEnd) && r.socEnd > r.socStart && now - Date.parse(r.date) <= 90 * 864e5);
+let careMode = '90';                                                     // '90' = letzte 90 Tage, 'kauf' = seit Kauf
+function batCare(now = Date.now(), mode = '90') {
+  const from = mode === 'kauf' ? Date.parse(purchaseDay() + 'T00:00:00') : now - 90 * 864e5;
+  const rs = getReadings().filter(r => Number.isFinite(r.socStart) && Number.isFinite(r.socEnd) && r.socEnd > r.socStart && Date.parse(r.date) >= from);
   const n = rs.length; if (n < 5) return { n };
   const hi = rs.filter(r => r.socEnd > 80).length, lo = rs.filter(r => r.socStart < 10).length, full = rs.filter(r => r.socEnd >= 98).length;
   const score = Math.max(0, Math.min(100, Math.round(100 - 50 * hi / n - 40 * Math.min(1, 3 * lo / n) - 10 * full / n)));
@@ -3816,13 +3834,15 @@ function batCare(now = Date.now()) {
   return { n, score, ok80: (n - hi) / n, lo, full, s0: avg('socStart'), s1: avg('socEnd') };
 }
 function renderCare() {
-  const c = batCare(), el = $('care-body'); if (!el) return;
-  if (c.score == null) { el.innerHTML = '<p class="mt-1 text-xl font-semibold">Noch zu wenige Daten</p><p class="text-sm mt-1 text-slate-600 dark:text-slate-300">Die Bewertung braucht mindestens 5 Ladungen der letzten 90 Tage mit Akku-Start und -Ende (bisher ' + c.n + ').</p>'; return; }
+  const c = batCare(Date.now(), careMode), el = $('care-body'); if (!el) return;
+  document.querySelectorAll('.care-btn').forEach(b => { const on = b.dataset.care === careMode; b.classList.toggle('bg-white', on); b.classList.toggle('dark:bg-slate-600', on); b.classList.toggle('shadow-sm', on); b.classList.toggle('text-slate-500', !on); });
+  const span = careMode === 'kauf' ? 'seit Kauf' : 'der letzten 90 Tage';
+  if (c.score == null) { el.innerHTML = '<p class="mt-1 text-xl font-semibold">Noch zu wenige Daten</p><p class="text-sm mt-1 text-slate-600 dark:text-slate-300">Die Bewertung braucht mindestens 5 Ladungen ' + span + ' mit Akku-Start und -Ende (bisher ' + c.n + ').</p>'; return; }
   const lvl = c.score >= 90 ? ['Sehr gut', 'Dein Akku wird schonend behandelt.', '#10b981'] : c.score >= 75 ? ['Gut', 'Kleine Verbesserungen sind möglich.', '#22c55e'] : c.score >= 60 ? ['Okay', 'Mit zwei Gewohnheiten holst du mehr heraus.', '#f59e0b'] : ['Verbesserbar', 'Der Akku wird öfter stark gefordert.', '#ef4444'];
   const len = 97.4, dash = (c.score / 100 * len).toFixed(1);
   const tip = (1 - c.ok80) > 0.3 ? 'Lade im Alltag bis 80 % – 100 % nur vor langen Fahrten. Das spart Zellstress und kaum Reichweite.'
     : c.lo ? 'Vermeide es, unter 10 % zu fahren – lieber etwas früher anstecken.'
-    : c.full ? 'Deine ' + (c.full === 1 ? 'Vollladung' : c.full + ' Vollladungen') + ' in den letzten 90 Tagen ' + (c.full === 1 ? 'ist' : 'sind') + ' in Ordnung, solange du danach bald losfährst.'
+    : c.full ? 'Deine ' + (c.full === 1 ? 'Vollladung' : c.full + ' Vollladungen') + ' ' + (careMode === 'kauf' ? 'seit Kauf' : 'in den letzten 90 Tagen') + ' ' + (c.full === 1 ? 'ist' : 'sind') + ' in Ordnung, solange du danach bald losfährst.'
     : 'Weiter so – zwischen 20 und 80 % fühlt sich der Akku am wohlsten.';
   const bar = (w, col) => `<div class="mt-1 h-1.5 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden"><div class="h-full rounded-full" style="width:${Math.round(w * 100)}%;background:${col}"></div></div>`;
   el.innerHTML = `<div class="mt-3 flex items-center gap-4">
@@ -3836,6 +3856,7 @@ function renderCare() {
     </div>
     <div class="mt-4 rounded-2xl bg-slate-100 dark:bg-slate-800/70 p-3 text-xs text-slate-600 dark:text-slate-300"><b class="text-slate-900 dark:text-white">Tipp:</b> ${tip}</div>`;
 }
+$('care-seg').addEventListener('click', (e) => { const b = e.target.closest('[data-care]'); if (b && b.dataset.care !== careMode) { careMode = b.dataset.care; renderCare(); } });
 function renderBattery() {
   try { renderCare(); } catch (e) { console.error(e); }
   const rows = batRows(), fit = batFit(rows), now = Date.now(), ok = !!fit && fit.n >= BAT.minN && fit.sumHub >= BAT.minHub;
