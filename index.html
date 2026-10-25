@@ -109,6 +109,12 @@
   @keyframes dpinL { from { opacity: 0; transform: translateX(36px); } to { opacity: 1; transform: none; } }
   @keyframes dpinR { from { opacity: 0; transform: translateX(-36px); } to { opacity: 1; transform: none; } }
   .dp-inL { animation: dpinL .32s cubic-bezier(.2,.8,.2,1) both; } .dp-inR { animation: dpinR .32s cubic-bezier(.2,.8,.2,1) both; }
+  /* Erklärende Texte (grau, klein) im Blocksatz mit Silbentrennung; zentrierte/rechtsbündige und einzeilige Texte bleiben unverändert */
+  p.text-xs.text-slate-500:not(.text-center):not(.text-right):not(.truncate),
+  p.text-sm.text-slate-500:not(.text-center):not(.text-right):not(.truncate),
+  p.text-sm.text-slate-600:not(.text-center):not(.text-right):not(.truncate),
+  p.text-\[11px\].text-slate-500:not(.text-center):not(.text-right):not(.truncate),
+  #care-body .rounded-2xl.text-xs, #tax-gap, #pv-hint, #bak-msg + p { text-align: justify; hyphens: auto; -webkit-hyphens: auto; hyphenate-limit-chars: 6 3 3; }
   #dp-panes { overflow-x: clip; overflow-clip-margin: 16px; }   /* hereingleitender Tab darf nicht über den Bildschirmrand ragen (Chrome vergrößert sonst die Seite) */
   @media (prefers-reduced-motion: reduce) { .dp-inL, .dp-inR { animation: none; } }
   @media (prefers-reduced-motion: reduce) { #bd-conf i, #bdg-conf i { animation: none; top: var(--y, 10%); } #bd-card, #bdg-card { animation: none; } }
