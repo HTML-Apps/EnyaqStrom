@@ -10,8 +10,81 @@
   "background_color": "#000000",
   "theme_color": "#000000",
   "icons": [
-    { "src": "/Bilder/car-v4-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/Bilder/car-v4-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "/Bilder/car-v4-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "/Bilder/car-v4-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/Bilder/car-v4-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/Bilder/car-v4-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Laden Zuhause",
+      "short_name": "Zuhause",
+      "description": "Zählerstand Zuhause erfassen",
+      "url": "/?go=laden-zuhause",
+      "icons": [
+        {
+          "src": "/Bilder/sc-home.png",
+          "sizes": "192x192",
+          "type": "image/png",
+          "purpose": "any"
+        }
+      ]
+    },
+    {
+      "name": "Laden Bosch",
+      "short_name": "Bosch",
+      "description": "Ladung bei Bosch erfassen",
+      "url": "/?go=laden-bosch",
+      "icons": [
+        {
+          "src": "/Bilder/sc-bosch.png",
+          "sizes": "192x192",
+          "type": "image/png",
+          "purpose": "any"
+        }
+      ]
+    },
+    {
+      "name": "Laden unterwegs",
+      "short_name": "Unterwegs",
+      "description": "Ladung unterwegs erfassen",
+      "url": "/?go=laden-unterwegs",
+      "icons": [
+        {
+          "src": "/Bilder/sc-away.png",
+          "sizes": "192x192",
+          "type": "image/png",
+          "purpose": "any"
+        }
+      ]
+    },
+    {
+      "name": "Kosten erfassen",
+      "short_name": "Kosten",
+      "description": "Kosten erfassen",
+      "url": "/?go=kosten",
+      "icons": [
+        {
+          "src": "/Bilder/sc-cost.png",
+          "sizes": "192x192",
+          "type": "image/png",
+          "purpose": "any"
+        }
+      ]
+    }
   ]
 }

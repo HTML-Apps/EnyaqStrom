@@ -149,6 +149,10 @@
     <div id="setup-hint" class="hidden rounded-2xl p-3 text-sm bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-200">Willkommen! Trage über das Profil-Symbol oben rechts unter „Einstellungen“ zuerst Strompreis, Nettokapazität der Batterie und Ladeleistung deines Autos ein, damit alle Berechnungen stimmen.</div>
     <div id="key-warn" class="hidden rounded-2xl p-3 text-sm"></div>
     <button id="report-banner" type="button" class="hidden w-full text-left rounded-2xl p-3 text-sm bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200 flex items-center justify-between gap-2 active:scale-95 transition"><span id="report-banner-text"></span><span aria-hidden="true">›</span></button>
+    <div id="bak-banner" class="hidden w-full rounded-2xl p-3 text-sm bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200 flex items-center justify-between gap-2">
+      <button id="bak-banner-go" type="button" class="min-w-0 flex-1 text-left active:opacity-70"><span class="block font-medium">Monatliche Sicherung fällig</span><span id="bak-banner-sub" class="block text-xs opacity-75">Antippen: alle Daten in Google Drive sichern</span></button>
+      <button id="bak-banner-x" type="button" aria-label="Heute nicht mehr anzeigen" class="w-9 h-9 shrink-0 rounded-xl text-lg active:scale-95 transition hover:bg-black/5 dark:hover:bg-white/10">×</button>
+    </div>
     <div id="trips-banner" class="hidden w-full rounded-2xl p-3 text-sm bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-200 flex items-center justify-between gap-2">
       <button id="trips-banner-go" type="button" class="min-w-0 flex-1 text-left active:opacity-70"><span id="trips-banner-text" class="block"></span><span class="block text-xs opacity-75">MyŠkoda-App → Fahrtenbuch → Export, dann hier hochladen</span></button>
       <button id="trips-banner-x" type="button" aria-label="Für diesen Monat ausblenden" class="w-9 h-9 shrink-0 rounded-xl text-lg active:scale-95 transition hover:bg-black/5 dark:hover:bg-white/10">×</button>
@@ -1002,7 +1006,7 @@
     <div class="rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
       <div class="flex items-start gap-3 pb-3 border-b-2 border-emerald-500/70">
         <svg class="w-6 h-6 mt-0.5 shrink-0 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3"/></svg>
-        <div class="min-w-0"><h2 class="text-lg font-bold leading-6">Datensicherung</h2><p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Zählerstände, Kosten, Erinnerungen, wiederkehrende Kosten und Fahrtenbuch als Datei.</p></div>
+        <div class="min-w-0"><h2 class="text-lg font-bold leading-6">Datensicherung</h2><p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Zählerstände, Kosten, Erinnerungen, wiederkehrende Kosten, Fahrtenbuch, Ladeanbieter und Einstellungen als Datei.</p></div>
       </div>
       <div class="divide-y divide-slate-200 dark:divide-slate-800">
         <div class="py-4 first:pt-4 last:pb-0">
@@ -1012,6 +1016,12 @@
           </div>
           <input id="import-file" type="file" accept=".json,application/json" class="hidden">
           <p id="io-msg" class="hidden text-sm mt-1.5"></p>
+        </div>
+        <div class="py-4 first:pt-4 last:pb-0">
+          <label class="flex items-center justify-between gap-3"><span class="min-w-0"><span class="block text-sm font-semibold text-slate-800 dark:text-slate-200">Monatlich in Google Drive sichern</span><span class="block text-xs text-slate-500 dark:text-slate-400">Alle Daten inkl. Einstellungen und Ladeanbieter als Datei im Drive-Ordner „Enyaq Belege/Sicherungen“, einmal pro Monat.</span></span>
+            <input id="bak-auto" type="checkbox" class="h-5 w-5 shrink-0 accent-emerald-600"></label>
+          <button id="bak-now" type="button" class="mt-3 w-full py-3 rounded-2xl bg-slate-200 dark:bg-slate-800 font-medium active:scale-95 transition">Jetzt in Google Drive sichern</button>
+          <p id="bak-msg" class="text-xs text-slate-500 dark:text-slate-400 mt-1.5 min-h-[1rem]"></p>
         </div>
       </div>
     </div>
@@ -1673,9 +1683,9 @@ function showView(name) {
     b.classList.toggle('text-slate-500', !active);
   });
   if (name === 'capture') { if (ENABLE_AI_SCAN) startCamera(); updateCaptureDefaults(); } else stopCamera();
-  if (name === 'dashboard') renderDashboard();
+  if (name === 'dashboard') { renderDashboard(); try { renderBakBanner(); } catch (e) { } }
   if (name === 'report') renderReport(); else reportYM = null;           // beim Verlassen zurück auf den Standardmonat
-  if (name === 'settings') fillSettings();
+  if (name === 'settings') { fillSettings(); try { renderBakInfo(); } catch (e) { } }
   if (name === 'costs') renderCostsView();
   if (name === 'reminders') renderReminders();
   if (name === 'providers') renderProvidersView();
@@ -1866,18 +1876,30 @@ function setCapPlace(p) {
   $('cap-title').textContent = home ? 'Zählerstand' : 'Ladung: ' + PLACES[capPlace];
   if (!home) {
     ['soc0-input', 'soc1-input', 'km-input'].forEach(id => { if ($(id).dataset.live) { $(id).value = ''; delete $(id).dataset.live; } });   // Live-Vorbelegung gilt nur für Zuhause
-    const pi = $('price-input');
-    if (pi.value === '' || pi.dataset.auto) {            // Preis der letzten Ladung an diesem Ort vorschlagen
-      const last = getReadings().reverse().find(r => placeOf(r) === capPlace && r.pricePerKwh != null);
-      pi.value = last ? String(last.pricePerKwh).replace('.', ',') : '';
-      if (last) pi.dataset.auto = '1'; else delete pi.dataset.auto;
-    }
+    suggestCapPrice();
   }
   updateCaptureDefaults();
 }
+/** Preis vorbelegen (nur wenn das Feld leer ist oder selbst vorbelegt wurde):
+    Unterwegs mit Anbieter: eigener Preis aus „Ladeanbieter“ (DC vor AC) → letzte Ladung bei diesem Anbieter → Ø aus der Historie.
+    Bosch: Preis der Bosch-Karte (AC vor DC) → letzte Ladung bei Bosch. Ohne Anbieter: letzte Ladung an diesem Ort. */
+function suggestCapPrice() {
+  const pi = $('price-input'); if (capPlace === 'home' || !(pi.value === '' || pi.dataset.auto)) return;
+  const rs = getReadings().reverse(), prov = capPlace === 'away' ? $('prov-input').value : '';
+  let v = null, src = '';
+  if (capPlace === 'bosch') { const p = pvPrices('bosch'); v = p.ac ?? p.dc; if (v != null) src = 'Preis von ' + (pvBoschName() || 'Bosch') + ' (Ladeanbieter)'; }
+  else if (prov) {
+    const p = pvPrices(prov); v = p.dc ?? p.ac; if (v != null) src = 'Preis von ' + prov + ' (Ladeanbieter)';
+    if (v == null) { const l = rs.find(r => placeOf(r) === 'away' && r.provider === prov && r.pricePerKwh != null); if (l) { v = l.pricePerKwh; src = 'letzte Ladung bei ' + prov; } }
+    if (v == null && p.hist) { v = p.hist; src = 'Ø bei ' + prov; }
+  }
+  if (v == null) { const l = rs.find(r => placeOf(r) === capPlace && r.pricePerKwh != null); if (l) { v = l.pricePerKwh; src = 'letzte Ladung ' + (capPlace === 'bosch' ? 'bei Bosch' : 'unterwegs'); } }
+  pi.value = v != null ? String(v).replace('.', ',') : ''; pi.title = src ? 'Vorbelegt: ' + src : '';
+  if (v != null) pi.dataset.auto = '1'; else delete pi.dataset.auto;
+}
 document.querySelectorAll('.cap-place-btn').forEach(b => b.addEventListener('click', () => setCapPlace(b.dataset.place)));
 $('price-input').addEventListener('input', (e) => { delete e.target.dataset.auto; });
-$('prov-input').addEventListener('change', (e) => { delete e.target.dataset.auto; });
+$('prov-input').addEventListener('change', (e) => { delete e.target.dataset.auto; suggestCapPrice(); });   // anderer Anbieter: dessen Preis vorschlagen
 
 /* =====================================================================
    Einstellungen
@@ -2773,15 +2795,21 @@ if (document.fonts) document.fonts.ready.then(fitSeg);
    ===================================================================== */
 const EXPORT_APP_ID = 'enyaq-ladekosten';
 
+/** Inhalt der Datensicherung (Datei-Export und monatliche Sicherung in Google Drive). Einstellungen ohne PIN. */
+function buildBackup() {
+  const readings = getReadings(), st = { ...(load(KEY_SETTINGS, {}) || {}) }; delete st.pin;
+  return {
+    app: EXPORT_APP_ID, version: 1, exportedAt: new Date().toISOString(), chargePowerKw: chargePowerKw(),
+    readings: readings.map(r => ({ ...r, chargeDuration: isHome(r) ? chargeDurationOf(r) : undefined })),     // Ladedauer als hh:mm (nur Zuhause)
+    costs: getCosts(), categories: getCategories(), reminders: getReminders(), recurring: getRecurring(),
+    trips: getTrips(), tripPrefs: { places: getTPlaces(), labels: getTLabels(), rules: getTRules(), defLabel: defLabelId() },   // Fahrtenbuch (seit Version mit Fahrten)
+    settings: st, providers: getProviders(), provInfo: load(KEY_PROVINFO, null)                                // seit Version mit Ladeanbietern
+  };
+}
 $('btn-export').addEventListener('click', () => {
   const readings = getReadings(), costs = getCosts(), reminders = getReminders(), recurring = getRecurring(), trips = getTrips();
   if (!readings.length && !costs.length && !reminders.length && !recurring.length && !trips.length) { flash($('io-msg'), 'Keine Daten zum Exportieren vorhanden.', false); return; }
-  const payload = {
-    app: EXPORT_APP_ID, version: 1, exportedAt: new Date().toISOString(), chargePowerKw: chargePowerKw(),
-    readings: readings.map(r => ({ ...r, chargeDuration: isHome(r) ? chargeDurationOf(r) : undefined })),     // Ladedauer als hh:mm (nur Zuhause)
-    costs, categories: getCategories(), reminders, recurring,
-    trips, tripPrefs: { places: getTPlaces(), labels: getTLabels(), rules: getTRules(), defLabel: defLabelId() }   // Fahrtenbuch (seit Version mit Fahrten)
-  };
+  const payload = buildBackup();
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
   a.download = 'enyaq-ladekosten-' + new Date().toISOString().slice(0, 10) + '.json';
@@ -2790,6 +2818,21 @@ $('btn-export').addEventListener('click', () => {
   flash($('io-msg'), readings.length + ' Ladungen, ' + costs.length + ' Kosten und ' + reminders.length + ' Erinnerungen exportiert.', true);
 });
 
+/** Ladeanbieter (ergänzen) und Einstellungen (nach Rückfrage) aus einer Sicherung übernehmen. */
+function importPrefsFromBackup(text) {
+  let d; try { d = JSON.parse(text); } catch { return; }
+  if (Array.isArray(d.providers)) { const cur = getProviders(), add = d.providers.filter(n => typeof n === 'string' && n.trim() && !cur.some(m => m.toLowerCase() === n.trim().toLowerCase())).map(n => n.trim().slice(0, 30));
+    if (add.length) setProviders(cur.concat(add).slice(0, 20)); }
+  if (d.provInfo && typeof d.provInfo === 'object') {                  // fehlende Angaben ergänzen, eigene bleiben
+    const cur = getProvInfo(), src = d.provInfo, out = { home: { ...(src.home || {}), ...cur.home }, bosch: { ...(src.bosch || {}), ...cur.bosch }, p: { ...(src.p || {}), ...cur.p } };
+    if (JSON.stringify(out) !== JSON.stringify(cur)) setProvInfo(JSON.parse(JSON.stringify(out)));
+  }
+  if (d.settings && typeof d.settings === 'object' && Object.keys(d.settings).length && confirm('Die Sicherung enthält auch Einstellungen (Strompreis, Akku, Fahrzeugdaten, Kauftag …).\n\nOK = Einstellungen aus der Sicherung übernehmen\nAbbrechen = aktuelle Einstellungen behalten')) {
+    const keep = load(KEY_SETTINGS, {}) || {}, n = { ...d.settings }; delete n.pin; if (keep.pin) n.pin = keep.pin;
+    if (!(Number(n.price) >= 0)) delete n.price;
+    save(KEY_SETTINGS, n); pushPrefs(); if (currentView === 'settings') fillSettings();
+  }
+}
 /** Prüft die Datei streng und gibt bereinigte Einträge (chronologisch) zurück oder wirft einen Fehler. */
 function parseImport(text) {
   let data;
@@ -2870,6 +2913,7 @@ $('import-file').addEventListener('change', async (e) => {
     const newCats = ic.categories.filter(n => !getCategories().some(m => m.toLowerCase() === n.toLowerCase()));
     if (newCats.length) setCategories(getCategories().concat(newCats));
     const nT = importTripsFromBackup(text);                // Fahrten + Orte/Etiketten/Regeln (ältere Dateien haben sie nicht)
+    importPrefsFromBackup(text);                           // Ladeanbieter und Einstellungen (ältere Dateien haben sie nicht)
     stopLive(false);                                     // Live-Basis wäre veraltet
     flash($('io-msg'), fresh.length + ' neue Ladungen, ' + freshC.length + ' neue Kosten, ' + freshR.length + ' neue Erinnerungen' + (nT ? ' und ' + nT + ' neue Fahrten' : '') + ' importiert.', true);
   } catch (err) {
@@ -3977,7 +4021,7 @@ const KEY_CACHE_UID = 'enyaq.cacheUid';                   // Konto (UID), zu dem
 function checkCacheUid(uid) {
   if (!uid) return;
   const prev = localStorage.getItem(KEY_CACHE_UID);
-  if (prev && prev !== uid) { save(KEY_READINGS, []); save(KEY_COSTS, []); save(KEY_REMINDERS, []); save(KEY_RECUR, []); localStorage.removeItem(KEY_PROVIDERS); localStorage.removeItem(KEY_CATEGORIES); localStorage.removeItem(KEY_WXLOC); localStorage.removeItem(KEY_WXCACHE); localStorage.removeItem(KEY_TEMPS); localStorage.removeItem(KEY_WRAP); save(KEY_TRIPS, []); localStorage.removeItem(KEY_TPLACES); localStorage.removeItem(KEY_TRIPS_IMP); localStorage.removeItem(KEY_TLABELS); localStorage.removeItem(KEY_TRULES); localStorage.removeItem(KEY_TDEF); const st = load(KEY_SETTINGS, null); if (st && st.wltp !== undefined) { delete st.wltp; save(KEY_SETTINGS, st); } stopLive(false); }
+  if (prev && prev !== uid) { save(KEY_READINGS, []); save(KEY_COSTS, []); save(KEY_REMINDERS, []); save(KEY_RECUR, []); localStorage.removeItem(KEY_PROVIDERS); localStorage.removeItem(KEY_PROVINFO); localStorage.removeItem(KEY_DVBAK); localStorage.removeItem(KEY_CATEGORIES); localStorage.removeItem(KEY_WXLOC); localStorage.removeItem(KEY_WXCACHE); localStorage.removeItem(KEY_TEMPS); localStorage.removeItem(KEY_WRAP); save(KEY_TRIPS, []); localStorage.removeItem(KEY_TPLACES); localStorage.removeItem(KEY_TRIPS_IMP); localStorage.removeItem(KEY_TLABELS); localStorage.removeItem(KEY_TRULES); localStorage.removeItem(KEY_TDEF); const st = load(KEY_SETTINGS, null); if (st && st.wltp !== undefined) { delete st.wltp; save(KEY_SETTINGS, st); } stopLive(false); }
   localStorage.setItem(KEY_CACHE_UID, uid);
 }
 let deferredCosts = null;
@@ -5013,6 +5057,60 @@ function dvName(c, i, ext) {                                                    
   const d = new Date(c.date), ds = isNaN(d) ? '' : wxIso(d), parts = [ds, c.category, c.title && c.title !== c.category ? c.title : '', Math.abs(Number(c.amount) || 0).toFixed(2).replace('.', ',')].filter(Boolean);
   return parts.join('_').replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim().slice(0, 110) + (i > 0 ? '_' + (i + 1) : '') + '.' + ext;
 }
+/* =====================================================================
+   Monatliche Sicherung in Google Drive: Datei „enyaq-sicherung-JJJJ-MM.json“ im Unterordner „Sicherungen“ des Belege-Ordners
+   (gleiche Berechtigung drive.file). Je Monat eine Datei; eine erneute Sicherung im selben Monat überschreibt sie.
+   Automatisch, sobald im neuen Monat ein Drive-Zugriff besteht (z. B. nach einem Beleg-Upload). Sonst erscheint auf Start ein Hinweis,
+   denn das Google-Fenster darf nur nach einem Tipp öffnen. Status: enyaq.driveBackup = { ym, at, auto (true/false), snooze ('JJJJ-MM-TT') }.
+   ===================================================================== */
+const KEY_DVBAK = 'enyaq.driveBackup';
+const bakState = () => ({ auto: true, ...(load(KEY_DVBAK, {}) || {}) });
+const bakYM = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); };
+const bakHasData = () => getReadings().length + getCosts().length + getReminders().length + getTrips().length > 0;
+const bakDue = () => { const b = bakState(); return b.auto && window.cloud?.isSignedIn() && bakHasData() && b.ym !== bakYM(); };
+async function bakSubFolder(tok) {
+  const parent = await dvFolder(tok), q = encodeURIComponent("appProperties has { key='enyaqBackup' and value='1' } and mimeType='application/vnd.google-apps.folder' and trashed=false and '" + parent + "' in parents");
+  const l = await (await dvFetch(tok, 'https://www.googleapis.com/drive/v3/files?q=' + q + '&fields=files(id)&pageSize=1')).json();
+  if (l.files && l.files[0]) return l.files[0].id;
+  return (await (await dvFetch(tok, 'https://www.googleapis.com/drive/v3/files?fields=id', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'Sicherungen', mimeType: 'application/vnd.google-apps.folder', parents: [parent], appProperties: { enyaqBackup: '1' } }) })).json()).id;
+}
+async function bakUpload(tok) {
+  const ym = bakYM(), folder = await bakSubFolder(tok), body = JSON.stringify(buildBackup(), null, 1), name = 'enyaq-sicherung-' + ym + '.json';
+  const q = encodeURIComponent("appProperties has { key='enyaqBackupYM' and value='" + ym + "' } and trashed=false and '" + folder + "' in parents");
+  const ex = await (await dvFetch(tok, 'https://www.googleapis.com/drive/v3/files?q=' + q + '&fields=files(id)&pageSize=1')).json(), id = ex.files && ex.files[0] && ex.files[0].id;
+  if (id) await dvFetch(tok, 'https://www.googleapis.com/upload/drive/v3/files/' + encodeURIComponent(id) + '?uploadType=media', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body });
+  else {
+    const bd = 'enyaq' + Date.now(), meta = { name, mimeType: 'application/json', parents: [folder], appProperties: { enyaqBackupYM: ym } };
+    const mp = '--' + bd + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify(meta) + '\r\n--' + bd + '\r\nContent-Type: application/json\r\n\r\n' + body + '\r\n--' + bd + '--';
+    await dvFetch(tok, 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', { method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + bd }, body: mp });
+  }
+  const b = bakState(); b.ym = ym; b.at = new Date().toISOString(); delete b.snooze; save(KEY_DVBAK, b);
+  return { name, kb: Math.round(body.length / 1024) };
+}
+let bakBusy = false;
+/** Sichern: silent = nur mit bereits vorhandenem Drive-Zugriff (kein Google-Fenster). */
+async function runBackup(silent) {
+  if (bakBusy || !window.cloud?.isSignedIn()) { if (!silent) $('bak-msg').textContent = 'Bitte zuerst bei Google anmelden.'; return false; }
+  if (silent && !window.cloud.driveReady()) return false;
+  bakBusy = true; if (!silent) { $('bak-msg').textContent = 'Verbinde mit Google Drive …'; $('bak-banner-sub').textContent = 'Wird gesichert …'; }
+  try { const tok = await window.cloud.driveToken(), r = await bakUpload(tok); $('bak-msg').textContent = 'Gesichert: ' + r.name + ' (' + fmt(r.kb, 0) + ' KB) · ' + fmtDate(new Date().toISOString()); renderBakBanner(); return true; }
+  catch (e) { if (e && e.status === 401) window.cloud.driveForget(); const t = 'Sicherung fehlgeschlagen: ' + dvErrText(e); $('bak-msg').textContent = t; if (!silent) $('bak-banner-sub').textContent = t; return false; }
+  finally { bakBusy = false; }
+}
+function renderBakBanner() {
+  const b = bakState(), show = bakDue() && b.snooze !== todayYMD() && !$('view-dashboard').classList.contains('hidden') && !liveHero;
+  $('bak-banner').classList.toggle('hidden', !show);
+  if (show) $('bak-banner-sub').textContent = b.at ? 'Letzte Sicherung: ' + fmtDate(b.at) + ' · Antippen zum Sichern' : 'Antippen: alle Daten in Google Drive sichern';
+}
+function renderBakInfo() { const b = bakState(); $('bak-auto').checked = b.auto !== false; if (!bakBusy) $('bak-msg').textContent = b.at ? 'Letzte Sicherung: ' + fmtDate(b.at) + ' (' + b.ym + ')' : 'Noch keine Sicherung in Google Drive.'; }
+$('bak-auto').addEventListener('change', (e) => { const b = bakState(); b.auto = e.target.checked; save(KEY_DVBAK, b); renderBakBanner(); });
+$('bak-now').addEventListener('click', () => runBackup(false));
+$('bak-banner-go').addEventListener('click', () => runBackup(false));
+$('bak-banner-x').addEventListener('click', () => { const b = bakState(); b.snooze = todayYMD(); save(KEY_DVBAK, b); renderBakBanner(); });
+/* Prüfen: kurz nach dem Start, beim Wechsel auf Start und regelmäßig (Drive-Zugriff kann zwischendurch durch einen Beleg-Upload entstehen) */
+function bakCheck() { if (bakDue()) runBackup(true); renderBakBanner(); }
+setTimeout(bakCheck, 4000); setInterval(bakCheck, 5 * 60 * 1000);
 async function dvUploadFor(cost, files, tokP, onProgress) {
   const tok = await (tokP || window.cloud.driveToken()), folder = await dvFolder(tok), out = [], have = (cost.files || []).length;
   for (let i = 0; i < files.length; i++) {
