@@ -2803,9 +2803,9 @@ $('btn-edit-save').addEventListener('click', () => {
   if (all.some(x => !isFinite(x.cap) || x.cap < 10 || x.cap > 200)) { alert('Bitte eine gültige Batteriekapazität in kWh eingeben (10 bis 200).'); return; }
   const storedCosts = getCosts();                        // Kosten-Karten (dieselbe Bearbeiten-Ansicht)
   const callC = storedCosts.map((c, j) => ({ c, date: new Date(ccell(j, 'date')?.value), cat: ccell(j, 'cat')?.value ?? c.category ?? '', title: (ccell(j, 'title')?.value ?? c.title ?? '').trim(),
-    amount: parseNum(ccell(j, 'amount')?.value ?? String(c.amount)), km: optNum(ccell(j, 'km')?.value ?? ''), note: (ccell(j, 'note')?.value ?? c.note ?? '').trim(), del: ccell(j, 'cdel')?.dataset.del === '1' }));
+    amount: (v => String(v).trim() === '' ? 0 : parseNum(v))(ccell(j, 'amount')?.value ?? String(c.amount)), /* leer = 0 € */ km: optNum(ccell(j, 'km')?.value ?? ''), note: (ccell(j, 'note')?.value ?? c.note ?? '').trim(), del: ccell(j, 'cdel')?.dataset.del === '1' }));
   const cLive = callC.filter(x => !x.del);
-  if (cLive.some(x => isNaN(x.date) || !isFinite(x.amount) || x.amount === 0)) { alert('Bitte bei den Kosten ein gültiges Datum und einen Betrag (nicht 0) eingeben.'); return; }
+  if (cLive.some(x => isNaN(x.date) || !isFinite(x.amount))) { alert('Bitte bei den Kosten ein gültiges Datum und einen gültigen Betrag eingeben (0 € ist erlaubt).'); return; }
   if (cLive.some(x => Number.isNaN(x.km) || (x.km != null && (x.km < 0 || x.km > 999999)))) { alert('Bitte bei den Kosten einen gültigen km-Stand eingeben (0 bis 999999) oder das Feld leer lassen.'); return; }
   const gone = all.filter(x => x.del).length + callC.filter(x => x.del).length;
   if (gone && !confirm(gone + (gone === 1 ? ' Eintrag wird' : ' Einträge werden') + ' gelöscht (auch in der Cloud). Fortfahren?')) return;
@@ -3109,12 +3109,13 @@ $('cost-cats').addEventListener('click', e => {
   renderCostsView();
 });
 $('btn-cost-save').addEventListener('click', () => {
-  const amount = parseNum($('cost-amount').value), km = optNum($('cost-km').value), d = new Date($('cost-date').value), msg = $('cost-msg');
-  if (!isFinite(amount) || amount <= 0) { flash(msg, 'Bitte einen Betrag größer 0 eingeben.', false); return; }
+  const amtRaw = $('cost-amount').value.trim(), amount = amtRaw === '' ? 0 : parseNum(amtRaw), km = optNum($('cost-km').value), d = new Date($('cost-date').value), msg = $('cost-msg');   // leer = 0 € (kostenlose Info, z. B. mit Beleg)
+  if (!isFinite(amount) || amount < 0) { flash(msg, 'Bitte einen gültigen Betrag eingeben (0 € ist erlaubt).', false); return; }
+  if (amount === 0 && $('cost-recur').checked) { flash(msg, 'Wiederkehrende Kosten brauchen einen Betrag größer 0.', false); return; }
   if (isNaN(d)) { flash(msg, 'Bitte ein gültiges Datum eingeben.', false); return; }
   if (Number.isNaN(km) || (km != null && (km < 0 || km > 999999))) { flash(msg, 'Bitte einen gültigen km-Stand eingeben (0 bis 999999) oder das Feld leer lassen.', false); return; }
   const income = $('cost-income').checked, note = $('cost-note').value.trim();
-  const entry = { id: Date.now(), date: d.toISOString(), title: $('cost-title').value.trim() || costCat || 'Kosten', amount: Math.round(amount * 100) / 100 * (income ? -1 : 1), category: costCat };
+  const entry = { id: Date.now(), date: d.toISOString(), title: $('cost-title').value.trim() || costCat || 'Kosten', amount: amount ? Math.round(amount * 100) / 100 * (income ? -1 : 1) : 0, category: costCat };
   if (note) entry.note = note;                                                    // optionale Felder nur setzen, wenn vorhanden (Firestore verbietet undefined)
   if (km != null) entry.odometerKm = km;
   const files = (dvPend.get('form') || []).slice();                                // Belege: Tipp auf „Speichern“ öffnet bei Bedarf das Google-Fenster
