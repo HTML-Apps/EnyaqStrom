@@ -225,7 +225,7 @@
       <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
     </button>
     <button id="go-akku" type="button" class="flex w-full items-center justify-between rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm px-4 py-3 active:scale-[0.99] transition">
-      <span class="flex items-center gap-3 font-medium"><svg class="w-6 h-6 text-emerald-500" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="16" height="10" rx="2"/><path d="M21 11v2M7 10.5v3M10.5 10.5v3"/></svg>Akkukapazität</span>
+      <span class="flex items-center gap-3 font-medium"><svg class="w-6 h-6 text-emerald-500" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="16" height="10" rx="2"/><path d="M21 11v2M7 10.5v3M10.5 10.5v3"/></svg><span class="min-w-0 truncate">Akku<span id="go-akku-n" class="text-sm font-normal text-slate-500 dark:text-slate-400"></span></span></span>
       <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
     </button>
     <button id="go-trips" type="button" class="flex w-full items-center justify-between rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm px-4 py-3 active:scale-[0.99] transition">
@@ -2481,6 +2481,7 @@ $('trends').addEventListener('scroll', () => {
   if (i !== trendIdx) { trendIdx = i; [...$('trends-dots').children].forEach((d, k) => d.className = 'block h-2 rounded-full transition-all ' + (k === i ? 'w-5 bg-emerald-500' : 'w-2 bg-slate-500/60')); }
 }, { passive: true });
 function renderDashboard() {
+  try { renderAkkuBtn(); } catch (e) { }                                   // Start-Button „Akku“ (auch nach Cloud-Abgleich aktuell)
   applyTitle(); renderSetupHint(); renderTrends();
   const readings = getReadings(), last = lastHome(readings);                   // Zählerstand und letzte Ladung: immer vom Zähler zuhause
   $('dash-reading').textContent = (last ? last.totalReading : 0).toFixed(1).padStart(8, '0');   // 6 Stellen + Komma + 1 Nachkommastelle
@@ -4038,7 +4039,14 @@ function renderStat() {
   $('st-note').textContent = 'Verbrauch inkl. Ladeverlusten (' + tot.n + ' Ladungen mit km-Stand' + (tot.approx ? ', grob ohne Akku-%' : '') + '). Kosten pro km, Tag und Monat sind reine Ladekosten – Einnahmen und sonstige Kosten findest du im Kosten-Tab.';
 }
 $('go-stat').addEventListener('click', () => { repMode = 'stat'; showView('report'); });
-$('go-akku').addEventListener('click', () => { repMode = 'akku'; showView('report'); });          // Berichte → Akku
+$('go-akku').addEventListener('click', () => { repMode = 'akku'; showView('report'); });
+/** Start-Button „Akku“: Netto-Kapazität (wie im Akku-Bericht) und Akku-Pflege der letzten 90 Tage, z. B. „Akku · 48,3 kWh (netto) · 73/100“. */
+function renderAkkuBtn() {
+  const parts = [];
+  try { const fit = batFit(batRows()); if (fit && fit.n >= BAT.minN && fit.sumHub >= BAT.minHub) parts.push(fmt(fit.K * BAT.eta, 1) + ' kWh (netto)'); } catch (e) { }
+  try { const c = batCare(); if (c.score != null) parts.push(c.score + '/100'); } catch (e) { }
+  $('go-akku-n').textContent = parts.length ? ' · ' + parts.join(' · ') : ' · Kapazität & Pflege';
+}          // Berichte → Akku
 $('go-trips').addEventListener('click', () => { histFilter = 'fahrten'; tripDays = 21; showView('history'); });   // Historie → Fahrten
 
 /* =====================================================================
