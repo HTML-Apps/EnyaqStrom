@@ -862,6 +862,7 @@
   <!-- ============ VIEW 3: EINSTELLUNGEN ============ -->
   <section id="view-settings" class="view hidden space-y-5">
     <div id="set-head" class="-mt-2 flex h-[60px] items-center gap-2 -mb-[18px]"><button id="set-burger" type="button" aria-label="Bereiche der Einstellungen" aria-expanded="false" aria-controls="set-drawer" class="-ml-2 h-11 w-11 shrink-0 rounded-xl text-white flex items-center justify-center active:scale-95 transition"><svg class="h-7 w-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button><h1 id="set-h" class="min-w-0 truncate font-barlow font-semibold text-2xl uppercase tracking-[0.14em] text-white">Einstellungen</h1></div>
+    <p id="set-sub" class="hidden -mt-1 px-1 text-sm text-slate-400"></p>
     <div class="rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
       <div class="flex items-start gap-3 pb-3 border-b-2 border-emerald-500/70">
         <svg class="w-6 h-6 mt-0.5 shrink-0 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>
@@ -5960,7 +5961,7 @@ const KEY_SETSEC = 'enyaq.setSec';
 let setSec = (() => { try { return localStorage.getItem(KEY_SETSEC) || 'fahrzeug'; } catch (e) { return 'fahrzeug'; } })();
 (function tagSettingsCards() {
   [...$('view-settings').children].forEach(el => {
-    if (el.id === 'set-head') return;
+    if (el.id === 'set-head' || el.id === 'set-sub') return;
     if (el.querySelector('#btn-save-settings')) { el.dataset.secs = SET_SECS.filter(x => x.save).map(x => x.k).join(' '); return; }
     const h = (el.querySelector('h2')?.textContent || '').trim(), sec = SET_SECS.find(x => x.h.includes(h));
     el.dataset.secs = sec ? sec.k : 'fahrzeug';
@@ -5971,6 +5972,12 @@ function setSettingsSec(k) {
   const sec = SET_SECS.find(x => x.k === k) || SET_SECS[0]; setSec = sec.k; try { localStorage.setItem(KEY_SETSEC, sec.k); } catch (e) { }
   [...$('view-settings').children].forEach(el => { if (el.dataset.secs) el.classList.toggle('hidden', !el.dataset.secs.split(' ').includes(sec.k)); });
   $('set-h').textContent = sec.t;
+  /* Nur eine Karte im Bereich: deren Kopfzeile (Symbol + Titel) doppelt die Seitenüberschrift → ausblenden, ihr Erklärsatz wird Untertitel */
+  const cards = [...$('view-settings').children].filter(el => el.dataset.secs && !el.classList.contains('hidden') && !el.querySelector('#btn-save-settings'));
+  cards.forEach(c => { const hd = c.querySelector(':scope > .border-b-2'); if (hd) hd.classList.remove('hidden'); });
+  let sub = '';
+  if (cards.length === 1) { const hd = cards[0].querySelector(':scope > .border-b-2'); if (hd) { hd.classList.add('hidden'); sub = (hd.querySelector('p')?.textContent || '').trim(); } }
+  $('set-sub').textContent = sub; $('set-sub').classList.toggle('hidden', !sub);
   document.querySelectorAll('#set-drawer [data-sec]').forEach(b => { if (!b.classList.contains('sd-item')) return; const on = b.dataset.sec === sec.k; b.classList.toggle('bg-emerald-600/15', on); b.classList.toggle('text-emerald-700', on); b.classList.toggle('dark:text-emerald-300', on); b.classList.toggle('font-semibold', on); });
   window.scrollTo(0, 0);
 }
