@@ -3840,7 +3840,11 @@ function renderProvidersView() {
       ${pvBadge(bn || 'B', '#0284c7')}
       <span class="min-w-0 flex-1"><span class="flex items-center gap-1.5"><span class="truncate font-semibold">${esc(bn || 'Ladeanbieter')}</span><span class="shrink-0 rounded-md bg-sky-100 dark:bg-sky-900/60 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-700 dark:text-sky-300">Bosch</span></span><span class="block truncate text-xs text-slate-500 dark:text-slate-400">${esc(bn ? [bp.tariff, bp.fee ? pvEur(bp.fee) + '/Monat' : '', bp.st.n ? bp.st.n + (bp.st.n === 1 ? ' Ladung' : ' Ladungen') : 'noch keine Ladung'].filter(Boolean).join(' · ') : 'Antippen, um den Anbieter einzutragen')}</span></span>
       <span class="flex flex-col items-end gap-1">${bchips.join('')}</span></button></li>`);
-  list.forEach((n, i) => {
+  /* Reihenfolge: nach Preis (günstigster zuerst; eigener AC/DC-Preis, sonst Ø aus der Historie), Anbieter ohne Preis danach alphabetisch.
+     Die Farbe bleibt an der Position in der Anbieter-Liste (ändert sich also nicht durch das Sortieren). */
+  const sortKey = (n) => { const p = pvPrices(n), v = [p.ac, p.dc].filter(x => x > 0); return v.length ? Math.min(...v) : p.hist > 0 ? p.hist : null; };
+  list.map((n, i) => ({ n, i, k: sortKey(n) })).sort((a, b) => a.k != null && b.k != null ? a.k - b.k || a.n.localeCompare(b.n, 'de') : a.k != null ? -1 : b.k != null ? 1 : a.n.localeCompare(b.n, 'de', { sensitivity: 'base' }))
+    .forEach(({ n, i }) => {
     if (pvSame(n, bn)) return;                                            // gleicher Anbieter wie bei Bosch: nur als Bosch-Karte
     const p = pvPrices(n), chips = [];
     if (p.ac) chips.push(pvChip('AC', p.ac)); if (p.dc) chips.push(pvChip('DC', p.dc));
