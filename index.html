@@ -1232,11 +1232,11 @@
     <div id="sd-list" class="space-y-0.5 text-[15px]"></div>
     <p class="mt-4 mb-1 px-3 text-[11px] uppercase tracking-wider text-slate-500">Mehr</p>
     <div class="space-y-0.5 text-[15px]">
-      <button type="button" data-go="providers" class="sd-item flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left active:bg-slate-100 dark:active:bg-slate-800"><span class="w-6 text-center">🔌</span>Ladeanbieter</button>
-      <button type="button" data-go="kb" class="sd-item flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left active:bg-slate-100 dark:active:bg-slate-800"><span class="w-6 text-center">📘</span>Wissen</button>
-      <button type="button" data-go="badges" class="sd-item flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left active:bg-slate-100 dark:active:bg-slate-800"><span class="w-6 text-center">🏅</span>Daten &amp; Abzeichen</button>
-      <button type="button" data-go="reminders" class="sd-item flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left active:bg-slate-100 dark:active:bg-slate-800"><span class="w-6 text-center">📋</span>Erinnerungen ansehen</button>
-      <button type="button" data-sec="gefahr" class="sd-item flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-red-600 dark:text-red-300 active:bg-slate-100 dark:active:bg-slate-800"><span class="w-6 text-center">⚠️</span>Alle Daten löschen</button>
+      <button type="button" data-go="providers" class="sd-item flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left active:bg-slate-100 dark:active:bg-slate-800"><svg class="h-[22px] w-[22px] shrink-0 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18"/></svg>Ladeanbieter</button>
+      <button type="button" data-go="kb" class="sd-item flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left active:bg-slate-100 dark:active:bg-slate-800"><svg class="h-[22px] w-[22px] shrink-0 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h12v18H6a2 2 0 0 1-2-2z"/><path d="M8 7h7"/></svg>Wissen</button>
+      <button type="button" data-go="badges" class="sd-item flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left active:bg-slate-100 dark:active:bg-slate-800"><svg class="h-[22px] w-[22px] shrink-0 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="9" r="5"/><path d="M9 13l-2 8 5-3 5 3-2-8"/></svg>Daten &amp; Abzeichen</button>
+      <button type="button" data-go="reminders" class="sd-item flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left active:bg-slate-100 dark:active:bg-slate-800"><svg class="h-[22px] w-[22px] shrink-0 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5h11M9 12h11M9 19h11"/><path d="M4 5l1 1 2-2M4 12l1 1 2-2M4 19l1 1 2-2"/></svg>Erinnerungen ansehen</button>
+      <button type="button" data-sec="gefahr" class="sd-item flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-red-600 dark:text-red-300 active:bg-slate-100 dark:active:bg-slate-800"><svg class="h-[22px] w-[22px] shrink-0 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>Alle Daten löschen</button>
     </div>
   </nav>
 </div>
@@ -6600,6 +6600,7 @@ const SET_SECS = [
   { k: 'konto', e: '👤', t: 'Konto & Cloud', h: ['Cloud-Sync'], hidden: true },
   { k: 'gefahr', e: '⚠️', t: 'Alle Daten löschen', h: ['Gefahrenzone'], hidden: true }
 ];
+const SET_ICON = {fahrzeug: '<path d="M5 17h14M6 17v2M18 17v2M4 13l2-5h12l2 5v4H4z"/><circle cx="8" cy="14" r="1"/><circle cx="16" cy="14" r="1"/>', laden: '<path d="M13 2L4 14h7l-1 8 9-12h-7l1-8Z"/>', erinnerungen: '<path d="M6 17V11a6 6 0 0 1 12 0v6l1.5 2h-15zM10 21a2 2 0 0 0 4 0"/>', fahrten: '<circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M8 18h6a4 4 0 0 0 0-8h-4a4 4 0 0 1 0-8h6"/>', listen: '<path d="M20 12l-8 8-9-9V3h8z"/><circle cx="7.5" cy="7.5" r="1.5"/>', wetter: '<path d="M7 18a5 5 0 1 1 1-9.9A6 6 0 0 1 19 10a4 4 0 0 1-1 8z"/>', daten: '<path d="M7 18a5 5 0 1 1 1-9.9A6 6 0 0 1 19 10a4 4 0 0 1-1 8z"/><path d="M12 11v6M9.5 13.5L12 11l2.5 2.5"/>', konto: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/>', gefahr: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>'};
 const KEY_SETSEC = 'enyaq.setSec';
 let setSec = (() => { try { return localStorage.getItem(KEY_SETSEC) || 'fahrzeug'; } catch (e) { return 'fahrzeug'; } })();
 (function tagSettingsCards() {
@@ -6609,7 +6610,7 @@ let setSec = (() => { try { return localStorage.getItem(KEY_SETSEC) || 'fahrzeug
     const h = (el.querySelector('h2')?.textContent || '').trim(), sec = SET_SECS.find(x => x.h.includes(h));
     el.dataset.secs = sec ? sec.k : 'fahrzeug';
   });
-  $('sd-list').innerHTML = SET_SECS.filter(x => !x.hidden).map(x => `<button type="button" data-sec="${x.k}" class="sd-item flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left active:bg-slate-100 dark:active:bg-slate-800"><span class="w-6 text-center">${x.e}</span><span class="min-w-0 truncate">${esc(x.t)}</span></button>`).join('');
+  $('sd-list').innerHTML = SET_SECS.filter(x => !x.hidden).map(x => `<button type="button" data-sec="${x.k}" class="sd-item flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left active:bg-slate-100 dark:active:bg-slate-800"><svg class="h-[22px] w-[22px] shrink-0 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true">${SET_ICON[x.k] || ''}</svg><span class="min-w-0 truncate">${esc(x.t)}</span></button>`).join('');
 })();
 function setSettingsSec(k) {
   const sec = SET_SECS.find(x => x.k === k) || SET_SECS[0]; setSec = sec.k; try { localStorage.setItem(KEY_SETSEC, sec.k); } catch (e) { }
