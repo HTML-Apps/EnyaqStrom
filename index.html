@@ -94,7 +94,7 @@
     #view-report .rcard { background: #fff !important; box-shadow: none !important; border: 0 !important; border-top: 1px solid #94a3b8 !important; border-radius: 0 !important; padding: 10px 0 !important; break-inside: avoid; }
     #view-report .rtile { background: transparent !important; border-radius: 0 !important; }
     #view-report .space-y-4 > * { margin-top: 0 !important; }
-    #st-img-card, #st-wrap-card, #st-akte-card, #dp-seg, #dp-badges, #dp-akte { display: none !important; } #dp-stat { display: block !important; }
+    #st-img-card, #st-wrap-card, #st-akte-card, #dp-seg, #dp-badges, #dp-akte, #dp-checkheft { display: none !important; } #dp-stat { display: block !important; }
     #st-heat-scroll { overflow: visible !important; } #st-heat, #st-heat-wd { max-width: 100% !important; height: auto !important; }
     .cv-src { display: none !important; } .cv-print { display: block !important; }
     #view-report .rcard * { color: #111 !important; }
@@ -660,7 +660,7 @@
         <div id="st-wrap-list" class="mt-1 flex flex-col"></div>
       </div>
       <div id="st-img-card" class="hidden rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4"><img id="st-img" alt="Statistik" draggable="false" class="mx-auto block max-h-44 w-auto object-contain"></div>
-      <div id="dp-seg" class="print:hidden flex bg-slate-200 dark:bg-slate-800 rounded-xl p-1"><button type="button" data-dp="stat" class="dp-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Statistik</button><button type="button" data-dp="badges" class="dp-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Abzeichen</button><button type="button" data-dp="akte" class="dp-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Fahrzeugakte</button></div>
+      <div id="dp-seg" class="print:hidden flex bg-slate-200 dark:bg-slate-800 rounded-xl p-1"><button type="button" data-dp="stat" class="dp-btn min-w-0 flex-auto px-1.5 py-1.5 rounded-lg text-[13px] font-medium whitespace-nowrap">Statistik</button><button type="button" data-dp="badges" class="dp-btn min-w-0 flex-auto px-1.5 py-1.5 rounded-lg text-[13px] font-medium whitespace-nowrap">Abzeichen</button><button type="button" data-dp="akte" class="dp-btn min-w-0 flex-auto px-1.5 py-1.5 rounded-lg text-[13px] font-medium whitespace-nowrap">Fahrzeugakte</button><button type="button" data-dp="checkheft" class="dp-btn min-w-0 flex-auto px-1.5 py-1.5 rounded-lg text-[13px] font-medium whitespace-nowrap">Checkheft</button></div>
       <div id="dp-panes">
       <div id="dp-stat" class="dp-pane space-y-4">
       <div class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
@@ -674,8 +674,8 @@
         </div>
       </div>
       <div class="grid grid-cols-2 gap-3">
-        <div class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4"><p class="text-sm text-slate-500 dark:text-slate-400">Ø Laufleistung pro Tag</p><div class="mt-2 flex items-center gap-2 min-w-0"><span class="text-sky-400 shrink-0 w-6 h-6"><svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16v-4l2-5h12l2 5v4M3 16h18M7 16v2.5M17 16v2.5"/><circle cx="8" cy="13" r=".8"/><circle cx="16" cy="13" r=".8"/></svg></span><p id="st-km-day" class="st-v whitespace-nowrap text-base font-semibold tabular-nums leading-6">–</p></div></div>
-        <div class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4"><p class="text-sm text-slate-500 dark:text-slate-400">Ø Laufleistung pro Monat</p><div class="mt-2 flex items-center gap-2 min-w-0"><span class="text-sky-400 shrink-0 w-6 h-6"><svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16v-4l2-5h12l2 5v4M3 16h18M7 16v2.5M17 16v2.5"/><circle cx="8" cy="13" r=".8"/><circle cx="16" cy="13" r=".8"/></svg></span><p id="st-km-mon" class="st-v whitespace-nowrap text-base font-semibold tabular-nums leading-6">–</p></div></div>
+        <div class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4"><p class="text-sm text-slate-500 dark:text-slate-400 text-left whitespace-nowrap overflow-hidden text-ellipsis tracking-tight">Ø km pro Tag</p><div class="mt-2 flex items-center gap-2 min-w-0"><span class="text-sky-400 shrink-0 w-6 h-6"><svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16v-4l2-5h12l2 5v4M3 16h18M7 16v2.5M17 16v2.5"/><circle cx="8" cy="13" r=".8"/><circle cx="16" cy="13" r=".8"/></svg></span><p id="st-km-day" class="st-v whitespace-nowrap text-base font-semibold tabular-nums leading-6">–</p></div></div>
+        <div class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4"><p class="text-sm text-slate-500 dark:text-slate-400 text-left whitespace-nowrap overflow-hidden text-ellipsis tracking-tight">Ø km pro Monat</p><div class="mt-2 flex items-center gap-2 min-w-0"><span class="text-sky-400 shrink-0 w-6 h-6"><svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16v-4l2-5h12l2 5v4M3 16h18M7 16v2.5M17 16v2.5"/><circle cx="8" cy="13" r=".8"/><circle cx="16" cy="13" r=".8"/></svg></span><p id="st-km-mon" class="st-v whitespace-nowrap text-base font-semibold tabular-nums leading-6">–</p></div></div>
       </div>
       <div class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
         <p class="text-sm text-slate-500 dark:text-slate-400">Durchschnittsverbrauch (Ø) inkl. Verluste</p>
@@ -698,8 +698,8 @@
         </div>
       </div>
       <div class="grid grid-cols-2 gap-3">
-        <div class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4"><p class="text-sm text-slate-500 dark:text-slate-400">Ø Ladekosten pro Tag</p><div class="mt-2 flex items-center gap-2 min-w-0"><span class="text-sky-400 shrink-0 w-6 h-6"><svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5A4.5 4.5 0 0 0 8 10m0 4a4.5 4.5 0 0 0 7.5 1.5M7 11h6M7 13h6"/></svg></span><p id="st-cpd" class="st-v whitespace-nowrap text-base font-semibold tabular-nums leading-6">–</p></div></div>
-        <div class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4"><p class="text-sm text-slate-500 dark:text-slate-400">Ø Ladekosten pro Monat</p><div class="mt-2 flex items-center gap-2 min-w-0"><span class="text-sky-400 shrink-0 w-6 h-6"><svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5A4.5 4.5 0 0 0 8 10m0 4a4.5 4.5 0 0 0 7.5 1.5M7 11h6M7 13h6"/></svg></span><p id="st-cpm" class="st-v whitespace-nowrap text-base font-semibold tabular-nums leading-6">–</p></div></div>
+        <div class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4"><p class="text-sm text-slate-500 dark:text-slate-400 text-left whitespace-nowrap overflow-hidden text-ellipsis tracking-tight">Ø Laden pro Tag</p><div class="mt-2 flex items-center gap-2 min-w-0"><span class="text-sky-400 shrink-0 w-6 h-6"><svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5A4.5 4.5 0 0 0 8 10m0 4a4.5 4.5 0 0 0 7.5 1.5M7 11h6M7 13h6"/></svg></span><p id="st-cpd" class="st-v whitespace-nowrap text-base font-semibold tabular-nums leading-6">–</p></div></div>
+        <div class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4"><p class="text-sm text-slate-500 dark:text-slate-400 text-left whitespace-nowrap overflow-hidden text-ellipsis tracking-tight">Ø Laden pro Monat</p><div class="mt-2 flex items-center gap-2 min-w-0"><span class="text-sky-400 shrink-0 w-6 h-6"><svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5A4.5 4.5 0 0 0 8 10m0 4a4.5 4.5 0 0 0 7.5 1.5M7 11h6M7 13h6"/></svg></span><p id="st-cpm" class="st-v whitespace-nowrap text-base font-semibold tabular-nums leading-6">–</p></div></div>
       </div>
       <div id="st-temp-card" class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
         <p class="text-sm text-slate-500 dark:text-slate-400">Verbrauch je Außentemperatur</p>
@@ -732,10 +732,14 @@
       </div>
       </div>
       <div id="dp-akte" class="dp-pane hidden space-y-4">
-      <div id="st-akte-card" class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4 flex items-center gap-3">
-        <div class="min-w-0 flex-1"><p class="font-barlow text-xl font-bold uppercase tracking-[0.08em]">Fahrzeugakte</p><p class="text-xs text-slate-500 dark:text-slate-400 text-left">Eckdaten, Verbrauch, Kosten, Akku</p></div>
-        <button id="btn-akte" type="button" class="shrink-0 h-11 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white active:scale-95 transition">PDF</button>
+      <div id="st-akte-card" class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
+        <p class="font-barlow text-xl font-bold uppercase tracking-[0.08em]">Fahrzeugakte</p>
+        <img src="/Bilder/fahrzeugakte.webp" alt="" aria-hidden="true" width="620" height="456" loading="lazy" decoding="async" class="mx-auto mt-3 mb-2 block h-auto w-full max-w-[260px] select-none pointer-events-none">
+        <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Lückenlose Historie als PDF, zum Beispiel für den Verkauf: Eckdaten mit Kaufangaben, Diagramme zu km, Verbrauch, Kosten, Akku und Strompreis, Monatsübersicht, AC-/DC-Aufteilung, Rekorde, Wartung und Service sowie Wartungsplan. Die Belege dazu stehen im Checkheft.</p>
+        <button id="btn-akte" type="button" class="mt-3 w-full rounded-xl bg-emerald-600 py-3 text-sm font-semibold text-white active:scale-95 transition">Fahrzeugakte als PDF erstellen</button>
       </div>
+      </div>
+      <div id="dp-checkheft" class="dp-pane hidden space-y-4">
       <div id="ch-card" class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4 space-y-3">
         <div class="flex items-baseline justify-between gap-2"><p class="font-barlow text-xl font-bold uppercase tracking-[0.08em]">Checkheft</p><span id="ch-count" class="text-xs text-slate-500 dark:text-slate-400"></span></div>
         <div id="ch-chips" class="flex flex-wrap gap-1.5"></div>
@@ -1004,7 +1008,7 @@
           <div><label for="set-next-hu" class="text-sm font-medium text-slate-700 dark:text-slate-300">Nächste HU</label><input id="set-next-hu" type="month" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
           <div><label for="set-next-svc" class="text-sm font-medium text-slate-700 dark:text-slate-300">Nächster Service</label><input id="set-next-svc" type="month" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
         </div>
-          <p class="mt-1.5 text-xs text-slate-500 dark:text-slate-400 text-left">Erscheint im Checkheft (Datenpool → Fahrzeugakte) und im Checkheft-PDF. Leer lassen blendet die Angabe aus.</p>
+          <p class="mt-1.5 text-xs text-slate-500 dark:text-slate-400 text-left">Erscheint im Checkheft (Datenpool → Checkheft) und im Checkheft-PDF. Leer lassen blendet die Angabe aus.</p>
         </div>
       </div>
     </div>
@@ -5469,7 +5473,7 @@ $('btn-akte').addEventListener('click', async () => {
   } finally { btn.disabled = false; btn.textContent = label; }
 });
 /* =====================================================================
-   Digitales Checkheft (Datenpool → Fahrzeugakte): alle Kosten der Kategorien Service, Reparatur und TÜV als Zeitleiste,
+   Digitales Checkheft (Datenpool → Checkheft): alle Kosten der Kategorien Service, Reparatur und TÜV als Zeitleiste,
    Detailansicht mit Belegen (Google Drive) und „Checkheft als PDF“: Deckblatt mit Inhaltsverzeichnis + alle Belege chronologisch,
    jede Seite mit Kopfzeile (Art · Leistung · Datum · km) und Seitenzahl. Zusammengesetzt im Browser mit pdf-lib.
    ===================================================================== */
@@ -6610,14 +6614,14 @@ function openSettings(sec) { window.setNoDrawer = true; if (currentView !== 'set
 segSwipe($('view-report'), $('rep-mode'), '#rep-place,#dp-panes,#dp-seg');   // Berichte: Laden | Kosten | Akku | Datenpool | Fahrten (ganze Seite; im Datenpool wischen die Unter-Tabs)
 /* ---- Datenpool (Berichte, früher „Statistik“): Unter-Tabs Statistik | Abzeichen | Fahrzeugakte, per Antippen oder Wischen ---- */
 let dpTab = 'stat';
-const DP_TABS = ['stat', 'badges', 'akte'];
+const DP_TABS = ['stat', 'badges', 'akte', 'checkheft'];
 function setDpTab(t, anim = true) {
   if (!DP_TABS.includes(t)) t = 'stat';
   const dir = DP_TABS.indexOf(t) - DP_TABS.indexOf(dpTab); dpTab = t;
   segPaintKey('.dp-btn', 'dp', t);
   DP_TABS.forEach(k => { const el = $('dp-' + k), on = k === t; el.classList.toggle('hidden', !on); el.classList.remove('dp-inL', 'dp-inR'); if (on && anim && dir) { void el.offsetWidth; el.classList.add(dir > 0 ? 'dp-inL' : 'dp-inR'); } });
   if (t === 'badges') { try { renderBadges(); } catch (e) { } }
-  if (t === 'akte') { try { renderCheckheft(); } catch (e) { } }
+  if (t === 'checkheft') { try { renderCheckheft(); } catch (e) { } }
 }
 document.querySelectorAll('.dp-btn').forEach(b => b.addEventListener('click', () => setDpTab(b.dataset.dp)));
 segSwipe($('dp-panes'), $('dp-seg'));                                     // im Datenpool wechselt Wischen die Unter-Tabs
