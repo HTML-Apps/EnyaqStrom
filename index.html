@@ -1176,8 +1176,11 @@
 <!-- Einstellungen: Seitenleiste (Burger-Menü) -->
 <div id="nav-drawer" class="fixed inset-0 z-[72] pointer-events-none" aria-hidden="true">
   <div id="nav-drawer-bg" class="absolute inset-0 bg-black/60 opacity-0 transition-opacity duration-300"></div>
-  <nav id="nav-drawer-panel" aria-label="Alles auf einen Blick" class="absolute inset-y-0 left-0 w-[340px] max-w-[94vw] -translate-x-full overflow-y-auto rounded-r-[28px] bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-2xl transition-transform duration-300 ease-out" style="padding:max(14px,env(safe-area-inset-top)) 12px max(16px,env(safe-area-inset-bottom))">
+  <nav id="nav-drawer-panel" aria-label="Alles auf einen Blick" class="absolute inset-y-0 left-0 w-[340px] max-w-[94vw] -translate-x-full overflow-y-auto rounded-r-[28px] flex flex-col bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-2xl transition-transform duration-300 ease-out" style="padding:max(14px,env(safe-area-inset-top)) 12px max(16px,env(safe-area-inset-bottom))">
     <div class="flex items-center justify-between gap-2"><p class="font-barlow text-[22px] font-bold uppercase tracking-[0.08em]">Alles auf einen Blick</p><button type="button" data-nav="close" aria-label="Schließen" class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-800"><svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <label class="mt-3 flex h-11 shrink-0 items-center gap-2 rounded-2xl bg-slate-100 dark:bg-slate-800 px-3 focus-within:ring-2 focus-within:ring-emerald-500"><svg class="h-[18px] w-[18px] shrink-0 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><input id="nav-q" type="search" autocomplete="off" enterkeyhint="search" placeholder="Seite oder Funktion suchen …" aria-label="Seite oder Funktion suchen" class="min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-slate-400"></label>
+    <div id="nav-results" class="hidden mt-3 space-y-1"></div>
+    <div id="nav-tiles" class="pb-4">
     <p class="mt-4 mb-2 text-[11px] font-bold uppercase tracking-[0.1em] text-emerald-700 dark:text-emerald-300">Erfassen</p>
     <div class="grid grid-cols-4 gap-1.5">
       <button type="button" data-nav="cap-home" class="relative flex min-w-0 flex-col items-center gap-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800 px-0.5 py-2.5 text-[10.5px] font-semibold leading-tight tracking-tight active:scale-95 transition"><svg class="h-[22px] w-[22px] text-emerald-600 dark:text-emerald-300" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg><span class="max-w-full truncate">Zuhause</span></button>
@@ -1207,6 +1210,11 @@
       <button type="button" data-nav="car" class="relative flex min-w-0 flex-col items-center gap-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800 px-0.5 py-2.5 text-[10.5px] font-semibold leading-tight tracking-tight active:scale-95 transition"><svg class="h-[22px] w-[22px] text-violet-600 dark:text-violet-300" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 17h14M6 17v2M18 17v2M4 13l2-5h12l2 5v4H4z"/><circle cx="8" cy="14" r="1"/><circle cx="16" cy="14" r="1"/></svg><span class="max-w-full truncate">Fahrzeug</span></button>
       <button type="button" data-nav="settings" class="relative flex min-w-0 flex-col items-center gap-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800 px-0.5 py-2.5 text-[10.5px] font-semibold leading-tight tracking-tight active:scale-95 transition"><svg class="h-[22px] w-[22px] text-violet-600 dark:text-violet-300" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/></svg><span class="max-w-full truncate">Einstellungen</span></button>
     </div>
+    </div>
+    <button type="button" data-nav="account" class="mt-auto flex w-full shrink-0 items-center gap-3 border-t border-slate-200 dark:border-slate-800 pt-3 text-left active:opacity-70">
+      <span id="nav-avatar" class="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-emerald-700 text-white font-bold">?</span>
+      <span class="min-w-0"><span id="nav-name" class="block truncate font-semibold">Nicht angemeldet</span><span id="nav-sub" class="block truncate text-xs text-slate-500 dark:text-slate-400">Konto &amp; Cloud</span></span>
+    </button>
   </nav>
 </div>
 <div id="set-drawer" class="fixed inset-0 z-[70] pointer-events-none" aria-hidden="true">
@@ -6647,12 +6655,17 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('set-d
 /* ---- Schnellmenü auf Start („☰“ links neben dem Titel oder vom linken Rand nach rechts wischen): alle wichtigen Seiten und Reiter mit einem Tipp ---- */
 function navOpen() { return $('nav-drawer').getAttribute('aria-hidden') === 'false'; }
 function openNavDrawer() {
+  try { const u = window.cloud?.userInfo?.(), av = $('nav-avatar'); $('nav-name').textContent = u ? (u.name || u.email || 'Angemeldet') : 'Nicht angemeldet';
+    $('nav-sub').textContent = u ? 'Cloud ✓' + (typeof apiEnabled === 'function' && apiEnabled() ? ' · Škoda-API verbunden' : '') : 'Konto & Cloud – antippen zum Anmelden';
+    const ini = u ? (u.name || u.email || '?').split(/[\s@.]+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('') : '?';
+    av.innerHTML = u && u.photo ? '<img src="' + esc(u.photo) + '" alt="" referrerpolicy="no-referrer" class="h-full w-full object-cover">' : esc(ini); } catch (e) { }
   const n = Number(($('bell-badge')?.textContent || '').replace(/\D/g, '')) || 0, rb = $('nav-rem-n'); rb.textContent = n; rb.classList.toggle('hidden', !(n > 0 && !$('bell-badge').classList.contains('hidden')));
   let due = false; try { const lim = new Date(); lim.setMonth(lim.getMonth() + 2); due = chDue().some(x => x.d <= lim); } catch (e) { } $('nav-ch-dot').classList.toggle('hidden', !due);   // HU/Service in den nächsten 2 Monaten oder überfällig
   const d = $('nav-drawer'); d.classList.remove('pointer-events-none'); d.setAttribute('aria-hidden', 'false'); $('btn-nav').setAttribute('aria-expanded', 'true');
   $('nav-drawer-bg').classList.replace('opacity-0', 'opacity-100'); $('nav-drawer-panel').classList.replace('-translate-x-full', 'translate-x-0');
 }
 function closeNavDrawer() {
+  $('nav-q').value = ''; navSearch(); try { $('nav-q').blur(); } catch (e) { }
   const d = $('nav-drawer'); d.classList.add('pointer-events-none'); d.setAttribute('aria-hidden', 'true'); $('btn-nav').setAttribute('aria-expanded', 'false');
   $('nav-drawer-bg').classList.replace('opacity-100', 'opacity-0'); $('nav-drawer-panel').classList.replace('translate-x-0', '-translate-x-full');
 }
@@ -6665,8 +6678,36 @@ const NAV_GO = {
   tax: () => { repMode = 'fahrten'; showView('report'); setTimeout(() => { const t = $('tax-card'); if (t && !t.classList.contains('hidden')) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 250); },
   akte: () => { repMode = 'stat'; setDpTab('akte', false); showView('report'); }, checkheft: () => { repMode = 'stat'; setDpTab('checkheft', false); showView('report'); },
   reminders: () => showView('reminders'), kb: () => showView('kb'), providers: () => showView('providers'),
-  backup: () => openSettings('daten'), car: () => openSettings('fahrzeug'), settings: () => showView('settings')
+  backup: () => openSettings('daten'), car: () => openSettings('fahrzeug'), settings: () => showView('settings'), account: () => openSettings('konto'),
+  'rep-kosten': () => { repMode = 'kosten'; showView('report'); }, 'rep-fahrten': () => { repMode = 'fahrten'; showView('report'); },
+  'hist-kosten': () => { histFilter = 'kosten'; showView('history'); }, 'hist-laden': () => { histFilter = 'laden'; showView('history'); },
+  'akte-pdf': () => { NAV_GO.akte(); setTimeout(() => $('btn-akte').click(), 300); }, 'ch-pdf': () => { NAV_GO.checkheft(); setTimeout(() => { const b = $('btn-ch-pdf'); if (b && !b.classList.contains('hidden')) b.scrollIntoView({ block: 'center' }); }, 300); },
+  'bak-now': () => { openSettings('daten'); setTimeout(() => $('bak-now').scrollIntoView({ block: 'center' }), 200); },
+  'set-laden': () => openSettings('laden'), 'set-rem': () => openSettings('erinnerungen'), 'set-fahrten': () => openSettings('fahrten'), 'set-listen': () => openSettings('listen'), 'set-wetter': () => openSettings('wetter'), 'set-gefahr': () => openSettings('gefahr')
 };
+/* Suche im Schnellmenü: Titel, Ort in der App und Stichwörter; alle Suchwörter müssen vorkommen (Groß/klein und Umlaute egal) */
+const NAV_IDX = [
+  ['cap-home', 'Laden Zuhause erfassen', 'Laden', 'wallbox zähler foto heim'], ['cap-bosch', 'Laden Bosch erfassen', 'Laden', 'arbeit werk lichtblick'], ['cap-away', 'Laden unterwegs erfassen', 'Laden', 'schnelllader dc ladesäule'],
+  ['costs', 'Kosten erfassen', 'Kosten', 'ausgabe beleg rechnung versicherung'], ['rep', 'Bericht Laden', 'Berichte › Laden', 'monat kwh'], ['rep-kosten', 'Bericht Kosten', 'Berichte › Kosten', 'tco ausgaben'],
+  ['akku', 'Akku', 'Berichte › Akku', 'kapazität pflege temperatur soh netto rebalancing'], ['stat', 'Statistik', 'Berichte › Datenpool', 'verbrauch rekorde laufleistung'], ['badges', 'Abzeichen', 'Berichte › Datenpool', 'badges erfolge'],
+  ['akte', 'Fahrzeugakte', 'Berichte › Datenpool', 'verkauf historie'], ['akte-pdf', 'Fahrzeugakte als PDF', 'Aktion', 'drucken export'], ['checkheft', 'Checkheft', 'Berichte › Datenpool', 'service reparatur tüv hu werkstatt'],
+  ['ch-pdf', 'Checkheft als PDF', 'Aktion', 'belege mappe drucken'], ['rep-fahrten', 'Fahrten-Bericht', 'Berichte › Fahrten', 'fahrtenbuch arbeitsweg'], ['tax', 'Steuer · Arbeitsweg', 'Berichte › Fahrten', 'pendlerpauschale entfernungspauschale werbungskosten'],
+  ['hist', 'Historie', 'Historie', 'verlauf bearbeiten datenprüfung'], ['hist-laden', 'Ladungen', 'Historie › Laden', 'verlauf'], ['hist-kosten', 'Kosten-Verlauf', 'Historie › Kosten', 'etiketten kategorien filter'], ['trips', 'Fahrten', 'Historie › Fahrten', 'fahrtenbuch'],
+  ['wrap', 'Rückblick', 'Start', 'jahr wrapped'], ['reminders', 'Erinnerungen', 'Erinnerungen', 'wartung termine fällig'], ['kb', 'Wissen', 'Wissen', 'notizen links tipps'], ['providers', 'Ladekarten', 'Ladeanbieter', 'anbieter tarife preise'],
+  ['bak-now', 'Jetzt in Google Drive sichern', 'Einstellungen › Sicherung & Belege', 'backup drive'], ['backup', 'Sicherung & Belege', 'Einstellungen', 'export import drive'],
+  ['car', 'Fahrzeug & Kauf', 'Einstellungen', 'kennzeichen fin kaufpreis kauftag'], ['set-laden', 'Laden & Akku', 'Einstellungen', 'strompreis kapazität wltp referenz temperatur'], ['set-rem', 'Nächste HU / Service', 'Einstellungen › Erinnerungen', 'vorwarnung fälligkeit tüv'],
+  ['set-fahrten', 'Fahrtenbuch-Einstellungen', 'Einstellungen', 'orte etiketten regeln import'], ['set-listen', 'Anbieter & Kategorien', 'Einstellungen', 'etiketten liste'], ['set-wetter', 'Wetter', 'Einstellungen', 'standort frost'],
+  ['account', 'Konto & Cloud', 'Einstellungen', 'anmelden google škoda api'], ['set-gefahr', 'Alle Daten löschen', 'Einstellungen', 'zurücksetzen reset']];
+const navNorm = (t) => String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+function navSearch() {
+  const q = navNorm($('nav-q').value.trim()), words = q.split(/\s+/).filter(Boolean), res = $('nav-results');
+  $('nav-tiles').classList.toggle('hidden', !!words.length); res.classList.toggle('hidden', !words.length); if (!words.length) { res.innerHTML = ''; return; }
+  const hits = NAV_IDX.filter(x => { const h = navNorm(x[1] + ' ' + x[2] + ' ' + x[3]); return words.every(w => h.includes(w)); });
+  res.innerHTML = hits.length ? hits.map(x => '<button type="button" data-nav="' + x[0] + '" class="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left active:bg-slate-100 dark:active:bg-slate-800"><span class="min-w-0 flex-1"><span class="block truncate text-[15px] font-semibold">' + esc(x[1]) + '</span><span class="block truncate text-xs text-slate-500 dark:text-slate-400">' + esc(x[2]) + '</span></span><svg class="h-4 w-4 shrink-0 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>').join('')
+    : '<p class="px-3 py-4 text-sm text-slate-500 dark:text-slate-400 text-left">Nichts gefunden.</p>';
+}
+$('nav-q').addEventListener('input', navSearch);
+$('nav-q').addEventListener('keydown', (e) => { if (e.key === 'Enter') { const b = $('nav-results').querySelector('[data-nav]'); if (b) b.click(); } });
 $('btn-nav').addEventListener('click', openNavDrawer);
 $('nav-drawer-bg').addEventListener('click', closeNavDrawer);
 $('nav-drawer').addEventListener('click', (e) => { const b = e.target.closest('[data-nav]'); if (!b) return; closeNavDrawer(); const f = NAV_GO[b.dataset.nav]; if (f) f(); });
