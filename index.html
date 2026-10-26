@@ -814,7 +814,7 @@
           <p><b>Messgröße:</b> Steckdosen-kWh je 100 % Akku = Summe der geladenen kWh ÷ Summe des Akku-Hubs. Es wird die Summe durch die Summe geteilt statt den Mittelwert der Einzelladungen zu bilden. So zählen große Ladehübe stärker, denn die Rundung des Akku-% (±0,5 je Ende) fällt bei 60 % Hub nur halb so stark ins Gewicht wie bei 30 %.</p>
           <p><b>Auswahl:</b> nur Wechselstrom-Ladungen Zuhause und Bosch, mindestens 30 % Hub, Ende unter 99 % (Zellausgleich und Ladekurve verfälschen die letzten Prozent). „Unterwegs“ bleibt außen vor (Gleich- und Wechselstrom gemischt). Ausreißer werden robust ausgeschlossen.</p>
           <p><b>Genauigkeit:</b> Der ±-Bereich (95 %) ergibt sich aus der tatsächlichen Streuung deiner Ladungen und der Rundung des Akku-%. Je mehr Ladungen, desto enger.</p>
-          <p><b>Nutzbare kWh:</b> Steckdosen-kWh × Ladewirkungsgrad (92 %, Spanne 91–93 %, entspricht 7–9 % Ladeverlust laut ADAC-Messungen). Das ist nur grob; der Absolutwert ist unsicher, wichtig ist die Veränderung über die Zeit.</p>
+          <p><b>Nutzbare kWh:</b> Steckdosen-kWh × Ladewirkungsgrad 93 % (entspricht 7 % Ladeverlust, ADAC-Messungen liegen bei 7–9 %). Das ist nur grob; der Absolutwert ist unsicher, wichtig ist die Veränderung über die Zeit.</p>
           <p><b>Trend:</b> erst nach 12 Monaten und nur im Vergleich desselben Zeitraums zum Vorjahr, weil Kälte im Winter Wirkungsgrad und nutzbare Kapazität senkt. Ein „Hinweis“ erscheint nur, wenn der Unterschied größer ist als die Messunsicherheit.</p>
           <p><b>Grenzen:</b> Sinkt der Wert, kann das Alterung sein, aber auch höhere Ladeverluste (Kabel, Wallbox, Batterieheizung). Die Akku-Anzeige ist nicht exakt linear. Dieser Wert ersetzt keine Auslesung des Akku-Zustands (State of Health) per OBD-Diagnose.</p>
         </div>
@@ -4047,9 +4047,9 @@ applyHeroColor();
    (Zellausgleich und Ladekurve verfälschen die letzten Prozent) und gemessener kWh-Angabe. Ausreißer werden robust (MAD) ausgeschlossen.
    Unsicherheit: größerer Wert aus (a) der tatsächlichen Streuung der Ladungen (Ratio-Schätzer) und (b) dem reinen Rundungsfehler; 95-%-Bereich mit t-Faktor.
    Trend erst ab 12 Monaten und nur als Vergleich desselben Zeitraums im Vorjahr (Kälte senkt im Winter Wirkungsgrad und nutzbare Kapazität); „Hinweis“ nur,
-   wenn der Unterschied größer ist als die kombinierte 95-%-Unsicherheit. Absolutwert (nutzbare kWh) = K × Ladewirkungsgrad 92 % (91–93 %): grobe Umrechnung.
+   wenn der Unterschied größer ist als die kombinierte 95-%-Unsicherheit. Absolutwert (nutzbare kWh) = K × Ladewirkungsgrad 93 %: grobe Umrechnung.
    ===================================================================== */
-const BAT = { hub: 30, endMax: 98, minN: 10, minHub: 400, eta: 0.92, etaLo: 0.91, etaHi: 0.93, win: 91, day: 864e5 };
+const BAT = { hub: 30, endMax: 98, minN: 10, minHub: 400, eta: 0.93, win: 91, day: 864e5 };
 let batChart = null;
 const median = (a) => { const s = a.slice().sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
 const tCrit = (df) => df < 1 ? Infinity : df <= 15 ? [0, 12.71, 4.30, 3.18, 2.78, 2.57, 2.45, 2.36, 2.31, 2.26, 2.23, 2.20, 2.18, 2.16, 2.14, 2.13][df] : df <= 20 ? 2.09 : df <= 30 ? 2.04 : 1.96;
@@ -4267,7 +4267,7 @@ function renderBattery() {
     $('bat-net').textContent = fmt(fit.K * BAT.eta, 1);
     $('bat-k').textContent = fmt(fit.K, 1); $('bat-ci').textContent = '± ' + fmt(fit.ci, 1);
     const eta = '<span style="font-family:system-ui,Roboto,\'Noto Sans\',\'Segoe UI\',\'DejaVu Sans\',\'Times New Roman\',serif" title="Ladewirkungsgrad">η</span>';
-    $('bat-c').innerHTML = 'Spanne ' + fmt(fit.K * BAT.etaLo, 1) + ' – ' + fmt(fit.K * BAT.etaHi, 1) + ' kWh · bei ' + eta + ' = ' + Math.round(BAT.eta * 100) + ' % (' + Math.round(BAT.etaLo * 100) + '–' + Math.round(BAT.etaHi * 100) + ' %)';
+    $('bat-c').innerHTML = 'bei ' + eta + ' = ' + Math.round(BAT.eta * 100) + ' %';
     $('bat-basis').textContent = 'Basis: ' + fit.n + ' Ladungen Zuhause/Bosch · ' + fmtDate(new Date(fit.use[0].t).toISOString()) + ' bis ' + fmtDate(new Date(fit.use[fit.use.length - 1].t).toISOString()) + (fit.out ? ' · ' + fit.out + (fit.out === 1 ? ' Ausreißer' : ' Ausreißer') + ' ausgeschlossen' : '');
   }
   /* Trend */
@@ -5282,7 +5282,7 @@ async function wxForecast(l) {
 
 /* =====================================================================
    Frost-Hinweis (Start, ab 16 Uhr): Tiefstwert morgen zwischen 5 und 9 Uhr am Wetter-Standort unter 0 °C.
-   Reichweite: Netto-Akku ÷ (Ø Verbrauch inkl. Ladeverluste × 0,92); Winter-Abschlag als Faustwert 10 % + 1,5 % je Grad unter 0 (max. 35 %).
+   Reichweite: Netto-Akku ÷ (Ø Verbrauch inkl. Ladeverluste × 0,93); Winter-Abschlag als Faustwert 10 % + 1,5 % je Grad unter 0 (max. 35 %).
    Vorhersage stündlich (Open-Meteo), 1 Stunde zwischengespeichert. × blendet bis zum nächsten Tag aus.
    ===================================================================== */
 const KEY_FROST = 'enyaq.frost';                 // { lat, lon, t, day ('JJJJ-MM-TT' = morgen), min } + snooze
@@ -5304,7 +5304,7 @@ async function renderFrost() {
   if (min == null || min >= 0) { el.classList.add('hidden'); return; }
   const loss = Math.min(35, Math.round(10 + Math.max(0, -min) * 1.5)), rs = getReadings();
   let k100 = null; try { const t = rs.length ? consumptionTotals(rs, rs.map((_, i) => i)) : null; k100 = t && t.km ? t.kwh100 : null; } catch (e) { }
-  const full = k100 ? batteryKwh() / (k100 * 0.92) * 100 : null;
+  const full = k100 ? batteryKwh() / (k100 * BAT.eta) * 100 : null;
   $('frost-h').textContent = 'Morgen früh ' + fmt(min, 0).replace('-', '−') + ' °C';
   $('frost-t').textContent = 'Reichweite ca. ' + loss + ' % geringer' + (full ? ' (volle Ladung ≈ ' + fmt(Math.round(full * (1 - loss / 100) / 5) * 5, 0) + ' statt ' + fmt(Math.round(full / 5) * 5, 0) + ' km)' : '') + '. Heute Abend anstecken: Vorklimatisieren aus dem Netz schont den Akku.';
   el.classList.remove('hidden');
@@ -5548,7 +5548,7 @@ function akteHtml() {
   if (n > 0) h += '<div style="break-inside:avoid">' + CAP('AC- und DC-Laden') + akSplit([['Energie (kWh)', ac.kwh, dc.kwh, (v) => fmt(v, 0) + ' kWh'], ['Ladungen (Anzahl)', ac.n, dc.n, (v) => fmt(v, 0) + (v === 1 ? ' Ladung' : ' Ladungen')]])
     + tbl(['Ladeart', 'Ladungen', 'Anteil', 'Energie (kWh)', 'Anteil'], [['AC-Laden (Zuhause + Bosch)', fmt(ac.n, 0), pc(ac.n, n), fmt(ac.kwh, 0), pc(ac.kwh, kwh)], ['davon Zuhause', fmt(pl.home.n, 0), pc(pl.home.n, n), fmt(pl.home.kwh, 0), pc(pl.home.kwh, kwh)], ['davon Bosch', fmt(pl.bosch.n, 0), pc(pl.bosch.n, n), fmt(pl.bosch.kwh, 0), pc(pl.bosch.kwh, kwh)], ['DC-Laden (Unterwegs)', fmt(dc.n, 0), pc(dc.n, n), fmt(dc.kwh, 0), pc(dc.kwh, kwh)], Object.assign(['Summe', fmt(n, 0), '100 %', fmt(kwh, 0), '100 %'], { bold: true })], [1, 2, 3, 4])
     + NOTE('AC = Zuhause und Bosch, DC = Unterwegs.' + (noKwh ? ' ' + noKwh + (noKwh === 1 ? ' Ladung ohne kWh-Angabe zählt' : ' Ladungen ohne kWh-Angabe zählen') + ' nur bei der Anzahl, nicht bei der Energie.' : '')) + '</div>';
-  h += H2('Akku-Schätzung') + (batOk ? kv([['Nutzbar im Auto je 100 % Akku', fmt(fit.K * BAT.eta, 1) + ' kWh (Spanne ' + fmt(fit.K * BAT.etaLo, 1) + ' – ' + fmt(fit.K * BAT.etaHi, 1) + ' kWh bei ' + Math.round(BAT.etaLo * 100) + '–' + Math.round(BAT.etaHi * 100) + ' % Ladewirkungsgrad)'], ['Brutto an der Steckdose je 100 % Akku', fmt(fit.K, 1) + ' kWh (± ' + fmt(fit.ci, 1) + ', 95 %)'], ['Basis', fit.n + ' Ladungen, ' + D1(fit.use[0].t) + ' bis ' + D1(fit.use[fit.use.length - 1].t)]]) + NOTE('Schätzung aus eigenen Messungen der Ladungen, kein Gutachten und kein Wert des Herstellers.') : '<p style="font-size:12px;color:#475569;margin:0">Noch nicht genug passende Ladungen (Akku-Start/-Ende in % und gemessene kWh) für eine Schätzung.</p>');
+  h += H2('Akku-Schätzung') + (batOk ? kv([['Nutzbar im Auto je 100 % Akku', fmt(fit.K * BAT.eta, 1) + ' kWh (bei ' + Math.round(BAT.eta * 100) + ' % Ladewirkungsgrad)'], ['Brutto an der Steckdose je 100 % Akku', fmt(fit.K, 1) + ' kWh (± ' + fmt(fit.ci, 1) + ', 95 %)'], ['Basis', fit.n + ' Ladungen, ' + D1(fit.use[0].t) + ' bis ' + D1(fit.use[fit.use.length - 1].t)]]) + NOTE('Schätzung aus eigenen Messungen der Ladungen, kein Gutachten und kein Wert des Herstellers.') : '<p style="font-size:12px;color:#475569;margin:0">Noch nicht genug passende Ladungen (Akku-Start/-Ende in % und gemessene kWh) für eine Schätzung.</p>');
   /* Diagramme */
   h += H2('Diagramme');
   const kmPts = rs.filter(r => r.odometerKm > 0).map(r => [Date.parse(r.date), r.odometerKm]).concat(cs.filter(c => c.odometerKm > 0).map(c => [Date.parse(c.date), c.odometerKm])).filter(q => Number.isFinite(q[0])).sort((a, b) => a[0] - b[0]);
