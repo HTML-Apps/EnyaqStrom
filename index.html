@@ -784,6 +784,11 @@
           <div id="care-seg" class="flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 text-xs"><button type="button" data-care="90" class="care-btn rounded-lg px-2.5 py-1 font-medium">90 Tage</button><button type="button" data-care="kauf" class="care-btn rounded-lg px-2.5 py-1 font-medium">Seit Kauf</button></div></div>
         <div id="care-body"></div>
       </div>
+      <div id="acdc-card" class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
+        <div class="space-y-2"><p class="text-sm text-slate-500 dark:text-slate-400">AC/DC-Laden</p>
+          <div id="acdc-seg" class="flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 text-xs"><button type="button" data-acdc="90" class="acdc-btn flex-1 rounded-lg px-2 py-1.5 font-medium whitespace-nowrap">90 Tage</button><button type="button" data-acdc="kauf" class="acdc-btn flex-1 rounded-lg px-2 py-1.5 font-medium whitespace-nowrap">Seit Kauf</button><button type="button" data-acdc="zul" class="acdc-btn flex-1 rounded-lg px-2 py-1.5 font-medium whitespace-nowrap">Seit Zulassung</button></div></div>
+        <div id="acdc-body"></div>
+      </div>
       <div id="temp-card" class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
         <p class="text-sm text-slate-500 dark:text-slate-400">Akku-Temperatur</p>
         <div id="temp-body"></div>
@@ -969,6 +974,15 @@
             <div><label for="set-ref-hi" class="text-xs text-slate-500 dark:text-slate-400">bis unter</label><input id="set-ref-hi" type="text" inputmode="text" placeholder="22" autocomplete="off" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
           </div>
           <p class="mt-1.5 text-xs text-slate-500 dark:text-slate-400">Akku-Temperatur ohne Heizung und Klima. Der Verbrauch in diesem Bereich ist die Referenz für den Mehrverbrauch bei Kälte und Hitze (Berichte → Akku). Leer = 15 bis 22 °C.</p>
+        </div>
+        <div class="py-4 first:pt-4 last:pb-0">
+          <p class="text-sm font-medium text-slate-700 dark:text-slate-300">Akku-Zertifikat vor dem Kauf</p>
+          <div class="mt-1.5 grid grid-cols-3 gap-2">
+            <div><label for="set-cert-ac" class="text-xs text-slate-500 dark:text-slate-400">AC [%]</label><input id="set-cert-ac" type="text" inputmode="decimal" placeholder="z. B. 85" autocomplete="off" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
+            <div><label for="set-cert-dc" class="text-xs text-slate-500 dark:text-slate-400">DC [%]</label><input id="set-cert-dc" type="text" inputmode="decimal" placeholder="z. B. 15" autocomplete="off" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
+            <div><label for="set-cert-km" class="text-xs text-slate-500 dark:text-slate-400">bei km</label><input id="set-cert-km" type="text" inputmode="numeric" placeholder="Kauf-km" autocomplete="off" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
+          </div>
+          <p class="mt-1.5 text-xs text-slate-500 dark:text-slate-400 text-left">AC/DC-Ladeverhältnis laut Zertifikat (Energieanteil). Ein Wert genügt, der andere ergänzt sich auf 100 %. km-Stand leer = km bei Kauf. Fließt in Berichte → Akku (AC/DC-Laden, „Seit Zulassung“) ein.</p>
         </div>
       </div>
     </div>
@@ -2172,6 +2186,7 @@ function fillSettings() {
   $('set-title').value = s.title || DEFAULT_TITLE;
   $('set-brand').value = s.brand || ''; $('set-model').value = s.model || ''; $('set-plate').value = s.plate || ''; $('set-year').value = s.year || ''; $('set-vin').value = s.vin || '';
   $('set-power').value = String(chargePowerKw()).replace('.', ',');
+  $('set-cert-ac').value = s.certAc != null ? String(s.certAc).replace('.', ',') : ''; $('set-cert-dc').value = s.certAc != null ? String(Math.round((100 - s.certAc) * 10) / 10).replace('.', ',') : ''; $('set-cert-km').value = s.certKm != null ? fmt(s.certKm, 0) : '';
   $('set-ref-lo').value = s.refLo != null ? String(s.refLo).replace('.', ',') : ''; $('set-ref-hi').value = s.refHi != null ? String(s.refHi).replace('.', ',') : '';
   renderDvInfo(); $('set-purchase').value = purchaseDay(); $('set-purchase-km').value = s.purchaseKm != null ? fmt(s.purchaseKm, 0) : ''; $('set-purchase-price').value = s.purchasePrice != null ? fmt(s.purchasePrice, 2) : ''; $('set-wltp').value = s.wltp ? String(s.wltp).replace('.', ',') : ''; renderWxLoc();
   $('set-rem-days').value = String(remWarn().days); $('set-rem-km').value = String(remWarn().km); $('set-next-hu').value = s.nextHu || ''; $('set-next-svc').value = s.nextService || '';
@@ -2237,6 +2252,12 @@ $('btn-save-settings').addEventListener('click', () => {
     alert('Bitte beim Referenzbereich der Akku-Temperatur beide Werte eintragen (−20 bis 45 °C, „bis“ mindestens 2 °C über „von“) oder beide Felder leer lassen.'); return; }
   const deNum = (v) => { const t = v.trim(); if (t === '') return undefined; return Number((/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(t) ? t.replace(/\./g, '') : t).replace(',', '.')); };   // 16.969 = sechzehntausend…, 32.500,50 = Euro mit Cent
   const pk = deNum($('set-purchase-km').value), pp = deNum($('set-purchase-price').value);
+  const cA = tnum('set-cert-ac'), cD = tnum('set-cert-dc'), certKm = deNum($('set-cert-km').value);
+  let certAc = cA !== undefined ? cA : cD !== undefined ? 100 - cD : undefined;
+  if (certAc !== undefined && !(Number.isFinite(certAc) && certAc >= 0 && certAc <= 100)) { alert('Bitte beim Akku-Zertifikat AC und DC als Prozent von 0 bis 100 eingeben.'); return; }
+  if (cA !== undefined && cD !== undefined && Math.abs(cA + cD - 100) > 1) { alert('AC und DC laut Zertifikat ergeben zusammen nicht 100 %. Bitte prüfen oder nur einen Wert eintragen.'); return; }
+  if (certKm !== undefined && !(certKm >= 0 && certKm <= 2e6)) { alert('Bitte den km-Stand des Akku-Zertifikats als Zahl eingeben oder das Feld leer lassen.'); return; }
+  if (certAc !== undefined) certAc = Math.round(certAc * 10) / 10;
   if (pk !== undefined && !(pk >= 0 && pk <= 2e6)) { alert('Bitte den Kilometerstand bei Kauf als Zahl eingeben (z. B. 16.969) oder das Feld leer lassen.'); return; }
   if (pp !== undefined && !(pp >= 0 && pp <= 1e7)) { alert('Bitte den Kaufpreis in Euro als Zahl eingeben (z. B. 32.500) oder das Feld leer lassen.'); return; }
   if (wl !== undefined && !(wl > 5 && wl < 40)) { alert('Bitte den WLTP-Verbrauch in kWh/100 km eingeben (z. B. 16,0) oder das Feld leer lassen.'); return; }
@@ -2248,7 +2269,7 @@ $('btn-save-settings').addEventListener('click', () => {
     if (+m[2] < 1990 || +m[2] * 12 + +m[1] > now.getFullYear() * 12 + now.getMonth() + 1) { alert('Das Baujahr ' + yr + ' kann nicht stimmen: Es muss zwischen 01/1990 und ' + String(now.getMonth() + 1).padStart(2, '0') + '/' + now.getFullYear() + ' liegen.'); $('set-year').focus(); return; }
   }
   const txt = (id, n) => $(id).value.trim().replace(/\s+/g, ' ').slice(0, n) || undefined;
-  if (save(KEY_SETTINGS, { title: $('set-title').value.trim() || DEFAULT_TITLE, brand: txt('set-brand', 30), model: txt('set-model', 40), plate: (txt('set-plate', 15) || '').toUpperCase() || undefined, year: yr || undefined, vin: vin || undefined, price, battery, power, remDays, remKm, purchase, wltp: wl, purchaseKm: pk !== undefined ? Math.round(pk) : undefined, purchasePrice: pp !== undefined ? Math.round(pp * 100) / 100 : undefined, commuteKm: getSettings().commuteKm || undefined, refLo: rlo, refHi: rhi, nextHu, nextService })) {   // commuteKm: im Steuerhelfer (Berichte → Fahrten) gepflegt
+  if (save(KEY_SETTINGS, { title: $('set-title').value.trim() || DEFAULT_TITLE, brand: txt('set-brand', 30), model: txt('set-model', 40), plate: (txt('set-plate', 15) || '').toUpperCase() || undefined, year: yr || undefined, vin: vin || undefined, price, battery, power, remDays, remKm, purchase, wltp: wl, purchaseKm: pk !== undefined ? Math.round(pk) : undefined, purchasePrice: pp !== undefined ? Math.round(pp * 100) / 100 : undefined, commuteKm: getSettings().commuteKm || undefined, refLo: rlo, refHi: rhi, nextHu, nextService, certAc, certKm: certKm !== undefined ? Math.round(certKm) : undefined })) {   // commuteKm: im Steuerhelfer (Berichte → Fahrten) gepflegt
     renderReminderBadges(); renderHeroStats(); pushPrefs();
     $('settings-msg').classList.remove('hidden'); setTimeout(() => $('settings-msg').classList.add('hidden'), 2500);
   }
@@ -4091,10 +4112,63 @@ function renderCare() {
     <div class="mt-4 space-y-2.5 text-sm">
       <div><div class="flex justify-between"><span class="text-slate-600 dark:text-slate-300">Ladeende bis 80 %</span><span>${Math.round(c.ok80 * 100)} %</span></div>${bar(c.ok80, '#10b981')}</div>
       <div><div class="flex justify-between"><span class="text-slate-600 dark:text-slate-300">Nicht unter 10 %</span><span>${c.lo ? c.lo + ' × darunter' : 'nie darunter'}</span></div>${bar(1 - Math.min(1, 3 * c.lo / c.n), c.lo ? '#f59e0b' : '#10b981')}</div>
+      ${(() => { const o = acdcSplit(careMode === 'kauf' ? Date.parse(purchaseDay() + 'T00:00:00') : Date.now() - 90 * 864e5); return o.dcP == null ? '' : `<div><div class="flex justify-between"><span class="text-slate-600 dark:text-slate-300">AC-Anteil (Energie)</span><span>${fmt(100 - o.dcP, 0)} % AC · ${fmt(o.dcP, 0)} % DC</span></div>${bar((100 - o.dcP) / 100, o.dcP > 40 ? '#f59e0b' : '#10b981')}</div>`; })()}
       <div><div class="flex justify-between"><span class="text-slate-600 dark:text-slate-300">Ø Ladebereich</span><span>${Math.round(c.s0)} → ${Math.round(c.s1)} %</span></div><div class="relative mt-1 h-1.5 rounded-full bg-slate-200 dark:bg-slate-800"><div class="absolute h-full rounded-full bg-sky-500" style="left:${c.s0}%;width:${Math.max(2, c.s1 - c.s0)}%"></div></div></div>
     </div>
     <div class="mt-4 rounded-2xl bg-slate-100 dark:bg-slate-800/70 p-3 text-xs text-slate-600 dark:text-slate-300"><b class="text-slate-900 dark:text-white">Tipp:</b> ${tip}</div>`;
 }
+
+/* =====================================================================
+   AC/DC-Laden (Berichte → Akku): Energieanteil AC (Zuhause + Bosch) und DC (Unterwegs) – letzte 90 Tage, seit Kauf (je Monat) und seit Zulassung.
+   Seit Zulassung: Anteil vor dem Kauf laut Akku-Zertifikat (Einstellungen → Laden & Akku), gewichtet mit der geschätzten Energie vor dem Kauf
+   (km-Stand des Zertifikats bzw. bei Kauf × Ø Verbrauch an der Steckdose; ohne Messwert WLTP).
+   ===================================================================== */
+let acdcMode = '90';
+const ACDC_C = { ac: '#10b981', dc: '#f59e0b' };
+function acdcSplit(from, to = Infinity) {
+  const o = { ac: 0, dc: 0, nAc: 0, nDc: 0 };
+  getReadings().forEach(r => { const t = Date.parse(r.date), e = Number(r.consumedSinceLast) || 0; if (!(t >= from && t < to) || e <= 0) return; if (placeOf(r) === 'away') { o.dc += e; o.nDc++; } else { o.ac += e; o.nAc++; } });
+  o.tot = o.ac + o.dc; o.dcP = o.tot ? o.dc / o.tot * 100 : null; return o;
+}
+function acdcCert() {
+  const st = getSettings(), ac = Number(st.certAc); if (st.certAc == null || !Number.isFinite(ac)) return null;
+  const km = Number(st.certKm) > 0 ? Number(st.certKm) : Number(st.purchaseKm) > 0 ? Number(st.purchaseKm) : null; if (!km) return { ac, dcP: 100 - ac, km: null, kwh: null };
+  const rs = getReadings(); let k100 = null; try { const t = rs.length ? consumptionTotals(rs, rs.map((_, i) => i)) : null; k100 = t && t.kwh100 ? t.kwh100 : null; } catch (e) { }
+  const kp = k100 || wltpVal(); return { ac, dcP: 100 - ac, km, k100: kp, measured: !!k100, kwh: km * kp / 100 };
+}
+const acdcLvl = (p) => p == null ? ['', ''] : p <= 20 ? ['Sehr schonend', '#10b981'] : p <= 40 ? ['Ausgewogen', '#22c55e'] : p <= 60 ? ['Viel Schnellladen', '#f59e0b'] : ['Überwiegend DC', '#ef4444'];
+function acdcBar(label, o, sub) {
+  const p = o.dcP == null ? 0 : o.dcP, a = 100 - p;
+  return `<div><div class="flex justify-between gap-2 text-sm"><span class="min-w-0 truncate text-slate-600 dark:text-slate-300">${label}</span><span class="shrink-0 tabular-nums"><b style="color:${ACDC_C.ac}">${fmt(a, 0)} %</b> · <b style="color:${ACDC_C.dc}">${fmt(p, 0)} %</b></span></div>
+    <div class="mt-1 flex h-3 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800"><div style="width:${a}%;background:${ACDC_C.ac}"></div><div style="width:${p}%;background:${ACDC_C.dc}"></div></div>${sub ? `<p class="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400 text-left">${sub}</p>` : ''}</div>`;
+}
+function renderAcdc() {
+  const el = $('acdc-body'); if (!el) return;
+  document.querySelectorAll('.acdc-btn').forEach(b => { const on = b.dataset.acdc === acdcMode; b.classList.toggle('bg-white', on); b.classList.toggle('dark:bg-slate-600', on); b.classList.toggle('shadow-sm', on); b.classList.toggle('text-slate-500', !on); });
+  const now = Date.now(), P0 = Date.parse(purchaseDay() + 'T00:00:00'), leg = `<div class="mt-3 flex gap-4 text-xs text-slate-500 dark:text-slate-400"><span class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm" style="background:${ACDC_C.ac}"></span>AC (Zuhause, Bosch)</span><span class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm" style="background:${ACDC_C.dc}"></span>DC (Unterwegs)</span></div>`;
+  const head = (p, sub) => { const l = acdcLvl(p); return `<div class="mt-2 flex items-end justify-between gap-3"><div><p class="font-barlow text-[40px] font-bold leading-none" style="color:${ACDC_C.dc}">${p == null ? '–' : fmt(p, 0) + ' %'}<span class="ml-1.5 font-sans text-sm font-medium text-slate-500 dark:text-slate-400">DC-Anteil</span></p><p class="mt-1 text-xs text-slate-500 dark:text-slate-400 text-left">${sub}</p></div>${l[0] ? `<span class="shrink-0 rounded-lg px-2 py-1 text-xs font-semibold" style="color:${l[1]};background:${l[1]}22">${l[0]}</span>` : ''}</div>`; };
+  if (acdcMode === 'zul') {
+    const c = acdcCert(), app = acdcSplit(P0);
+    if (!c) { el.innerHTML = `<p class="mt-2 text-sm text-slate-600 dark:text-slate-300 text-left">Für „Seit Zulassung“ fehlt das AC/DC-Verhältnis aus deinem Akku-Zertifikat.</p><button type="button" data-acdc-set class="mt-3 w-full rounded-xl border border-slate-300 dark:border-slate-700 py-2.5 text-sm font-semibold active:scale-95 transition">In den Einstellungen eintragen</button>`; return; }
+    const pre = { dcP: c.dcP, ac: c.kwh ? c.kwh * c.ac / 100 : null, dc: c.kwh ? c.kwh * c.dcP / 100 : null };
+    const tot = c.kwh ? { ac: pre.ac + app.ac, dc: pre.dc + app.dc } : null; if (tot) { tot.tot = tot.ac + tot.dc; tot.dcP = tot.tot ? tot.dc / tot.tot * 100 : null; }
+    el.innerHTML = head(tot ? tot.dcP : c.dcP, tot ? 'gesamt seit Zulassung · ca. ' + fmt(tot.tot, 0) + ' kWh, davon ' + fmt(c.kwh, 0) + ' kWh vor dem Kauf (geschätzt)' : 'laut Zertifikat (ohne km-Stand keine Gewichtung mit deinen Ladungen)')
+      + `<div class="mt-4 space-y-3">${acdcBar('Vor dem Kauf (Zertifikat)', pre, c.kwh ? 'ca. ' + fmt(c.kwh, 0) + ' kWh = ' + fmt(c.km, 0) + ' km × ' + fmt(c.k100, 1) + ' kWh/100 km' + (c.measured ? ' (dein Ø)' : ' (WLTP)') : '')}${app.tot ? acdcBar('Seit Kauf (deine Ladungen)', app, fmt(app.tot, 0) + ' kWh in ' + (app.nAc + app.nDc) + ' Ladungen') : ''}${tot ? acdcBar('Gesamt seit Zulassung', tot, '') : ''}</div>` + leg
+      + (tot && app.dcP != null ? `<p class="mt-3 rounded-2xl bg-slate-100 dark:bg-slate-800/70 p-3 text-xs text-slate-600 dark:text-slate-300 text-left">${app.dcP < c.dcP - 2 ? 'Seit dem Kauf lädst du anteilig weniger per DC als der Vorbesitzer – gut für den Akku.' : app.dcP > c.dcP + 2 ? 'Seit dem Kauf lädst du anteilig mehr per DC als der Vorbesitzer. Gelegentliches Schnellladen ist unbedenklich, im Alltag ist AC schonender.' : 'Dein Ladeverhalten entspricht in etwa dem des Vorbesitzers.'}</p>` : '');
+    return;
+  }
+  const from = acdcMode === 'kauf' ? P0 : now - 90 * 864e5, o = acdcSplit(from);
+  if (!o.tot) { el.innerHTML = '<p class="mt-2 text-sm text-slate-600 dark:text-slate-300 text-left">Noch keine Ladungen mit kWh in diesem Zeitraum.</p>'; return; }
+  /* Monatsbalken (gestapelt, kWh) */
+  const d0 = new Date(from), months = []; for (let d = new Date(d0.getFullYear(), d0.getMonth(), 1); d.getTime() <= now; d.setMonth(d.getMonth() + 1)) { const a = Math.max(from, d.getTime()), e = new Date(d.getFullYear(), d.getMonth() + 1, 1).getTime(); months.push({ l: d.toLocaleDateString('de-DE', { month: 'short' }).replace('.', ''), ...acdcSplit(a, e) }); }
+  const mx = Math.max(1, ...months.map(m => m.tot));
+  const bars = `<div class="mt-4 flex items-end gap-1.5 h-28">${months.map(m => `<div class="flex min-w-0 flex-1 flex-col items-center gap-1"><div class="flex w-full max-w-[34px] flex-col justify-end overflow-hidden rounded-md" style="height:${Math.max(2, m.tot / mx * 92)}px" title="${m.l}: AC ${fmt(m.ac, 0)} kWh, DC ${fmt(m.dc, 0)} kWh"><div style="height:${m.tot ? m.dc / m.tot * 100 : 0}%;background:${ACDC_C.dc}"></div><div style="flex:1;background:${ACDC_C.ac}"></div></div><span class="text-[10px] text-slate-500 dark:text-slate-400">${m.l}</span></div>`).join('')}</div>`;
+  const c = acdcCert(), cmp = c ? `<p class="mt-3 text-xs text-slate-500 dark:text-slate-400 text-left">Zum Vergleich laut Akku-Zertifikat vor dem Kauf: ${fmt(c.dcP, 0)} % DC.</p>` : '';
+  el.innerHTML = head(o.dcP, fmt(o.tot, 0) + ' kWh · ' + o.nAc + ' × AC, ' + o.nDc + ' × DC') + bars + leg + cmp;
+}
+$('acdc-seg').addEventListener('click', (e) => { const b = e.target.closest('[data-acdc]'); if (b && b.dataset.acdc !== acdcMode) { acdcMode = b.dataset.acdc; renderAcdc(); } });
+$('acdc-body').addEventListener('click', (e) => { if (e.target.closest('[data-acdc-set]')) { openSettings('laden'); setTimeout(() => { const f = $('set-cert-ac'); f.scrollIntoView({ block: 'center' }); }, 200); } });
+['set-cert-ac', 'set-cert-dc'].forEach((id, i) => $(id).addEventListener('input', () => { const v = Number($(id).value.trim().replace(',', '.')), o = $(i ? 'set-cert-ac' : 'set-cert-dc'); if ($(id).value.trim() !== '' && Number.isFinite(v) && v >= 0 && v <= 100) o.value = String(Math.round((100 - v) * 10) / 10).replace('.', ','); else if ($(id).value.trim() === '') o.value = ''; }));
 $('care-seg').addEventListener('click', (e) => { const b = e.target.closest('[data-care]'); if (b && b.dataset.care !== careMode) { careMode = b.dataset.care; renderCare(); } });
 /* =====================================================================
    Akku-Temperatur (Berichte → Akku): Auswertung der optional erfassten Temperatur beim Anstecken (ab 10 Ladungen).
@@ -4185,6 +4259,7 @@ function renderBattery() {
   try { renderTcCard(); } catch (e) { console.error(e); }
   try { renderTempCard(); } catch (e) { console.error(e); }
   try { renderCare(); } catch (e) { console.error(e); }
+  try { renderAcdc(); } catch (e) { console.error(e); }
   const rows = batRows(), fit = batFit(rows), now = Date.now(), ok = !!fit && fit.n >= BAT.minN && fit.sumHub >= BAT.minHub;
   $('bat-value').classList.toggle('hidden', !ok); $('bat-few').classList.toggle('hidden', ok);
   const hubSum = rows.reduce((a, x) => a + x.hub, 0);
@@ -5970,7 +6045,7 @@ try { renderWrapCard(); } catch (e) { }
    im Dokument enyaqStrom/<uid>/settings/prefs, gleiche Regel wie Anbieter und Kategorien. Die PIN bleibt nur auf dem Gerät.
    Erster Abgleich: Was die Cloud hat, gilt; fehlt dort etwas und ist lokal vorhanden, wird es hochgeladen. Danach gilt die Cloud (Änderung auf einem Gerät wirkt auf allen).
    ===================================================================== */
-const SYNC_SET_KEYS = ['title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService'];
+const SYNC_SET_KEYS = ['title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAc', 'certKm'];
 /** Einstellungen für die Cloud: feste Reihenfolge, ohne leere Werte (Firestore verbietet undefined). null = nichts vorhanden. */
 function syncSet(src) {
   const o = {}; if (src && typeof src === 'object') SYNC_SET_KEYS.forEach(k => { const v = src[k]; if (v != null && v !== '' && !(typeof v === 'number' && !isFinite(v))) o[k] = v; });
