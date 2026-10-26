@@ -75,6 +75,7 @@
   @media (prefers-color-scheme: dark){ .st-u { color: #94a3b8; } }
   /* Fahrzeugakte: nur beim Drucken sichtbar, dann verschwindet die restliche App */
   #akte-print { display: none; }
+  .no-sb { scrollbar-width: none; } .no-sb::-webkit-scrollbar { display: none; }
   .cv-print { display: none; }
   /* Akte wird auf dem Bildschirm UND im Druck als eigene Seite gezeigt: so sind die Diagramm-Bilder sicher gezeichnet, bevor der Druckdialog sie erfasst */
   html:has(body.print-akte), body.print-akte { background: #fff !important; }
@@ -561,6 +562,7 @@
       <ul id="dq-list" class="hidden mt-3 space-y-3 text-sm"></ul>
     </div>
     <div id="hist-filter" class="flex bg-slate-200 dark:bg-slate-800 rounded-xl p-1"><button type="button" data-filter="all" class="hist-filter-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Alle</button><button type="button" data-filter="laden" class="hist-filter-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Laden</button><button type="button" data-filter="kosten" class="hist-filter-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Kosten</button><button type="button" data-filter="fahrten" class="hist-filter-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Fahrten</button></div>
+    <div id="hist-cats" class="hidden -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5 no-sb"></div>
     <p id="history-empty" class="hidden text-center text-sm text-slate-500 py-8">Noch keine Zählerstände erfasst.</p>
     <ul id="history-list" class="space-y-3"></ul>
     <div id="trips-wrap" class="hidden space-y-3">
@@ -995,6 +997,14 @@
           <div><label for="set-rem-km" class="text-sm font-medium text-slate-700 dark:text-slate-300">km vor Fälligkeit</label><input id="set-rem-km" type="text" inputmode="numeric" placeholder="500" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
         </div>
           <p class="mt-1.5 text-xs text-slate-500 dark:text-slate-400">Ab dann zählt die Erinnerung am Start-Tab und an der Glocke.</p>
+        </div>
+        <div class="py-4 first:pt-4 last:pb-0">
+          <p class="block text-sm font-medium text-slate-700 dark:text-slate-300">Nächste Fälligkeiten (Checkheft)</p>
+          <div class="grid grid-cols-2 gap-2 mt-2">
+          <div><label for="set-next-hu" class="text-sm font-medium text-slate-700 dark:text-slate-300">Nächste HU</label><input id="set-next-hu" type="month" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
+          <div><label for="set-next-svc" class="text-sm font-medium text-slate-700 dark:text-slate-300">Nächster Service</label><input id="set-next-svc" type="month" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
+        </div>
+          <p class="mt-1.5 text-xs text-slate-500 dark:text-slate-400 text-left">Erscheint im Checkheft (Datenpool → Fahrzeugakte) und im Checkheft-PDF. Leer lassen blendet die Angabe aus.</p>
         </div>
       </div>
     </div>
@@ -2112,7 +2122,7 @@ function fillSettings() {
   $('set-power').value = String(chargePowerKw()).replace('.', ',');
   $('set-ref-lo').value = s.refLo != null ? String(s.refLo).replace('.', ',') : ''; $('set-ref-hi').value = s.refHi != null ? String(s.refHi).replace('.', ',') : '';
   renderDvInfo(); $('set-purchase').value = purchaseDay(); $('set-purchase-km').value = s.purchaseKm != null ? fmt(s.purchaseKm, 0) : ''; $('set-purchase-price').value = s.purchasePrice != null ? fmt(s.purchasePrice, 2) : ''; $('set-wltp').value = s.wltp ? String(s.wltp).replace('.', ',') : ''; renderWxLoc();
-  $('set-rem-days').value = String(remWarn().days); $('set-rem-km').value = String(remWarn().km);
+  $('set-rem-days').value = String(remWarn().days); $('set-rem-km').value = String(remWarn().km); $('set-next-hu').value = s.nextHu || ''; $('set-next-svc').value = s.nextService || '';
 }
 /** Ladeanbieter: speichern sofort (lokal und, wenn angemeldet, in der Cloud). Ältere Einträge behalten ihren Anbieter-Namen. */
 function renderProviders() {
@@ -2164,6 +2174,7 @@ $('btn-save-settings').addEventListener('click', () => {
   const power = parseNum($('set-power').value);
   if (!isFinite(power) || power < 0.5 || power > 50) { alert('Bitte eine gültige Ladeleistung in kW eingeben (z. B. 7).'); return; }
   const remDays = $('set-rem-days').value.trim() === '' ? 14 : parseNum($('set-rem-days').value), remKm = $('set-rem-km').value.trim() === '' ? 500 : parseNum($('set-rem-km').value);
+  const ym = (id) => { const v = $(id).value.trim(); return /^\d{4}-(0[1-9]|1[0-2])$/.test(v) ? v : undefined; }, nextHu = ym('set-next-hu'), nextService = ym('set-next-svc');
   if (!Number.isInteger(remDays) || remDays < 0 || remDays > 365) { alert('Bitte die Vorwarnung in Tagen als ganze Zahl von 0 bis 365 eingeben.'); return; }
   if (!Number.isInteger(remKm) || remKm < 0 || remKm > 20000) { alert('Bitte die Vorwarnung in km als ganze Zahl von 0 bis 20000 eingeben.'); return; }
   const pd = $('set-purchase').value, purchase = /^\d{4}-\d{2}-\d{2}$/.test(pd) && !isNaN(Date.parse(pd)) ? pd : '2026-06-08';
@@ -2185,7 +2196,7 @@ $('btn-save-settings').addEventListener('click', () => {
     if (+m[2] < 1990 || +m[2] * 12 + +m[1] > now.getFullYear() * 12 + now.getMonth() + 1) { alert('Das Baujahr ' + yr + ' kann nicht stimmen: Es muss zwischen 01/1990 und ' + String(now.getMonth() + 1).padStart(2, '0') + '/' + now.getFullYear() + ' liegen.'); $('set-year').focus(); return; }
   }
   const txt = (id, n) => $(id).value.trim().replace(/\s+/g, ' ').slice(0, n) || undefined;
-  if (save(KEY_SETTINGS, { title: $('set-title').value.trim() || DEFAULT_TITLE, brand: txt('set-brand', 30), model: txt('set-model', 40), plate: (txt('set-plate', 15) || '').toUpperCase() || undefined, year: yr || undefined, vin: vin || undefined, price, battery, power, remDays, remKm, purchase, wltp: wl, purchaseKm: pk !== undefined ? Math.round(pk) : undefined, purchasePrice: pp !== undefined ? Math.round(pp * 100) / 100 : undefined, commuteKm: getSettings().commuteKm || undefined, refLo: rlo, refHi: rhi })) {   // commuteKm: im Steuerhelfer (Berichte → Fahrten) gepflegt
+  if (save(KEY_SETTINGS, { title: $('set-title').value.trim() || DEFAULT_TITLE, brand: txt('set-brand', 30), model: txt('set-model', 40), plate: (txt('set-plate', 15) || '').toUpperCase() || undefined, year: yr || undefined, vin: vin || undefined, price, battery, power, remDays, remKm, purchase, wltp: wl, purchaseKm: pk !== undefined ? Math.round(pk) : undefined, purchasePrice: pp !== undefined ? Math.round(pp * 100) / 100 : undefined, commuteKm: getSettings().commuteKm || undefined, refLo: rlo, refHi: rhi, nextHu, nextService })) {   // commuteKm: im Steuerhelfer (Berichte → Fahrten) gepflegt
     renderReminderBadges(); renderHeroStats(); pushPrefs();
     $('settings-msg').classList.remove('hidden'); setTimeout(() => $('settings-msg').classList.add('hidden'), 2500);
   }
@@ -2800,7 +2811,7 @@ function renderHistory() {
   const cHtml = costs.map((c, j) => {                     // Kosten-Karten (Ansicht und Bearbeiten)
     const d = new Date(c.date), amt = costAmt(c), inc = amt < 0;
     if (editMode) {
-      return `<li data-cidx="${j}" data-kind="kosten" class="rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4 ring-2 ring-emerald-500/40">
+      return `<li data-cidx="${j}" data-kind="kosten" data-cat="${esc((c.category || '').trim())}" class="rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4 ring-2 ring-emerald-500/40">
         <input type="datetime-local" data-cf="date" value="${toLocalInput(c.date)}" class="${INPUT_CLS}">
         <select data-cf="cat" aria-label="Kategorie" class="${INPUT_CLS} mt-3">${catOptions(c.category || '')}</select>
         <input data-cf="title" type="text" maxlength="80" value="${esc(c.title || '')}" placeholder="Titel" class="${INPUT_CLS} mt-3 !text-left">
@@ -2814,7 +2825,7 @@ function renderHistory() {
       </li>`;
     }
     const date = d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ', ' + d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + ' Uhr';
-    return `<li data-cidx="${j}" data-kind="kosten" class="rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
+    return `<li data-cidx="${j}" data-kind="kosten" data-cat="${esc((c.category || '').trim())}" class="rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
       <div class="flex justify-between items-baseline"><span class="font-semibold">${WEEKDAYS[d.getDay()]}</span><span class="text-sm text-slate-500 dark:text-slate-400">${date}</span></div>
       <div class="flex justify-between items-start gap-3 mt-2">
         <div class="min-w-0"><p class="font-medium break-words">${esc(c.title || 'Kosten')}</p>${c.category ? `<span class="inline-block mt-1 text-xs px-2.5 py-1 rounded-lg bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-200">${esc(c.category)}</span>` : ''}</div>
@@ -2834,6 +2845,18 @@ function renderHistory() {
   renderDataCheck();
 }
 
+/** Historie → Kosten: Etiketten-Filter wie im Checkheft, mit allen Kategorien (auch ohne Einträge) und Anzahl */
+let histCat = 'all';
+function renderHistCats(show) {
+  const box = $('hist-cats'); box.classList.toggle('hidden', !show || !getCosts().length); if (!show) return;
+  const cs = getCosts(), key = (c) => (c.category || '').trim(), names = getCategories().slice();
+  cs.forEach(c => { const k = key(c); if (k && !names.some(n => n.toLowerCase() === k.toLowerCase())) names.push(k); });
+  if (histCat !== 'all' && !names.some(n => n.toLowerCase() === histCat.toLowerCase())) histCat = 'all';
+  const cnt = (n) => cs.filter(c => key(c).toLowerCase() === n.toLowerCase()).length;
+  const chip = (k, label, cls) => '<button type="button" data-hcat="' + esc(k) + '" class="h-8 shrink-0 whitespace-nowrap rounded-full px-3 text-xs font-semibold ' + (histCat.toLowerCase() === k.toLowerCase() ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900' : 'border border-slate-300 dark:border-slate-700 ' + cls) + '">' + label + '</button>';
+  box.innerHTML = chip('all', 'Alle', '') + names.map(n => { const t = chType(n); return chip(n, esc(n) + ' ' + cnt(n), t ? t.txt : 'text-slate-600 dark:text-slate-300'); }).join('');
+}
+$('hist-cats').addEventListener('click', (e) => { const b = e.target.closest('[data-hcat]'); if (!b) return; histCat = b.dataset.hcat; applyHistFilter(); });
 /** Filter Alle | Laden | Kosten: blendet nur aus (alles bleibt im Dokument, damit das Speichern im Bearbeiten-Modus vollständig ist). */
 function applyHistFilter() {
   const nL = getReadings().length, nK = getCosts().length, trips = histFilter === 'fahrten';
@@ -2842,11 +2865,14 @@ function applyHistFilter() {
   $('btn-edit').classList.toggle('hidden', trips || editMode || nL + nK === 0);
   if (trips) { segPaintKey('.hist-filter-btn', 'filter', histFilter); $('history-empty').classList.add('hidden'); $('dq-card').classList.add('hidden'); renderTrips(); updateHistFab(); return; }
   renderDataCheck();
-  [...$('history-list').children].forEach(li => li.classList.toggle('hidden', histFilter !== 'all' && li.dataset.kind !== histFilter));
+  const kost = histFilter === 'kosten'; renderHistCats(kost);
+  const catOk = (li) => !kost || histCat === 'all' || (li.dataset.cat || '').toLowerCase() === histCat.toLowerCase();
+  [...$('history-list').children].forEach(li => li.classList.toggle('hidden', (histFilter !== 'all' && li.dataset.kind !== histFilter) || !catOk(li)));
   segPaintKey('.hist-filter-btn', 'filter', histFilter);
-  const visible = histFilter === 'laden' ? nL : histFilter === 'kosten' ? nK : nL + nK;
+  const nCat = kost && histCat !== 'all' ? getCosts().filter(c => (c.category || '').trim().toLowerCase() === histCat.toLowerCase()).length : nK;
+  const visible = histFilter === 'laden' ? nL : kost ? nCat : nL + nK;
   $('history-empty').classList.toggle('hidden', visible > 0);
-  $('history-empty').textContent = nL + nK === 0 ? 'Noch nichts erfasst.' : histFilter === 'kosten' ? 'Noch keine Kosten erfasst.' : 'Noch keine Ladungen erfasst.';
+  $('history-empty').textContent = nL + nK === 0 ? 'Noch nichts erfasst.' : histFilter === 'kosten' ? (histCat !== 'all' && nK ? 'Keine Kosten mit dem Etikett „' + histCat + '“.' : 'Noch keine Kosten erfasst.') : 'Noch keine Ladungen erfasst.';
 }
 document.querySelectorAll('.hist-filter-btn').forEach(b => b.addEventListener('click', () => { histFilter = b.dataset.filter; if (histFilter === 'fahrten') tripDays = 21; applyHistFilter(); }));
 const ccell = (j, f) => $('history-list').querySelector(`li[data-cidx="${j}"] [data-cf="${f}"]`);
@@ -5461,13 +5487,11 @@ const chSvg = (k, cls) => '<svg class="' + cls + '" fill="none" stroke="currentC
 const CH_FILE_SVG = '<svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4"/></svg>';
 const chIsPdf = (f) => /pdf/i.test(f.mime || '') || /\.pdf$/i.test(f.name || '');
 const chFilesLabel = (f) => f.length ? (f.every(chIsPdf) ? f.length + ' PDF' : f.every(x => !chIsPdf(x)) ? f.length + (f.length === 1 ? ' Foto' : ' Fotos') : f.length + ' Belege') : '';
-/** Nächste Fälligkeiten: HU 24 Monate nach der letzten TÜV-Buchung (sonst 36 Monate nach Erstzulassung), Service 24 Monate nach dem letzten Service. */
-function chDue(list) {
-  const last = (k) => list.filter(c => chType(c.category).k === k).reduce((m, c) => Math.max(m, Date.parse(c.date)), 0), out = [];
-  const lt = last('tuev'), ez = /^(\d{1,2})\/(\d{4})$/.exec(String(getSettings().year || '').trim());
-  const hu = lt ? chAddM(lt, 24) : ez ? new Date(Number(ez[2]), Number(ez[1]) - 1 + 36, 1) : null;
-  if (hu) out.push({ k: 'tuev', l: 'Nächste HU', d: hu });
-  const ls = last('service'); if (ls) out.push({ k: 'service', l: 'Service', d: chAddM(ls, 24) });
+/** Nächste Fälligkeiten aus Einstellungen → Erinnerungen (Monat JJJJ-MM): HU und Service (inkl. Klimaservice, Reifenwechsel usw.). */
+function chDue() {
+  const st = getSettings(), m = (v) => /^(\d{4})-(\d{2})$/.exec(v || ''), out = [], hu = m(st.nextHu), sv = m(st.nextService);
+  if (hu) out.push({ k: 'tuev', l: 'Nächste HU', d: new Date(Number(hu[1]), Number(hu[2]) - 1, 1) });
+  if (sv) out.push({ k: 'service', l: 'Service', d: new Date(Number(sv[1]), Number(sv[2]) - 1, 1) });
   return out;
 }
 function renderCheckheft() {
@@ -5476,9 +5500,9 @@ function renderCheckheft() {
   $('ch-count').textContent = all.length ? all.length + (all.length === 1 ? ' Eintrag' : ' Einträge') + ' · ' + nF + (nF === 1 ? ' Beleg' : ' Belege') : '';
   const chip = (k, label, cls) => '<button type="button" data-chf="' + k + '" class="h-8 rounded-full px-3 text-xs font-semibold ' + (chFilter === k ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900' : 'border border-slate-300 dark:border-slate-700 ' + cls) + '">' + label + '</button>';
   $('ch-chips').innerHTML = all.length ? chip('all', 'Alle', '') + CH_TYPES.map(t => chip(t.k, t.n + ' ' + cnt(t.k), t.txt)).join('') : '';
-  const due = chDue(all), now = new Date();
+  const due = chDue(), now = new Date(), mon0 = new Date(now.getFullYear(), now.getMonth(), 1);
   $('ch-due').classList.toggle('hidden', !due.length);
-  $('ch-due').innerHTML = due.length ? '<div class="flex items-center gap-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 px-3 py-2.5 text-xs text-slate-600 dark:text-slate-300">' + chSvg('tuev', 'h-[18px] w-[18px] shrink-0 text-violet-600 dark:text-violet-300') + '<span class="min-w-0 text-left">' + due.map(x => x.l + ' ' + (x === due[0] ? 'fällig ' : '') + '<b class="' + (x.d < now ? 'text-amber-600 dark:text-amber-400' : 'text-slate-900 dark:text-slate-100') + '">' + chMY(x.d) + (x.d < now ? ' (überfällig)' : '') + '</b>').join(' · ') + '</span></div>' : '';
+  $('ch-due').innerHTML = due.length ? '<div class="flex items-center gap-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 px-3 py-2.5 text-xs text-slate-600 dark:text-slate-300">' + chSvg('tuev', 'h-[18px] w-[18px] shrink-0 text-violet-600 dark:text-violet-300') + '<span class="min-w-0 text-left">' + due.map(x => x.l + ' ' + (x === due[0] ? 'fällig ' : '') + '<b class="' + (x.d < mon0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-900 dark:text-slate-100') + '">' + chMY(x.d) + (x.d < mon0 ? ' (überfällig)' : '') + '</b>').join(' · ') + '</span></div>' : '';
   const list = chFilter === 'all' ? all : all.filter(c => chType(c.category).k === chFilter);
   let html = '', divDone = false;
   const divider = () => '<li class="flex items-center gap-2 py-1.5 pl-11 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400 dark:text-slate-500"><span class="h-px flex-1 bg-slate-200 dark:bg-slate-800"></span>Kauf ' + chDY(P0) + (getSettings().purchaseKm ? ' · ' + fmt(Number(getSettings().purchaseKm), 0) + ' km' : '') + '<span class="h-px flex-1 bg-slate-200 dark:bg-slate-800"></span></li>';
@@ -5647,7 +5671,7 @@ async function buildCheckheftPdf(onMsg, tokP) {
     y -= RH; onPage++;
   });
   /* Fälligkeiten + Hinweis unten auf Seite 1 */
-  const due = chDue(entries);
+  const due = chDue();
   due.forEach((d, i) => { const bw = (W - 88 - 10) / 2, x = 44 + i * (bw + 10); p1.drawRectangle({ x, y: 92, width: bw, height: 38, color: TINT[d.k] }); txt(p1, d.l === 'Service' ? 'Nächster Service' : d.l, x + 10, 116, { bold: true, size: 9, color: COL[d.k] }); txt(p1, chMY(d.d), x + 10, 100, { size: 10 }); });
   p1.drawLine({ start: { x: 44, y: 76 }, end: { x: W - 44, y: 76 }, thickness: 0.5, color: line });
   txt(p1, 'Zusammengestellt aus den Belegen in EnyaqStrom. Die Belege folgen in zeitlicher Reihenfolge, jede Seite trägt oben Art, Datum und km-Stand.', 44, 62, { size: 7.5, color: grey, w: W - 88 });
@@ -5886,7 +5910,7 @@ try { renderWrapCard(); } catch (e) { }
    im Dokument enyaqStrom/<uid>/settings/prefs, gleiche Regel wie Anbieter und Kategorien. Die PIN bleibt nur auf dem Gerät.
    Erster Abgleich: Was die Cloud hat, gilt; fehlt dort etwas und ist lokal vorhanden, wird es hochgeladen. Danach gilt die Cloud (Änderung auf einem Gerät wirkt auf allen).
    ===================================================================== */
-const SYNC_SET_KEYS = ['title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi'];
+const SYNC_SET_KEYS = ['title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService'];
 /** Einstellungen für die Cloud: feste Reihenfolge, ohne leere Werte (Firestore verbietet undefined). null = nichts vorhanden. */
 function syncSet(src) {
   const o = {}; if (src && typeof src === 'object') SYNC_SET_KEYS.forEach(k => { const v = src[k]; if (v != null && v !== '' && !(typeof v === 'number' && !isFinite(v))) o[k] = v; });
