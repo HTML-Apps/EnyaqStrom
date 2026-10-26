@@ -730,11 +730,18 @@
       </div>
       </div>
       <div id="dp-akte" class="dp-pane hidden space-y-4">
-      <div id="st-akte-card" class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
-        <p class="font-barlow text-xl font-bold uppercase tracking-[0.08em]">Fahrzeugakte</p>
-        <img src="/Bilder/fahrzeugakte.webp" alt="" aria-hidden="true" width="620" height="456" loading="lazy" decoding="async" class="mx-auto mt-3 mb-2 block h-auto w-full max-w-[260px] select-none pointer-events-none">
-        <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Lückenlose Historie als PDF, zum Beispiel für den Verkauf: Eckdaten mit Kaufangaben, Diagramme zu km, Verbrauch, Kosten, Akku und Strompreis, Monatsübersicht, AC-/DC-Aufteilung, Rekorde, Wartung und Service sowie Wartungsplan.</p>
-        <button id="btn-akte" type="button" class="mt-3 w-full rounded-xl bg-emerald-600 py-3 text-sm font-semibold text-white active:scale-95 transition">Fahrzeugakte als PDF erstellen</button>
+      <div id="st-akte-card" class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4 flex items-center gap-3">
+        <div class="min-w-0 flex-1"><p class="font-barlow text-xl font-bold uppercase tracking-[0.08em]">Fahrzeugakte</p><p class="text-xs text-slate-500 dark:text-slate-400 text-left">Eckdaten, Verbrauch, Kosten, Akku</p></div>
+        <button id="btn-akte" type="button" class="shrink-0 h-11 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white active:scale-95 transition">PDF</button>
+      </div>
+      <div id="ch-card" class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4 space-y-3">
+        <div class="flex items-baseline justify-between gap-2"><p class="font-barlow text-xl font-bold uppercase tracking-[0.08em]">Checkheft</p><span id="ch-count" class="text-xs text-slate-500 dark:text-slate-400"></span></div>
+        <div id="ch-chips" class="flex flex-wrap gap-1.5"></div>
+        <div id="ch-due" class="hidden"></div>
+        <ul id="ch-list" class="relative"></ul>
+        <p id="ch-empty" class="hidden text-sm text-slate-500 dark:text-slate-400 text-left">Noch keine Einträge. Ins Checkheft kommen alle Kosten mit den Kategorien Service, Reparatur und TÜV, samt ihren Belegen. Einträge vom Vorbesitzer lassen sich mit einem Datum vor dem Kauf nachtragen.</p>
+        <button id="btn-ch-pdf" type="button" class="w-full h-12 rounded-xl bg-emerald-600 text-sm font-semibold text-white active:scale-95 transition flex items-center justify-center gap-2"><svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4M9 13h6M9 17h6"/></svg><span id="btn-ch-pdf-l">Checkheft als PDF</span></button>
+        <p id="ch-msg" class="text-xs text-slate-500 dark:text-slate-400 text-left empty:hidden"></p>
       </div>
       </div>
       </div>
@@ -1259,6 +1266,10 @@
 </div>
 
 <!-- Wissen: Eintrag ansehen / bearbeiten -->
+<div id="ch-sheet" class="hidden fixed inset-0 z-50 bg-black/60 flex items-end justify-center">
+  <div id="ch-sheet-box" class="w-full max-w-md max-h-[92vh] overflow-y-auto rounded-t-[28px] bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-4 pt-2.5 pb-5 space-y-3.5"></div>
+  <input id="ch-file" type="file" accept="image/*,application/pdf" multiple class="hidden">
+</div>
 <div id="kb-dialog" class="hidden fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-3">
   <div class="w-full max-w-sm max-h-[92vh] overflow-y-auto rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 p-4 space-y-3">
     <div id="kb-view" class="space-y-3"></div>
@@ -1451,10 +1462,17 @@ const providerOptions = (selected) => {              // <option>-Liste: leer + A
   return '<option value="">–</option>' + list.map(n => `<option value="${esc(n)}" ${n === selected ? 'selected' : ''}>${esc(n)}</option>`).join('');
 };
 /* Kosten: { id, date, title, amount (negativ = Einnahme), category, note?, odometerKm?, guid? (aus früherem Import, wird nur mitgeführt) } */
-const DEFAULT_CATEGORIES = ['Service', 'Wartung', 'Versicherung', 'Anmeldung', 'Fahrzeugwäsche', 'Parken', 'Maut', 'Strafzettel/Gebühren', 'Tuning', 'Sonstiges'];
+const DEFAULT_CATEGORIES = ['Service', 'Reparatur', 'TÜV', 'Wartung', 'Versicherung', 'Anmeldung', 'Fahrzeugwäsche', 'Parken', 'Maut', 'Strafzettel/Gebühren', 'Tuning', 'Sonstiges'];
 const getCosts = () => { const l = load(KEY_COSTS, []); return Array.isArray(l) ? l : []; };
 const getCategories = () => { const l = load(KEY_CATEGORIES, null); return Array.isArray(l) ? l.filter(n => typeof n === 'string' && n.trim()) : DEFAULT_CATEGORIES.slice(); };
 const costAmt = (c) => Number(c.amount) || 0;
+/* Checkheft-Arten: fest Service (planmäßig, Werkstatt), Reparatur (außerplanmäßig) und TÜV; erkannt am Namen der Kosten-Kategorie */
+const KEY_CHCATS = 'enyaq.chCats';
+const CH_TYPES = [
+  { k: 'service', n: 'Service', bg: 'bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300', txt: 'text-sky-700 dark:text-sky-300' },
+  { k: 'rep', n: 'Reparatur', bg: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300', txt: 'text-amber-700 dark:text-amber-300' },
+  { k: 'tuev', n: 'TÜV', bg: 'bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300', txt: 'text-violet-700 dark:text-violet-300' }];
+const chType = (cat) => { const c = String(cat || '').trim().toLowerCase(); return c === 'service' ? CH_TYPES[0] : c === 'reparatur' ? CH_TYPES[1] : (c === 'tüv' || c === 'tuev') ? CH_TYPES[2] : null; };
 const catOptions = (selected) => {                    // <option>-Liste der Kategorien (eine nicht mehr gelistete, aber gespeicherte bleibt wählbar)
   const l = getCategories(); if (selected && !l.includes(selected)) l.push(selected);
   return '<option value="">Ohne Kategorie</option>' + l.map(n => `<option value="${esc(n)}" ${n === selected ? 'selected' : ''}>${esc(n)}</option>`).join('');
@@ -3183,6 +3201,10 @@ window.onCloudCategories = (list, first, uid) => {
   let next = Array.isArray(list) ? list.filter(n => typeof n === 'string' && n.trim()) : null;
   if (next === null) { if (customized && first) window.cloud.setCategories(local).catch(() => {}); return; }
   if (first && customized && uploadCutoff(uid) === 0) { const merged = next.concat(local.filter(n => !next.some(m => m.toLowerCase() === n.toLowerCase()))); if (merged.length !== next.length) { next = merged; window.cloud.setCategories(next).catch(() => {}); } }
+  if (first && !localStorage.getItem(KEY_CHCATS)) {                         // Checkheft: Service, Reparatur und TÜV einmalig ergänzen, falls sie fehlen
+    const miss = CH_TYPES.map(t => t.n).filter(n => !next.some(m => chType(m) && chType(m).n === n)); localStorage.setItem(KEY_CHCATS, '1');
+    if (miss.length) { next = next.concat(miss); window.cloud.setCategories(next).catch(() => {}); }
+  }
   if (!customized || JSON.stringify(next) !== JSON.stringify(local)) { save(KEY_CATEGORIES, next); renderCategories(); if (!$('view-costs').classList.contains('hidden')) renderCostsView(); }
 };
 
@@ -5420,6 +5442,237 @@ $('btn-akte').addEventListener('click', async () => {
     await akteReady(box);                                                          // Druck startet erst über den Button „Drucken / als PDF“
   } finally { btn.disabled = false; btn.textContent = label; }
 });
+/* =====================================================================
+   Digitales Checkheft (Datenpool → Fahrzeugakte): alle Kosten der Kategorien Service, Reparatur und TÜV als Zeitleiste,
+   Detailansicht mit Belegen (Google Drive) und „Checkheft als PDF“: Deckblatt mit Inhaltsverzeichnis + alle Belege chronologisch,
+   jede Seite mit Kopfzeile (Art · Leistung · Datum · km) und Seitenzahl. Zusammengesetzt im Browser mit pdf-lib.
+   ===================================================================== */
+let chFilter = 'all', chSheetId = null; const chPend = [];
+const chEntries = () => getCosts().filter(c => chType(c.category) && Number.isFinite(Date.parse(c.date)));
+const chDY = (ms) => new Date(ms).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+const chMY = (d) => String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear();
+const chAddM = (ms, m) => { const d = new Date(ms); d.setMonth(d.getMonth() + m); return d; };
+const CH_ICON = {
+  service: '<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z"/>',
+  rep: '<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9L2 18a2 2 0 0 0 1.7 3h16.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>',
+  tuev: '<path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/>'
+};
+const chSvg = (k, cls) => '<svg class="' + cls + '" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true">' + CH_ICON[k] + '</svg>';
+const CH_FILE_SVG = '<svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4"/></svg>';
+const chIsPdf = (f) => /pdf/i.test(f.mime || '') || /\.pdf$/i.test(f.name || '');
+const chFilesLabel = (f) => f.length ? (f.every(chIsPdf) ? f.length + ' PDF' : f.every(x => !chIsPdf(x)) ? f.length + (f.length === 1 ? ' Foto' : ' Fotos') : f.length + ' Belege') : '';
+/** Nächste Fälligkeiten: HU 24 Monate nach der letzten TÜV-Buchung (sonst 36 Monate nach Erstzulassung), Service 24 Monate nach dem letzten Service. */
+function chDue(list) {
+  const last = (k) => list.filter(c => chType(c.category).k === k).reduce((m, c) => Math.max(m, Date.parse(c.date)), 0), out = [];
+  const lt = last('tuev'), ez = /^(\d{1,2})\/(\d{4})$/.exec(String(getSettings().year || '').trim());
+  const hu = lt ? chAddM(lt, 24) : ez ? new Date(Number(ez[2]), Number(ez[1]) - 1 + 36, 1) : null;
+  if (hu) out.push({ k: 'tuev', l: 'Nächste HU', d: hu });
+  const ls = last('service'); if (ls) out.push({ k: 'service', l: 'Service', d: chAddM(ls, 24) });
+  return out;
+}
+function renderCheckheft() {
+  const all = chEntries().sort((a, b) => Date.parse(b.date) - Date.parse(a.date)), P0 = Date.parse(purchaseDay() + 'T00:00:00');
+  const nF = all.reduce((a, c) => a + (c.files || []).length, 0), cnt = (k) => all.filter(c => chType(c.category).k === k).length;
+  $('ch-count').textContent = all.length ? all.length + (all.length === 1 ? ' Eintrag' : ' Einträge') + ' · ' + nF + (nF === 1 ? ' Beleg' : ' Belege') : '';
+  const chip = (k, label, cls) => '<button type="button" data-chf="' + k + '" class="h-8 rounded-full px-3 text-xs font-semibold ' + (chFilter === k ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900' : 'border border-slate-300 dark:border-slate-700 ' + cls) + '">' + label + '</button>';
+  $('ch-chips').innerHTML = all.length ? chip('all', 'Alle', '') + CH_TYPES.map(t => chip(t.k, t.n + ' ' + cnt(t.k), t.txt)).join('') : '';
+  const due = chDue(all), now = new Date();
+  $('ch-due').classList.toggle('hidden', !due.length);
+  $('ch-due').innerHTML = due.length ? '<div class="flex items-center gap-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 px-3 py-2.5 text-xs text-slate-600 dark:text-slate-300">' + chSvg('tuev', 'h-[18px] w-[18px] shrink-0 text-violet-600 dark:text-violet-300') + '<span class="min-w-0 text-left">' + due.map(x => x.l + ' ' + (x === due[0] ? 'fällig ' : '') + '<b class="' + (x.d < now ? 'text-amber-600 dark:text-amber-400' : 'text-slate-900 dark:text-slate-100') + '">' + chMY(x.d) + (x.d < now ? ' (überfällig)' : '') + '</b>').join(' · ') + '</span></div>' : '';
+  const list = chFilter === 'all' ? all : all.filter(c => chType(c.category).k === chFilter);
+  let html = '', divDone = false;
+  const divider = () => '<li class="flex items-center gap-2 py-1.5 pl-11 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400 dark:text-slate-500"><span class="h-px flex-1 bg-slate-200 dark:bg-slate-800"></span>Kauf ' + chDY(P0) + (getSettings().purchaseKm ? ' · ' + fmt(Number(getSettings().purchaseKm), 0) + ' km' : '') + '<span class="h-px flex-1 bg-slate-200 dark:bg-slate-800"></span></li>';
+  list.forEach(c => {
+    const t = Date.parse(c.date), ty = chType(c.category), pre = t < P0, f = c.files || [], amt = costAmt(c);
+    if (pre && !divDone) { html += divider(); divDone = true; }
+    const sub = [chDY(t), c.odometerKm > 0 ? fmt(c.odometerKm, 0) + ' km' : '', c.note || ''].filter(Boolean).join(' · ');
+    html += '<li><button type="button" data-chid="' + esc(String(c.id)) + '" class="relative flex w-full items-start gap-3 py-2 text-left active:opacity-70' + (pre ? ' opacity-80' : '') + '">'
+      + '<span class="relative z-[1] flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ' + ty.bg + '">' + chSvg(ty.k, 'h-[18px] w-[18px]') + '</span>'
+      + '<span class="min-w-0 flex-1"><span class="flex justify-between gap-2"><span class="truncate text-sm font-semibold">' + esc(c.title || ty.n) + '</span><span class="shrink-0 text-[13px] text-slate-600 dark:text-slate-300">' + (pre && !amt ? 'Vorbesitzer' : eur(amt)) + '</span></span>'
+      + '<span class="block truncate text-xs text-slate-500 dark:text-slate-400">' + esc(sub) + '</span>'
+      + (f.length ? '<span class="mt-1 inline-flex items-center gap-1 rounded-md bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 text-[11px] text-slate-600 dark:text-slate-300">' + CH_FILE_SVG + chFilesLabel(f) + '</span>' : '') + '</span></button></li>';
+  });
+  if (list.length && !divDone && chFilter === 'all') html += divider();
+  $('ch-list').innerHTML = list.length ? '<span class="pointer-events-none absolute bottom-5 left-[17px] top-5 w-0.5 bg-slate-200 dark:bg-slate-800" aria-hidden="true"></span>' + html : '';
+  $('ch-empty').classList.toggle('hidden', all.length > 0);
+  $('btn-ch-pdf').classList.toggle('hidden', !all.length);
+  $('btn-ch-pdf-l').textContent = 'Checkheft als PDF' + (nF ? ' (' + nF + (nF === 1 ? ' Beleg)' : ' Belege)') : '');
+}
+$('ch-chips').addEventListener('click', (e) => { const b = e.target.closest('[data-chf]'); if (b) { chFilter = b.dataset.chf; renderCheckheft(); } });
+$('ch-list').addEventListener('click', (e) => { const b = e.target.closest('[data-chid]'); if (b) openChSheet(b.dataset.chid); });
+
+/* ---- Detailansicht (Bottom-Sheet) ---- */
+function openChSheet(id) { chSheetId = String(id); chPend.length = 0; renderChSheet(); $('ch-sheet').classList.remove('hidden'); }
+function closeChSheet() { $('ch-sheet').classList.add('hidden'); chSheetId = null; chPend.length = 0; }
+function renderChSheet(msg) {
+  const c = getCosts().find(x => String(x.id) === chSheetId); if (!c) { closeChSheet(); return; }
+  const ty = chType(c.category) || CH_TYPES[0], f = c.files || [], t = Date.parse(c.date), box = 'rounded-xl bg-slate-100 dark:bg-slate-800 p-2.5';
+  $('ch-sheet-box').innerHTML = '<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div>'
+    + '<div class="flex items-center gap-3"><span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ' + ty.bg + '">' + chSvg(ty.k, 'h-[22px] w-[22px]') + '</span>'
+    + '<div class="min-w-0 flex-1"><p class="text-[11px] font-bold uppercase tracking-[0.1em] ' + ty.txt + '">' + esc(ty.n) + '</p><p class="truncate text-lg font-bold">' + esc(c.title || ty.n) + '</p></div>'
+    + '<button type="button" data-chs="close" aria-label="Schließen" class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-800"><svg class="h-[18px] w-[18px]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>'
+    + '<div class="grid grid-cols-3 gap-2"><div class="' + box + '"><p class="text-[11px] text-slate-500 dark:text-slate-400">Datum</p><p class="text-[15px] font-semibold">' + chDY(t) + '</p></div>'
+    + '<div class="' + box + '"><p class="text-[11px] text-slate-500 dark:text-slate-400">km-Stand</p><p class="text-[15px] font-semibold">' + (c.odometerKm > 0 ? fmt(c.odometerKm, 0) : '–') + '</p></div>'
+    + '<div class="' + box + '"><p class="text-[11px] text-slate-500 dark:text-slate-400">Betrag</p><p class="text-[15px] font-semibold">' + eur(costAmt(c)) + '</p></div></div>'
+    + (c.note ? '<p class="text-sm text-slate-600 dark:text-slate-300 text-left">Notiz: ' + esc(c.note) + '</p>' : '')
+    + '<div class="space-y-2"><p class="text-xs font-semibold text-slate-500 dark:text-slate-400">Belege in Google Drive</p>'
+    + (f.length ? '<div class="grid grid-cols-2 gap-2.5">' + f.map(x => '<a href="' + dvLink(x.id) + '" target="_blank" rel="noopener" class="flex flex-col gap-2 rounded-2xl bg-slate-100 dark:bg-slate-800 p-2 active:opacity-70"><span class="flex h-24 items-center justify-center rounded-xl bg-white dark:bg-slate-950 text-slate-400"><svg class="h-9 w-9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true">' + (chIsPdf(x) ? '<path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4M9 13h6M9 17h6"/>' : '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-8 8"/>') + '</svg></span><span class="truncate text-xs font-semibold">' + esc(x.name) + '</span></a>').join('') + '</div><p class="text-[11px] text-slate-400 dark:text-slate-500 text-left">Antippen öffnet den Beleg in Google Drive.</p>' : '<p class="text-sm text-slate-500 dark:text-slate-400 text-left">Noch kein Beleg hinterlegt.</p>')
+    + (chPend.length ? '<ul class="space-y-1">' + chPend.map((x, i) => '<li class="flex items-center justify-between gap-2 rounded-lg bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1.5 text-xs"><span class="min-w-0 truncate">' + esc(x.name) + ' · ' + fmt(x.size / 1048576, 1) + ' MB · noch nicht hochgeladen</span><button type="button" data-chs="rm" data-i="' + i + '" aria-label="Entfernen" class="shrink-0 px-2 py-1 text-slate-500">✕</button></li>').join('') + '</ul>' : '')
+    + '<p id="ch-sheet-msg" class="text-xs text-slate-500 dark:text-slate-400 text-left empty:hidden">' + esc(msg || '') + '</p></div>'
+    + '<div class="grid grid-cols-2 gap-2.5"><button type="button" data-chs="edit" class="h-12 rounded-2xl border border-slate-300 dark:border-slate-700 text-sm font-semibold active:scale-95 transition">Bearbeiten</button>'
+    + (chPend.length ? '<button type="button" data-chs="upload" class="h-12 rounded-2xl bg-emerald-600 text-sm font-semibold text-white active:scale-95 transition">Hochladen (' + chPend.length + ')</button>' : '<button type="button" data-chs="pick" class="h-12 rounded-2xl bg-emerald-600 text-sm font-semibold text-white active:scale-95 transition">Beleg hinzufügen</button>') + '</div>';
+}
+$('ch-sheet').addEventListener('click', async (e) => {
+  if (e.target === $('ch-sheet')) { closeChSheet(); return; }
+  const b = e.target.closest('[data-chs]'); if (!b) return; const act = b.dataset.chs;
+  if (act === 'close') closeChSheet();
+  else if (act === 'pick') $('ch-file').click();
+  else if (act === 'rm') { chPend.splice(Number(b.dataset.i), 1); renderChSheet(); }
+  else if (act === 'edit') {                                                     // Historie → Kosten im Bearbeiten-Modus, Eintrag in die Mitte scrollen
+    const id = chSheetId; closeChSheet(); histFilter = 'kosten'; showView('history'); setEditMode(true);
+    const j = getCosts().findIndex(c => String(c.id) === id), li = document.querySelector('#history-list li[data-cidx="' + j + '"]');
+    if (li) setTimeout(() => { li.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, 120);
+  }
+  else if (act === 'upload') {
+    const c = getCosts().find(x => String(x.id) === chSheetId), msg = (t) => { const m = $('ch-sheet-msg'); if (m) m.textContent = t; };
+    if (!c || !chPend.length) return;
+    if (!window.cloud?.isSignedIn()) { msg('Belege brauchen die Anmeldung bei Google (Einstellungen).'); return; }
+    const tokP = window.cloud.driveToken(); tokP.catch(() => { }); b.disabled = true; msg('Verbinde mit Google Drive …');
+    try { const up = await dvUploadFor(c, chPend.slice(), tokP, (i, n) => msg('Lade hoch ' + i + ' von ' + n + ' …')); chPend.length = 0; await dvSetFiles(c.id, f => f.concat(up)); renderChSheet(up.length + (up.length === 1 ? ' Beleg' : ' Belege') + ' in Google Drive gespeichert.'); renderCheckheft(); }
+    catch (err) { if (err && err.status === 401) window.cloud.driveForget(); b.disabled = false; msg('Upload fehlgeschlagen: ' + dvErrText(err)); }
+  }
+});
+$('ch-file').addEventListener('change', (e) => {
+  let big = ''; Array.from(e.target.files || []).forEach(f => { if (f.size > DV_MAX) big = '„' + f.name + '“ ist größer als 15 MB und wurde ausgelassen.'; else chPend.push(f); });
+  e.target.value = ''; renderChSheet(big || (chPend.length ? 'Zum Speichern in Google Drive auf „Hochladen“ tippen.' : ''));
+});
+
+/* ---- Checkheft als PDF (pdf-lib, im Browser) ---- */
+let chPdfLib = null;
+function chLoadPdfLib() {
+  if (window.PDFLib) return Promise.resolve(window.PDFLib);
+  if (!chPdfLib) chPdfLib = new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js'; sc.onload = () => window.PDFLib ? res(window.PDFLib) : rej(new Error('pdf-lib fehlt')); sc.onerror = () => { chPdfLib = null; rej(new Error('pdf-lib konnte nicht geladen werden (offline?)')); }; document.head.appendChild(sc); });
+  return chPdfLib;
+}
+async function chImageBytes(buf, mime) {                                         // Fotos als JPEG/PNG einbetten; andere Formate (WebP, HEIC …) über ein Canvas zu JPEG
+  if (/jpe?g/i.test(mime)) return { kind: 'jpg', bytes: buf };
+  if (/png/i.test(mime)) return { kind: 'png', bytes: buf };
+  const bmp = await createImageBitmap(new Blob([buf], { type: mime })); const cv = document.createElement('canvas'); cv.width = bmp.width; cv.height = bmp.height; cv.getContext('2d').drawImage(bmp, 0, 0);
+  const bl = await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.88)); return { kind: 'jpg', bytes: await bl.arrayBuffer() };
+}
+async function buildCheckheftPdf(onMsg, tokP) {
+  const L = window.PDFLib, { PDFDocument, StandardFonts, rgb } = L, entries = chEntries().sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
+  const nFiles = entries.reduce((a, c) => a + (c.files || []).length, 0);
+  const doc = await PDFDocument.create(), F = await doc.embedFont(StandardFonts.Helvetica), FB = await doc.embedFont(StandardFonts.HelveticaBold);
+  const W = 595.28, H = 841.89, ink = rgb(0.06, 0.09, 0.16), grey = rgb(0.39, 0.45, 0.55), line = rgb(0.89, 0.91, 0.94);
+  const COL = { service: rgb(0.012, 0.412, 0.631), rep: rgb(0.706, 0.325, 0.035), tuev: rgb(0.427, 0.157, 0.851) }, TINT = { service: rgb(0.88, 0.95, 0.99), rep: rgb(1, 0.95, 0.86), tuev: rgb(0.93, 0.91, 1) };
+  const safe = (f, s) => Array.from(String(s == null ? '' : s).replace(/[   ]/g, ' ')).map(ch => { try { f.encodeText(ch); return ch; } catch (e) { return '?'; } }).join('');
+  const fit = (f, s, size, w) => { let t = safe(f, s); if (f.widthOfTextAtSize(t, size) <= w) return t; while (t.length > 1 && f.widthOfTextAtSize(t + '…', size) > w) t = t.slice(0, -1); return t + '…'; };
+  const txt = (pg, s, x, y, o = {}) => { const f = o.bold ? FB : F, size = o.size || 10, t = o.w ? fit(f, s, size, o.w) : safe(f, s); const xx = o.right ? x - f.widthOfTextAtSize(t, size) : x; pg.drawText(t, { x: xx, y, size, font: f, color: o.color || ink }); };
+  const set = getSettings(), car = [set.brand, set.model].filter(Boolean).join(' ') || (set.title || DEFAULT_TITLE).split('|')[0].trim(), P0 = Date.parse(purchaseDay() + 'T00:00:00');
+  /* Inhaltsverzeichnis: Zeilen = Einträge + Trennzeile „Kauf“; Seiten vorab anlegen, damit die Seitenzahlen der Belege feststehen */
+  const rows = []; let kaufDone = false;
+  entries.forEach(c => { if (!kaufDone && Date.parse(c.date) >= P0) { rows.push({ kauf: true }); kaufDone = true; } rows.push({ c }); });
+  if (!kaufDone) rows.push({ kauf: true });
+  const RH = 30, CAP1 = 15, CAPN = 23, nIdx = rows.length <= CAP1 ? 1 : 1 + Math.ceil((rows.length - CAP1) / CAPN), idx = []; for (let i = 0; i < nIdx; i++) idx.push(doc.addPage([W, H]));
+  /* Belege */
+  const startPage = new Map(); let tok = null, done = 0;
+  for (const c of entries) {
+    const f = c.files || [], ty = chType(c.category); if (!f.length) continue;
+    startPage.set(c.id, doc.getPageCount() + 1);
+    for (let i = 0; i < f.length; i++) {
+      done++; onMsg('Lade Beleg ' + done + ' von ' + nFiles + ' …');
+      const head = { ty, c, label: 'Beleg ' + (i + 1) + ' von ' + f.length }; let placed = 0, err = '';
+      try {
+        if (!tok) tok = await tokP;
+        const buf = await (await dvFetch(tok, 'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(f[i].id) + '?alt=media')).arrayBuffer();
+        if (chIsPdf(f[i])) {
+          const src = await PDFDocument.load(buf, { ignoreEncryption: true }), n = src.getPageCount();
+          const emb = await doc.embedPages(src.getPages());
+          emb.forEach((ep, p) => { const pg = doc.addPage([W, H]); chDrawFit(pg, ep, true); chHead(pg, head, n > 1 ? ' · S. ' + (p + 1) + '/' + n : ''); placed++; });
+        } else {
+          const im = await chImageBytes(buf, f[i].mime || ''), img = im.kind === 'png' ? await doc.embedPng(im.bytes) : await doc.embedJpg(im.bytes);
+          const pg = doc.addPage([W, H]); chDrawFit(pg, img, false); chHead(pg, head, ''); placed++;
+        }
+      } catch (e) { if (e && e.status === 401) { window.cloud.driveForget(); throw e; } err = (e && e.message) || String(e); }
+      if (!placed) {                                                              // Ersatzseite statt Abbruch (z. B. verschlüsseltes oder gelöschtes Dokument)
+        const pg = doc.addPage([W, H]); chHead(pg, head, '');
+        txt(pg, 'Beleg konnte nicht eingebunden werden', 60, 640, { bold: true, size: 16 }); txt(pg, f[i].name, 60, 612, { size: 11, w: 475 });
+        txt(pg, err || 'Unbekannter Fehler', 60, 592, { size: 10, color: grey, w: 475 }); txt(pg, 'Original in Google Drive:', 60, 560, { size: 10, color: grey }); txt(pg, dvLink(f[i].id), 60, 544, { size: 9, color: COL.service, w: 475 });
+      }
+    }
+  }
+  function chDrawFit(pg, obj, isPage) {                                           // Beleg in den Bereich unter der Kopfzeile einpassen, zentriert
+    const bx = 24, by = 30, bw = W - 48, bh = H - 34 - 40, ow = obj.width, oh = obj.height, k = Math.min(bw / ow, bh / oh), w = ow * k, h = oh * k, x = bx + (bw - w) / 2, y = by + (bh - h) / 2;
+    if (isPage) pg.drawPage(obj, { x, y, width: w, height: h }); else pg.drawImage(obj, { x, y, width: w, height: h });
+    pg.drawRectangle({ x, y, width: w, height: h, borderColor: line, borderWidth: 0.6 });
+  }
+  function chHead(pg, hd, extra) {
+    const k = hd.ty.k, tag = safe(FB, hd.ty.n.toUpperCase()), tw = FB.widthOfTextAtSize(tag, 8.5) + 12;
+    pg.drawRectangle({ x: 24, y: H - 30, width: tw, height: 15, color: TINT[k] }); pg.drawText(tag, { x: 30, y: H - 26, size: 8.5, font: FB, color: COL[k] });
+    const meta = chDY(Date.parse(hd.c.date)) + (hd.c.odometerKm > 0 ? ' · ' + fmt(hd.c.odometerKm, 0) + ' km' : ''), right = hd.label + extra, rw = F.widthOfTextAtSize(safe(F, right), 9);
+    const mw = F.widthOfTextAtSize(safe(F, meta), 9), titleW = W - 24 - rw - 14 - (24 + tw + 8) - mw - 10;
+    const t = fit(FB, hd.c.title || hd.ty.n, 10, Math.max(40, titleW)); pg.drawText(t, { x: 24 + tw + 8, y: H - 26, size: 10, font: FB, color: ink });
+    txt(pg, meta, 24 + tw + 8 + FB.widthOfTextAtSize(t, 10) + 8, H - 26, { size: 9, color: grey }); txt(pg, right, W - 24, H - 26, { size: 9, color: grey, right: true });
+    pg.drawLine({ start: { x: 24, y: H - 36 }, end: { x: W - 24, y: H - 36 }, thickness: 0.6, color: rgb(0.8, 0.84, 0.88) });
+  }
+  /* Deckblatt + Inhaltsverzeichnis */
+  const total = doc.getPageCount(), p1 = idx[0], sum = entries.reduce((a, c) => a + Math.max(0, costAmt(c)), 0);
+  txt(p1, 'DIGITALES CHECKHEFT', 44, H - 82, { bold: true, size: 28 });
+  txt(p1, car + (set.year ? ' · Erstzulassung ' + set.year : '') + (set.plate ? ' · ' + set.plate : ''), 44, H - 102, { size: 11, color: grey, w: 380 });
+  txt(p1, 'erstellt am ' + chDY(Date.now()), W - 44, H - 82, { size: 9, color: grey, right: true }); txt(p1, total + ' Seiten', W - 44, H - 95, { size: 9, color: grey, right: true });
+  p1.drawLine({ start: { x: 44, y: H - 114 }, end: { x: W - 44, y: H - 114 }, thickness: 1.6, color: ink });
+  const tiles = CH_TYPES.map(t => [t.n.toUpperCase(), String(entries.filter(c => chType(c.category).k === t.k).length), COL[t.k]]).concat([['KOSTEN', eur(sum), grey]]), tW = (W - 88 - 30) / 4;
+  tiles.forEach((t, i) => { const x = 44 + i * (tW + 10); p1.drawRectangle({ x, y: H - 182, width: tW, height: 50, borderColor: line, borderWidth: 1 }); txt(p1, t[0], x + 10, H - 148, { bold: true, size: 8, color: t[2] }); txt(p1, t[1], x + 10, H - 172, { bold: true, size: 18, w: tW - 20 }); });
+  const X = { d: 44, a: 112, l: 176, km: 432, b: 492, s: W - 44 };
+  let pi = 0, y = 0, onPage = 0;
+  const startIdx = (pg, first) => { txt(pg, first ? 'INHALT' : 'INHALT (FORTSETZUNG)', 44, first ? H - 214 : H - 70, { bold: true, size: 13 }); y = first ? H - 238 : H - 94;
+    [['DATUM', X.d], ['ART', X.a], ['LEISTUNG', X.l]].forEach(([t, x]) => txt(pg, t, x, y, { bold: true, size: 7.5, color: grey })); [['KM', X.km], ['BETRAG', X.b], ['SEITE', X.s]].forEach(([t, x]) => txt(pg, t, x, y, { bold: true, size: 7.5, color: grey, right: true }));
+    pg.drawLine({ start: { x: 44, y: y - 6 }, end: { x: W - 44, y: y - 6 }, thickness: 0.8, color: rgb(0.8, 0.84, 0.88) }); y -= 24; onPage = 0; };
+  startIdx(idx[0], true);
+  rows.forEach(r => {
+    if (onPage >= (pi === 0 ? CAP1 : CAPN)) { pi++; startIdx(idx[pi], false); }
+    const pg = idx[pi];
+    if (r.kauf) txt(pg, 'KAUF AM ' + chDY(P0) + (set.purchaseKm ? ' BEI ' + fmt(Number(set.purchaseKm), 0) + ' KM' : ''), X.d, y + 2, { bold: true, size: 7.5, color: grey });
+    else {
+      const c = r.c, ty = chType(c.category), f = c.files || [], sp = startPage.get(c.id), pre = Date.parse(c.date) < P0, amt = costAmt(c);
+      txt(pg, chDY(Date.parse(c.date)), X.d, y + 4, { size: 9.5 }); txt(pg, ty.n, X.a, y + 4, { bold: true, size: 9.5, color: COL[ty.k] });
+      txt(pg, c.title || ty.n, X.l, y + 4, { size: 9.5, w: X.km - X.l - 52 });
+      txt(pg, [pre ? 'vor dem Kauf' : '', c.note || '', f.length ? f.length + (f.length === 1 ? ' Beleg' : ' Belege') : 'ohne Beleg'].filter(Boolean).join(' · '), X.l, y - 7, { size: 7.5, color: grey, w: X.km - X.l - 52 });
+      txt(pg, c.odometerKm > 0 ? fmt(c.odometerKm, 0) : '–', X.km, y + 4, { size: 9.5, right: true }); txt(pg, pre && !amt ? '–' : eur(amt), X.b, y + 4, { size: 9.5, right: true });
+      let pages = '–'; if (sp) { let end = total; for (const [id, s0] of startPage) if (s0 > sp && s0 - 1 < end) end = s0 - 1; pages = end > sp ? sp + '–' + end : String(sp); }
+      txt(pg, pages, X.s, y + 4, { size: 9.5, right: true });
+    }
+    pg.drawLine({ start: { x: 44, y: y - 13 }, end: { x: W - 44, y: y - 13 }, thickness: 0.5, color: line });
+    y -= RH; onPage++;
+  });
+  /* Fälligkeiten + Hinweis unten auf Seite 1 */
+  const due = chDue(entries);
+  due.forEach((d, i) => { const bw = (W - 88 - 10) / 2, x = 44 + i * (bw + 10); p1.drawRectangle({ x, y: 92, width: bw, height: 38, color: TINT[d.k] }); txt(p1, d.l === 'Service' ? 'Nächster Service' : d.l, x + 10, 116, { bold: true, size: 9, color: COL[d.k] }); txt(p1, chMY(d.d), x + 10, 100, { size: 10 }); });
+  p1.drawLine({ start: { x: 44, y: 76 }, end: { x: W - 44, y: 76 }, thickness: 0.5, color: line });
+  txt(p1, 'Zusammengestellt aus den Belegen in EnyaqStrom. Die Belege folgen in zeitlicher Reihenfolge, jede Seite trägt oben Art, Datum und km-Stand.', 44, 62, { size: 7.5, color: grey, w: W - 88 });
+  txt(p1, 'Die Mappe ersetzt keine Herstellernachweise.', 44, 52, { size: 7.5, color: grey });
+  /* Fußzeile auf allen Seiten */
+  doc.getPages().forEach((pg, i) => { txt(pg, 'Digitales Checkheft · ' + car, 24, 14, { size: 7.5, color: grey, w: 360 }); txt(pg, 'Seite ' + (i + 1) + ' von ' + total, W - 24, 14, { size: 7.5, color: grey, right: true }); });
+  doc.setTitle('Digitales Checkheft ' + car); doc.setCreator('EnyaqStrom'); doc.setProducer('EnyaqStrom (pdf-lib)');
+  return doc.save();
+}
+let chBusy = false;
+$('btn-ch-pdf').addEventListener('click', async () => {
+  if (chBusy) return; const msg = $('ch-msg'), nF = chEntries().reduce((a, c) => a + (c.files || []).length, 0);
+  if (nF && !window.cloud?.isSignedIn()) { msg.textContent = 'Für die Belege bitte zuerst bei Google anmelden (Einstellungen).'; return; }
+  chBusy = true; const btn = $('btn-ch-pdf'); btn.disabled = true; btn.classList.add('opacity-60');
+  const tokWarm = nF ? window.cloud.driveToken() : null; if (tokWarm) tokWarm.catch(() => { });   // Google-Fenster direkt nach dem Tipp öffnen
+  try {
+    msg.textContent = 'Bereite das Checkheft vor …'; await chLoadPdfLib();
+    const bytes = await buildCheckheftPdf((t) => { msg.textContent = t; }, tokWarm), blob = new Blob([bytes], { type: 'application/pdf' }), url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'Checkheft ' + ((getSettings().model || 'Enyaq').trim()) + ' ' + wxIso(new Date()) + '.pdf'; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    msg.textContent = 'Fertig: ' + fmt(blob.size / 1048576, 1) + ' MB · im Download-Ordner gespeichert.';
+  } catch (e) { msg.textContent = 'Checkheft konnte nicht erstellt werden: ' + (e && e.status ? dvErrText(e) : (e && e.message) || e); }
+  finally { chBusy = false; btn.disabled = false; btn.classList.remove('opacity-60'); }
+});
+
 let akteOldTitle = '';
 async function akteReady(box) {                                                     // alle Diagramm-Bilder geladen, dekodiert und gezeichnet
   await Promise.all([...box.querySelectorAll('img')].map(i => (i.complete ? Promise.resolve() : new Promise(r => { i.onload = i.onerror = r; })).then(() => i.decode ? i.decode().catch(() => { }) : null)));
@@ -6340,6 +6593,7 @@ function setDpTab(t, anim = true) {
   segPaintKey('.dp-btn', 'dp', t);
   DP_TABS.forEach(k => { const el = $('dp-' + k), on = k === t; el.classList.toggle('hidden', !on); el.classList.remove('dp-inL', 'dp-inR'); if (on && anim && dir) { void el.offsetWidth; el.classList.add(dir > 0 ? 'dp-inL' : 'dp-inR'); } });
   if (t === 'badges') { try { renderBadges(); } catch (e) { } }
+  if (t === 'akte') { try { renderCheckheft(); } catch (e) { } }
 }
 document.querySelectorAll('.dp-btn').forEach(b => b.addEventListener('click', () => setDpTab(b.dataset.dp)));
 segSwipe($('dp-panes'), $('dp-seg'));                                     // im Datenpool wechselt Wischen die Unter-Tabs
