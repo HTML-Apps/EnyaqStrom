@@ -259,7 +259,7 @@
     </button>
     <div id="kb-start-pins" class="hidden flex flex-wrap gap-2"></div>
 
-    <div class="!mt-7 flex items-center gap-3" role="presentation">
+    <div id="sec-eff" class="!mt-7 flex items-center gap-3 scroll-mt-4" role="presentation">
       <h2 class="shrink-0 font-barlow text-xl font-bold uppercase tracking-[0.1em] text-white">Verbräuche &amp; Effizienz</h2>
       <span class="h-0.5 flex-1 rounded-full bg-gradient-to-r from-emerald-500/80 to-white/10" aria-hidden="true"></span>
     </div>
@@ -309,7 +309,7 @@
       <p id="loss-empty" class="hidden text-center text-sm text-slate-500 py-6">Noch keine Ladungen mit Akku-Start und -Ende erfasst.</p>
       <p id="loss-note" class="text-xs text-slate-500 dark:text-slate-400 mt-3 text-center"></p>
     </div>
-    <div class="!mt-7 flex items-center gap-3" role="presentation">
+    <div id="sec-trends" class="!mt-7 flex items-center gap-3 scroll-mt-4" role="presentation">
       <h2 class="shrink-0 font-barlow text-xl font-bold uppercase tracking-[0.1em] text-white">Trends</h2>
       <span class="h-0.5 flex-1 rounded-full bg-gradient-to-r from-emerald-500/80 to-white/10" aria-hidden="true"></span>
     </div>
@@ -1198,6 +1198,8 @@
       <button type="button" data-nav="badges" class="relative flex min-w-0 flex-col items-center gap-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800 px-0.5 py-2.5 text-[10.5px] font-semibold leading-tight tracking-tight active:scale-95 transition"><svg class="h-[22px] w-[22px] text-sky-600 dark:text-sky-300" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="9" r="5"/><path d="M9 13l-2 8 5-3 5 3-2-8"/></svg><span class="max-w-full truncate">Abzeichen</span></button>
       <button type="button" data-nav="wrap" class="relative flex min-w-0 flex-col items-center gap-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800 px-0.5 py-2.5 text-[10.5px] font-semibold leading-tight tracking-tight active:scale-95 transition"><svg class="h-[22px] w-[22px] text-sky-600 dark:text-sky-300" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/></svg><span class="max-w-full truncate">Rückblick</span></button>
       <button type="button" data-nav="tax" class="relative flex min-w-0 flex-col items-center gap-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800 px-0.5 py-2.5 text-[10.5px] font-semibold leading-tight tracking-tight active:scale-95 transition"><svg class="h-[22px] w-[22px] text-sky-600 dark:text-sky-300" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7M9 16h7"/></svg><span class="max-w-full truncate">Steuer</span></button>
+      <button type="button" data-nav="eff" class="relative flex min-w-0 flex-col items-center gap-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800 px-0.5 py-2.5 text-[10.5px] font-semibold leading-tight tracking-tight active:scale-95 transition"><svg class="h-[22px] w-[22px] text-sky-600 dark:text-sky-300" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17l4-5"/><circle cx="12" cy="17" r="1.2"/></svg><span class="max-w-full truncate">Effizienz</span></button>
+      <button type="button" data-nav="trends" class="relative flex min-w-0 flex-col items-center gap-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800 px-0.5 py-2.5 text-[10.5px] font-semibold leading-tight tracking-tight active:scale-95 transition"><svg class="h-[22px] w-[22px] text-sky-600 dark:text-sky-300" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg><span class="max-w-full truncate">Trends</span></button>
     </div>
     <p class="mt-4 mb-2 text-[11px] font-bold uppercase tracking-[0.1em] text-violet-700 dark:text-violet-300">Fahrzeug</p>
     <div class="grid grid-cols-4 gap-1.5">
@@ -6669,9 +6671,11 @@ function closeNavDrawer() {
   const d = $('nav-drawer'); d.classList.add('pointer-events-none'); d.setAttribute('aria-hidden', 'true'); $('btn-nav').setAttribute('aria-expanded', 'false');
   $('nav-drawer-bg').classList.replace('opacity-100', 'opacity-0'); $('nav-drawer-panel').classList.replace('translate-x-0', '-translate-x-full');
 }
+const navStart = (id) => { if (currentView !== 'dashboard') showView('dashboard'); setTimeout(() => { const el = $(id); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 320); };
 const NAV_GO = {
   'cap-home': () => { setCapPlace('home'); showView('capture'); setCapPlace('home'); }, 'cap-bosch': () => { setCapPlace('bosch'); showView('capture'); setCapPlace('bosch'); },
   'cap-away': () => { setCapPlace('away'); showView('capture'); setCapPlace('away'); }, costs: () => showView('costs'),
+  eff: () => navStart('sec-eff'), trends: () => navStart('sec-trends'),
   rep: () => { repMode = 'laden'; showView('report'); }, akku: () => { repMode = 'akku'; showView('report'); }, stat: () => { repMode = 'stat'; setDpTab('stat', false); showView('report'); },
   trips: () => { histFilter = 'fahrten'; tripDays = 21; showView('history'); }, hist: () => { histFilter = 'all'; showView('history'); },
   badges: () => { repMode = 'stat'; setDpTab('badges', false); showView('report'); }, wrap: () => $('btn-wrap-preview').click(),
@@ -6689,6 +6693,7 @@ const NAV_GO = {
 const NAV_IDX = [
   ['cap-home', 'Laden Zuhause erfassen', 'Laden', 'wallbox zähler foto heim'], ['cap-bosch', 'Laden Bosch erfassen', 'Laden', 'arbeit werk lichtblick'], ['cap-away', 'Laden unterwegs erfassen', 'Laden', 'schnelllader dc ladesäule'],
   ['costs', 'Kosten erfassen', 'Kosten', 'ausgabe beleg rechnung versicherung'], ['rep', 'Bericht Laden', 'Berichte › Laden', 'monat kwh'], ['rep-kosten', 'Bericht Kosten', 'Berichte › Kosten', 'tco ausgaben'],
+  ['eff', 'Verbräuche & Effizienz', 'Start', 'verbrauch kwh/100 km ladekosten pro km strompreis'], ['trends', 'Trends', 'Start', 'laufleistung stromkosten gesamtkosten monate'],
   ['akku', 'Akku', 'Berichte › Akku', 'kapazität pflege temperatur soh netto rebalancing'], ['stat', 'Statistik', 'Berichte › Datenpool', 'verbrauch rekorde laufleistung'], ['badges', 'Abzeichen', 'Berichte › Datenpool', 'badges erfolge'],
   ['akte', 'Fahrzeugakte', 'Berichte › Datenpool', 'verkauf historie'], ['akte-pdf', 'Fahrzeugakte als PDF', 'Aktion', 'drucken export'], ['checkheft', 'Checkheft', 'Berichte › Datenpool', 'service reparatur tüv hu werkstatt'],
   ['ch-pdf', 'Checkheft als PDF', 'Aktion', 'belege mappe drucken'], ['rep-fahrten', 'Fahrten-Bericht', 'Berichte › Fahrten', 'fahrtenbuch arbeitsweg'], ['tax', 'Steuer · Arbeitsweg', 'Berichte › Fahrten', 'pendlerpauschale entfernungspauschale werbungskosten'],
