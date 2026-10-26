@@ -565,6 +565,7 @@
     </div>
     <div id="hist-filter" class="flex bg-slate-200 dark:bg-slate-800 rounded-xl p-1"><button type="button" data-filter="all" class="hist-filter-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Alle</button><button type="button" data-filter="laden" class="hist-filter-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Laden</button><button type="button" data-filter="kosten" class="hist-filter-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Kosten</button><button type="button" data-filter="fahrten" class="hist-filter-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Fahrten</button></div>
     <div id="hist-cats" class="hidden -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5 no-sb"></div>
+    <div id="hist-cat-sum" class="hidden"></div>
     <p id="history-empty" class="hidden text-center text-sm text-slate-500 py-8">Noch keine Zählerstände erfasst.</p>
     <ul id="history-list" class="space-y-3"></ul>
     <div id="trips-wrap" class="hidden space-y-3">
@@ -2899,12 +2900,20 @@ function renderHistory() {
 /** Historie → Kosten: Etiketten-Filter wie im Checkheft, mit allen Kategorien (auch ohne Einträge) und Anzahl */
 let histCat = 'all';
 function renderHistCats(show) {
-  const box = $('hist-cats'); box.classList.toggle('hidden', !show || !getCosts().length); if (!show) return;
+  const box = $('hist-cats'); box.classList.toggle('hidden', !show || !getCosts().length); if (!show) { $('hist-cat-sum').classList.add('hidden'); return; }
   const cs = getCosts(), key = (c) => (c.category || '').trim(), names = getCategories().slice();
   cs.forEach(c => { const k = key(c); if (k && !names.some(n => n.toLowerCase() === k.toLowerCase())) names.push(k); });
   if (histCat !== 'all' && !names.some(n => n.toLowerCase() === histCat.toLowerCase())) histCat = 'all';
   const cnt = (n) => cs.filter(c => key(c).toLowerCase() === n.toLowerCase()).length;
   const chip = (k, label, cls) => '<button type="button" data-hcat="' + esc(k) + '" class="h-8 shrink-0 whitespace-nowrap rounded-full px-3 text-xs font-semibold ' + (histCat.toLowerCase() === k.toLowerCase() ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900' : 'border border-slate-300 dark:border-slate-700 ' + cls) + '">' + label + '</button>';
+  const sb = $('hist-cat-sum'), sel = histCat === 'all' ? [] : cs.filter(c => key(c).toLowerCase() === histCat.toLowerCase());   // Summe für das gewählte Etikett
+  sb.classList.toggle('hidden', histCat === 'all');
+  if (histCat !== 'all') {
+    const out = sel.reduce((a, c) => a + Math.max(0, costAmt(c)), 0), inc = sel.reduce((a, c) => a + Math.max(0, -costAmt(c)), 0), ts = sel.map(c => Date.parse(c.date)).filter(Number.isFinite);
+    const span = ts.length ? new Date(Math.min(...ts)).toLocaleDateString('de-DE', { month: '2-digit', year: 'numeric' }) + (ts.length > 1 ? ' – ' + new Date(Math.max(...ts)).toLocaleDateString('de-DE', { month: '2-digit', year: 'numeric' }) : '') : '';
+    const big = out > 0 || !inc ? '<span class="text-xl font-semibold tabular-nums">' + eur(out) + '</span>' : '<span class="text-xl font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">+' + eur(inc) + '</span>';
+    sb.innerHTML = '<div class="flex items-center justify-between gap-3 rounded-2xl bg-white dark:bg-slate-900 shadow-sm px-4 py-3"><span class="min-w-0"><span class="block truncate font-semibold">Summe ' + esc(histCat) + '</span><span class="block truncate text-xs text-slate-500 dark:text-slate-400">' + sel.length + (sel.length === 1 ? ' Eintrag' : ' Einträge') + (span ? ' · ' + span : '') + (out > 0 && inc > 0 ? ' · Einnahmen +' + eur(inc) : '') + '</span></span>' + big + '</div>';
+  }
   box.innerHTML = chip('all', 'Alle', '') + names.map(n => { const t = chType(n); return chip(n, esc(n) + ' ' + cnt(n), t ? t.txt : 'text-slate-600 dark:text-slate-300'); }).join('');
 }
 $('hist-cats').addEventListener('click', (e) => { const b = e.target.closest('[data-hcat]'); if (!b) return; histCat = b.dataset.hcat; applyHistFilter(); });
