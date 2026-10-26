@@ -978,11 +978,12 @@
         <div class="py-4 first:pt-4 last:pb-0">
           <p class="text-sm font-medium text-slate-700 dark:text-slate-300">Akku-Zertifikat vor dem Kauf</p>
           <div class="mt-1.5 grid grid-cols-3 gap-2">
-            <div><label for="set-cert-ac" class="text-xs text-slate-500 dark:text-slate-400">AC [%]</label><input id="set-cert-ac" type="text" inputmode="decimal" placeholder="z. B. 85" autocomplete="off" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
-            <div><label for="set-cert-dc" class="text-xs text-slate-500 dark:text-slate-400">DC [%]</label><input id="set-cert-dc" type="text" inputmode="decimal" placeholder="z. B. 15" autocomplete="off" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
+            <div><label for="set-cert-ac" class="text-xs text-slate-500 dark:text-slate-400">AC [kWh]</label><input id="set-cert-ac" type="text" inputmode="decimal" placeholder="z. B. 2.100" autocomplete="off" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
+            <div><label for="set-cert-dc" class="text-xs text-slate-500 dark:text-slate-400">DC [kWh]</label><input id="set-cert-dc" type="text" inputmode="decimal" placeholder="z. B. 380" autocomplete="off" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
             <div><label for="set-cert-km" class="text-xs text-slate-500 dark:text-slate-400">bei km</label><input id="set-cert-km" type="text" inputmode="numeric" placeholder="Kauf-km" autocomplete="off" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
           </div>
-          <p class="mt-1.5 text-xs text-slate-500 dark:text-slate-400 text-left">AC/DC-Ladeverhältnis laut Zertifikat (Energieanteil). Ein Wert genügt, der andere ergänzt sich auf 100 %. km-Stand leer = km bei Kauf. Fließt in Berichte → Akku (AC/DC-Laden, „Seit Zulassung“) ein.</p>
+          <p id="set-cert-ratio" class="mt-1.5 text-sm font-medium text-slate-700 dark:text-slate-300 empty:hidden"></p>
+          <p class="mt-1.5 text-xs text-slate-500 dark:text-slate-400 text-left">Geladene Energie laut Zertifikat, getrennt nach AC und DC. Daraus ergibt sich das Ladeverhältnis vor dem Kauf. km-Stand leer = km bei Kauf. Fließt in Berichte → Akku (AC/DC-Laden, „Seit Zulassung“) ein.</p>
         </div>
       </div>
     </div>
@@ -2186,7 +2187,7 @@ function fillSettings() {
   $('set-title').value = s.title || DEFAULT_TITLE;
   $('set-brand').value = s.brand || ''; $('set-model').value = s.model || ''; $('set-plate').value = s.plate || ''; $('set-year').value = s.year || ''; $('set-vin').value = s.vin || '';
   $('set-power').value = String(chargePowerKw()).replace('.', ',');
-  $('set-cert-ac').value = s.certAc != null ? String(s.certAc).replace('.', ',') : ''; $('set-cert-dc').value = s.certAc != null ? String(Math.round((100 - s.certAc) * 10) / 10).replace('.', ',') : ''; $('set-cert-km').value = s.certKm != null ? fmt(s.certKm, 0) : '';
+  $('set-cert-ac').value = s.certAcKwh != null ? fmt(s.certAcKwh, 0) : ''; $('set-cert-dc').value = s.certDcKwh != null ? fmt(s.certDcKwh, 0) : ''; $('set-cert-km').value = s.certKm != null ? fmt(s.certKm, 0) : ''; certRatioHint();
   $('set-ref-lo').value = s.refLo != null ? String(s.refLo).replace('.', ',') : ''; $('set-ref-hi').value = s.refHi != null ? String(s.refHi).replace('.', ',') : '';
   renderDvInfo(); $('set-purchase').value = purchaseDay(); $('set-purchase-km').value = s.purchaseKm != null ? fmt(s.purchaseKm, 0) : ''; $('set-purchase-price').value = s.purchasePrice != null ? fmt(s.purchasePrice, 2) : ''; $('set-wltp').value = s.wltp ? String(s.wltp).replace('.', ',') : ''; renderWxLoc();
   $('set-rem-days').value = String(remWarn().days); $('set-rem-km').value = String(remWarn().km); $('set-next-hu').value = s.nextHu || ''; $('set-next-svc').value = s.nextService || '';
@@ -2252,12 +2253,9 @@ $('btn-save-settings').addEventListener('click', () => {
     alert('Bitte beim Referenzbereich der Akku-Temperatur beide Werte eintragen (−20 bis 45 °C, „bis“ mindestens 2 °C über „von“) oder beide Felder leer lassen.'); return; }
   const deNum = (v) => { const t = v.trim(); if (t === '') return undefined; return Number((/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(t) ? t.replace(/\./g, '') : t).replace(',', '.')); };   // 16.969 = sechzehntausend…, 32.500,50 = Euro mit Cent
   const pk = deNum($('set-purchase-km').value), pp = deNum($('set-purchase-price').value);
-  const cA = tnum('set-cert-ac'), cD = tnum('set-cert-dc'), certKm = deNum($('set-cert-km').value);
-  let certAc = cA !== undefined ? cA : cD !== undefined ? 100 - cD : undefined;
-  if (certAc !== undefined && !(Number.isFinite(certAc) && certAc >= 0 && certAc <= 100)) { alert('Bitte beim Akku-Zertifikat AC und DC als Prozent von 0 bis 100 eingeben.'); return; }
-  if (cA !== undefined && cD !== undefined && Math.abs(cA + cD - 100) > 1) { alert('AC und DC laut Zertifikat ergeben zusammen nicht 100 %. Bitte prüfen oder nur einen Wert eintragen.'); return; }
+  const certAcKwh = deNum($('set-cert-ac').value), certDcKwh = deNum($('set-cert-dc').value), certKm = deNum($('set-cert-km').value);
+  if ([certAcKwh, certDcKwh].some(v => v !== undefined && !(Number.isFinite(v) && v >= 0 && v <= 1e6)) || (certAcKwh !== undefined) !== (certDcKwh !== undefined) || (certAcKwh !== undefined && certAcKwh + certDcKwh <= 0)) { alert('Bitte beim Akku-Zertifikat beide Werte (AC und DC in kWh) eintragen oder beide Felder leer lassen.'); return; }
   if (certKm !== undefined && !(certKm >= 0 && certKm <= 2e6)) { alert('Bitte den km-Stand des Akku-Zertifikats als Zahl eingeben oder das Feld leer lassen.'); return; }
-  if (certAc !== undefined) certAc = Math.round(certAc * 10) / 10;
   if (pk !== undefined && !(pk >= 0 && pk <= 2e6)) { alert('Bitte den Kilometerstand bei Kauf als Zahl eingeben (z. B. 16.969) oder das Feld leer lassen.'); return; }
   if (pp !== undefined && !(pp >= 0 && pp <= 1e7)) { alert('Bitte den Kaufpreis in Euro als Zahl eingeben (z. B. 32.500) oder das Feld leer lassen.'); return; }
   if (wl !== undefined && !(wl > 5 && wl < 40)) { alert('Bitte den WLTP-Verbrauch in kWh/100 km eingeben (z. B. 16,0) oder das Feld leer lassen.'); return; }
@@ -2269,7 +2267,7 @@ $('btn-save-settings').addEventListener('click', () => {
     if (+m[2] < 1990 || +m[2] * 12 + +m[1] > now.getFullYear() * 12 + now.getMonth() + 1) { alert('Das Baujahr ' + yr + ' kann nicht stimmen: Es muss zwischen 01/1990 und ' + String(now.getMonth() + 1).padStart(2, '0') + '/' + now.getFullYear() + ' liegen.'); $('set-year').focus(); return; }
   }
   const txt = (id, n) => $(id).value.trim().replace(/\s+/g, ' ').slice(0, n) || undefined;
-  if (save(KEY_SETTINGS, { title: $('set-title').value.trim() || DEFAULT_TITLE, brand: txt('set-brand', 30), model: txt('set-model', 40), plate: (txt('set-plate', 15) || '').toUpperCase() || undefined, year: yr || undefined, vin: vin || undefined, price, battery, power, remDays, remKm, purchase, wltp: wl, purchaseKm: pk !== undefined ? Math.round(pk) : undefined, purchasePrice: pp !== undefined ? Math.round(pp * 100) / 100 : undefined, commuteKm: getSettings().commuteKm || undefined, refLo: rlo, refHi: rhi, nextHu, nextService, certAc, certKm: certKm !== undefined ? Math.round(certKm) : undefined })) {   // commuteKm: im Steuerhelfer (Berichte → Fahrten) gepflegt
+  if (save(KEY_SETTINGS, { title: $('set-title').value.trim() || DEFAULT_TITLE, brand: txt('set-brand', 30), model: txt('set-model', 40), plate: (txt('set-plate', 15) || '').toUpperCase() || undefined, year: yr || undefined, vin: vin || undefined, price, battery, power, remDays, remKm, purchase, wltp: wl, purchaseKm: pk !== undefined ? Math.round(pk) : undefined, purchasePrice: pp !== undefined ? Math.round(pp * 100) / 100 : undefined, commuteKm: getSettings().commuteKm || undefined, refLo: rlo, refHi: rhi, nextHu, nextService, certAcKwh: certAcKwh !== undefined ? Math.round(certAcKwh * 10) / 10 : undefined, certDcKwh: certDcKwh !== undefined ? Math.round(certDcKwh * 10) / 10 : undefined, certKm: certKm !== undefined ? Math.round(certKm) : undefined })) {   // commuteKm: im Steuerhelfer (Berichte → Fahrten) gepflegt
     renderReminderBadges(); renderHeroStats(); pushPrefs();
     $('settings-msg').classList.remove('hidden'); setTimeout(() => $('settings-msg').classList.add('hidden'), 2500);
   }
@@ -4120,8 +4118,7 @@ function renderCare() {
 
 /* =====================================================================
    AC/DC-Laden (Berichte → Akku): Energieanteil AC (Zuhause + Bosch) und DC (Unterwegs) – letzte 90 Tage, seit Kauf (je Monat) und seit Zulassung.
-   Seit Zulassung: Anteil vor dem Kauf laut Akku-Zertifikat (Einstellungen → Laden & Akku), gewichtet mit der geschätzten Energie vor dem Kauf
-   (km-Stand des Zertifikats bzw. bei Kauf × Ø Verbrauch an der Steckdose; ohne Messwert WLTP).
+   Seit Zulassung: geladene kWh AC/DC vor dem Kauf laut Akku-Zertifikat (Einstellungen → Laden & Akku) plus die eigenen Ladungen seit Kauf.
    ===================================================================== */
 let acdcMode = '90';
 const ACDC_C = { ac: '#10b981', dc: '#f59e0b' };
@@ -4131,10 +4128,9 @@ function acdcSplit(from, to = Infinity) {
   o.tot = o.ac + o.dc; o.dcP = o.tot ? o.dc / o.tot * 100 : null; return o;
 }
 function acdcCert() {
-  const st = getSettings(), ac = Number(st.certAc); if (st.certAc == null || !Number.isFinite(ac)) return null;
-  const km = Number(st.certKm) > 0 ? Number(st.certKm) : Number(st.purchaseKm) > 0 ? Number(st.purchaseKm) : null; if (!km) return { ac, dcP: 100 - ac, km: null, kwh: null };
-  const rs = getReadings(); let k100 = null; try { const t = rs.length ? consumptionTotals(rs, rs.map((_, i) => i)) : null; k100 = t && t.kwh100 ? t.kwh100 : null; } catch (e) { }
-  const kp = k100 || wltpVal(); return { ac, dcP: 100 - ac, km, k100: kp, measured: !!k100, kwh: km * kp / 100 };
+  const st = getSettings(), A = Number(st.certAcKwh), D = Number(st.certDcKwh); if (!(Number.isFinite(A) && Number.isFinite(D) && A + D > 0)) return null;
+  const km = Number(st.certKm) > 0 ? Number(st.certKm) : Number(st.purchaseKm) > 0 ? Number(st.purchaseKm) : null;
+  return { ac: A / (A + D) * 100, dcP: D / (A + D) * 100, acK: A, dcK: D, kwh: A + D, km };
 }
 const acdcLvl = (p) => p == null ? ['', ''] : p <= 20 ? ['Sehr schonend', '#10b981'] : p <= 40 ? ['Ausgewogen', '#22c55e'] : p <= 60 ? ['Viel Schnellladen', '#f59e0b'] : ['Überwiegend DC', '#ef4444'];
 function acdcBar(label, o, sub) {
@@ -4150,10 +4146,10 @@ function renderAcdc() {
   if (acdcMode === 'zul') {
     const c = acdcCert(), app = acdcSplit(P0);
     if (!c) { el.innerHTML = `<p class="mt-2 text-sm text-slate-600 dark:text-slate-300 text-left">Für „Seit Zulassung“ fehlt das AC/DC-Verhältnis aus deinem Akku-Zertifikat.</p><button type="button" data-acdc-set class="mt-3 w-full rounded-xl border border-slate-300 dark:border-slate-700 py-2.5 text-sm font-semibold active:scale-95 transition">In den Einstellungen eintragen</button>`; return; }
-    const pre = { dcP: c.dcP, ac: c.kwh ? c.kwh * c.ac / 100 : null, dc: c.kwh ? c.kwh * c.dcP / 100 : null };
+    const pre = { dcP: c.dcP, ac: c.acK, dc: c.dcK };
     const tot = c.kwh ? { ac: pre.ac + app.ac, dc: pre.dc + app.dc } : null; if (tot) { tot.tot = tot.ac + tot.dc; tot.dcP = tot.tot ? tot.dc / tot.tot * 100 : null; }
-    el.innerHTML = head(tot ? tot.dcP : c.dcP, tot ? 'gesamt seit Zulassung · ca. ' + fmt(tot.tot, 0) + ' kWh, davon ' + fmt(c.kwh, 0) + ' kWh vor dem Kauf (geschätzt)' : 'laut Zertifikat (ohne km-Stand keine Gewichtung mit deinen Ladungen)')
-      + `<div class="mt-4 space-y-3">${acdcBar('Vor dem Kauf (Zertifikat)', pre, c.kwh ? 'ca. ' + fmt(c.kwh, 0) + ' kWh = ' + fmt(c.km, 0) + ' km × ' + fmt(c.k100, 1) + ' kWh/100 km' + (c.measured ? ' (dein Ø)' : ' (WLTP)') : '')}${app.tot ? acdcBar('Seit Kauf (deine Ladungen)', app, fmt(app.tot, 0) + ' kWh in ' + (app.nAc + app.nDc) + ' Ladungen') : ''}${tot ? acdcBar('Gesamt seit Zulassung', tot, '') : ''}</div>` + leg
+    el.innerHTML = head(tot ? tot.dcP : c.dcP, tot ? 'gesamt seit Zulassung · ' + fmt(tot.tot, 0) + ' kWh, davon ' + fmt(c.kwh, 0) + ' kWh vor dem Kauf laut Zertifikat' : '')
+      + `<div class="mt-4 space-y-3">${acdcBar('Vor dem Kauf (Zertifikat)', pre, 'AC ' + fmt(c.acK, 0) + ' kWh · DC ' + fmt(c.dcK, 0) + ' kWh' + (c.km ? ' bis ' + fmt(c.km, 0) + ' km' : ''))}${app.tot ? acdcBar('Seit Kauf (deine Ladungen)', app, fmt(app.tot, 0) + ' kWh in ' + (app.nAc + app.nDc) + ' Ladungen') : ''}${tot ? acdcBar('Gesamt seit Zulassung', tot, '') : ''}</div>` + leg
       + (tot && app.dcP != null ? `<p class="mt-3 rounded-2xl bg-slate-100 dark:bg-slate-800/70 p-3 text-xs text-slate-600 dark:text-slate-300 text-left">${app.dcP < c.dcP - 2 ? 'Seit dem Kauf lädst du anteilig weniger per DC als der Vorbesitzer – gut für den Akku.' : app.dcP > c.dcP + 2 ? 'Seit dem Kauf lädst du anteilig mehr per DC als der Vorbesitzer. Gelegentliches Schnellladen ist unbedenklich, im Alltag ist AC schonender.' : 'Dein Ladeverhalten entspricht in etwa dem des Vorbesitzers.'}</p>` : '');
     return;
   }
@@ -4168,7 +4164,9 @@ function renderAcdc() {
 }
 $('acdc-seg').addEventListener('click', (e) => { const b = e.target.closest('[data-acdc]'); if (b && b.dataset.acdc !== acdcMode) { acdcMode = b.dataset.acdc; renderAcdc(); } });
 $('acdc-body').addEventListener('click', (e) => { if (e.target.closest('[data-acdc-set]')) { openSettings('laden'); setTimeout(() => { const f = $('set-cert-ac'); f.scrollIntoView({ block: 'center' }); }, 200); } });
-['set-cert-ac', 'set-cert-dc'].forEach((id, i) => $(id).addEventListener('input', () => { const v = Number($(id).value.trim().replace(',', '.')), o = $(i ? 'set-cert-ac' : 'set-cert-dc'); if ($(id).value.trim() !== '' && Number.isFinite(v) && v >= 0 && v <= 100) o.value = String(Math.round((100 - v) * 10) / 10).replace('.', ','); else if ($(id).value.trim() === '') o.value = ''; }));
+function certRatioHint() { const n = (id) => { const t = $(id).value.trim(); if (!t) return NaN; return Number((/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(t) ? t.replace(/\./g, '') : t).replace(',', '.')); }, a = n('set-cert-ac'), d = n('set-cert-dc');
+  $('set-cert-ratio').textContent = Number.isFinite(a) && Number.isFinite(d) && a + d > 0 ? 'Verhältnis: ' + fmt(a / (a + d) * 100, 0) + ' % AC · ' + fmt(d / (a + d) * 100, 0) + ' % DC (' + fmt(a + d, 0) + ' kWh gesamt)' : ''; }
+['set-cert-ac', 'set-cert-dc'].forEach(id => $(id).addEventListener('input', certRatioHint));
 $('care-seg').addEventListener('click', (e) => { const b = e.target.closest('[data-care]'); if (b && b.dataset.care !== careMode) { careMode = b.dataset.care; renderCare(); } });
 /* =====================================================================
    Akku-Temperatur (Berichte → Akku): Auswertung der optional erfassten Temperatur beim Anstecken (ab 10 Ladungen).
@@ -6045,7 +6043,7 @@ try { renderWrapCard(); } catch (e) { }
    im Dokument enyaqStrom/<uid>/settings/prefs, gleiche Regel wie Anbieter und Kategorien. Die PIN bleibt nur auf dem Gerät.
    Erster Abgleich: Was die Cloud hat, gilt; fehlt dort etwas und ist lokal vorhanden, wird es hochgeladen. Danach gilt die Cloud (Änderung auf einem Gerät wirkt auf allen).
    ===================================================================== */
-const SYNC_SET_KEYS = ['title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAc', 'certKm'];
+const SYNC_SET_KEYS = ['title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAcKwh', 'certDcKwh', 'certKm'];
 /** Einstellungen für die Cloud: feste Reihenfolge, ohne leere Werte (Firestore verbietet undefined). null = nichts vorhanden. */
 function syncSet(src) {
   const o = {}; if (src && typeof src === 'object') SYNC_SET_KEYS.forEach(k => { const v = src[k]; if (v != null && v !== '' && !(typeof v === 'number' && !isFinite(v))) o[k] = v; });
