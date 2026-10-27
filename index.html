@@ -806,6 +806,10 @@
           <div id="tc-seg" class="flex shrink-0 whitespace-nowrap rounded-lg bg-slate-100 dark:bg-slate-800 p-0.5 text-[11px]"><button type="button" data-tc="akku" class="tc-btn rounded-md px-2 py-0.5 font-medium">Akku °C</button><button type="button" data-tc="aussen" class="tc-btn rounded-md px-2 py-0.5 font-medium">Außen °C</button></div></div>
         <div id="tc-body"></div>
       </div>
+      <div id="av-card" class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
+        <p class="text-sm text-slate-500 dark:text-slate-400">Alterung im Vergleich</p>
+        <div id="av-body"></div>
+      </div>
       <div id="bat-trend-card" class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
         <p class="text-sm text-slate-500 dark:text-slate-400">Veränderung</p>
         <p id="bat-trend-h" class="mt-1 text-xl font-semibold"></p>
@@ -4129,7 +4133,7 @@ const median = (a) => { const s = a.slice().sort((x, y) => x - y), m = s.length 
 const tCrit = (df) => df < 1 ? Infinity : df <= 15 ? [0, 12.71, 4.30, 3.18, 2.78, 2.57, 2.45, 2.36, 2.31, 2.26, 2.23, 2.20, 2.18, 2.16, 2.14, 2.13][df] : df <= 20 ? 2.09 : df <= 30 ? 2.04 : 1.96;
 function batRows() {
   return getReadings().filter(r => (placeOf(r) === 'home' || placeOf(r) === 'bosch') && Number.isFinite(r.socStart) && Number.isFinite(r.socEnd) && r.socEnd - r.socStart >= BAT.hub && r.socEnd <= BAT.endMax && r.consumedSinceLast > 0)
-    .map(r => { const hub = r.socEnd - r.socStart; return { t: Date.parse(r.date), hub, e: r.consumedSinceLast, k: r.consumedSinceLast / (hub / 100), bt: Number.isFinite(r.battTemp) ? r.battTemp : null }; })
+    .map(r => { const hub = r.socEnd - r.socStart; return { t: Date.parse(r.date), hub, e: r.consumedSinceLast, k: r.consumedSinceLast / (hub / 100), bt: Number.isFinite(r.battTemp) ? r.battTemp : null, km: Number(r.odometerKm) > 0 ? Number(r.odometerKm) : null }; })
     .filter(x => Number.isFinite(x.t)).sort((a, b) => a.t - b.t);
 }
 function batFit(rows) {
@@ -4327,6 +4331,51 @@ async function renderTcCard() {
     <p class="mt-2 text-[11px] text-slate-500 dark:text-slate-400">Hochrechnung über alle erfassten Strecken: km je Bereich × (Verbrauch − Referenz), an der Steckdose (Ø Wirkungsgrad ${fmt(eta * 100, 0)} %) × Ø Strompreis ${fmt(price, 3)} €/kWh. Referenzbereich änderbar unter Einstellungen → Laden &amp; Akku.</p>`;
 }
 $('tc-seg').addEventListener('click', (e) => { const b = e.target.closest('[data-tc]'); if (b && b.dataset.tc !== tcMode) { tcMode = b.dataset.tc; renderTcCard(); } });
+
+/* =====================================================================
+   Alterung im Vergleich (Berichte → Akku): Aviloo-Benchmark Enyaq iV (FLASH-Tests, n = 20.303), Median-SoH 95,14 % / 92,67 % / 91,04 %
+   bei 50.000 / 100.000 / 150.000 km. Bis 50.000 km Potenzkurve (Verlust ∝ km^0,6, früher Abfall), danach linear zwischen den Stützpunkten,
+   über 150.000 km mit der letzten Steigung fortgeschrieben. Eigener SoH = nutzbare kWh (K × η) ÷ Werksangabe 52 kWh netto.
+   ===================================================================== */
+const AVILOO = { n: 20303, nom: 52, pts: [[0, 100], [50000, 95.14], [100000, 92.67], [150000, 91.04]], warr: { yrs: 8, km: 160000, soh: 70 } };
+function avSoh(km) {
+  const P = AVILOO.pts; if (!(km > 0)) return 100;
+  if (km <= P[1][0]) return 100 - (100 - P[1][1]) * Math.pow(km / P[1][0], 0.6);
+  for (let i = 1; i < P.length - 1; i++) if (km <= P[i + 1][0]) return P[i][1] + (P[i + 1][1] - P[i][1]) * (km - P[i][0]) / (P[i + 1][0] - P[i][0]);
+  const a = P[P.length - 2], b = P[P.length - 1]; return b[1] + (b[1] - a[1]) * (km - b[0]) / (b[0] - a[0]);
+}
+function avPoints(rows) {                                                       // eigene Messpunkte je Quartal (mind. 6 Ladungen) + Gesamt
+  const out = [], by = new Map();
+  rows.forEach(x => { if (x.km == null) return; const d = new Date(x.t), q = d.getFullYear() + '-' + Math.floor(d.getMonth() / 3); if (!by.has(q)) by.set(q, []); by.get(q).push(x); });
+  [...by.values()].forEach(g => { const f = batFit(g); if (!f || f.n < 6) return; const kms = g.map(x => x.km).sort((a, b) => a - b); out.push({ km: kms[Math.floor(kms.length / 2)], soh: f.K * BAT.eta / AVILOO.nom * 100, ci: f.ci * BAT.eta / AVILOO.nom * 100, n: f.n }); });
+  return out.sort((a, b) => a.km - b.km);
+}
+function renderAviloo(rows, fit, ok) {
+  const el = $('av-body'); if (!el) return;
+  const km = lastKnownKm(), mySoh = ok ? fit.K * BAT.eta / AVILOO.nom * 100 : null, myCi = ok ? fit.ci * BAT.eta / AVILOO.nom * 100 : null, exp = km ? avSoh(km) : null;
+  const pts = avPoints(rows); if (ok && km && !pts.length) pts.push({ km, soh: mySoh, ci: myCi, n: fit.n });
+  /* Diagramm (SVG): x 0–160.000 km, y 86–100 % */
+  const W = 320, H = 170, L = 34, R = 10, T = 10, B = 26, X = (k) => L + k / 160000 * (W - L - R), Y = (v) => T + (100 - Math.max(86, Math.min(100, v))) / 14 * (H - T - B);
+  let curve = ''; for (let k = 0; k <= 160000; k += 4000) curve += (k ? ' L' : 'M') + X(k).toFixed(1) + ' ' + Y(avSoh(k)).toFixed(1);
+  const grid = [100, 96, 92, 88].map(v => `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" stroke="currentColor" class="text-slate-200 dark:text-slate-800" stroke-width="1"/><text x="${L - 5}" y="${Y(v) + 3.5}" text-anchor="end" font-size="10" fill="currentColor" class="text-slate-400">${v}</text>`).join('')
+    + [0, 50000, 100000, 150000].map(k => `<text x="${X(k)}" y="${H - 8}" text-anchor="middle" font-size="10" fill="currentColor" class="text-slate-400">${k ? k / 1000 + 'k' : '0'}</text>`).join('');
+  const bench = AVILOO.pts.slice(1).map(([k, v]) => `<circle cx="${X(k)}" cy="${Y(v)}" r="3.2" fill="#0ea5e9"/><text x="${X(k)}" y="${Y(v) - 7}" text-anchor="middle" font-size="9.5" fill="#0ea5e9">${fmt(v, 1)}</text>`).join('');
+  const mine = pts.map(p => `<line x1="${X(p.km)}" x2="${X(p.km)}" y1="${Y(p.soh + p.ci)}" y2="${Y(p.soh - p.ci)}" stroke="#10b981" stroke-width="1.5" opacity=".6"/><circle cx="${X(p.km)}" cy="${Y(p.soh)}" r="4" fill="#10b981" stroke="#0f172a" stroke-width="1.5"><title>${fmt(p.km, 0)} km: ${fmt(p.soh, 1)} % (± ${fmt(p.ci, 1)})</title></circle>`).join('');
+  const svg = `<svg viewBox="0 0 ${W} ${H}" class="mt-3 w-full" role="img" aria-label="Akkugesundheit über km: Aviloo-Median gegen deine Messung">${grid}<path d="${curve}" fill="none" stroke="#0ea5e9" stroke-width="2" stroke-dasharray="1 0"/>${bench}${mine}</svg>
+    <div class="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400"><span class="flex items-center gap-1.5"><span class="h-0.5 w-4 rounded bg-sky-500"></span>Aviloo-Median Enyaq iV</span><span class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-emerald-500"></span>Deine Schätzung (± Unsicherheit)</span></div>`;
+  const head = mySoh != null && exp != null ? `<div class="mt-2 grid grid-cols-2 gap-2 text-center">
+      <div class="rounded-2xl bg-slate-100 dark:bg-slate-800/70 p-2.5"><p class="text-xs text-center text-slate-500 dark:text-slate-400">Typisch bei ${fmt(km, 0)} km</p><p class="text-lg font-semibold tabular-nums text-sky-600 dark:text-sky-400">${fmt(exp, 1)} %</p></div>
+      <div class="rounded-2xl bg-slate-100 dark:bg-slate-800/70 p-2.5"><p class="text-xs text-center text-slate-500 dark:text-slate-400">Dein Akku (Schätzung)</p><p class="text-lg font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">${fmt(mySoh, 1)} %</p></div></div>`
+    : `<p class="mt-2 text-sm text-slate-600 dark:text-slate-300 text-left">${exp != null ? 'Typisch bei ' + fmt(km, 0) + ' km: ' + fmt(exp, 1) + ' %. ' : ''}Deine eigene Schätzung erscheint, sobald genug Ladungen vorliegen.</p>`;
+  /* Prognose (Median) in kWh und Reichweite */
+  let k100 = null; try { const rs = getReadings(), t = rs.length ? consumptionTotals(rs, rs.map((_, i) => i)) : null; k100 = t && t.km ? t.kwh100 * BAT.eta : null; } catch (e) { }
+  const prog = [50000, 100000, 150000].filter(k => !km || k > km - 5000).map(k => { const v = avSoh(k), kwh = v / 100 * AVILOO.nom; return `<tr class="border-t border-slate-200 dark:border-slate-800"><td class="py-1.5 text-left">${fmt(k, 0)} km</td><td class="py-1.5 text-right tabular-nums">${fmt(v, 1)} %</td><td class="py-1.5 text-right tabular-nums">${fmt(kwh, 1)} kWh</td><td class="py-1.5 text-right tabular-nums">${k100 ? 'ca. ' + fmt(Math.round(kwh / k100 * 100 / 5) * 5, 0) + ' km' : '–'}</td></tr>`; }).join('');
+  const w = AVILOO.warr, atW = avSoh(w.km);
+  el.innerHTML = head + svg
+    + `<p class="mt-4 text-sm font-medium text-left">Prognose (typischer Verlauf)</p><table class="mt-1 w-full text-sm"><thead><tr class="text-xs text-slate-500 dark:text-slate-400"><th class="text-left font-normal">bei</th><th class="text-right font-normal">SoH</th><th class="text-right font-normal">netto</th><th class="text-right font-normal">Reichweite</th></tr></thead><tbody>${prog}</tbody></table>`
+    + `<p class="mt-3 rounded-2xl bg-slate-100 dark:bg-slate-800/70 p-3 text-xs text-slate-600 dark:text-slate-300 text-left"><b class="text-slate-900 dark:text-white">Garantie:</b> ${w.yrs} Jahre bzw. ${fmt(w.km, 0)} km, Mindestkapazität laut Škoda-Garantiebedingungen (üblich ${w.soh} %). Ein typischer Enyaq liegt bei ${fmt(w.km, 0)} km noch bei etwa ${fmt(atW, 0)} %, also rund ${fmt(atW - w.soh, 0)} Punkte darüber.</p>`
+    + `<p class="mt-2 text-[11px] text-slate-500 dark:text-slate-400 text-left">Benchmark: Aviloo FLASH-Tests, ${fmt(AVILOO.n, 0)} Enyaq iV, Median ${AVILOO.pts.slice(1).map(p => fmt(p[1], 2) + ' % bei ' + fmt(p[0] / 1000, 0) + '.000 km').join(', ')}. Deine Schätzung = nutzbare kWh (η ${Math.round(BAT.eta * 100)} %) ÷ ${AVILOO.nom} kWh Werksangabe und deshalb nur grob vergleichbar. Aussagekräftiger ist, ob deine Punkte über die Jahre der Kurve folgen. Reichweite mit deinem Ø-Verbrauch.</p>`;
+}
 function renderBattery() {
   try { renderTcCard(); } catch (e) { console.error(e); }
   try { renderTempCard(); } catch (e) { console.error(e); }
@@ -4344,6 +4393,7 @@ function renderBattery() {
     $('bat-c').innerHTML = 'bei ' + eta + ' = ' + Math.round(BAT.eta * 100) + ' %';
     $('bat-basis').textContent = 'Basis: ' + fit.n + ' Ladungen Zuhause/Bosch · ' + fmtDate(new Date(fit.use[0].t).toISOString()) + ' bis ' + fmtDate(new Date(fit.use[fit.use.length - 1].t).toISOString()) + (fit.out ? ' · ' + fit.out + (fit.out === 1 ? ' Ausreißer' : ' Ausreißer') + ' ausgeschlossen' : '');
   }
+  try { renderAviloo(rows, fit, ok); } catch (e) { console.error(e); }
   /* Trend */
   const tr = rows.length ? batTrend(rows, now) : { state: 'none' }, h = $('bat-trend-h'), t = $('bat-trend-t');
   h.className = 'mt-1 text-xl font-semibold'; t.className = 'text-sm mt-1 text-slate-600 dark:text-slate-300';
@@ -5629,7 +5679,7 @@ function akteHtml() {
   if (n > 0) h += '<div style="break-inside:avoid">' + CAP('AC- und DC-Laden') + akSplit([['Energie (kWh)', ac.kwh, dc.kwh, (v) => fmt(v, 0) + ' kWh'], ['Ladungen (Anzahl)', ac.n, dc.n, (v) => fmt(v, 0) + (v === 1 ? ' Ladung' : ' Ladungen')]])
     + tbl(['Ladeart', 'Ladungen', 'Anteil', 'Energie (kWh)', 'Anteil'], [['AC-Laden (Zuhause + Bosch)', fmt(ac.n, 0), pc(ac.n, n), fmt(ac.kwh, 0), pc(ac.kwh, kwh)], ['davon Zuhause', fmt(pl.home.n, 0), pc(pl.home.n, n), fmt(pl.home.kwh, 0), pc(pl.home.kwh, kwh)], ['davon Bosch', fmt(pl.bosch.n, 0), pc(pl.bosch.n, n), fmt(pl.bosch.kwh, 0), pc(pl.bosch.kwh, kwh)], ['DC-Laden (Unterwegs)', fmt(dc.n, 0), pc(dc.n, n), fmt(dc.kwh, 0), pc(dc.kwh, kwh)], Object.assign(['Summe', fmt(n, 0), '100 %', fmt(kwh, 0), '100 %'], { bold: true })], [1, 2, 3, 4])
     + NOTE('AC = Zuhause und Bosch, DC = Unterwegs.' + (noKwh ? ' ' + noKwh + (noKwh === 1 ? ' Ladung ohne kWh-Angabe zählt' : ' Ladungen ohne kWh-Angabe zählen') + ' nur bei der Anzahl, nicht bei der Energie.' : '')) + '</div>';
-  h += H2('Akku-Schätzung') + (batOk ? kv([['Nutzbar im Auto je 100 % Akku', fmt(fit.K * BAT.eta, 1) + ' kWh (bei ' + Math.round(BAT.eta * 100) + ' % Ladewirkungsgrad)'], ['Brutto an der Steckdose je 100 % Akku', fmt(fit.K, 1) + ' kWh (± ' + fmt(fit.ci, 1) + ', 95 %)'], ['Basis', fit.n + ' Ladungen, ' + D1(fit.use[0].t) + ' bis ' + D1(fit.use[fit.use.length - 1].t)]]) + NOTE('Schätzung aus eigenen Messungen der Ladungen, kein Gutachten und kein Wert des Herstellers.') : '<p style="font-size:12px;color:#475569;margin:0">Noch nicht genug passende Ladungen (Akku-Start/-Ende in % und gemessene kWh) für eine Schätzung.</p>');
+  h += H2('Akku-Schätzung') + (batOk ? kv([['Nutzbar im Auto je 100 % Akku', fmt(fit.K * BAT.eta, 1) + ' kWh (bei ' + Math.round(BAT.eta * 100) + ' % Ladewirkungsgrad)'], ['Brutto an der Steckdose je 100 % Akku', fmt(fit.K, 1) + ' kWh (± ' + fmt(fit.ci, 1) + ', 95 %)'], ['Akkugesundheit (Schätzung)', fmt(fit.K * BAT.eta / AVILOO.nom * 100, 1) + ' % von ' + AVILOO.nom + ' kWh Werksangabe' + (lastKnownKm() ? ' · typisch bei ' + fmt(lastKnownKm(), 0) + ' km: ' + fmt(avSoh(lastKnownKm()), 1) + ' %' : '')], ['Typisch laut Aviloo-Benchmark', fmt(AVILOO.n, 0) + ' Enyaq iV: ' + AVILOO.pts.slice(1).map(q => fmt(q[1], 1) + ' % nach ' + fmt(q[0], 0) + ' km').join(', ')], ['Basis', fit.n + ' Ladungen, ' + D1(fit.use[0].t) + ' bis ' + D1(fit.use[fit.use.length - 1].t)]]) + NOTE('Schätzung aus eigenen Messungen der Ladungen, kein Gutachten und kein Wert des Herstellers.') : '<p style="font-size:12px;color:#475569;margin:0">Noch nicht genug passende Ladungen (Akku-Start/-Ende in % und gemessene kWh) für eine Schätzung.</p>');
   /* Diagramme */
   h += H2('Diagramme');
   const kmPts = rs.filter(r => r.odometerKm > 0).map(r => [Date.parse(r.date), r.odometerKm]).concat(cs.filter(c => c.odometerKm > 0).map(c => [Date.parse(c.date), c.odometerKm])).filter(q => Number.isFinite(q[0])).sort((a, b) => a[0] - b[0]);
