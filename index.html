@@ -255,11 +255,13 @@
       <span class="flex items-center gap-3 font-medium"><svg class="w-6 h-6 text-emerald-500" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="9" r="6"/><path d="M8.5 14l-1.5 7 5-3 5 3-1.5-7"/></svg><span class="min-w-0 truncate">Abzeichen<span id="go-badges-n" class="text-sm font-normal text-slate-500 dark:text-slate-400"></span></span></span>
       <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
     </button>
-    <button id="go-kb" type="button" class="flex w-full items-center justify-between rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm px-4 py-3 active:scale-[0.99] transition">
+    <div id="kb-card" class="overflow-hidden rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm">
+    <button id="go-kb" type="button" class="flex w-full items-center justify-between px-4 py-3 active:bg-slate-100 dark:active:bg-slate-800 transition">
       <span class="flex items-center gap-3 font-medium"><svg class="w-6 h-6 text-emerald-500" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 1 6.5 18H20v3H6.5"/></svg><span class="min-w-0 truncate">Wissen<span id="go-kb-n" class="text-sm font-normal text-slate-500 dark:text-slate-400"></span></span></span>
       <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
     </button>
-    <div id="kb-start-pins" class="hidden flex flex-wrap gap-2"></div>
+    <div id="kb-start-pins" class="hidden relative pb-1.5 pl-[27px] pr-3"></div>
+    </div>
 
     <div id="sec-eff" class="!mt-7 flex items-center gap-3 scroll-mt-4" role="presentation">
       <h2 class="shrink-0 font-barlow text-xl font-bold uppercase tracking-[0.1em] text-white">Verbräuche &amp; Effizienz</h2>
@@ -4678,9 +4680,15 @@ function renderKbStart() {
   const kb = getKb(), n = kb.items.length, pins = kb.items.filter(x => x.pin).sort((a, b) => a.title.localeCompare(b.title, 'de'));
   $('go-kb-n').textContent = ' · ' + (n ? n + (n === 1 ? ' Eintrag' : ' Einträge') : 'Handbuch, Tipps & mehr');
   $('kb-start-pins').classList.toggle('hidden', !pins.length);
-  $('kb-start-pins').innerHTML = pins.map(x => x.links && x.links.length
-    ? `<a href="${esc(x.links[0].url)}" target="_blank" rel="noopener" class="inline-flex max-w-full items-center gap-1.5 rounded-xl ${KB_TINT(x.cat)} px-3 py-2 text-sm font-medium text-slate-900 dark:text-slate-100 active:scale-95 transition"><span>${KB_ICON(x.cat)}</span><span class="truncate">${esc(x.title)}</span><span aria-hidden="true">↗</span></a>`
-    : `<button type="button" data-kb="${esc(x.id)}" class="inline-flex max-w-full items-center gap-1.5 rounded-xl ${KB_TINT(x.cat)} px-3 py-2 text-sm font-medium text-slate-900 dark:text-slate-100 active:scale-95 transition"><span>${KB_ICON(x.cat)}</span><span class="truncate">${esc(x.title)}</span></button>`).join('');
+  /* Angepinnte Einträge als Unterzeilen von „Wissen“ (Baumlinie); mit Link öffnet ein Tipp direkt den Link, sonst den Eintrag */
+  const ico = '<svg class="h-4 w-4 shrink-0 text-emerald-500" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4"/></svg>';
+  const ext = '<svg class="h-4 w-4 shrink-0 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-label="öffnet Link"><path d="M7 17L17 7M9 7h8v8"/></svg>';
+  const chev = '<svg class="h-4 w-4 shrink-0 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>';
+  const cls = (i) => 'relative flex w-full items-center gap-2.5 pl-[18px] py-2.5 text-left text-[15px] active:opacity-70' + (i ? ' border-t border-slate-200 dark:border-slate-800' : '');
+  const twig = '<span class="absolute left-0 top-1/2 h-0.5 w-3 -translate-y-1/2 bg-slate-200 dark:bg-slate-800" aria-hidden="true"></span>';
+  $('kb-start-pins').innerHTML = pins.length ? '<span class="absolute left-[27px] top-0 bottom-[23px] w-0.5 bg-slate-200 dark:bg-slate-800" aria-hidden="true"></span>' + pins.map((x, i) => x.links && x.links.length
+    ? `<a href="${esc(x.links[0].url)}" target="_blank" rel="noopener" class="${cls(i)}">${twig}${ico}<span class="min-w-0 flex-1 truncate">${esc(x.title)}</span>${ext}</a>`
+    : `<button type="button" data-kb="${esc(x.id)}" class="${cls(i)}">${twig}${ico}<span class="min-w-0 flex-1 truncate">${esc(x.title)}</span>${chev}</button>`).join('') : '';
 }
 const kbLinkify = (t) => esc(t).replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener" class="underline text-sky-600 dark:text-sky-300 break-all">$1</a>');
 function openKb(id) {
