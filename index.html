@@ -3952,6 +3952,7 @@ function setLiveHero(on) {
 /* Live-Eingabe (Start-/Ziel-%) geöffnet: „Erinnerungen prüfen“ schon jetzt ausblenden, damit mehr Platz ist */
 new MutationObserver(() => $('view-dashboard').classList.toggle('live-setup-open', !$('live-setup').classList.contains('hidden')))
   .observe($('live-setup'), { attributes: true, attributeFilter: ['class'] });
+let lbOpen = false;
 const CAR_COUNT = 5, CAR_DOTS = 3, CAR_AUTO_MS = 30000;                  // Enyaq1 … Enyaq5 (unten bleiben 3 Punkte als Deko); automatischer Wechsel alle 30 Sekunden
 async function initCarousel() {
   const box = $('car-scroll'), dash = $('car-dashes'); if (!box) return;
@@ -3979,12 +3980,76 @@ async function initCarousel() {
   };
   /* Automatisch weiterschalten (im Kreis), nur wenn die Start-Ansicht sichtbar ist; jede Bedienung startet die 30 Sekunden neu */
   const schedule = () => { clearTimeout(autoT); if (slides.length > 1) autoT = setTimeout(tick, CAR_AUTO_MS); };
-  const tick = () => { if (!document.hidden && !liveHero && !$('view-dashboard').classList.contains('hidden')) show((cur + 1) % slides.length); schedule(); };   // im Live-Modus pausiert
+  const tick = () => { if (!document.hidden && !liveHero && !lbOpen && !$('view-dashboard').classList.contains('hidden')) show((cur + 1) % slides.length); schedule(); };   // im Live-Modus pausiert
   schedule();
   box.addEventListener('pointerdown', (e) => { sx = e.clientX; sy = e.clientY; tracking = e.clientX >= 40; });   // vom linken Rand: öffnet das Schnellmenü, nicht das Karussell
-  box.addEventListener('pointerup', (e) => { if (!tracking) return; tracking = false; const dx = e.clientX - sx, dy = e.clientY - sy; if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.3) show(cur + (dx < 0 ? 1 : -1)); });
+  box.addEventListener('pointerup', (e) => { if (!tracking) return; tracking = false; const dx = e.clientX - sx, dy = e.clientY - sy; if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.3) show(cur + (dx < 0 ? 1 : -1)); else if (Math.abs(dx) < 10 && Math.abs(dy) < 10 && !liveHero) lbShow(cur); });   // kurzer Tipp: Vollbild mit Zoom
   box.addEventListener('pointercancel', () => { tracking = false; });
-  box.addEventListener('keydown', (e) => { if (e.key === 'ArrowLeft') show(cur - 1); else if (e.key === 'ArrowRight') show(cur + 1); });
+  box.addEventListener('keydown', (e) => { if (e.key === 'ArrowLeft') show(cur - 1); else if (e.key === 'ArrowRight') show(cur + 1); else if (e.key === 'Enter') lbShow(cur); });
+
+  /* ---- Vollbild mit Zoom (Tipp aufs Bild): zwei Finger zoomen, ein Finger verschiebt, Doppeltipp 2,5×; ungezoomt wischen = nächstes Bild,
+     nach unten wischen, ✕ oder Zurück-Taste = schließen. Während es offen ist, wechselt das Karussell nicht. Gibt es Bilder/EnyaqN-hd.webp, wird es nachgeladen. */
+  const ov = document.createElement('div'); ov.id = 'car-lb'; ov.className = 'hidden fixed inset-0 z-[95] bg-black select-none'; ov.style.touchAction = 'none';
+  ov.innerHTML = '<img id="car-lb-img" alt="" draggable="false" class="absolute inset-0 h-full w-full object-contain will-change-transform" style="padding:max(56px,env(safe-area-inset-top)) 8px max(40px,env(safe-area-inset-bottom))">'
+    + '<span id="car-lb-n" class="absolute left-4 text-sm font-medium text-white/80 tabular-nums" style="top:max(18px,env(safe-area-inset-top))"></span>'
+    + '<button type="button" id="car-lb-x" aria-label="Schließen" class="absolute right-3 flex h-11 w-11 items-center justify-center rounded-full bg-white/15 text-white active:scale-95" style="top:max(8px,env(safe-area-inset-top))"><svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>';
+  document.body.appendChild(ov);
+  const li = ov.querySelector('#car-lb-img'), hd = {};
+  let lbi = 0, sc = 1, tx = 0, ty = 0, pts = new Map(), g = null, lastTap = 0, pushed = false;
+  const W = () => ov.clientWidth, H = () => ov.clientHeight;
+  const apply = (anim) => { li.style.transition = anim ? 'transform .25s ease-out, opacity .2s' : 'none'; li.style.transform = 'translate(' + tx + 'px,' + ty + 'px) scale(' + sc + ')'; };
+  const clampT = () => { const mx = (sc - 1) * W() / 2, my = (sc - 1) * H() / 2; tx = Math.max(-mx, Math.min(mx, tx)); ty = Math.max(-my, Math.min(my, ty)); };
+  const setImg = (i) => {
+    lbi = ((i % imgs.length) + imgs.length) % imgs.length; sc = 1; tx = 0; ty = 0; apply(false); li.style.opacity = '1';
+    li.src = hd[lbi] || imgs[lbi].src; ov.querySelector('#car-lb-n').textContent = imgs.length > 1 ? (lbi + 1) + ' / ' + imgs.length : '';
+    if (hd[lbi] === undefined) { const n = lbi, t = new Image(); hd[n] = null; t.onload = () => { hd[n] = t.src; if (lbi === n && lbOpen) li.src = t.src; }; t.src = 'Bilder/Enyaq' + (n + 1) + '-hd.webp?v=' + HERO_VER; }
+  };
+  function lbShow(i) { if (lbOpen) return; lbOpen = true; setImg(i); ov.classList.remove('hidden'); document.body.style.overflow = 'hidden'; clearTimeout(autoT); try { history.pushState({ carLb: 1 }, ''); pushed = true; } catch (e) { pushed = false; } }
+  const lbClose = (fromPop) => {
+    if (!lbOpen) return; lbOpen = false; ov.classList.add('hidden'); document.body.style.overflow = ''; pts.clear(); g = null;
+    if (lbi !== cur) { lock = false; show(lbi); } schedule();
+    if (pushed && !fromPop) { pushed = false; try { history.back(); } catch (e) { } } else pushed = false;
+  };
+  window.addEventListener('popstate', () => { if (lbOpen) lbClose(true); });
+  ov.querySelector('#car-lb-x').addEventListener('click', (e) => { e.stopPropagation(); lbClose(false); });
+  document.addEventListener('keydown', (e) => { if (!lbOpen) return; if (e.key === 'Escape') lbClose(false); else if (e.key === 'ArrowRight') setImg(lbi + 1); else if (e.key === 'ArrowLeft') setImg(lbi - 1); });
+  const rel = (p) => ({ x: p.x - W() / 2, y: p.y - H() / 2 });
+  ov.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('#car-lb-x')) return; try { ov.setPointerCapture(e.pointerId); } catch (er) { }
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pts.size === 2) { const [a, b] = [...pts.values()]; g = { pinch: true, d0: Math.hypot(a.x - b.x, a.y - b.y) || 1, m0: rel({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }), s0: sc, tx0: tx, ty0: ty }; }
+    else if (pts.size === 1) g = { pinch: false, x0: e.clientX, y0: e.clientY, tx0: tx, ty0: ty, t0: Date.now(), moved: false };
+  });
+  ov.addEventListener('pointermove', (e) => {
+    if (!pts.has(e.pointerId) || !g) return; pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (g.pinch && pts.size >= 2) {
+      const [a, b] = [...pts.values()], d = Math.hypot(a.x - b.x, a.y - b.y), m = rel({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+      sc = Math.max(1, Math.min(5, g.s0 * d / g.d0)); const k = sc / g.s0;
+      tx = m.x - (g.m0.x - g.tx0) * k; ty = m.y - (g.m0.y - g.ty0) * k; clampT(); apply(false); return;
+    }
+    if (g.pinch) return;
+    const dx = e.clientX - g.x0, dy = e.clientY - g.y0; if (Math.abs(dx) > 8 || Math.abs(dy) > 8) g.moved = true;
+    if (sc > 1.01) { tx = g.tx0 + dx; ty = g.ty0 + dy; clampT(); apply(false); }
+    else if (Math.abs(dy) > Math.abs(dx) && dy > 0) { ty = dy; li.style.opacity = String(Math.max(0.3, 1 - dy / 400)); apply(false); }   // nach unten ziehen zum Schließen
+    else { tx = dx * 0.6; apply(false); }
+  });
+  const end = (e) => {
+    if (!pts.has(e.pointerId)) return; pts.delete(e.pointerId);
+    if (!g) return;
+    if (g.pinch) { if (pts.size === 0) { g = null; if (sc < 1.05) { sc = 1; tx = 0; ty = 0; apply(true); } } else { const [a] = [...pts.values()]; g = { pinch: false, x0: a.x, y0: a.y, tx0: tx, ty0: ty, t0: Date.now(), moved: true }; } return; }
+    const dx = e.clientX - g.x0, dy = e.clientY - g.y0, quick = Date.now() - g.t0 < 300; const gg = g; g = null;
+    if (!gg.moved && quick) {                                                   // Tipp: Doppeltipp zoomt an der Stelle (bzw. zurück)
+      const now = Date.now();
+      if (now - lastTap < 320) { lastTap = 0; if (sc > 1.01) { sc = 1; tx = 0; ty = 0; } else { const p = rel({ x: e.clientX, y: e.clientY }); sc = 2.5; tx = p.x * (1 - sc); ty = p.y * (1 - sc); clampT(); } apply(true); }
+      else lastTap = now;
+      return;
+    }
+    if (sc > 1.01) return;
+    if (dy > 110 && Math.abs(dy) > Math.abs(dx)) { lbClose(false); return; }
+    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) { setImg(lbi + (dx < 0 ? 1 : -1)); return; }
+    tx = 0; ty = 0; li.style.opacity = '1'; apply(true);
+  };
+  ov.addEventListener('pointerup', end); ov.addEventListener('pointercancel', end);
 }
 
 
@@ -6818,7 +6883,7 @@ $('nav-drawer-bg').addEventListener('click', closeNavDrawer);
 $('nav-drawer').addEventListener('click', (e) => { const b = e.target.closest('[data-nav]'); if (!b) return; closeNavDrawer(); const f = NAV_GO[b.dataset.nav]; if (f) f(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && navOpen()) closeNavDrawer(); });
 (() => { let sx = 0, sy = 0, on = false;     // Start: vom linken Rand nach rechts wischen öffnet, nach links schließt
-  document.addEventListener('touchstart', (e) => { const t = e.touches[0], open = navOpen(); on = e.touches.length === 1 && (open || (currentView === 'dashboard' && t.clientX < 40)); sx = t.clientX; sy = t.clientY; }, { passive: true });
+  document.addEventListener('touchstart', (e) => { const t = e.touches[0], open = navOpen(); on = e.touches.length === 1 && !lbOpen && (open || (currentView === 'dashboard' && t.clientX < 40)); sx = t.clientX; sy = t.clientY; }, { passive: true });
   document.addEventListener('touchend', (e) => { if (!on) return; on = false; const t = e.changedTouches[0], dx = t.clientX - sx, dy = t.clientY - sy; if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy) * 1.5) return; const open = navOpen(); if (dx > 0 && !open) openNavDrawer(); else if (dx < 0 && open) closeNavDrawer(); }, { passive: true });
 })();
 setSettingsSec(setSec);
