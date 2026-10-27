@@ -108,7 +108,7 @@
   @keyframes bdfall { 0% { transform: translate3d(0, -20px, 0) rotate(0deg); } 100% { transform: translate3d(var(--x, 20px), 105vh, 0) rotate(var(--r, 540deg)); } }
   @keyframes bdin { from { opacity: 0; transform: translateY(16px) scale(.96); } to { opacity: 1; transform: none; } }
   #bd-card, #bdg-card { animation: bdin .45s cubic-bezier(.2,.8,.2,1) both; }
-  /* Datenpool: Wechsel zwischen Statistik | Abzeichen | Fahrzeugakte gleitet von der Seite herein */
+  /* Daten (früher Datenpool): Wechsel zwischen Statistik | Fahrzeugakte | Checkheft gleitet von der Seite herein */
   @keyframes dpinL { from { opacity: 0; transform: translateX(36px); } to { opacity: 1; transform: none; } }
   @keyframes dpinR { from { opacity: 0; transform: translateX(-36px); } to { opacity: 1; transform: none; } }
   .dp-inL { animation: dpinL .32s cubic-bezier(.2,.8,.2,1) both; } .dp-inR { animation: dpinR .32s cubic-bezier(.2,.8,.2,1) both; }
@@ -232,7 +232,7 @@
     </div>
 
     <button id="go-stat" type="button" class="flex w-full items-center justify-between rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm px-4 py-3 active:scale-[0.99] transition">
-      <span class="flex items-center gap-3 font-medium"><svg class="w-6 h-6 text-emerald-500" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/></svg>Statistik</span>
+      <span class="flex items-center gap-3 font-medium"><svg class="w-6 h-6 text-emerald-500" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/></svg>Fahrzeugdaten</span>
       <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
     </button>
     <button id="btn-wrap-preview" type="button" class="flex w-full items-center justify-between rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm px-4 py-3 active:scale-[0.99] transition">
@@ -518,6 +518,19 @@
     <p class="px-1 text-xs text-slate-500 dark:text-slate-400">Preise kommen aus deinen Ladungen (Ø je kWh: Unterwegs mit Anbieter, Bosch über den dort hinterlegten Anbieter). Fehlt ein Preis oder willst du AC/DC getrennt angeben: Karte antippen und eintragen. Zuhause gilt der Strompreis aus den Einstellungen.</p>
   </section>
 
+  <!-- ============ Abzeichen (eigene Seite, Start → „Abzeichen“) ============ -->
+  <section id="view-badges" class="view hidden space-y-3">
+    <div class="-mt-2 flex h-[60px] items-center justify-between gap-3 -mb-[10px]">
+      <h1 class="min-w-0 truncate font-barlow font-semibold text-2xl uppercase tracking-[0.14em] text-white">Abzeichen</h1>
+      <span id="bdg-count" class="shrink-0 text-sm text-slate-400"></span>
+    </div>
+    <div id="st-badge-card" class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
+        <div id="bdg-grid" class="grid grid-cols-3 gap-2.5 text-center"></div>
+        <p id="bdg-info" class="mt-3 min-h-[2.5rem] rounded-xl bg-slate-100 dark:bg-slate-800/60 px-3 py-2 text-xs text-slate-600 dark:text-slate-300">Antippen zeigt Datum bzw. was noch fehlt.</p>
+      </div>
+    </div>
+  </section>
+
   <!-- ============ WISSEN (Start → „Wissen“) ============ -->
   <section id="view-kb" class="view hidden space-y-3">
     <div class="-mt-2 flex h-[60px] items-center justify-between gap-3 -mb-[10px]">
@@ -589,7 +602,7 @@
 
   <!-- ============ VIEW: BERICHTE ============ -->
   <section id="view-report" class="view hidden space-y-4">
-    <div id="rep-mode" class="print:hidden flex bg-slate-200 dark:bg-slate-800 rounded-xl p-1"><button type="button" data-mode="laden" class="rep-mode-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Laden</button><button type="button" data-mode="kosten" class="rep-mode-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Kosten</button><button type="button" data-mode="akku" class="rep-mode-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Akku</button><button type="button" data-mode="stat" class="rep-mode-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Datenpool</button><button type="button" data-mode="fahrten" class="rep-mode-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Fahrten</button></div>
+    <div id="rep-mode" class="print:hidden flex bg-slate-200 dark:bg-slate-800 rounded-xl p-1"><button type="button" data-mode="laden" class="rep-mode-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Laden</button><button type="button" data-mode="kosten" class="rep-mode-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Kosten</button><button type="button" data-mode="akku" class="rep-mode-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Akku</button><button type="button" data-mode="stat" class="rep-mode-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Daten</button><button type="button" data-mode="fahrten" class="rep-mode-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Fahrten</button></div>
     <div id="rep-head" class="flex items-center justify-between">
       <button id="rep-prev" type="button" aria-label="Vorheriger Monat" class="print:invisible w-10 h-10 rounded-xl bg-slate-200 dark:bg-slate-800 flex items-center justify-center active:scale-95 transition disabled:opacity-30"><svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
       <div class="text-center">
@@ -665,7 +678,7 @@
         <div id="st-wrap-list" class="mt-1 flex flex-col"></div>
       </div>
       <div id="st-img-card" class="hidden rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4"><img id="st-img" alt="Statistik" draggable="false" class="mx-auto block max-h-44 w-auto object-contain"></div>
-      <div id="dp-seg" class="print:hidden flex bg-slate-200 dark:bg-slate-800 rounded-xl p-1"><button type="button" data-dp="stat" class="dp-btn min-w-0 flex-auto px-1.5 py-1.5 rounded-lg text-[13px] font-medium whitespace-nowrap">Statistik</button><button type="button" data-dp="badges" class="dp-btn min-w-0 flex-auto px-1.5 py-1.5 rounded-lg text-[13px] font-medium whitespace-nowrap">Abzeichen</button><button type="button" data-dp="akte" class="dp-btn min-w-0 flex-auto px-1.5 py-1.5 rounded-lg text-[13px] font-medium whitespace-nowrap">Fahrzeugakte</button><button type="button" data-dp="checkheft" class="dp-btn min-w-0 flex-auto px-1.5 py-1.5 rounded-lg text-[13px] font-medium whitespace-nowrap">Checkheft</button></div>
+      <div id="dp-seg" class="print:hidden flex bg-slate-200 dark:bg-slate-800 rounded-xl p-1"><button type="button" data-dp="stat" class="dp-btn min-w-0 flex-auto px-1.5 py-1.5 rounded-lg text-[13px] font-medium whitespace-nowrap">Statistik</button><button type="button" data-dp="akte" class="dp-btn min-w-0 flex-auto px-1.5 py-1.5 rounded-lg text-[13px] font-medium whitespace-nowrap">Fahrzeugakte</button><button type="button" data-dp="checkheft" class="dp-btn min-w-0 flex-auto px-1.5 py-1.5 rounded-lg text-[13px] font-medium whitespace-nowrap">Checkheft</button></div>
       <div id="dp-panes">
       <div id="dp-stat" class="dp-pane space-y-4">
       <div class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
@@ -728,13 +741,6 @@
         <p class="mt-3 text-xs text-slate-500 dark:text-slate-400">Laden + sonstige Kosten − Einnahmen. Kaufpreis und Wertverlust sind nicht enthalten.</p>
       </div>
       <p id="st-note" class="text-xs text-slate-500 dark:text-slate-400 px-1"></p>
-      </div>
-      <div id="dp-badges" class="dp-pane hidden space-y-4">
-      <div id="st-badge-card" class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
-        <div class="flex items-baseline justify-between"><p class="font-barlow text-xl font-bold uppercase tracking-[0.08em]">Abzeichen</p><span id="bdg-count" class="text-xs text-slate-500 dark:text-slate-400"></span></div>
-        <div id="bdg-grid" class="mt-3 grid grid-cols-3 gap-2.5 text-center"></div>
-        <p id="bdg-info" class="mt-3 min-h-[2.5rem] rounded-xl bg-slate-100 dark:bg-slate-800/60 px-3 py-2 text-xs text-slate-600 dark:text-slate-300">Antippen zeigt Datum bzw. was noch fehlt.</p>
-      </div>
       </div>
       <div id="dp-akte" class="dp-pane hidden space-y-4">
       <div id="st-akte-card" class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
@@ -1028,7 +1034,7 @@
           <div><label for="set-next-hu" class="text-sm font-medium text-slate-700 dark:text-slate-300">Nächste HU</label><input id="set-next-hu" type="month" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
           <div><label for="set-next-svc" class="text-sm font-medium text-slate-700 dark:text-slate-300">Nächster Service</label><input id="set-next-svc" type="month" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
         </div>
-          <p class="mt-1.5 text-xs text-slate-500 dark:text-slate-400 text-left">Erscheint im Checkheft (Datenpool → Checkheft) und im Checkheft-PDF. Leer lassen blendet die Angabe aus.</p>
+          <p class="mt-1.5 text-xs text-slate-500 dark:text-slate-400 text-left">Erscheint im Checkheft (Berichte → Daten → Checkheft) und im Checkheft-PDF. Leer lassen blendet die Angabe aus.</p>
         </div>
       </div>
     </div>
@@ -1212,7 +1218,7 @@
     <div class="grid grid-cols-4 gap-1.5">
       <button type="button" data-nav="rep" class="relative flex min-w-0 flex-col items-center gap-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800 px-0.5 py-2.5 text-[10.5px] font-semibold leading-tight tracking-tight active:scale-95 transition"><svg class="h-[22px] w-[22px] text-sky-600 dark:text-sky-300" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/></svg><span class="max-w-full truncate">Berichte</span></button>
       <button type="button" data-nav="akku" class="relative flex min-w-0 flex-col items-center gap-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800 px-0.5 py-2.5 text-[10.5px] font-semibold leading-tight tracking-tight active:scale-95 transition"><svg class="h-[22px] w-[22px] text-sky-600 dark:text-sky-300" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="16" height="10" rx="2"/><path d="M21 11v2M7 10v4M11 10v4"/></svg><span class="max-w-full truncate">Akku</span></button>
-      <button type="button" data-nav="stat" class="relative flex min-w-0 flex-col items-center gap-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800 px-0.5 py-2.5 text-[10.5px] font-semibold leading-tight tracking-tight active:scale-95 transition"><svg class="h-[22px] w-[22px] text-sky-600 dark:text-sky-300" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg><span class="max-w-full truncate">Statistik</span></button>
+      <button type="button" data-nav="stat" class="relative flex min-w-0 flex-col items-center gap-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800 px-0.5 py-2.5 text-[10.5px] font-semibold leading-tight tracking-tight active:scale-95 transition"><svg class="h-[22px] w-[22px] text-sky-600 dark:text-sky-300" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg><span class="max-w-full truncate">Fahrzeugdaten</span></button>
       <button type="button" data-nav="trips" class="relative flex min-w-0 flex-col items-center gap-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800 px-0.5 py-2.5 text-[10.5px] font-semibold leading-tight tracking-tight active:scale-95 transition"><svg class="h-[22px] w-[22px] text-sky-600 dark:text-sky-300" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M8 18h6a4 4 0 0 0 0-8h-4a4 4 0 0 1 0-8h6"/></svg><span class="max-w-full truncate">Fahrten</span></button>
       <button type="button" data-nav="hist" class="relative flex min-w-0 flex-col items-center gap-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800 px-0.5 py-2.5 text-[10.5px] font-semibold leading-tight tracking-tight active:scale-95 transition"><svg class="h-[22px] w-[22px] text-sky-600 dark:text-sky-300" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="max-w-full truncate">Historie</span></button>
       <button type="button" data-nav="badges" class="relative flex min-w-0 flex-col items-center gap-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800 px-0.5 py-2.5 text-[10.5px] font-semibold leading-tight tracking-tight active:scale-95 transition"><svg class="h-[22px] w-[22px] text-sky-600 dark:text-sky-300" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="9" r="5"/><path d="M9 13l-2 8 5-3 5 3-2-8"/></svg><span class="max-w-full truncate">Abzeichen</span></button>
@@ -1252,7 +1258,7 @@
     <div class="space-y-0.5 text-[15px]">
       <button type="button" data-go="providers" class="sd-item flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left active:bg-slate-100 dark:active:bg-slate-800"><svg class="h-[22px] w-[22px] shrink-0 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18"/></svg>Ladeanbieter</button>
       <button type="button" data-go="kb" class="sd-item flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left active:bg-slate-100 dark:active:bg-slate-800"><svg class="h-[22px] w-[22px] shrink-0 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h12v18H6a2 2 0 0 1-2-2z"/><path d="M8 7h7"/></svg>Wissen</button>
-      <button type="button" data-go="badges" class="sd-item flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left active:bg-slate-100 dark:active:bg-slate-800"><svg class="h-[22px] w-[22px] shrink-0 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="9" r="5"/><path d="M9 13l-2 8 5-3 5 3-2-8"/></svg>Daten &amp; Abzeichen</button>
+      <button type="button" data-go="badges" class="sd-item flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left active:bg-slate-100 dark:active:bg-slate-800"><svg class="h-[22px] w-[22px] shrink-0 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="9" r="5"/><path d="M9 13l-2 8 5-3 5 3-2-8"/></svg>Abzeichen</button>
       <button type="button" data-go="reminders" class="sd-item flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left active:bg-slate-100 dark:active:bg-slate-800"><svg class="h-[22px] w-[22px] shrink-0 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5h11M9 12h11M9 19h11"/><path d="M4 5l1 1 2-2M4 12l1 1 2-2M4 19l1 1 2-2"/></svg>Erinnerungen ansehen</button>
       <button type="button" data-sec="gefahr" class="sd-item flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-red-600 dark:text-red-300 active:bg-slate-100 dark:active:bg-slate-800"><svg class="h-[22px] w-[22px] shrink-0 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>Alle Daten löschen</button>
     </div>
@@ -1964,6 +1970,7 @@ function showView(name) {
   if (name === 'reminders') renderReminders();
   if (name === 'providers') renderProvidersView();
   if (name === 'kb') renderKb();
+  if (name === 'badges') { try { renderBadges(); } catch (e) { } }
   if (name !== 'history' && editMode) setEditMode(false);
   if (name === 'history') renderHistory();
   updateHistFab();
@@ -4314,7 +4321,7 @@ function renderBattery() {
    Ø pro Tag/Monat: Laufleistung vom ersten bis zum letzten km-Stand, Ladekosten vom ersten Eintrag bis heute.
    ===================================================================== */
 /* =====================================================================
-   Abzeichen (Berichte → Datenpool → Abzeichen, Start-Button; 36 Stück): werden aus den vorhandenen Daten berechnet. Freigeschaltet-Datum lokal in enyaq.badges = { <id>: ISO }.
+   Abzeichen (eigene Seite über Start → „Abzeichen“ und das Schnellmenü; 36 Stück): werden aus den vorhandenen Daten berechnet. Freigeschaltet-Datum lokal in enyaq.badges = { <id>: ISO }.
    Erster Lauf (noch nichts gespeichert): alle bereits verdienten still eintragen. Danach: neues Abzeichen → Pop-up mit Konfetti (eins nach dem anderen).
    ===================================================================== */
 const KEY_BADGES = 'enyaq.badges';
@@ -4423,13 +4430,13 @@ function renderBadges() {
 }
 /** Beschriftung der Abzeichen immer einzeilig: bei Bedarf schrittweise kleiner (bis 9 px). */
 function bdgFit() { requestAnimationFrame(() => document.querySelectorAll('#bdg-grid .bdg-l').forEach(l => { let f = 11; l.style.fontSize = ''; while (l.scrollWidth > l.clientWidth + 0.5 && f > 9) { f -= 0.5; l.style.fontSize = f + 'px'; } })); }
-window.addEventListener('resize', () => { if (!$('dp-badges').classList.contains('hidden')) bdgFit(); });
+window.addEventListener('resize', () => { if (!$('view-badges').classList.contains('hidden')) bdgFit(); });
 function bdgInfo(id) {
   bdgSel = id; const x = bdgState().find(y => y.b.id === id), got = load(KEY_BADGES, {}) || {}; if (!x) return;
   $('bdg-info').innerHTML = '<b class="text-slate-900 dark:text-white">' + esc(x.b.t) + '</b> · ' + esc(x.b.txt) + ' ' + (x.done ? (got[id] ? 'Erreicht am ' + fmtDate(got[id]) + '.' : 'Erreicht.') : 'Noch ' + (100 - Math.round(x.v * 100)) + ' % bis zum Ziel.');
 }
 $('bdg-grid').addEventListener('click', (e) => { const b = e.target.closest('[data-bdg]'); if (b) bdgInfo(b.dataset.bdg); });
-$('go-badges').addEventListener('click', () => { repMode = 'stat'; setDpTab('badges', false); showView('report'); });
+$('go-badges').addEventListener('click', () => showView('badges'));
 setTimeout(() => checkBadges(false), 2500);
 function renderStat() {
   try { renderBadges(); } catch (e) { console.error(e); }
@@ -5610,7 +5617,7 @@ $('btn-akte').addEventListener('click', async () => {
   } finally { btn.disabled = false; btn.textContent = label; }
 });
 /* =====================================================================
-   Digitales Checkheft (Datenpool → Checkheft): alle Kosten der Kategorien Service, Reparatur und TÜV als Zeitleiste,
+   Digitales Checkheft (Berichte → Daten → Checkheft): alle Kosten der Kategorien Service, Reparatur und TÜV als Zeitleiste,
    Detailansicht mit Belegen (Google Drive) und „Checkheft als PDF“: Deckblatt mit Inhaltsverzeichnis + alle Belege chronologisch,
    jede Seite mit Kopfzeile (Art · Leistung · Datum · km) und Seitenzahl. Zusammengesetzt im Browser mit pdf-lib.
    ===================================================================== */
@@ -6738,7 +6745,7 @@ $('set-drawer').addEventListener('click', (e) => {
   closeSetDrawer();
   if (b.dataset.sec) { openSettings(b.dataset.sec); return; }
   const g = b.dataset.go;
-  if (g === 'badges') { repMode = 'stat'; setDpTab('badges', false); showView('report'); } else showView(g);
+  showView(g);
 });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('set-drawer').getAttribute('aria-hidden') === 'false') closeSetDrawer(); });
 /* Wischen: vom linken Rand nach rechts öffnet, nach links schließt */
@@ -6771,7 +6778,7 @@ const NAV_GO = {
   eff: () => navStart('sec-eff'), trends: () => navStart('sec-trends'),
   rep: () => { repMode = 'laden'; showView('report'); }, akku: () => { repMode = 'akku'; showView('report'); }, stat: () => { repMode = 'stat'; setDpTab('stat', false); showView('report'); },
   trips: () => { histFilter = 'fahrten'; tripDays = 21; showView('history'); }, hist: () => { histFilter = 'all'; showView('history'); },
-  badges: () => { repMode = 'stat'; setDpTab('badges', false); showView('report'); }, wrap: () => $('btn-wrap-preview').click(),
+  badges: () => showView('badges'), wrap: () => $('btn-wrap-preview').click(),
   tax: () => { repMode = 'fahrten'; showView('report'); setTimeout(() => { const t = $('tax-card'); if (t && !t.classList.contains('hidden')) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 250); },
   akte: () => { repMode = 'stat'; setDpTab('akte', false); showView('report'); }, checkheft: () => { repMode = 'stat'; setDpTab('checkheft', false); showView('report'); },
   reminders: () => showView('reminders'), kb: () => showView('kb'), providers: () => showView('providers'),
@@ -6787,8 +6794,8 @@ const NAV_IDX = [
   ['cap-home', 'Laden Zuhause erfassen', 'Laden', 'wallbox zähler foto heim'], ['cap-bosch', 'Laden Bosch erfassen', 'Laden', 'arbeit werk lichtblick'], ['cap-away', 'Laden unterwegs erfassen', 'Laden', 'schnelllader dc ladesäule'],
   ['costs', 'Kosten erfassen', 'Kosten', 'ausgabe beleg rechnung versicherung'], ['rep', 'Bericht Laden', 'Berichte › Laden', 'monat kwh'], ['rep-kosten', 'Bericht Kosten', 'Berichte › Kosten', 'tco ausgaben'],
   ['eff', 'Verbräuche & Effizienz', 'Start', 'verbrauch kwh/100 km ladekosten pro km strompreis'], ['trends', 'Trends', 'Start', 'laufleistung stromkosten gesamtkosten monate'],
-  ['akku', 'Akku', 'Berichte › Akku', 'kapazität pflege temperatur soh netto rebalancing'], ['stat', 'Statistik', 'Berichte › Datenpool', 'verbrauch rekorde laufleistung'], ['badges', 'Abzeichen', 'Berichte › Datenpool', 'badges erfolge'],
-  ['akte', 'Fahrzeugakte', 'Berichte › Datenpool', 'verkauf historie'], ['akte-pdf', 'Fahrzeugakte als PDF', 'Aktion', 'drucken export'], ['checkheft', 'Checkheft', 'Berichte › Datenpool', 'service reparatur tüv hu werkstatt'],
+  ['akku', 'Akku', 'Berichte › Akku', 'kapazität pflege temperatur soh netto rebalancing'], ['stat', 'Fahrzeugdaten', 'Berichte › Daten', 'statistik verbrauch rekorde laufleistung'], ['badges', 'Abzeichen', 'Abzeichen', 'badges erfolge'],
+  ['akte', 'Fahrzeugakte', 'Berichte › Daten', 'verkauf historie'], ['akte-pdf', 'Fahrzeugakte als PDF', 'Aktion', 'drucken export'], ['checkheft', 'Checkheft', 'Berichte › Daten', 'service reparatur tüv hu werkstatt'],
   ['ch-pdf', 'Checkheft als PDF', 'Aktion', 'belege mappe drucken'], ['rep-fahrten', 'Fahrten-Bericht', 'Berichte › Fahrten', 'fahrtenbuch arbeitsweg'], ['tax', 'Steuer · Arbeitsweg', 'Berichte › Fahrten', 'pendlerpauschale entfernungspauschale werbungskosten'],
   ['hist', 'Historie', 'Historie', 'verlauf bearbeiten datenprüfung'], ['hist-laden', 'Ladungen', 'Historie › Laden', 'verlauf'], ['hist-kosten', 'Kosten-Verlauf', 'Historie › Kosten', 'etiketten kategorien filter'], ['trips', 'Fahrten', 'Historie › Fahrten', 'fahrtenbuch'],
   ['wrap', 'Rückblick', 'Start', 'jahr wrapped'], ['reminders', 'Erinnerungen', 'Erinnerungen', 'wartung termine fällig'], ['kb', 'Wissen', 'Wissen', 'notizen links tipps'], ['providers', 'Ladekarten', 'Ladeanbieter', 'anbieter tarife preise'],
@@ -6818,15 +6825,14 @@ setSettingsSec(setSec);
 /** Einstellungen direkt in einem Bereich öffnen (ohne Seitenleiste). */
 function openSettings(sec) { window.setNoDrawer = true; if (currentView !== 'settings') showView('settings'); else window.setNoDrawer = false; setSettingsSec(sec); }
 segSwipe($('view-report'), $('rep-mode'), '#rep-place,#dp-panes,#dp-seg');   // Berichte: Laden | Kosten | Akku | Datenpool | Fahrten (ganze Seite; im Datenpool wischen die Unter-Tabs)
-/* ---- Datenpool (Berichte, früher „Statistik“): Unter-Tabs Statistik | Abzeichen | Fahrzeugakte, per Antippen oder Wischen ---- */
+/* ---- Daten (Berichte, früher „Datenpool“): Unter-Tabs Statistik | Fahrzeugakte | Checkheft, per Antippen oder Wischen ---- */
 let dpTab = 'stat';
-const DP_TABS = ['stat', 'badges', 'akte', 'checkheft'];
+const DP_TABS = ['stat', 'akte', 'checkheft'];
 function setDpTab(t, anim = true) {
   if (!DP_TABS.includes(t)) t = 'stat';
   const dir = DP_TABS.indexOf(t) - DP_TABS.indexOf(dpTab); dpTab = t;
   segPaintKey('.dp-btn', 'dp', t);
   DP_TABS.forEach(k => { const el = $('dp-' + k), on = k === t; el.classList.toggle('hidden', !on); el.classList.remove('dp-inL', 'dp-inR'); if (on && anim && dir) { void el.offsetWidth; el.classList.add(dir > 0 ? 'dp-inL' : 'dp-inR'); } });
-  if (t === 'badges') { try { renderBadges(); } catch (e) { } }
   if (t === 'checkheft') { try { renderCheckheft(); } catch (e) { } }
 }
 document.querySelectorAll('.dp-btn').forEach(b => b.addEventListener('click', () => setDpTab(b.dataset.dp)));
