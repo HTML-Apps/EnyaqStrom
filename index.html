@@ -531,6 +531,16 @@
     </div>
   </section>
 
+  <!-- ============ Rekorde (eigene Seite, Schnellmenü → „Rekorde“) ============ -->
+  <section id="view-recs" class="view hidden space-y-3">
+    <div class="-mt-2 flex h-[60px] items-center justify-between gap-3 -mb-[10px]">
+      <h1 class="min-w-0 truncate font-barlow font-semibold text-2xl uppercase tracking-[0.14em] text-white">Rekorde</h1>
+      <button id="rec-add" type="button" class="shrink-0 h-10 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white active:scale-95 transition">+ Neu</button>
+    </div>
+    <div id="rec-chips" class="no-sb -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5"></div>
+    <div id="rec-list" class="space-y-3"></div>
+  </section>
+
   <!-- ============ WISSEN (Start → „Wissen“) ============ -->
   <section id="view-kb" class="view hidden space-y-3">
     <div class="-mt-2 flex h-[60px] items-center justify-between gap-3 -mb-[10px]">
@@ -796,6 +806,10 @@
         <div class="space-y-2"><p class="text-sm text-slate-500 dark:text-slate-400">AC/DC-Laden</p>
           <div id="acdc-seg" class="flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 text-xs"><button type="button" data-acdc="90" class="acdc-btn flex-1 rounded-lg px-2 py-1.5 font-medium whitespace-nowrap">90 Tage</button><button type="button" data-acdc="kauf" class="acdc-btn flex-1 rounded-lg px-2 py-1.5 font-medium whitespace-nowrap">Seit Kauf</button><button type="button" data-acdc="zul" class="acdc-btn flex-1 rounded-lg px-2 py-1.5 font-medium whitespace-nowrap">Seit Zulassung</button></div></div>
         <div id="acdc-body"></div>
+      </div>
+      <div id="cv-card" class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
+        <div class="flex items-baseline justify-between gap-2"><p class="text-sm text-slate-500 dark:text-slate-400">DC-Ladekurve · Referenz</p><span id="cv-hdate" class="text-xs text-slate-500"></span></div>
+        <div id="cv-body"></div>
       </div>
       <div id="temp-card" class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
         <p class="text-sm text-slate-500 dark:text-slate-400">Akku-Temperatur</p>
@@ -1230,6 +1244,7 @@
       <button type="button" data-nav="tax" class="relative flex min-w-0 flex-col items-center gap-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800 px-0.5 py-2.5 text-[10.5px] font-semibold leading-tight tracking-tight active:scale-95 transition"><svg class="h-[22px] w-[22px] text-sky-600 dark:text-sky-300" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7M9 16h7"/></svg><span class="max-w-full truncate">Steuer</span></button>
       <button type="button" data-nav="eff" class="relative flex min-w-0 flex-col items-center gap-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800 px-0.5 py-2.5 text-[10.5px] font-semibold leading-tight tracking-tight active:scale-95 transition"><svg class="h-[22px] w-[22px] text-sky-600 dark:text-sky-300" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17l4-5"/><circle cx="12" cy="17" r="1.2"/></svg><span class="max-w-full truncate">Effizienz</span></button>
       <button type="button" data-nav="trends" class="relative flex min-w-0 flex-col items-center gap-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800 px-0.5 py-2.5 text-[10.5px] font-semibold leading-tight tracking-tight active:scale-95 transition"><svg class="h-[22px] w-[22px] text-sky-600 dark:text-sky-300" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg><span class="max-w-full truncate">Trends</span></button>
+      <button type="button" data-nav="recs" class="relative flex min-w-0 flex-col items-center gap-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800 px-0.5 py-2.5 text-[10.5px] font-semibold leading-tight tracking-tight active:scale-95 transition"><svg class="h-[22px] w-[22px] text-sky-600 dark:text-sky-300" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></svg><span class="max-w-full truncate">Rekorde</span></button>
     </div>
     <p class="mt-4 mb-2 text-[11px] font-bold uppercase tracking-[0.1em] text-violet-700 dark:text-violet-300">Fahrzeug</p>
     <div class="grid grid-cols-4 gap-1.5">
@@ -1355,6 +1370,9 @@
 </div>
 
 <!-- Wissen: Eintrag ansehen / bearbeiten -->
+<div id="cv-sheet" class="hidden fixed inset-0 z-50 bg-black/60 flex items-end justify-center"><div id="cv-sheet-box" class="w-full max-w-md max-h-[92vh] overflow-y-auto rounded-t-[28px] bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-4 pt-2.5 pb-5 space-y-3"></div></div>
+<input id="cv-file" type="file" accept="image/*,application/pdf" class="hidden">
+<div id="rec-sheet" class="hidden fixed inset-0 z-50 bg-black/60 flex items-end justify-center"><div id="rec-sheet-box" class="w-full max-w-md max-h-[92vh] overflow-y-auto rounded-t-[28px] bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-4 pt-2.5 pb-5 space-y-3"></div></div>
 <div id="ch-sheet" class="hidden fixed inset-0 z-50 bg-black/60 flex items-end justify-center">
   <div id="ch-sheet-box" class="w-full max-w-md max-h-[92vh] overflow-y-auto rounded-t-[28px] bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-4 pt-2.5 pb-5 space-y-3.5"></div>
   <input id="ch-file" type="file" accept="image/*,application/pdf" multiple class="hidden">
@@ -1975,6 +1993,7 @@ function showView(name) {
   if (name === 'providers') renderProvidersView();
   if (name === 'kb') renderKb();
   if (name === 'badges') { try { renderBadges(); } catch (e) { } }
+  if (name === 'recs') { try { renderRecs(); } catch (e) { console.error(e); } }
   if (name !== 'history' && editMode) setEditMode(false);
   if (name === 'history') renderHistory();
   updateHistFab();
@@ -3149,7 +3168,7 @@ function buildBackup() {
     readings: readings.map(r => ({ ...r, chargeDuration: isHome(r) ? chargeDurationOf(r) : undefined })),     // Ladedauer als hh:mm (nur Zuhause)
     costs: getCosts(), categories: getCategories(), reminders: getReminders(), recurring: getRecurring(),
     trips: getTrips(), tripPrefs: { places: getTPlaces(), labels: getTLabels(), rules: getTRules(), defLabel: defLabelId() },   // Fahrtenbuch (seit Version mit Fahrten)
-    settings: st, providers: getProviders(), provInfo: load(KEY_PROVINFO, null), kb: load('enyaq.kb', null)                                // seit Version mit Ladeanbietern
+    settings: st, providers: getProviders(), provInfo: load(KEY_PROVINFO, null), kb: load('enyaq.kb', null), lab: load(KEY_LAB, null)          // seit Version mit Ladeanbietern
   };
 }
 $('btn-export').addEventListener('click', () => {
@@ -3177,6 +3196,11 @@ function importPrefsFromBackup(text) {
     const cur = getKb(), ids = new Set(cur.items.map(x => String(x.id))), add = d.kb.items.filter(x => x && x.title && !ids.has(String(x.id)));
     const cats = cur.cats.concat((d.kb.cats || []).filter(c => typeof c === 'string' && !cur.cats.includes(c)));
     if (add.length || cats.length !== cur.cats.length) setKb({ cats, items: cur.items.concat(add) });
+  }
+  if (d.lab && typeof d.lab === 'object') {                            // Ladekurven/Rekorde: fehlende ergänzen
+    const cur = load(KEY_LAB, null), base = getLab(), ids = new Set(base.curves.concat(base.recs).map(x => String(x.id)));
+    const ac = (d.lab.curves || []).filter(x => x && x.id && !ids.has(String(x.id))), ar = (d.lab.recs || []).filter(x => x && x.id && !ids.has(String(x.id)));
+    if (!cur || ac.length || ar.length) setLab({ curves: base.curves.concat(ac), recs: base.recs.concat(ar), speed: cur && cur.speed ? base.speed : (d.lab.speed || base.speed) });
   }
   if (d.settings && typeof d.settings === 'object' && Object.keys(d.settings).length && confirm('Die Sicherung enthält auch Einstellungen (Strompreis, Akku, Fahrzeugdaten, Kauftag …).\n\nOK = Einstellungen aus der Sicherung übernehmen\nAbbrechen = aktuelle Einstellungen behalten')) {
     const keep = load(KEY_SETTINGS, {}) || {}, n = { ...d.settings }; delete n.pin; if (keep.pin) n.pin = keep.pin;
@@ -4381,6 +4405,7 @@ function renderBattery() {
   try { renderTempCard(); } catch (e) { console.error(e); }
   try { renderCare(); } catch (e) { console.error(e); }
   try { renderAcdc(); } catch (e) { console.error(e); }
+  try { renderCurve(); } catch (e) { console.error(e); }
   const rows = batRows(), fit = batFit(rows), now = Date.now(), ok = !!fit && fit.n >= BAT.minN && fit.sumHub >= BAT.minHub;
   $('bat-value').classList.toggle('hidden', !ok); $('bat-few').classList.toggle('hidden', ok);
   const hubSum = rows.reduce((a, x) => a + x.hub, 0);
@@ -6183,7 +6208,7 @@ function syncSet(src) {
 function pushPrefs() {
   if (!window.cloud?.isSignedIn()) return;
   const w = Number(getSettings().wltp);
-  window.cloud.setPrefs({ wltp: w > 0 ? w : null, wxLoc: wxLoc() || null, provInfo: load(KEY_PROVINFO, null), settings: syncSet(load(KEY_SETTINGS, {})), kb: load('enyaq.kb', null) }).catch(() => { });
+  window.cloud.setPrefs({ wltp: w > 0 ? w : null, wxLoc: wxLoc() || null, provInfo: load(KEY_PROVINFO, null), settings: syncSet(load(KEY_SETTINGS, {})), kb: load('enyaq.kb', null), lab: load(KEY_LAB, null) }).catch(() => { });
 }
 window.onCloudPrefs = (d, first, uid) => {
   if (first) checkCacheUid(uid);
@@ -6209,7 +6234,11 @@ window.onCloudPrefs = (d, first, uid) => {
   const lk = load('enyaq.kb', null); let nk = d && d.kb && typeof d.kb === 'object' ? d.kb : null;
   if (first && nk == null && lk) { nk = lk; up = true; }
   if (JSON.stringify(nk) !== JSON.stringify(lk)) { if (nk) save('enyaq.kb', nk); else localStorage.removeItem('enyaq.kb'); try { renderKbStart(); if (currentView === 'kb') renderKb(); } catch (e) { } }
-  if (up) window.cloud.setPrefs({ wltp: nw, wxLoc: nl, provInfo: np, settings: ns, kb: nk }).catch(() => { });
+  /* Labor (Ladekurven, Rekorde, Tempomat-Messreihe): wie Wissen */
+  const lq = load(KEY_LAB, null); let nq = d && d.lab && typeof d.lab === 'object' ? d.lab : null;
+  if (first && nq == null && lq) { nq = lq; up = true; }
+  if (JSON.stringify(nq) !== JSON.stringify(lq)) { if (nq) save(KEY_LAB, nq); else localStorage.removeItem(KEY_LAB); try { renderCurve(); if (currentView === 'recs') renderRecs(); } catch (e) { } }
+  if (up) window.cloud.setPrefs({ wltp: nw, wxLoc: nl, provInfo: np, settings: ns, kb: nk, lab: nq }).catch(() => { });
 };
 
 /* =====================================================================
@@ -6891,7 +6920,8 @@ const navStart = (id) => { if (currentView !== 'dashboard') showView('dashboard'
 const NAV_GO = {
   'cap-home': () => { setCapPlace('home'); showView('capture'); setCapPlace('home'); }, 'cap-bosch': () => { setCapPlace('bosch'); showView('capture'); setCapPlace('bosch'); },
   'cap-away': () => { setCapPlace('away'); showView('capture'); setCapPlace('away'); }, costs: () => showView('costs'),
-  eff: () => navStart('sec-eff'), trends: () => navStart('sec-trends'),
+  eff: () => navStart('sec-eff'), trends: () => navStart('sec-trends'), recs: () => showView('recs'),
+  curve: () => { repMode = 'akku'; showView('report'); setTimeout(() => { const c = $('cv-card'); if (c) c.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 300); },
   rep: () => { repMode = 'laden'; showView('report'); }, akku: () => { repMode = 'akku'; showView('report'); }, stat: () => { repMode = 'stat'; setDpTab('stat', false); showView('report'); },
   trips: () => { histFilter = 'fahrten'; tripDays = 21; showView('history'); }, hist: () => { histFilter = 'all'; showView('history'); },
   badges: () => showView('badges'), wrap: () => $('btn-wrap-preview').click(),
@@ -6909,8 +6939,9 @@ const NAV_GO = {
 const NAV_IDX = [
   ['cap-home', 'Laden Zuhause erfassen', 'Laden', 'wallbox zähler foto heim'], ['cap-bosch', 'Laden Bosch erfassen', 'Laden', 'arbeit werk lichtblick'], ['cap-away', 'Laden unterwegs erfassen', 'Laden', 'schnelllader dc ladesäule'],
   ['costs', 'Kosten erfassen', 'Kosten', 'ausgabe beleg rechnung versicherung'], ['rep', 'Bericht Laden', 'Berichte › Laden', 'monat kwh'], ['rep-kosten', 'Bericht Kosten', 'Berichte › Kosten', 'tco ausgaben'],
-  ['eff', 'Verbräuche & Effizienz', 'Start', 'verbrauch kwh/100 km ladekosten pro km strompreis'], ['trends', 'Trends', 'Start', 'laufleistung stromkosten gesamtkosten monate'],
-  ['akku', 'Akku', 'Berichte › Akku', 'kapazität pflege temperatur soh netto rebalancing'], ['stat', 'Statistik', 'Berichte › Daten', 'fahrzeugdaten verbrauch rekorde laufleistung'], ['badges', 'Abzeichen', 'Abzeichen', 'badges erfolge'],
+  ['eff', 'Verbräuche & Effizienz', 'Start', 'verbrauch kwh/100 km ladekosten pro km strompreis'], ['trends', 'Trends', 'Start', 'laufleistung stromkosten gesamtkosten monate'], ['recs', 'Rekorde', 'Rekorde', 'verbrauch bestwert strecke tempomat messreihe reichweite'],
+  ['curve', 'DC-Ladekurve', 'Berichte › Akku', 'schnellladen ladeleistung kw ladezeit rechner sommer winter'],
+  ['akku', 'Akku', 'Berichte › Akku', 'kapazität pflege temperatur soh netto rebalancing'], ['stat', 'Statistik', 'Berichte › Daten', 'fahrzeugdaten verbrauch laufleistung'], ['badges', 'Abzeichen', 'Abzeichen', 'badges erfolge'],
   ['akte', 'Fahrzeugakte', 'Berichte › Daten', 'verkauf historie'], ['akte-pdf', 'Fahrzeugakte als PDF', 'Aktion', 'drucken export'], ['checkheft', 'Checkheft', 'Berichte › Daten', 'service reparatur tüv hu werkstatt'],
   ['ch-pdf', 'Checkheft als PDF', 'Aktion', 'belege mappe drucken'], ['rep-fahrten', 'Fahrten-Bericht', 'Berichte › Fahrten', 'fahrtenbuch arbeitsweg'], ['tax', 'Steuer · Arbeitsweg', 'Berichte › Fahrten', 'pendlerpauschale entfernungspauschale werbungskosten'],
   ['hist', 'Historie', 'Historie', 'verlauf bearbeiten datenprüfung'], ['hist-laden', 'Ladungen', 'Historie › Laden', 'verlauf'], ['hist-kosten', 'Kosten-Verlauf', 'Historie › Kosten', 'etiketten kategorien filter'], ['trips', 'Fahrten', 'Historie › Fahrten', 'fahrtenbuch'],
@@ -6976,6 +7007,209 @@ function openDeepLink() {
   return !!t;
 }
 openDeepLink();
+/* =====================================================================
+   Labor: DC-Ladekurven (Berichte → Akku) und Verbrauchsrekorde (eigene Seite „Rekorde“).
+   Speicher enyaq.lab = { curves: [{ id, name, date, s0, s1, kwh, min, maxKw, avgKw?, hi100?, tStart?, tEnd?, tOut?, loss?, pts?: { '10': kW, … }, files? }],
+                          recs: [{ id, route, date, km?, k100, tOut?, tBat?, v?, cond?: [..], note? }], speed: { label, rows: [{ v, k }] } }
+   Synchronisiert über das Einstellungs-Dokument (prefs.lab) und in der Sicherung enthalten. Ohne eigene Daten gilt LAB_DEF (Sommerkurve 21.08.2026, Tempomat-Messreihe).
+   ===================================================================== */
+const KEY_LAB = 'enyaq.lab';
+const LAB_DEF = {
+  curves: [{ id: 'c1', name: 'Sommer', date: '2026-08-21', s0: 5, s1: 80, kwh: 37.17, min: 33, maxKw: 106.2, avgKw: 66.7, hi100: 25, tStart: 23, tEnd: 42, tOut: 20, loss: 5,
+    pts: { 10: 101, 20: 102, 30: 94, 40: 83, 50: 74, 60: 66, 70: 58, 80: 55 } }],
+  recs: [], speed: { label: 'Sommer, eben, Klima an', rows: [{ v: 90, k: 13 }, { v: 100, k: 15 }, { v: 110, k: 17 }, { v: 120, k: 18.5 }, { v: 130, k: 21 }] } };
+function getLab() { const o = load(KEY_LAB, null); return { curves: o && Array.isArray(o.curves) ? o.curves : LAB_DEF.curves.slice(), recs: o && Array.isArray(o.recs) ? o.recs : [], speed: o && o.speed && Array.isArray(o.speed.rows) ? o.speed : JSON.parse(JSON.stringify(LAB_DEF.speed)) }; }
+function setLab(o) { save(KEY_LAB, JSON.parse(JSON.stringify(o))); try { pushPrefs(); } catch (e) { } try { renderCurve(); } catch (e) { } if (currentView === 'recs') renderRecs(); }
+const labId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const deDec = (v) => { const t = String(v == null ? '' : v).trim().replace('−', '-').replace(',', '.'); return t === '' ? undefined : Number(t); };
+const labD = (iso) => { const d = new Date(iso + 'T12:00:00'); return isNaN(d) ? '' : d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }); };
+const sheetBox = 'w-full max-w-md max-h-[92vh] overflow-y-auto rounded-t-[28px] bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-4 pt-2.5 pb-5 space-y-3';
+const inCls = 'mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 text-[15px] focus:outline-none focus:ring-2 focus:ring-emerald-500';
+const fld = (id, label, val, ph, mode = 'decimal') => `<div class="min-w-0"><label for="${id}" class="text-xs text-slate-500 dark:text-slate-400">${label}</label><input id="${id}" type="text" inputmode="${mode}" autocomplete="off" value="${val == null ? '' : esc(String(val).replace('.', ','))}" placeholder="${ph || ''}" class="${inCls}"></div>`;
+
+/* ---- DC-Ladekurve ---- */
+let cvSel = null;
+function cvPow(c, p) {                                                          // kW bei Ladestand p (lineare Interpolation der Stützpunkte; ohne Punkte: Ø-Leistung)
+  const P = Object.entries(c.pts || {}).map(([k, v]) => [Number(k), Number(v)]).filter(x => x[1] > 0).sort((a, b) => a[0] - b[0]);
+  if (!P.length) return c.avgKw || (c.kwh && c.min ? c.kwh / (c.min / 60) : 50);
+  if (p <= P[0][0]) return P[0][1]; if (p >= P[P.length - 1][0]) return P[P.length - 1][1];
+  for (let i = 0; i < P.length - 1; i++) if (p <= P[i + 1][0]) return P[i][1] + (P[i + 1][1] - P[i][1]) * (p - P[i][0]) / (P[i + 1][0] - P[i][0]);
+  return P[P.length - 1][1];
+}
+function cvMinutes(c, a, b) {                                                   // Ladezeit von a bis b %, auf die gemessene Dauer der Kurve geeicht
+  const per = c.kwh / (c.s1 - c.s0), raw = (x, y) => { let m = 0; for (let p = x; p < y; p += 0.5) m += per * 0.5 / cvPow(c, p + 0.25) * 60; return m; };
+  const k = c.min > 0 ? c.min / raw(c.s0, c.s1) : 1; return raw(a, b) * k;
+}
+function renderCurve() {
+  const el = $('cv-body'); if (!el) return;
+  const lab = getLab(), cs = lab.curves.slice().sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  if (!cs.length) { el.innerHTML = '<p class="mt-2 text-sm text-slate-600 dark:text-slate-300 text-left">Noch keine Ladekurve erfasst. Nach der nächsten Schnellladung die Werte der Säule eintragen.</p><button type="button" data-cvact="new" class="mt-3 w-full py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-semibold">+ Kurve hinzufügen</button>'; $('cv-hdate').textContent = ''; return; }
+  if (!cs.some(c => c.id === cvSel)) cvSel = cs[cs.length - 1].id;
+  const c = cs.find(x => x.id === cvSel), others = cs.filter(x => x !== c);
+  const COL = ['#f59e0b', '#38bdf8', '#a78bfa', '#34d399'], col = (x) => COL[cs.indexOf(x) % COL.length];
+  const chips = `<div class="mt-2 flex flex-wrap gap-1.5">${cs.map(x => `<button type="button" data-cv="${esc(x.id)}" class="inline-flex h-[30px] items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold ${x === c ? '' : 'border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300'}"${x === c ? ` style="background:${col(x)}26;color:${col(x)}"` : ''}><span class="h-[3px] w-2.5 rounded" style="background:${col(x)}"></span>${esc(x.name || 'Kurve')} · ${String(x.date || '').slice(5, 7)}/${String(x.date || '').slice(0, 4)}</button>`).join('')}<button type="button" data-cvact="new" class="inline-flex h-[30px] items-center rounded-full border border-dashed border-slate-400 dark:border-slate-600 px-2.5 text-xs font-semibold text-slate-500 dark:text-slate-400">+ Kurve hinzufügen</button></div>`;
+  const W = 320, H = 170, L = 34, R = 8, T = 14, B = 26, X = (p) => L + p / 100 * (W - L - R), Y = (kw) => T + (1 - Math.min(150, kw) / 150) * (H - T - B);
+  const path = (x) => { let d = ''; for (let p = x.s0; p <= x.s1 + 0.01; p += 1) d += (d ? ' L' : 'M') + X(p).toFixed(1) + ' ' + Y(cvPow(x, p)).toFixed(1); return d; };
+  const avg = c.avgKw || (c.kwh && c.min ? c.kwh / (c.min / 60) : null);
+  let peakP = c.s0, peak = 0; for (let p = c.s0; p <= c.s1; p++) { const v = cvPow(c, p); if (v > peak) { peak = v; peakP = p; } }
+  const svg = `<svg viewBox="0 0 ${W} ${H}" class="mt-2 w-full" role="img" aria-label="Ladeleistung über Ladestand">`
+    + [150, 100, 50].map(v => `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" stroke="currentColor" class="text-slate-200 dark:text-slate-800"/><text x="${L - 6}" y="${Y(v) + 3.5}" text-anchor="end" font-size="10" fill="currentColor" class="text-slate-400">${v}</text>`).join('')
+    + `<line x1="${L}" x2="${W - R}" y1="${Y(0)}" y2="${Y(0)}" stroke="currentColor" class="text-slate-300 dark:text-slate-700"/>`
+    + [0, 50, 80, 100].map(p => `<text x="${X(p)}" y="${H - 8}" text-anchor="${p === 100 ? 'end' : 'middle'}" font-size="10" fill="currentColor" class="text-slate-400">${p} %</text>`).join('')
+    + others.map(x => `<path d="${path(x)}" fill="none" stroke="${col(x)}" stroke-width="1.6" stroke-dasharray="4 3" opacity=".7"/>`).join('')
+    + `<path d="${path(c)} L${X(c.s1)} ${Y(0)} L${X(c.s0)} ${Y(0)} Z" fill="${col(c)}" fill-opacity=".14"/><path d="${path(c)}" fill="none" stroke="${col(c)}" stroke-width="2.6" stroke-linejoin="round"/>`
+    + (avg ? `<line x1="${L}" x2="${W - R}" y1="${Y(avg)}" y2="${Y(avg)}" stroke="#64748b" stroke-dasharray="4 3"/><text x="${W - R - 2}" y="${Y(avg) - 4}" text-anchor="end" font-size="9.5" fill="#94a3b8">Ø ${fmt(avg, 1)} kW</text>` : '')
+    + `<circle cx="${X(peakP)}" cy="${Y(c.maxKw || peak)}" r="3.5" fill="${col(c)}"/><text x="${X(peakP) + 5}" y="${Y(c.maxKw || peak) - 6}" font-size="10" font-weight="600" fill="${col(c)}">${fmt(c.maxKw || peak, 0)} kW</text></svg>`;
+  const tile = (l, v) => v == null || v === '' ? '' : `<div class="rounded-2xl bg-slate-100 dark:bg-slate-800/70 px-1 py-2 text-center"><p class="text-[11px] text-slate-500 dark:text-slate-400">${l}</p><p class="text-[15px] font-bold tabular-nums">${v}</p></div>`;
+  const tiles = [tile('Energie', c.kwh ? fmt(c.kwh, 1) + ' kWh' : null), tile('Max · Ø', c.maxKw ? fmt(c.maxKw, 0) + (avg ? ' · ' + fmt(avg, 0) : '') + ' kW' : null), tile('> 100 kW', c.hi100 != null ? 'bis ' + c.hi100 + ' %' : null),
+    tile('Akku', c.tStart != null ? fmt(c.tStart, 0) + (c.tEnd != null ? ' → ' + fmt(c.tEnd, 0) : '') + ' °C' : null), tile('Außen', c.tOut != null ? fmt(c.tOut, 0) + ' °C' : null), tile('Verlust', c.loss != null ? fmt(c.loss, 0) + ' %' : null)].filter(Boolean).join('');
+  const opts = (sel) => Array.from({ length: 21 }, (_, i) => i * 5).map(v => `<option value="${v}"${v === sel ? ' selected' : ''}>${v} %</option>`).join('');
+  const ra = Number(el.dataset.ra || 10), rb = Number(el.dataset.rb || 80);
+  el.innerHTML = chips
+    + `<div class="mt-3 flex items-baseline gap-2"><span class="font-barlow text-[42px] font-bold leading-none" style="color:${col(c)}">${fmt(c.min, 0)} min</span><span class="text-sm text-slate-500 dark:text-slate-400">für ${c.s0} → ${c.s1} %</span></div>`
+    + svg + (tiles ? `<div class="mt-2 grid grid-cols-3 gap-1.5">${tiles}</div>` : '')
+    + `<div class="mt-3 rounded-2xl bg-slate-100 dark:bg-slate-800/70 p-3"><p class="text-sm font-semibold text-left">Ladezeit-Rechner (diese Kurve)</p><div class="mt-2 flex items-center gap-2 text-sm"><span class="text-slate-500 dark:text-slate-400">von</span><select id="cv-a" aria-label="von" class="min-w-0 rounded-lg border border-slate-300 dark:border-slate-700 bg-transparent px-1.5 py-1.5 font-semibold">${opts(ra)}</select><span class="text-slate-500 dark:text-slate-400">bis</span><select id="cv-b" aria-label="bis" class="min-w-0 rounded-lg border border-slate-300 dark:border-slate-700 bg-transparent px-1.5 py-1.5 font-semibold">${opts(rb)}</select><span id="cv-res" class="ml-auto whitespace-nowrap font-barlow text-[26px] font-bold" style="color:${col(c)}"></span></div><p class="mt-1 text-[11px] text-slate-500 dark:text-slate-400 text-left">Bedingungen wie bei dieser Messung (Akku ${c.tStart != null ? fmt(c.tStart, 0) + ' °C' : 'warm'}). Bei kaltem Akku deutlich länger.${Object.keys(c.pts || {}).length ? '' : ' Ohne Leistungs-Stützpunkte gerechnet mit Ø-Leistung.'}</p></div>`
+    + `<div class="mt-3 flex items-center justify-between gap-2 text-sm font-semibold">${c.files && c.files.length ? `<a href="${dvLink(c.files[0].id)}" target="_blank" rel="noopener" class="text-sky-600 dark:text-sky-300">Foto der Säule ansehen ›</a>` : '<span></span>'}<button type="button" data-cvact="edit" class="text-sky-600 dark:text-sky-300">Bearbeiten ›</button></div>`;
+  $('cv-hdate').textContent = labD(c.date);
+  cvCalc();
+}
+function cvCalc() {
+  const el = $('cv-body'), a = $('cv-a'), b = $('cv-b'), r = $('cv-res'); if (!a || !b || !r) return; const c = getLab().curves.find(x => x.id === cvSel); if (!c) return;
+  const A = Number(a.value), Bv = Number(b.value); el.dataset.ra = A; el.dataset.rb = Bv;
+  r.textContent = Bv <= A ? '–' : '≈ ' + fmt(Math.round(cvMinutes(c, A, Bv)), 0) + ' min';
+}
+document.addEventListener('change', (e) => { if (e.target && (e.target.id === 'cv-a' || e.target.id === 'cv-b')) cvCalc(); });
+document.addEventListener('click', (e) => {
+  const ch = e.target.closest('#cv-body [data-cv]'); if (ch) { cvSel = ch.dataset.cv; renderCurve(); return; }
+  const b = e.target.closest('#cv-body [data-cvact]'); if (b) openCvSheet(b.dataset.cvact === 'edit' ? cvSel : null);
+});
+let cvEdit = null; const cvPend = [];
+function openCvSheet(id) {
+  const c = id ? getLab().curves.find(x => x.id === id) : null; cvEdit = c ? c.id : null; cvPend.length = 0;
+  const v = (k) => c ? c[k] : undefined, P = (c && c.pts) || {};
+  $('cv-sheet-box').innerHTML = `<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div><p class="text-lg font-bold">${c ? 'Ladekurve bearbeiten' : 'Ladekurve erfassen'}</p>
+    <div class="grid grid-cols-2 gap-2"><div class="min-w-0"><label for="cv-name" class="text-xs text-slate-500 dark:text-slate-400">Name</label><input id="cv-name" type="text" maxlength="24" value="${esc((c && c.name) || '')}" placeholder="z. B. Winter" class="${inCls}"></div><div class="min-w-0"><label for="cv-date" class="text-xs text-slate-500 dark:text-slate-400">Datum</label><input id="cv-date" type="date" value="${esc((c && c.date) || wxIso(new Date()))}" class="${inCls}"></div></div>
+    <div class="grid grid-cols-3 gap-2">${fld('cv-s0', 'Start %', v('s0'), '5', 'numeric')}${fld('cv-s1', 'Ende %', v('s1'), '80', 'numeric')}${fld('cv-kwh', 'Energie kWh', v('kwh'), '37,17')}${fld('cv-min', 'Dauer min', v('min'), '33', 'numeric')}${fld('cv-max', 'Max kW', v('maxKw'), '106,2')}${fld('cv-avg', 'Ø kW', v('avgKw'), 'optional')}${fld('cv-t0', 'Akku °C Start', v('tStart'), '', 'text')}${fld('cv-t1', 'Akku °C Ende', v('tEnd'), '', 'text')}${fld('cv-to', 'Außen °C', v('tOut'), '', 'text')}${fld('cv-hi', '> 100 kW bis %', v('hi100'), 'optional', 'numeric')}${fld('cv-loss', 'Verlust %', v('loss'), 'optional')}</div>
+    <p class="text-xs text-slate-500 dark:text-slate-400 text-left">Leistung (kW) bei Ladestand – optional, ergibt die Kurve</p>
+    <div class="grid grid-cols-8 gap-1 text-center">${[10, 20, 30, 40, 50, 60, 70, 80].map(p => `<label class="text-[10px] text-slate-500 dark:text-slate-400">${p}${p === 80 ? ' %' : ''}<input data-cvp="${p}" type="text" inputmode="decimal" value="${P[p] != null ? String(P[p]).replace('.', ',') : ''}" class="mt-1 w-full min-w-0 rounded-lg border border-slate-300 dark:border-slate-700 bg-transparent px-0.5 py-2 text-center text-[13px] text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"></label>`).join('')}</div>
+    <div><button type="button" data-cvs="pick" class="w-full rounded-xl border border-dashed border-slate-300 dark:border-slate-600 py-2.5 text-sm">Foto der Säule anhängen (Google Drive)</button><p id="cv-fmsg" class="mt-1 text-xs text-slate-500 dark:text-slate-400 text-left empty:hidden">${c && c.files && c.files.length ? c.files.length + ' Foto in Google Drive' : ''}</p></div>
+    <p id="cv-msg" class="text-sm text-red-600 dark:text-red-400 text-left empty:hidden"></p>
+    <div class="grid grid-cols-2 gap-2.5"><button type="button" data-cvs="${c ? 'del' : 'close'}" class="h-12 rounded-2xl border border-slate-300 dark:border-slate-700 text-sm font-semibold ${c ? 'text-red-600 dark:text-red-400' : ''}">${c ? 'Löschen' : 'Abbrechen'}</button><button type="button" data-cvs="save" class="h-12 rounded-2xl bg-emerald-600 text-white text-sm font-semibold">Speichern</button></div>`;
+  $('cv-sheet').classList.remove('hidden');
+}
+$('cv-sheet').addEventListener('click', async (e) => {
+  if (e.target === $('cv-sheet')) { $('cv-sheet').classList.add('hidden'); return; }
+  const b = e.target.closest('[data-cvs]'); if (!b) return; const act = b.dataset.cvs, lab = getLab();
+  if (act === 'close') $('cv-sheet').classList.add('hidden');
+  else if (act === 'pick') $('cv-file').click();
+  else if (act === 'del') { if (confirm('Diese Ladekurve löschen?')) { lab.curves = lab.curves.filter(x => x.id !== cvEdit); setLab(lab); $('cv-sheet').classList.add('hidden'); } }
+  else if (act === 'save') {
+    const n = (id) => deDec($(id).value), m = $('cv-msg'), s0 = n('cv-s0'), s1 = n('cv-s1'), kwh = n('cv-kwh'), min = n('cv-min'), mx = n('cv-max');
+    if (!(s0 >= 0 && s1 <= 100 && s1 > s0)) { m.textContent = 'Bitte Start- und Ende-% eintragen (Ende größer als Start).'; return; }
+    if (!(kwh > 0 && min > 0 && mx > 0)) { m.textContent = 'Bitte Energie, Dauer und Max-Leistung eintragen.'; return; }
+    const pts = {}; document.querySelectorAll('[data-cvp]').forEach(i => { const v = deDec(i.value); if (v > 0 && v < 400) pts[i.dataset.cvp] = v; });
+    const old = cvEdit ? lab.curves.find(x => x.id === cvEdit) : null, opt = (id) => { const v = n(id); return Number.isFinite(v) ? v : undefined; };
+    const c = { id: old ? old.id : labId(), name: $('cv-name').value.trim().slice(0, 24) || 'Kurve', date: $('cv-date').value || wxIso(new Date()), s0, s1, kwh, min, maxKw: mx, avgKw: opt('cv-avg'), hi100: opt('cv-hi'), tStart: opt('cv-t0'), tEnd: opt('cv-t1'), tOut: opt('cv-to'), loss: opt('cv-loss'), pts, files: old && old.files ? old.files : undefined };
+    Object.keys(c).forEach(k => c[k] === undefined && delete c[k]);
+    let tokP = null; if (cvPend.length) { if (!window.cloud?.isSignedIn()) { m.textContent = 'Für das Foto bitte bei Google anmelden.'; return; } tokP = window.cloud.driveToken(); tokP.catch(() => { }); }
+    lab.curves = old ? lab.curves.map(x => x.id === old.id ? c : x) : lab.curves.concat(c); cvSel = c.id; setLab(lab); $('cv-sheet').classList.add('hidden');
+    if (cvPend.length) { try { const up = await dvUploadFor({ id: c.id, date: c.date + 'T12:00:00Z', title: 'Ladekurve ' + c.name, category: 'Ladekurve', amount: 0 }, cvPend.slice(), tokP); const l2 = getLab(); l2.curves = l2.curves.map(x => x.id === c.id ? { ...x, files: (x.files || []).concat(up) } : x); setLab(l2); } catch (er) { if (er && er.status === 401) window.cloud.driveForget(); alert('Foto-Upload fehlgeschlagen: ' + dvErrText(er)); } cvPend.length = 0; }
+  }
+});
+$('cv-file').addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; if (f) { cvPend.length = 0; cvPend.push(f); $('cv-fmsg').textContent = f.name + ' · wird beim Speichern hochgeladen'; } e.target.value = ''; });
+
+/* ---- Verbrauchsrekorde ---- */
+const REC_COND = ['Klima aus', 'Klima an', 'Heizung', 'Tempomat', 'trocken', 'Regen', 'Winterreifen', 'Stau'];
+let recRoute = 'all', recEdit = null;
+function recChips(r) { return [r.tOut != null ? 'Außen ' + fmt(r.tOut, 0) + ' °C' : '', r.tBat != null ? 'Akku ' + fmt(r.tBat, 0) + ' °C' : '', r.v ? 'Ø ' + fmt(r.v, 0) + ' km/h' : ''].concat(r.cond || []).filter(Boolean).map(t => `<span class="inline-flex h-[22px] items-center rounded-md bg-slate-100 dark:bg-slate-800 px-1.5 text-[11px] text-slate-600 dark:text-slate-300">${esc(t)}</span>`).join(''); }
+const CUP = '<svg class="h-[22px] w-[22px]" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></svg>';
+function renderRecs() {
+  const lab = getLab(), recs = lab.recs, routes = [...new Set(recs.map(r => r.route))].sort((a, b) => a.localeCompare(b, 'de'));
+  if (recRoute !== 'all' && recRoute !== 'speed' && !routes.includes(recRoute)) recRoute = 'all';
+  const chip = (k, l) => `<button type="button" data-rr="${esc(k)}" class="h-8 shrink-0 whitespace-nowrap rounded-full px-3 text-xs font-semibold ${recRoute === k ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900' : 'border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300'}">${esc(l)}</button>`;
+  $('rec-chips').innerHTML = chip('all', 'Alle Strecken') + routes.map(r => chip(r, r)).join('') + chip('speed', 'Tempomat-Messreihe');
+  let h = '';
+  if (recRoute === 'all') {
+    h = routes.map(rt => { const rs = recs.filter(r => r.route === rt), best = rs.slice().sort((a, b) => a.k100 - b.k100)[0], avg = rs.reduce((a, r) => a + r.k100, 0) / rs.length, kmv = rs.find(r => r.km)?.km;
+      const better = rs.length > 1 ? (1 - best.k100 / avg) * 100 : null;
+      return `<button type="button" data-rr="${esc(rt)}" class="w-full rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 text-left active:scale-[0.99] transition space-y-2">
+        <span class="flex items-baseline justify-between gap-2"><span class="min-w-0 truncate text-[15px] font-bold">${esc(rt)}</span><span class="shrink-0 text-xs text-slate-500 dark:text-slate-400">${kmv ? fmt(kmv, 0) + ' km · ' : ''}${rs.length} ${rs.length === 1 ? 'Eintrag' : 'Einträge'}</span></span>
+        <span class="flex items-center gap-3"><span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-600 dark:bg-amber-950 dark:text-amber-400">${CUP}</span><span><span class="block font-barlow text-[30px] font-bold leading-none text-emerald-600 dark:text-emerald-400">${fmt(best.k100, 1)} <span class="font-sans text-[13px] font-medium text-slate-500 dark:text-slate-400">kWh/100 km</span></span><span class="block text-xs text-slate-500 dark:text-slate-400">Bestwert · ${labD(best.date)}</span></span></span>
+        <span class="flex flex-wrap gap-1">${recChips(best)}</span>
+        ${better != null && better > 0.5 ? `<span class="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400"><span class="relative h-1.5 flex-1 rounded-full bg-slate-200 dark:bg-slate-800"><span class="absolute inset-y-0 left-0 rounded-full bg-emerald-500" style="width:${Math.round(best.k100 / avg * 100)}%"></span></span>${fmt(better, 0)} % besser als dein Ø hier (${fmt(avg, 1)})</span>` : ''}</button>`; }).join('')
+      || '<p class="rounded-3xl bg-white dark:bg-slate-900 p-4 text-sm text-slate-600 dark:text-slate-300 text-left">Noch keine Rekorde. Trage über „+ Neu“ deine besten Verbräuche auf festen Strecken ein, mit Außentemperatur und Bedingungen.</p>';
+    h += speedCard(lab.speed);
+  } else if (recRoute === 'speed') h = speedCard(lab.speed);
+  else {
+    const rs = recs.filter(r => r.route === recRoute).sort((a, b) => a.k100 - b.k100);
+    h = `<ul class="space-y-2">${rs.map((r, i) => `<li><button type="button" data-rec="${esc(r.id)}" class="flex w-full items-start gap-3 rounded-2xl bg-white dark:bg-slate-900 shadow-sm p-3.5 text-left active:scale-[0.99] transition"><span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${i === 0 ? 'bg-amber-100 text-amber-600 dark:bg-amber-950 dark:text-amber-400' : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'} text-sm font-bold">${i === 0 ? CUP : i + 1}</span><span class="min-w-0 flex-1 space-y-1"><span class="flex items-baseline justify-between gap-2"><span class="text-lg font-bold tabular-nums">${fmt(r.k100, 1)} <span class="text-xs font-medium text-slate-500 dark:text-slate-400">kWh/100 km</span></span><span class="text-xs text-slate-500 dark:text-slate-400">${labD(r.date)}${r.km ? ' · ' + fmt(r.km, 0) + ' km' : ''}</span></span><span class="flex flex-wrap gap-1">${recChips(r)}</span>${r.note ? `<span class="block text-xs text-slate-500 dark:text-slate-400 text-left">${esc(r.note)}</span>` : ''}</span></button></li>`).join('')}</ul>`;
+  }
+  $('rec-list').innerHTML = h;
+}
+function speedCard(sp) {
+  const rows = (sp.rows || []).filter(r => r.v > 0 && r.k > 0); if (!rows.length) return '';
+  const mx = Math.max(...rows.map(r => r.k)), mn = Math.min(...rows.map(r => r.k)), colr = (k) => { const t = mx > mn ? (k - mn) / (mx - mn) : 0; return t < .2 ? '#10b981' : t < .45 ? '#22c55e' : t < .65 ? '#eab308' : t < .85 ? '#f59e0b' : '#ef4444'; };
+  return `<div class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4"><div class="flex items-baseline justify-between gap-2"><p class="text-sm font-bold">Tempomat-Messreihe</p><button type="button" data-spd class="shrink-0 text-xs font-semibold text-sky-600 dark:text-sky-300">Bearbeiten</button></div>${sp.label ? `<p class="text-xs text-slate-500 dark:text-slate-400 text-left">${esc(sp.label)}</p>` : ''}
+    <div class="mt-3 grid items-end gap-1.5" style="grid-template-columns:repeat(${rows.length},minmax(0,1fr));height:110px">${rows.map(r => `<div class="flex flex-col items-center gap-1 text-[11px]"><b class="tabular-nums">${fmt(r.k, r.k % 1 ? 1 : 0)}</b><span class="w-full rounded-t-md" style="height:${Math.round(r.k / mx * 80)}px;background:${colr(r.k)}"></span></div>`).join('')}</div>
+    <div class="mt-1 grid gap-1.5 text-center text-[11px] text-slate-500 dark:text-slate-400" style="grid-template-columns:repeat(${rows.length},minmax(0,1fr))">${rows.map((r, i) => `<span>${r.v}${i === rows.length - 1 ? ' km/h' : ''}</span>`).join('')}</div>
+    <p class="mt-2 text-[11px] text-slate-500 dark:text-slate-400 text-left">kWh/100 km bei konstantem Tempo. Reichweite mit ${fmt(AVILOO.nom * avSoh(lastKnownKm() || 0) / 100, 0)} kWh: ${rows.map(r => r.v + ' km/h ≈ ' + fmt(Math.round(AVILOO.nom * avSoh(lastKnownKm() || 0) / 100 / r.k * 100 / 5) * 5, 0) + ' km').join(' · ')}</p></div>`;
+}
+$('rec-chips').addEventListener('click', (e) => { const b = e.target.closest('[data-rr]'); if (b) { recRoute = b.dataset.rr; renderRecs(); } });
+$('rec-list').addEventListener('click', (e) => {
+  const r = e.target.closest('[data-rr]'); if (r) { recRoute = r.dataset.rr; renderRecs(); window.scrollTo(0, 0); return; }
+  const it = e.target.closest('[data-rec]'); if (it) { openRecSheet(it.dataset.rec); return; }
+  if (e.target.closest('[data-spd]')) openSpdSheet();
+});
+$('rec-add').addEventListener('click', () => openRecSheet(null));
+const recTown = (a) => { const m = /\d{5} ([^,]+)/.exec(String(a || '')); return m ? m[1].split('-')[0].trim() : ''; };
+function openRecSheet(id, pre) {
+  const lab = getLab(), r = id ? lab.recs.find(x => x.id === id) : null, d = pre || r || {}; recEdit = r ? r.id : null;
+  const routes = [...new Set(lab.recs.map(x => x.route))];
+  $('rec-sheet-box').innerHTML = `<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div><p class="text-lg font-bold">${r ? 'Rekord bearbeiten' : 'Rekord eintragen'}</p>
+    <div><label for="rec-route" class="text-xs text-slate-500 dark:text-slate-400">Strecke</label><input id="rec-route" list="rec-routes" type="text" maxlength="40" value="${esc(d.route || (recRoute !== 'all' && recRoute !== 'speed' ? recRoute : ''))}" placeholder="z. B. Arbeitsweg oder A6 Tempomat 110" class="${inCls}"><datalist id="rec-routes">${routes.map(x => `<option value="${esc(x)}"></option>`).join('')}</datalist></div>
+    <div class="grid grid-cols-[1.35fr_0.8fr_1fr] gap-2"><div class="min-w-0"><label for="rec-date" class="text-xs text-slate-500 dark:text-slate-400">Datum</label><input id="rec-date" type="date" value="${esc(d.date || wxIso(new Date()))}" class="${inCls} !px-1.5 text-[13px]"></div>${fld('rec-km', 'km', d.km, '17')}${fld('rec-k', 'kWh/100 km', d.k100, '10,8')}${fld('rec-to', 'Außen °C', d.tOut, '18', 'text')}${fld('rec-tb', 'Akku °C', d.tBat, 'optional', 'text')}${fld('rec-v', 'Ø km/h', d.v, 'optional', 'numeric')}</div>
+    <div><p class="text-xs text-slate-500 dark:text-slate-400">Bedingungen</p><div id="rec-cond" class="mt-1 flex flex-wrap gap-1.5">${REC_COND.map(c => { const on = (d.cond || []).includes(c); return `<button type="button" data-cond="${esc(c)}" aria-pressed="${on}" class="h-8 rounded-full border px-3 text-xs font-semibold ${on ? 'border-emerald-600 bg-emerald-600/15 text-emerald-700 dark:text-emerald-300' : 'border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300'}">${esc(c)}</button>`; }).join('')}</div></div>
+    <div><label for="rec-note" class="text-xs text-slate-500 dark:text-slate-400">Notiz</label><input id="rec-note" type="text" maxlength="120" value="${esc(d.note || '')}" placeholder="z. B. Rekuperation B, Eco-Modus" class="${inCls}"></div>
+    <p id="rec-hint" class="rounded-xl bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-xs text-amber-800 dark:text-amber-300 text-left empty:hidden"></p>
+    ${r ? '' : '<button type="button" data-rs="trip" class="text-sm font-semibold text-sky-600 dark:text-sky-300">Aus dem Fahrtenbuch übernehmen ›</button><div id="rec-trips" class="hidden space-y-1"></div>'}
+    <p id="rec-msg" class="text-sm text-red-600 dark:text-red-400 text-left empty:hidden"></p>
+    <div class="grid grid-cols-2 gap-2.5"><button type="button" data-rs="${r ? 'del' : 'close'}" class="h-12 rounded-2xl border border-slate-300 dark:border-slate-700 text-sm font-semibold ${r ? 'text-red-600 dark:text-red-400' : ''}">${r ? 'Löschen' : 'Abbrechen'}</button><button type="button" data-rs="save" class="h-12 rounded-2xl bg-emerald-600 text-white text-sm font-semibold">Speichern</button></div>`;
+  $('rec-sheet').classList.remove('hidden'); recHint();
+}
+function recHint() {
+  const rt = ($('rec-route')?.value || '').trim(), k = deDec($('rec-k')?.value), h = $('rec-hint'); if (!h) return;
+  const others = getLab().recs.filter(r => r.route === rt && r.id !== recEdit), best = others.length ? Math.min(...others.map(r => r.k100)) : null;
+  h.textContent = rt && k > 0 && best != null && k < best ? 'Neuer Bestwert für „' + rt + '“ (bisher ' + fmt(best, 1) + ')' : rt && k > 0 && best == null ? 'Erster Eintrag für „' + rt + '“' : '';
+}
+$('rec-sheet').addEventListener('input', recHint);
+$('rec-sheet').addEventListener('click', (e) => {
+  if (e.target === $('rec-sheet')) { $('rec-sheet').classList.add('hidden'); return; }
+  const c = e.target.closest('[data-cond]'); if (c) { const on = c.getAttribute('aria-pressed') !== 'true'; c.setAttribute('aria-pressed', on); ['border-emerald-600', 'bg-emerald-600/15', 'text-emerald-700', 'dark:text-emerald-300'].forEach(x => c.classList.toggle(x, on)); ['border-slate-300', 'dark:border-slate-700', 'text-slate-600', 'dark:text-slate-300'].forEach(x => c.classList.toggle(x, !on)); return; }
+  const tp = e.target.closest('[data-trip]'); if (tp) { const t = getTrips().find(x => String(x.id) === tp.dataset.trip); if (t) { $('rec-date').value = wxIso(new Date(t.s)); $('rec-km').value = String(t.km).replace('.', ','); if (t.k100) $('rec-k').value = String(t.k100).replace('.', ','); if (t.v) $('rec-v').value = String(Math.round(t.v)); $('rec-trips').classList.add('hidden'); recHint(); } return; }
+  const b = e.target.closest('[data-rs]'); if (!b) return; const act = b.dataset.rs, lab = getLab();
+  if (act === 'close') $('rec-sheet').classList.add('hidden');
+  else if (act === 'trip') { const box = $('rec-trips'), ts = getTrips().filter(t => t.km >= 3 && t.k100 > 0).sort((a, b) => Date.parse(b.s) - Date.parse(a.s)).slice(0, 12);
+    box.innerHTML = ts.length ? ts.map(t => `<button type="button" data-trip="${esc(String(t.id))}" class="flex w-full items-center justify-between gap-2 rounded-xl bg-slate-100 dark:bg-slate-800 px-3 py-2 text-left text-sm"><span class="min-w-0 truncate">${new Date(t.s).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })} · ${fmt(t.km, 0)} km${t.v ? ' · Ø ' + fmt(t.v, 0) + ' km/h' : ''}${recTown(t.a0) && recTown(t.a1) ? ' · ' + esc(recTown(t.a0)) + ' → ' + esc(recTown(t.a1)) : ''}</span><b class="shrink-0 tabular-nums">${fmt(t.k100, 1)}</b></button>`).join('') : '<p class="text-xs text-slate-500">Keine Fahrten im Fahrtenbuch.</p>'; box.classList.toggle('hidden'); }
+  else if (act === 'del') { if (confirm('Diesen Rekord löschen?')) { lab.recs = lab.recs.filter(x => x.id !== recEdit); setLab(lab); $('rec-sheet').classList.add('hidden'); } }
+  else if (act === 'save') {
+    const m = $('rec-msg'), route = $('rec-route').value.trim().slice(0, 40), k = deDec($('rec-k').value), opt = (id) => { const v = deDec($(id).value); return Number.isFinite(v) ? v : undefined; };
+    if (!route) { m.textContent = 'Bitte eine Strecke angeben.'; return; } if (!(k > 3 && k < 60)) { m.textContent = 'Bitte den Verbrauch in kWh/100 km eintragen (z. B. 10,8).'; return; }
+    const cond = [...document.querySelectorAll('#rec-cond [data-cond]')].filter(x => x.getAttribute('aria-pressed') === 'true').map(x => x.dataset.cond);
+    const r = { id: recEdit || labId(), route, date: $('rec-date').value || wxIso(new Date()), km: opt('rec-km'), k100: Math.round(k * 10) / 10, tOut: opt('rec-to'), tBat: opt('rec-tb'), v: opt('rec-v'), cond: cond.length ? cond : undefined, note: $('rec-note').value.trim() || undefined };
+    Object.keys(r).forEach(x => r[x] === undefined && delete r[x]);
+    lab.recs = recEdit ? lab.recs.map(x => x.id === recEdit ? r : x) : lab.recs.concat(r); recRoute = route; setLab(lab); $('rec-sheet').classList.add('hidden');
+  }
+});
+function openSpdSheet() {
+  const sp = getLab().speed;
+  $('rec-sheet-box').innerHTML = `<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div><p class="text-lg font-bold">Tempomat-Messreihe</p>
+    <div><label for="spd-l" class="text-xs text-slate-500 dark:text-slate-400">Bedingungen</label><input id="spd-l" type="text" maxlength="50" value="${esc(sp.label || '')}" class="${inCls}"></div>
+    <div class="grid grid-cols-2 gap-2">${[90, 100, 110, 120, 130, 140].map(v => fld('spd-' + v, v + ' km/h · kWh/100 km', (sp.rows.find(r => r.v === v) || {}).k, '', 'decimal')).join('')}</div>
+    <div class="grid grid-cols-2 gap-2.5"><button type="button" data-ss="close" class="h-12 rounded-2xl border border-slate-300 dark:border-slate-700 text-sm font-semibold">Abbrechen</button><button type="button" data-ss="save" class="h-12 rounded-2xl bg-emerald-600 text-white text-sm font-semibold">Speichern</button></div>`;
+  $('rec-sheet').classList.remove('hidden');
+}
+$('rec-sheet').addEventListener('click', (e) => { const b = e.target.closest('[data-ss]'); if (!b) return; if (b.dataset.ss === 'save') { const lab = getLab(); lab.speed = { label: $('spd-l').value.trim().slice(0, 50), rows: [90, 100, 110, 120, 130, 140].map(v => ({ v, k: deDec($('spd-' + v).value) })).filter(r => r.k > 0) }; setLab(lab); } $('rec-sheet').classList.add('hidden'); });
+
 </script>
 <script type="module">
 /* Firebase (modular SDK). Die Konfiguration ist kein Geheimnis – geschützt wird über Auth + Firestore-Regeln. */
