@@ -539,7 +539,7 @@
     </div>
     <label class="flex items-center gap-2 rounded-xl bg-white dark:bg-slate-800 px-3 text-slate-500 dark:text-slate-400"><svg class="h-4 w-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><input id="kb-q" type="search" autocomplete="off" placeholder="Suchen …" aria-label="Wissen durchsuchen" class="min-w-0 flex-1 bg-transparent py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:outline-none"></label>
     <div id="kb-cats" class="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-0.5 text-xs font-medium whitespace-nowrap [scrollbar-width:none]"></div>
-    <div id="kb-pin-wrap" class="hidden"><p class="mb-1.5 px-1 text-[11px] uppercase tracking-wider text-slate-500">Angeheftet</p><div id="kb-pins" class="grid grid-cols-2 gap-2.5"></div></div>
+    <div id="kb-pin-wrap" class="hidden"><p class="mb-1.5 px-1 text-[11px] uppercase tracking-wider text-slate-500">Angeheftet</p><div id="kb-pins" class="grid grid-cols-2 gap-2"></div></div>
     <div id="kb-list-wrap"><p class="mb-1.5 px-1 text-[11px] uppercase tracking-wider text-slate-500">Alle Einträge</p><ul id="kb-list" class="rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm divide-y divide-slate-200 dark:divide-slate-800 overflow-hidden"></ul></div>
     <p id="kb-empty" class="hidden px-1 py-6 text-center text-sm text-slate-500 dark:text-slate-400">Noch nichts gespeichert. Lege mit „+ Neu“ zum Beispiel den Link zum Handbuch, Reifendruck-Werte oder die Nummer deiner Werkstatt an.</p>
   </section>
@@ -4737,9 +4737,10 @@ function renderKb() {
   const hit = (x) => (!kbCat || x.cat === kbCat) && (!q || [x.title, x.text, x.cat].concat((x.links || []).map(l => l.url + ' ' + (l.label || ''))).join(' ').toLowerCase().includes(q));
   const list = kb.items.filter(hit).sort((a, b) => a.title.localeCompare(b.title, 'de')), pins = list.filter(x => x.pin), rest = list.filter(x => !x.pin);
   $('kb-pin-wrap').classList.toggle('hidden', !pins.length);
-  $('kb-pins').innerHTML = pins.map(x => `<button type="button" data-kb="${esc(x.id)}" class="rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-3 text-left active:scale-[0.98] transition">
-      <span class="flex items-center justify-between"><span class="flex h-8 w-8 items-center justify-center rounded-lg ${KB_TINT(x.cat)}">${KB_ICON(x.cat)}</span><svg class="h-4 w-4 text-slate-400" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3l7 7-3 1-4 4 1 5-2 1-4-5-5 5-1-1 5-5-5-4 1-2 5 1 4-4z"/></svg></span>
-      <span class="mt-2 block truncate text-sm font-semibold">${esc(x.title)}</span><span class="mt-0.5 block truncate text-[11px] ${x.links && x.links.length ? 'text-sky-600 dark:text-sky-300' : 'text-slate-500 dark:text-slate-400'}">${x.links && x.links.length ? '↗ Link öffnen' : esc(kbSub(x))}</span></button>`).join('');
+  $('kb-pins').innerHTML = pins.map(x => `<button type="button" data-kb="${esc(x.id)}" class="flex h-14 min-w-0 items-center gap-2.5 rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm px-2.5 text-left active:scale-[0.98] transition">
+      <span class="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] ${KB_TINT(x.cat)}">${KB_ICON(x.cat)}</span>
+      <span class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold leading-5">${esc(x.title)}</span><span class="block truncate text-[11px] leading-4 ${x.links && x.links.length ? 'text-sky-600 dark:text-sky-300' : 'text-slate-500 dark:text-slate-400'}">${x.links && x.links.length ? '↗ Link öffnen' : esc(kbSub(x))}</span></span>
+      <svg class="h-3.5 w-3.5 shrink-0 text-slate-400" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3l7 7-3 1-4 4 1 5-2 1-4-5-5 5-1-1 5-5-5-4 1-2 5 1 4-4z"/></svg></button>`).join('');
   $('kb-list-wrap').classList.toggle('hidden', !rest.length);
   $('kb-list').innerHTML = rest.map(x => `<li><button type="button" data-kb="${esc(x.id)}" class="flex w-full items-center gap-3 px-3.5 py-3 text-left active:bg-slate-100 dark:active:bg-slate-800">
       <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${KB_TINT(x.cat)}">${KB_ICON(x.cat)}</span>
