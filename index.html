@@ -3223,7 +3223,8 @@ function importPrefsFromBackup(text) {
   if (d.lab && typeof d.lab === 'object') {                            // Ladekurven/Rekorde: fehlende ergänzen
     const cur = load(KEY_LAB, null), base = getLab(), ids = new Set(base.curves.concat(base.recs).map(x => String(x.id)));
     const ac = (d.lab.curves || []).filter(x => x && x.id && !ids.has(String(x.id))), ar = (d.lab.recs || []).filter(x => x && x.id && !ids.has(String(x.id)));
-    if (!cur || ac.length || ar.length) setLab({ curves: base.curves.concat(ac), recs: base.recs.concat(ar), speed: cur && cur.speed ? base.speed : (d.lab.speed || base.speed) });
+    const sids = new Set(base.speeds.map(x => String(x.id))), as = (Array.isArray(d.lab.speeds) ? d.lab.speeds : []).filter(x => x && x.id && !sids.has(String(x.id)));
+    if (!cur || ac.length || ar.length || as.length) setLab({ curves: base.curves.concat(ac), recs: base.recs.concat(ar), speeds: base.speeds.concat(as) });
   }
   if (d.settings && typeof d.settings === 'object' && Object.keys(d.settings).length && confirm('Die Sicherung enthält auch Einstellungen (Strompreis, Akku, Fahrzeugdaten, Kauftag …).\n\nOK = Einstellungen aus der Sicherung übernehmen\nAbbrechen = aktuelle Einstellungen behalten')) {
     const keep = load(KEY_SETTINGS, {}) || {}, n = { ...d.settings }; delete n.pin; if (keep.pin) n.pin = keep.pin;
@@ -7048,16 +7049,17 @@ openDeepLink();
 /* =====================================================================
    Labor: DC-Ladekurven (Berichte → Akku) und Verbrauchsrekorde (eigene Seite „Rekorde“).
    Speicher enyaq.lab = { curves: [{ id, name, date, s0, s1, kwh, min, maxKw, avgKw?, hi100?, tStart?, tEnd?, tOut?, loss?, pts?: { '10': kW, … }, files? }],
-                          recs: [{ id, route, date, km?, k100, tOut?, tBat?, v?, cond?: [..], note? }], speed: { label, rows: [{ v, k }] } }
+                          recs: [{ id, route, date, km?, k100, tOut?, tBat?, v?, cond?: [..], note? }], speeds: [{ id, season, klima, note?, tOut?, rows: [{ v, k }] }] }
    Synchronisiert über das Einstellungs-Dokument (prefs.lab) und in der Sicherung enthalten. Ohne eigene Daten gilt LAB_DEF (Sommerkurve 21.08.2026, Tempomat-Messreihe).
    ===================================================================== */
 const KEY_LAB = 'enyaq.lab';
 const LAB_DEF = {
   curves: [{ id: 'c1', name: 'Sommer', date: '2026-08-21', s0: 5, s1: 80, kwh: 37.17, min: 33, maxKw: 106.2, avgKw: 66.7, hi100: 25, tStart: 23, tEnd: 42, tOut: 20, loss: 5,
     pts: { 10: 101, 20: 102, 30: 94, 40: 83, 50: 74, 60: 66, 70: 58, 80: 55, 81: 40, 90: 30, 95: 27, 100: 22 }, tail: [{ a: 80, b: 90, min: 10 }, { a: 90, b: 100, min: 13 }] }],
-  recs: [], speed: { label: 'Sommer, eben, Klima an', rows: [{ v: 90, k: 13 }, { v: 100, k: 15 }, { v: 110, k: 17 }, { v: 120, k: 18.5 }, { v: 130, k: 21 }] } };
+  recs: [], speeds: [{ id: 's1', season: 'Sommer', klima: 'an', note: 'eben', rows: [{ v: 90, k: 13 }, { v: 100, k: 15 }, { v: 110, k: 17 }, { v: 120, k: 18.5 }, { v: 130, k: 21 }] }] };
 const cvMig = (c) => c && c.id === 'c1' && c.date === '2026-08-21' && c.s1 === 80 && !c.tail ? { ...c, tail: LAB_DEF.curves[0].tail, pts: { ...LAB_DEF.curves[0].pts, ...(c.pts || {}) } } : c;   // 80→100 % nachgetragen (10 + 13 min)
-function getLab() { const o = load(KEY_LAB, null); return { curves: o && Array.isArray(o.curves) ? o.curves.map(cvMig) : LAB_DEF.curves.slice(), recs: o && Array.isArray(o.recs) ? o.recs : [], speed: o && o.speed && Array.isArray(o.speed.rows) ? o.speed : JSON.parse(JSON.stringify(LAB_DEF.speed)) }; }
+function getLab() { const o = load(KEY_LAB, null); return { curves: o && Array.isArray(o.curves) ? o.curves.map(cvMig) : LAB_DEF.curves.slice(), recs: o && Array.isArray(o.recs) ? o.recs : [], speeds: o && Array.isArray(o.speeds) ? o.speeds : o && o.speed && Array.isArray(o.speed.rows) ? [{ id: 's1', season: 'Sommer', klima: 'an', note: 'eben', rows: o.speed.rows }] : JSON.parse(JSON.stringify(LAB_DEF.speeds)) }; }
+const recKey = (r) => String(r || '').trim().toLowerCase();
 function setLab(o) { save(KEY_LAB, JSON.parse(JSON.stringify(o))); try { pushPrefs(); } catch (e) { } try { renderCurve(); } catch (e) { } if (currentView === 'recs') renderRecs(); }
 const labId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 const deDec = (v) => { const t = String(v == null ? '' : v).trim().replace('−', '-').replace(',', '.'); return t === '' ? undefined : Number(t); };
@@ -7178,49 +7180,60 @@ let recRoute = 'all', recEdit = null;
 function recChips(r) { return [r.tOut != null ? 'Außen ' + fmt(r.tOut, 0) + ' °C' : '', r.tBat != null ? 'Akku ' + fmt(r.tBat, 0) + ' °C' : '', r.v ? 'Ø ' + fmt(r.v, 0) + ' km/h' : ''].concat(r.cond || []).filter(Boolean).map(t => `<span class="inline-flex h-[22px] items-center rounded-md bg-slate-100 dark:bg-slate-800 px-1.5 text-[11px] text-slate-600 dark:text-slate-300">${esc(t)}</span>`).join(''); }
 const CUP = '<svg class="h-[22px] w-[22px]" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></svg>';
 function renderRecs() {
-  const lab = getLab(), recs = lab.recs, routes = [...new Set(recs.map(r => r.route))].sort((a, b) => a.localeCompare(b, 'de'));
-  if (recRoute !== 'all' && recRoute !== 'speed' && !routes.includes(recRoute)) recRoute = 'all';
+  const lab = getLab(), byRoute = new Map();
+  lab.recs.forEach(r => { const k = recKey(r.route), o = byRoute.get(k); if (!o || r.k100 < o.k100) byRoute.set(k, r); });   // je Strecke ein Eintrag (ältere Doppelte: der beste zählt)
+  const recs = [...byRoute.values()].sort((a, b) => a.route.localeCompare(b.route, 'de'));
+  if (recRoute !== 'all' && recRoute !== 'speed') recRoute = 'all';
   const chip = (k, l) => `<button type="button" data-rr="${esc(k)}" class="h-8 shrink-0 whitespace-nowrap rounded-full px-3 text-xs font-semibold ${recRoute === k ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900' : 'border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300'}">${esc(l)}</button>`;
-  $('rec-chips').innerHTML = chip('all', 'Alle Strecken') + routes.map(r => chip(r, r)).join('') + chip('speed', 'Tempomat-Messreihe');
+  $('rec-chips').innerHTML = chip('all', 'Strecken') + chip('speed', 'Tempomat-Messreihen');
+  $('rec-add').textContent = recRoute === 'speed' ? '+ Messreihe' : '+ Neu';
   let h = '';
   if (recRoute === 'all') {
-    h = routes.map(rt => { const rs = recs.filter(r => r.route === rt), best = rs.slice().sort((a, b) => a.k100 - b.k100)[0], avg = rs.reduce((a, r) => a + r.k100, 0) / rs.length, kmv = rs.find(r => r.km)?.km;
-      const better = rs.length > 1 ? (1 - best.k100 / avg) * 100 : null;
-      return `<button type="button" data-rr="${esc(rt)}" class="w-full rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 text-left active:scale-[0.99] transition space-y-2">
-        <span class="flex items-baseline justify-between gap-2"><span class="min-w-0 truncate text-[15px] font-bold">${esc(rt)}</span><span class="shrink-0 text-xs text-slate-500 dark:text-slate-400">${kmv ? fmt(kmv, 0) + ' km · ' : ''}${rs.length} ${rs.length === 1 ? 'Eintrag' : 'Einträge'}</span></span>
-        <span class="flex items-center gap-3"><span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-600 dark:bg-amber-950 dark:text-amber-400">${CUP}</span><span><span class="block font-barlow text-[30px] font-bold leading-none text-emerald-600 dark:text-emerald-400">${fmt(best.k100, 1)} <span class="font-sans text-[13px] font-medium text-slate-500 dark:text-slate-400">kWh/100 km</span></span><span class="block text-xs text-slate-500 dark:text-slate-400">Bestwert · ${labD(best.date)}</span></span></span>
-        <span class="flex flex-wrap gap-1">${recChips(best)}</span>
-        ${better != null && better > 0.5 ? `<span class="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400"><span class="relative h-1.5 flex-1 rounded-full bg-slate-200 dark:bg-slate-800"><span class="absolute inset-y-0 left-0 rounded-full bg-emerald-500" style="width:${Math.round(best.k100 / avg * 100)}%"></span></span>${fmt(better, 0)} % besser als dein Ø hier (${fmt(avg, 1)})</span>` : ''}</button>`; }).join('')
-      || '<p class="rounded-3xl bg-white dark:bg-slate-900 p-4 text-sm text-slate-600 dark:text-slate-300 text-left">Noch keine Rekorde. Trage über „+ Neu“ deine besten Verbräuche auf festen Strecken ein, mit Außentemperatur und Bedingungen.</p>';
-    h += speedCard(lab.speed);
-  } else if (recRoute === 'speed') h = speedCard(lab.speed);
-  else {
-    const rs = recs.filter(r => r.route === recRoute).sort((a, b) => a.k100 - b.k100);
-    h = `<ul class="space-y-2">${rs.map((r, i) => `<li><button type="button" data-rec="${esc(r.id)}" class="flex w-full items-start gap-3 rounded-2xl bg-white dark:bg-slate-900 shadow-sm p-3.5 text-left active:scale-[0.99] transition"><span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${i === 0 ? 'bg-amber-100 text-amber-600 dark:bg-amber-950 dark:text-amber-400' : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'} text-sm font-bold">${i === 0 ? CUP : i + 1}</span><span class="min-w-0 flex-1 space-y-1"><span class="flex items-baseline justify-between gap-2"><span class="text-lg font-bold tabular-nums">${fmt(r.k100, 1)} <span class="text-xs font-medium text-slate-500 dark:text-slate-400">kWh/100 km</span></span><span class="text-xs text-slate-500 dark:text-slate-400">${labD(r.date)}${r.km ? ' · ' + fmt(r.km, 0) + ' km' : ''}</span></span><span class="flex flex-wrap gap-1">${recChips(r)}</span>${r.note ? `<span class="block text-xs text-slate-500 dark:text-slate-400 text-left">${esc(r.note)}</span>` : ''}</span></button></li>`).join('')}</ul>`;
-  }
+    h = recs.map(r => `<button type="button" data-rec="${esc(r.id)}" class="w-full rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 text-left active:scale-[0.99] transition space-y-2">
+        <span class="flex items-baseline justify-between gap-2"><span class="min-w-0 truncate text-[15px] font-bold">${esc(r.route)}</span><span class="shrink-0 text-xs text-slate-500 dark:text-slate-400">${r.km ? fmt(r.km, 0) + ' km' : ''}</span></span>
+        <span class="flex items-center gap-3"><span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-600 dark:bg-amber-950 dark:text-amber-400">${CUP}</span><span><span class="block font-barlow text-[30px] font-bold leading-none text-emerald-600 dark:text-emerald-400">${fmt(r.k100, 1)} <span class="font-sans text-[13px] font-medium text-slate-500 dark:text-slate-400">kWh/100 km</span></span><span class="block text-xs text-slate-500 dark:text-slate-400">Bestwert · ${labD(r.date)}</span></span></span>
+        ${recChips(r) ? `<span class="flex flex-wrap gap-1">${recChips(r)}</span>` : ''}${r.note ? `<span class="block text-xs text-slate-500 dark:text-slate-400 text-left">${esc(r.note)}</span>` : ''}</button>`).join('')
+      || '<p class="rounded-3xl bg-white dark:bg-slate-900 p-4 text-sm text-slate-600 dark:text-slate-300 text-left">Noch keine Rekorde. Trage über „+ Neu“ deinen Bestwert je Strecke ein, mit Außentemperatur und Bedingungen. Ein neuer Eintrag für dieselbe Strecke ersetzt den alten.</p>';
+  } else h = speedCard(lab.speeds);
   $('rec-list').innerHTML = h;
 }
-function speedCard(sp) {
-  const rows = (sp.rows || []).filter(r => r.v > 0 && r.k > 0); if (!rows.length) return '';
+/* ---- Tempomat-Messreihen: mehrere je Bedingung (Sommer/Winter/Übergang, Klima an/aus) ---- */
+const SPD_SEASONS = ['Sommer', 'Übergang', 'Winter'], SPD_V = [80, 90, 100, 110, 120, 130, 140], SPD_COL = ['#f59e0b', '#38bdf8', '#a78bfa', '#34d399', '#f472b6', '#94a3b8'];
+let spdSel = null, spdEdit = null;
+const spdLabel = (s) => [s.season, s.klima ? 'Klima ' + s.klima : '', s.note].filter(Boolean).join(' · ') + (s.tOut != null ? ' · ' + fmt(s.tOut, 0) + ' °C' : '');
+function speedCard(list) {
+  const ss = (list || []).filter(s => (s.rows || []).some(r => r.k > 0));
+  if (!ss.length) return '<p class="rounded-3xl bg-white dark:bg-slate-900 p-4 text-sm text-slate-600 dark:text-slate-300 text-left">Noch keine Messreihe. Über „+ Messreihe“ Verbräuche bei konstantem Tempo eintragen, je Jahreszeit und Klima.</p>';
+  if (!ss.some(s => s.id === spdSel)) spdSel = ss[0].id;
+  const sp = ss.find(s => s.id === spdSel), ci = (s) => SPD_COL[list.indexOf(s) % SPD_COL.length];
+  const rows = sp.rows.filter(r => r.v > 0 && r.k > 0).sort((a, b) => a.v - b.v);
   const mx = Math.max(...rows.map(r => r.k)), mn = Math.min(...rows.map(r => r.k)), colr = (k) => { const t = mx > mn ? (k - mn) / (mx - mn) : 0; return t < .2 ? '#10b981' : t < .45 ? '#22c55e' : t < .65 ? '#eab308' : t < .85 ? '#f59e0b' : '#ef4444'; };
-  return `<div class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4"><div class="flex items-baseline justify-between gap-2"><p class="text-sm font-bold">Tempomat-Messreihe</p><button type="button" data-spd class="shrink-0 text-xs font-semibold text-sky-600 dark:text-sky-300">Bearbeiten</button></div>${sp.label ? `<p class="text-xs text-slate-500 dark:text-slate-400 text-left">${esc(sp.label)}</p>` : ''}
+  const net = AVILOO.nom * avSoh(lastKnownKm() || 0) / 100;
+  let h = `<div class="flex flex-wrap gap-1.5">${ss.map(s => `<button type="button" data-spsel="${esc(s.id)}" class="inline-flex h-[30px] items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold ${s === sp ? '' : 'border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300'}"${s === sp ? ` style="background:${ci(s)}26;color:${ci(s)}"` : ''}><span class="h-2 w-2 rounded-full" style="background:${ci(s)}"></span>${esc([s.season, s.klima ? 'Klima ' + s.klima : ''].filter(Boolean).join(' · '))}</button>`).join('')}</div>
+    <div class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4"><div class="flex items-baseline justify-between gap-2"><p class="min-w-0 text-sm font-bold text-left">${esc(spdLabel(sp))}</p><button type="button" data-spd="${esc(sp.id)}" class="shrink-0 text-xs font-semibold text-sky-600 dark:text-sky-300">Bearbeiten</button></div>
     <div class="mt-3 grid items-end gap-1.5" style="grid-template-columns:repeat(${rows.length},minmax(0,1fr));height:110px">${rows.map(r => `<div class="flex flex-col items-center gap-1 text-[11px]"><b class="tabular-nums">${fmt(r.k, r.k % 1 ? 1 : 0)}</b><span class="w-full rounded-t-md" style="height:${Math.round(r.k / mx * 80)}px;background:${colr(r.k)}"></span></div>`).join('')}</div>
     <div class="mt-1 grid gap-1.5 text-center text-[11px] text-slate-500 dark:text-slate-400" style="grid-template-columns:repeat(${rows.length},minmax(0,1fr))">${rows.map((r, i) => `<span>${r.v}${i === rows.length - 1 ? ' km/h' : ''}</span>`).join('')}</div>
-    <p class="mt-2 text-[11px] text-slate-500 dark:text-slate-400 text-left">kWh/100 km bei konstantem Tempo. Reichweite mit ${fmt(AVILOO.nom * avSoh(lastKnownKm() || 0) / 100, 0)} kWh: ${rows.map(r => r.v + ' km/h ≈ ' + fmt(Math.round(AVILOO.nom * avSoh(lastKnownKm() || 0) / 100 / r.k * 100 / 5) * 5, 0) + ' km').join(' · ')}</p></div>`;
+    <p class="mt-2 text-[11px] text-slate-500 dark:text-slate-400 text-left">kWh/100 km bei konstantem Tempo. Reichweite mit ${fmt(net, 0)} kWh: ${rows.map(r => r.v + ' km/h ≈ ' + fmt(Math.round(net / r.k * 100 / 5) * 5, 0) + ' km').join(' · ')}</p></div>`;
+  if (ss.length > 1) {                                                          // Vergleich aller Messreihen je Tempo
+    const vs = [...new Set(ss.flatMap(s => s.rows.filter(r => r.k > 0).map(r => r.v)))].sort((a, b) => a - b);
+    h += `<div class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4"><p class="text-sm font-bold text-left">Vergleich</p><div class="mt-2 overflow-x-auto no-sb"><table class="w-full text-sm tabular-nums"><thead><tr class="text-[11px] text-slate-500 dark:text-slate-400"><th class="py-1 pr-2 text-left font-medium">km/h</th>${ss.map(s => `<th class="py-1 px-1 text-right font-medium"><span class="inline-block h-2 w-2 rounded-full align-middle" style="background:${ci(s)}"></span> ${esc(s.season.slice(0, 2) + '.' + (s.klima ? ' K. ' + s.klima : ''))}</th>`).join('')}</tr></thead><tbody>${vs.map(v => { const vals = ss.map(s => (s.rows.find(r => r.v === v) || {}).k), lo = Math.min(...vals.filter(x => x > 0));
+      return `<tr class="border-t border-slate-100 dark:border-slate-800"><td class="py-1.5 pr-2 text-left text-slate-500 dark:text-slate-400">${v}</td>${vals.map(x => `<td class="py-1.5 px-1 text-right ${x === lo && vals.filter(y => y > 0).length > 1 ? 'font-bold text-emerald-600 dark:text-emerald-400' : ''}">${x > 0 ? fmt(x, 1) : '–'}</td>`).join('')}</tr>`; }).join('')}</tbody></table></div><p class="mt-1 text-[11px] text-slate-500 dark:text-slate-400 text-left">kWh/100 km; grün = niedrigster Wert je Tempo.</p></div>`;
+  }
+  return h;
 }
 $('rec-chips').addEventListener('click', (e) => { const b = e.target.closest('[data-rr]'); if (b) { recRoute = b.dataset.rr; renderRecs(); } });
 $('rec-list').addEventListener('click', (e) => {
-  const r = e.target.closest('[data-rr]'); if (r) { recRoute = r.dataset.rr; renderRecs(); window.scrollTo(0, 0); return; }
+  const s = e.target.closest('[data-spsel]'); if (s) { spdSel = s.dataset.spsel; renderRecs(); return; }
   const it = e.target.closest('[data-rec]'); if (it) { openRecSheet(it.dataset.rec); return; }
-  if (e.target.closest('[data-spd]')) openSpdSheet();
+  const sp = e.target.closest('[data-spd]'); if (sp) openSpdSheet(sp.dataset.spd);
 });
-$('rec-add').addEventListener('click', () => openRecSheet(null));
+$('rec-add').addEventListener('click', () => recRoute === 'speed' ? openSpdSheet(null) : openRecSheet(null));
 const recTown = (a) => { const m = /\d{5} ([^,]+)/.exec(String(a || '')); return m ? m[1].split('-')[0].trim() : ''; };
 function openRecSheet(id, pre) {
   const lab = getLab(), r = id ? lab.recs.find(x => x.id === id) : null, d = pre || r || {}; recEdit = r ? r.id : null;
   const routes = [...new Set(lab.recs.map(x => x.route))];
   $('rec-sheet-box').innerHTML = `<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div><p class="text-lg font-bold">${r ? 'Rekord bearbeiten' : 'Rekord eintragen'}</p>
-    <div><label for="rec-route" class="text-xs text-slate-500 dark:text-slate-400">Strecke</label><input id="rec-route" list="rec-routes" type="text" maxlength="40" value="${esc(d.route || (recRoute !== 'all' && recRoute !== 'speed' ? recRoute : ''))}" placeholder="z. B. Arbeitsweg oder A6 Tempomat 110" class="${inCls}"><datalist id="rec-routes">${routes.map(x => `<option value="${esc(x)}"></option>`).join('')}</datalist></div>
+    <div><label for="rec-route" class="text-xs text-slate-500 dark:text-slate-400">Strecke</label><input id="rec-route" list="rec-routes" type="text" maxlength="40" value="${esc(d.route || '')}" placeholder="z. B. Arbeitsweg oder A6 Tempomat 110" class="${inCls}"><datalist id="rec-routes">${routes.map(x => `<option value="${esc(x)}"></option>`).join('')}</datalist></div>
     <div class="grid grid-cols-[1.35fr_0.8fr_1fr] gap-2"><div class="min-w-0"><label for="rec-date" class="text-xs text-slate-500 dark:text-slate-400">Datum</label><input id="rec-date" type="date" value="${esc(d.date || wxIso(new Date()))}" class="${inCls} !px-1.5 text-[13px]"></div>${fld('rec-km', 'km', d.km, '17')}${fld('rec-k', 'kWh/100 km', d.k100, '10,8')}${fld('rec-to', 'Außen °C', d.tOut, '18', 'text')}${fld('rec-tb', 'Akku °C', d.tBat, 'optional', 'text')}${fld('rec-v', 'Ø km/h', d.v, 'optional', 'numeric')}</div>
     <div><p class="text-xs text-slate-500 dark:text-slate-400">Bedingungen</p><div id="rec-cond" class="mt-1 flex flex-wrap gap-1.5">${REC_COND.map(c => { const on = (d.cond || []).includes(c); return `<button type="button" data-cond="${esc(c)}" aria-pressed="${on}" class="h-8 rounded-full border px-3 text-xs font-semibold ${on ? 'border-emerald-600 bg-emerald-600/15 text-emerald-700 dark:text-emerald-300' : 'border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300'}">${esc(c)}</button>`; }).join('')}</div></div>
     <div><label for="rec-note" class="text-xs text-slate-500 dark:text-slate-400">Notiz</label><input id="rec-note" type="text" maxlength="120" value="${esc(d.note || '')}" placeholder="z. B. Rekuperation B, Eco-Modus" class="${inCls}"></div>
@@ -7232,8 +7245,8 @@ function openRecSheet(id, pre) {
 }
 function recHint() {
   const rt = ($('rec-route')?.value || '').trim(), k = deDec($('rec-k')?.value), h = $('rec-hint'); if (!h) return;
-  const others = getLab().recs.filter(r => r.route === rt && r.id !== recEdit), best = others.length ? Math.min(...others.map(r => r.k100)) : null;
-  h.textContent = rt && k > 0 && best != null && k < best ? 'Neuer Bestwert für „' + rt + '“ (bisher ' + fmt(best, 1) + ')' : rt && k > 0 && best == null ? 'Erster Eintrag für „' + rt + '“' : '';
+  const own = recEdit ? getLab().recs.find(r => r.id === recEdit) : null, others = getLab().recs.filter(r => recKey(r.route) === recKey(rt) && r.id !== recEdit), best = others.length ? Math.min(...others.map(r => r.k100)) : (own && recKey(own.route) === recKey(rt) ? own.k100 : null);
+  h.textContent = !rt || !(k > 0) || best == null ? (rt && k > 0 ? 'Erster Eintrag für „' + rt + '“' : '') : k < best ? 'Neuer Bestwert für „' + rt + '“ – ersetzt ' + fmt(best, 1) : k > best ? 'Achtung: Bisheriger Bestwert ' + fmt(best, 1) + ' ist besser. Speichern ersetzt ihn trotzdem.' : '';
 }
 $('rec-sheet').addEventListener('input', recHint);
 $('rec-sheet').addEventListener('click', (e) => {
@@ -7251,18 +7264,36 @@ $('rec-sheet').addEventListener('click', (e) => {
     const cond = [...document.querySelectorAll('#rec-cond [data-cond]')].filter(x => x.getAttribute('aria-pressed') === 'true').map(x => x.dataset.cond);
     const r = { id: recEdit || labId(), route, date: $('rec-date').value || wxIso(new Date()), km: opt('rec-km'), k100: Math.round(k * 10) / 10, tOut: opt('rec-to'), tBat: opt('rec-tb'), v: opt('rec-v'), cond: cond.length ? cond : undefined, note: $('rec-note').value.trim() || undefined };
     Object.keys(r).forEach(x => r[x] === undefined && delete r[x]);
-    lab.recs = recEdit ? lab.recs.map(x => x.id === recEdit ? r : x) : lab.recs.concat(r); recRoute = route; setLab(lab); $('rec-sheet').classList.add('hidden');
+    lab.recs = lab.recs.filter(x => x.id !== r.id && recKey(x.route) !== recKey(route)).concat(r); recRoute = 'all'; setLab(lab); $('rec-sheet').classList.add('hidden');   // je Strecke genau ein Eintrag
   }
 });
-function openSpdSheet() {
-  const sp = getLab().speed;
-  $('rec-sheet-box').innerHTML = `<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div><p class="text-lg font-bold">Tempomat-Messreihe</p>
-    <div><label for="spd-l" class="text-xs text-slate-500 dark:text-slate-400">Bedingungen</label><input id="spd-l" type="text" maxlength="50" value="${esc(sp.label || '')}" class="${inCls}"></div>
-    <div class="grid grid-cols-2 gap-2">${[90, 100, 110, 120, 130, 140].map(v => fld('spd-' + v, v + ' km/h · kWh/100 km', (sp.rows.find(r => r.v === v) || {}).k, '', 'decimal')).join('')}</div>
-    <div class="grid grid-cols-2 gap-2.5"><button type="button" data-ss="close" class="h-12 rounded-2xl border border-slate-300 dark:border-slate-700 text-sm font-semibold">Abbrechen</button><button type="button" data-ss="save" class="h-12 rounded-2xl bg-emerald-600 text-white text-sm font-semibold">Speichern</button></div>`;
+function openSpdSheet(id) {
+  const sp = id ? getLab().speeds.find(x => x.id === id) : null; spdEdit = sp ? sp.id : null;
+  const seg = (name, opts, cur) => `<div data-seg="${name}" class="flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 text-sm">${opts.map(o => `<button type="button" data-v="${esc(o)}" class="flex-1 rounded-lg py-1.5 font-medium ${o === cur ? 'bg-white dark:bg-slate-600 shadow-sm' : 'text-slate-500 dark:text-slate-400'}">${esc(o)}</button>`).join('')}</div>`;
+  $('rec-sheet-box').innerHTML = `<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div><p class="text-lg font-bold">${sp ? 'Messreihe bearbeiten' : 'Tempomat-Messreihe eintragen'}</p>
+    <div><p class="text-xs text-slate-500 dark:text-slate-400">Jahreszeit</p><div class="mt-1">${seg('season', SPD_SEASONS, sp ? sp.season : 'Winter')}</div></div>
+    <div><p class="text-xs text-slate-500 dark:text-slate-400">Klima / Heizung</p><div class="mt-1">${seg('klima', ['an', 'aus'], sp ? sp.klima : 'an')}</div></div>
+    <div class="grid grid-cols-[1fr_0.6fr] gap-2"><div class="min-w-0"><label for="spd-note" class="text-xs text-slate-500 dark:text-slate-400">Zusatz</label><input id="spd-note" type="text" maxlength="30" value="${esc((sp && sp.note) || '')}" placeholder="z. B. eben, Winterreifen" class="${inCls}"></div>${fld('spd-to', 'Außen °C', sp ? sp.tOut : undefined, 'optional', 'text')}</div>
+    <p class="text-xs text-slate-500 dark:text-slate-400 text-left">kWh/100 km bei konstantem Tempo (leer lassen, was du nicht gemessen hast)</p>
+    <div class="grid grid-cols-4 gap-2">${SPD_V.map(v => fld('spd-' + v, v + ' km/h', sp ? (sp.rows.find(r => r.v === v) || {}).k : undefined, '', 'decimal')).join('')}</div>
+    <p id="spd-msg" class="text-sm text-red-600 dark:text-red-400 text-left empty:hidden"></p>
+    <div class="grid grid-cols-2 gap-2.5"><button type="button" data-ss="${sp ? 'del' : 'close'}" class="h-12 rounded-2xl border border-slate-300 dark:border-slate-700 text-sm font-semibold ${sp ? 'text-red-600 dark:text-red-400' : ''}">${sp ? 'Löschen' : 'Abbrechen'}</button><button type="button" data-ss="save" class="h-12 rounded-2xl bg-emerald-600 text-white text-sm font-semibold">Speichern</button></div>`;
   $('rec-sheet').classList.remove('hidden');
 }
-$('rec-sheet').addEventListener('click', (e) => { const b = e.target.closest('[data-ss]'); if (!b) return; if (b.dataset.ss === 'save') { const lab = getLab(); lab.speed = { label: $('spd-l').value.trim().slice(0, 50), rows: [90, 100, 110, 120, 130, 140].map(v => ({ v, k: deDec($('spd-' + v).value) })).filter(r => r.k > 0) }; setLab(lab); } $('rec-sheet').classList.add('hidden'); });
+$('rec-sheet').addEventListener('click', (e) => {
+  const sb = e.target.closest('[data-seg] [data-v]'); if (sb) { sb.parentElement.querySelectorAll('[data-v]').forEach(x => { const on = x === sb; x.classList.toggle('bg-white', on); x.classList.toggle('dark:bg-slate-600', on); x.classList.toggle('shadow-sm', on); x.classList.toggle('text-slate-500', !on); x.classList.toggle('dark:text-slate-400', !on); }); return; }
+  const b = e.target.closest('[data-ss]'); if (!b) return; const act = b.dataset.ss, lab = getLab();
+  if (act === 'del') { if (!confirm('Diese Messreihe löschen?')) return; lab.speeds = lab.speeds.filter(x => x.id !== spdEdit); spdSel = null; setLab(lab); }
+  else if (act === 'save') {
+    const pick = (n) => { const x = document.querySelector(`[data-seg="${n}"] .bg-white`); return x ? x.dataset.v : ''; };
+    const rows = SPD_V.map(v => ({ v, k: deDec($('spd-' + v).value) })).filter(r => r.k > 3 && r.k < 60);
+    if (!rows.length) { $('spd-msg').textContent = 'Bitte mindestens einen Verbrauch eintragen.'; return; }
+    const to = deDec($('spd-to').value), sp = { id: spdEdit || labId(), season: pick('season') || 'Sommer', klima: pick('klima') || 'an', note: $('spd-note').value.trim() || undefined, tOut: Number.isFinite(to) ? to : undefined, rows };
+    Object.keys(sp).forEach(k => sp[k] === undefined && delete sp[k]);
+    lab.speeds = spdEdit ? lab.speeds.map(x => x.id === spdEdit ? sp : x) : lab.speeds.concat(sp); spdSel = sp.id; recRoute = 'speed'; setLab(lab);
+  }
+  $('rec-sheet').classList.add('hidden');
+});
 
 if (window.__noStorage) {                                                       // Hinweis: Browser-Speicher gesperrt
   const d = document.createElement('div'); d.setAttribute('role', 'alert');
