@@ -1378,7 +1378,7 @@
       <div><label for="rem-due-km" class="text-xs text-slate-500 dark:text-slate-400">Fällig bei km</label><input id="rem-due-km" type="text" inputmode="numeric" autocomplete="off" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
     </div>
     <div class="grid grid-cols-2 gap-2">
-      <div><label for="rem-rep-m" class="text-xs text-slate-500 dark:text-slate-400">Wiederholen alle … Monate</label><input id="rem-rep-m" type="text" inputmode="numeric" autocomplete="off" placeholder="leer = einmalig" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
+      <div><label for="rem-rep-m" class="text-xs text-slate-500 dark:text-slate-400">Wiederholen alle …</label><div class="mt-1 flex min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 focus-within:ring-2 focus-within:ring-emerald-500"><input id="rem-rep-m" type="text" inputmode="numeric" autocomplete="off" placeholder="leer = einmalig" class="w-full min-w-0 rounded-l-xl bg-transparent px-3 py-2.5 focus:outline-none"><select id="rem-rep-unit" aria-label="Einheit" class="shrink-0 rounded-r-xl border-l border-slate-300 dark:border-slate-700 bg-transparent px-1.5 text-sm font-medium focus:outline-none"><option value="d">Tage</option><option value="w">Wochen</option><option value="m" selected>Monate</option></select></div></div>
       <div><label for="rem-rep-km" class="text-xs text-slate-500 dark:text-slate-400">Wiederholen alle … km</label><input id="rem-rep-km" type="text" inputmode="numeric" autocomplete="off" placeholder="leer = einmalig" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
     </div>
     <div><label for="rem-note" class="text-xs text-slate-500 dark:text-slate-400">Notiz (optional)</label><textarea id="rem-note" rows="2" maxlength="300" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></textarea></div>
@@ -3479,7 +3479,7 @@ function parseCsv(text) {                                // RFC-4180: Anführung
 /* =====================================================================
    Erinnerungen (Wartung, Service, Prüfungen) nach Datum und/oder km
    Eintrag: { id, title, category?, note?, dueDate? ('JJJJ-MM-TT'), dueKm?, startDate ('JJJJ-MM-TT', Beginn des Fortschrittsbalkens), startKm?,
-              repeatMonths?, repeatKm?, doneAt? (ISO, nur bei einmaligen), lastDoneAt?, lastDoneKm?, log? ([{ at, km?, cost? }] alle Erledigungen), guid? (aus früherem Import) }
+              repeatMonths?, repeatDays? (täglich/wöchentlich, Wochen = 7 Tage), repeatUnit? ('d'|'w', nur Anzeige), repeatKm?, doneAt? (ISO, nur bei einmaligen), lastDoneAt?, lastDoneKm?, log? ([{ at, km?, cost? }] alle Erledigungen), guid? (aus früherem Import) }
    Fortschritt: Anteil der Strecke von startDate/startKm bis dueDate/dueKm; gilt der größere der beiden Anteile (es zählt, was zuerst erreicht wird).
    Wiederkehrende Erinnerungen werden mit „Erledigt“ ab dem Erledigt-Datum (und -km) neu angesetzt, einmalige wandern in die Liste „Erledigt“.
    Den aktuellen km-Stand liefert lastKnownKm() (jüngster Wert aus Ladungen und Kosten).
@@ -3514,7 +3514,15 @@ function addMonths(d, n) {                                 // 31.01. + 1 Monat =
 }
 const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n, 12);
 const cleanRem = (o) => { Object.keys(o).forEach(k => { if (o[k] === undefined || o[k] === null || (typeof o[k] === 'number' && !isFinite(o[k]))) delete o[k]; }); return o; };
-const isRepeating = (r) => r.repeatMonths > 0 || r.repeatKm > 0;
+const isRepeating = (r) => r.repeatMonths > 0 || r.repeatDays > 0 || r.repeatKm > 0;
+const hasRepTime = (r) => r.repeatMonths > 0 || r.repeatDays > 0;
+/** Zeit-Intervall anwenden (n = +1 vor, −1 zurück): Monate oder Tage (wöchentlich = 7 Tage) */
+const remStep = (d, r, n = 1) => r.repeatMonths > 0 ? addMonths(d, n * r.repeatMonths) : addDays(d, n * r.repeatDays);
+function remEveryText(r) {
+  if (r.repeatMonths > 0) return r.repeatMonths === 1 ? 'monatlich' : 'alle ' + r.repeatMonths + ' Monate';
+  if (r.repeatDays > 0) { if (r.repeatUnit === 'w' || (r.repeatDays % 7 === 0 && r.repeatUnit !== 'd')) { const w = r.repeatDays / 7; return w === 1 ? 'wöchentlich' : 'alle ' + w + ' Wochen'; } return r.repeatDays === 1 ? 'täglich' : 'alle ' + r.repeatDays + ' Tage'; }
+  return '';
+}
 /** Verlauf aller Erledigungen einer Erinnerung, älteste zuerst: [{ at (ISO), km?, cost? }].
     Ältere Einträge ohne Verlauf: der zuletzt gespeicherte Termin (lastDoneAt bzw. doneAt) gilt als erster Eintrag. */
 const REM_LOG_MAX = 100;
@@ -3547,7 +3555,8 @@ function remStatus(r, km = lastKnownKm(), today = dayStart()) {
   }
   st.frac = fr.length ? Math.max(...fr) : null;
   const over = (st.daysLeft != null && st.daysLeft <= 0) || (st.kmLeft != null && st.kmLeft <= 0);
-  const soon = (st.daysLeft != null && st.daysLeft <= w.days) || (st.kmLeft != null && st.kmLeft <= w.km);
+  const wd = r.repeatDays > 0 ? Math.min(w.days, Math.floor(r.repeatDays / 3)) : w.days;
+  const soon = (st.daysLeft != null && st.daysLeft <= wd) || (st.kmLeft != null && st.kmLeft <= w.km);
   st.level = over ? 'over' : soon ? 'soon' : 'ok';
   return st;
 }
@@ -3575,7 +3584,7 @@ const REM_LEVEL = {
   ok:   { bar: 'bg-emerald-500', chip: '' }
 };
 function remRepeatText(r) {
-  const p = []; if (r.repeatMonths > 0) p.push('alle ' + r.repeatMonths + (r.repeatMonths === 1 ? ' Monat' : ' Monate')); if (r.repeatKm > 0) p.push('alle ' + fmt(r.repeatKm, 0) + ' km');
+  const p = []; if (hasRepTime(r)) p.push(remEveryText(r)); if (r.repeatKm > 0) p.push('alle ' + fmt(r.repeatKm, 0) + ' km');
   return p.length ? 'wiederholt ' + p.join(' / ') : 'einmalig';
 }
 function remLines(r, s, km) {
@@ -3643,7 +3652,8 @@ function openRemDialog(r = null) {
   $('rem-dialog-title').textContent = r ? 'Erinnerung bearbeiten' : 'Neue Erinnerung';
   $('rem-title').value = r?.title || ''; $('rem-cat').innerHTML = catOptions(r?.category || '');
   $('rem-due').value = r?.dueDate || ''; $('rem-due-km').value = r?.dueKm ? String(r.dueKm) : '';
-  $('rem-rep-m').value = r?.repeatMonths ? String(r.repeatMonths) : ''; $('rem-rep-km').value = r?.repeatKm ? String(r.repeatKm) : '';
+  const ru = r?.repeatMonths ? 'm' : r?.repeatDays ? (r.repeatUnit === 'w' || (r.repeatDays % 7 === 0 && r.repeatUnit !== 'd') ? 'w' : 'd') : 'm';
+  $('rem-rep-unit').value = ru; $('rem-rep-m').value = r?.repeatMonths ? String(r.repeatMonths) : r?.repeatDays ? String(ru === 'w' ? r.repeatDays / 7 : r.repeatDays) : ''; $('rem-rep-km').value = r?.repeatKm ? String(r.repeatKm) : '';
   $('rem-note').value = r?.note || '';
   $('rem-dialog-msg').className = 'hidden text-sm'; $('rem-delete').classList.toggle('hidden', !r);
   $('rem-dialog').classList.remove('hidden');
@@ -3659,24 +3669,26 @@ $('rem-delete').addEventListener('click', () => {
 $('rem-save').addEventListener('click', () => {
   const title = $('rem-title').value.trim().replace(/\s+/g, ' '), cat = $('rem-cat').value, note = $('rem-note').value.trim();
   let due = $('rem-due').value;
-  const dueKm = optNum($('rem-due-km').value), repM = optNum($('rem-rep-m').value), repKm = optNum($('rem-rep-km').value), km = lastKnownKm();
+  const dueKm = optNum($('rem-due-km').value), repN = optNum($('rem-rep-m').value), repU = $('rem-rep-unit').value, repKm = optNum($('rem-rep-km').value), km = lastKnownKm();
+  const repMax = repU === 'd' ? 3650 : repU === 'w' ? 520 : 240;
   if (!title) { remMsg('rem-dialog-msg', 'Bitte einen Titel eingeben.'); return; }
   if (due && isNaN(parseYMD(due))) { remMsg('rem-dialog-msg', 'Bitte ein gültiges Datum eingeben.'); return; }
-  if ([dueKm, repM, repKm].some(Number.isNaN) || (dueKm != null && (dueKm <= 0 || dueKm > 999999)) || (repM != null && (!Number.isInteger(repM) || repM < 1 || repM > 240))
-      || (repKm != null && (repKm <= 0 || repKm > 999999))) { remMsg('rem-dialog-msg', 'Bitte km (1 bis 999999) und Monate (ganze Zahl, 1 bis 240) prüfen.'); return; }
+  if ([dueKm, repN, repKm].some(Number.isNaN) || (dueKm != null && (dueKm <= 0 || dueKm > 999999)) || (repN != null && (!Number.isInteger(repN) || repN < 1 || repN > repMax))
+      || (repKm != null && (repKm <= 0 || repKm > 999999))) { remMsg('rem-dialog-msg', 'Bitte km (1 bis 999999) und das Intervall (ganze Zahl, 1 bis ' + repMax + ') prüfen.'); return; }
+  const repM = repN != null && repU === 'm' ? repN : null, repD = repN != null && repU !== 'm' ? repN * (repU === 'w' ? 7 : 1) : null, tmp = { repeatMonths: repM || 0, repeatDays: repD || 0 };
   let dKm = dueKm;
   if (!due && dKm == null) {                                            // nur Wiederholung angegeben: erste Fälligkeit ab heute
-    if (repM) due = ymd(addMonths(new Date(), repM));
+    if (repM || repD) due = ymd(remStep(new Date(), tmp));
     if (repKm && km != null) dKm = km + repKm;
   }
-  if (!due && dKm == null) { remMsg('rem-dialog-msg', repKm && !repM ? 'Für die Wiederholung nach km fehlt ein bekannter km-Stand. Bitte „Fällig bei km“ eingeben.' : 'Bitte ein Datum oder einen km-Stand angeben, wann die Erinnerung fällig ist.'); return; }
+  if (!due && dKm == null) { remMsg('rem-dialog-msg', repKm && !repM && !repD ? 'Für die Wiederholung nach km fehlt ein bekannter km-Stand. Bitte „Fällig bei km“ eingeben.' : 'Bitte ein Datum oder einen km-Stand angeben, wann die Erinnerung fällig ist.'); return; }
   const list = getReminders(), old = remEditId != null ? list.find(x => String(x.id) === String(remEditId)) : null;
-  const r = { ...(old || { id: Date.now() }), title, category: cat || undefined, note: note || undefined, dueDate: due || undefined, dueKm: dKm ?? undefined, repeatMonths: repM ?? undefined, repeatKm: repKm ?? undefined };
+  const r = { ...(old || { id: Date.now() }), title, category: cat || undefined, note: note || undefined, dueDate: due || undefined, dueKm: dKm ?? undefined, repeatMonths: repM ?? undefined, repeatDays: repD ?? undefined, repeatUnit: repD ? repU : undefined, repeatKm: repKm ?? undefined };
   const today = new Date();
   if (!old) {                                                           // Beginn des Fortschritts: bei Wiederholung der Beginn des aktuellen Zeitraums, sonst heute
-    const back = due && repM ? addMonths(parseYMD(due), -repM) : null;
+    const back = due && (repM || repD) ? remStep(parseYMD(due), tmp, -1) : null;
     r.startDate = back && back < today ? ymd(back) : ymd(today);
-  } else if (due && parseYMD(due) <= parseYMD(r.startDate || due)) r.startDate = repM ? ymd(addMonths(parseYMD(due), -repM)) : ymd(addDays(parseYMD(due), -30));
+  } else if (due && parseYMD(due) <= parseYMD(r.startDate || due)) r.startDate = repM || repD ? ymd(remStep(parseYMD(due), tmp, -1)) : ymd(addDays(parseYMD(due), -30));
   if (dKm != null) { const sk = km != null && km < dKm ? km : (repKm && dKm > repKm ? dKm - repKm : null); if (!old || old.startKm == null || old.startKm >= dKm) r.startKm = sk ?? undefined; }
   else r.startKm = undefined;
   commitReminders(old ? list.map(x => String(x.id) === String(old.id) ? cleanRem(r) : x) : list.concat(cleanRem(r)));
@@ -3697,8 +3709,8 @@ function remNextAfterDone(r) {
   if (km == null) km = lastKnownKm();
   const out = { doneAt: d, km };
   if (isRepeating(r)) {
-    if (r.repeatMonths > 0) out.dueDate = ymd(addMonths(d, r.repeatMonths));
-    if (r.repeatKm > 0) { if (km == null) { if (!(r.repeatMonths > 0)) return { error: 'Für die nächste km-Fälligkeit bitte den km-Stand eingeben.' }; } else out.dueKm = km + r.repeatKm; }
+    if (hasRepTime(r)) out.dueDate = ymd(remStep(d, r));
+    if (r.repeatKm > 0) { if (km == null) { if (!hasRepTime(r)) return { error: 'Für die nächste km-Fälligkeit bitte den km-Stand eingeben.' }; } else out.dueKm = km + r.repeatKm; }
   }
   return out;
 }
@@ -3721,7 +3733,7 @@ $('done-ok').addEventListener('click', () => {
     .concat(le).sort((a, b) => Date.parse(a.at) - Date.parse(b.at)).slice(-REM_LOG_MAX);
   if (isRepeating(r)) {
     upd.startDate = ymd(n.doneAt); upd.startKm = n.km ?? undefined;
-    if (r.repeatMonths > 0) upd.dueDate = n.dueDate;
+    if (hasRepTime(r)) upd.dueDate = n.dueDate;
     if (r.repeatKm > 0) upd.dueKm = n.dueKm ?? r.dueKm;
   } else upd.doneAt = n.doneAt.toISOString();
   commitReminders(getReminders().map(x => String(x.id) === String(r.id) ? cleanRem(upd) : x));
@@ -3786,7 +3798,7 @@ function parseImportReminders(text) {
     const num = (v, max) => v == null ? undefined : (typeof v === 'number' && isFinite(v) && v > 0 && v <= max ? v : (() => { throw bad(); })());
     let id = Number(r.id); if (!Number.isFinite(id) || seen.has(id)) id = Date.now() + i; seen.add(id);
     const o = { id, title: r.title.trim().slice(0, 80), startDate: r.startDate || r.dueDate || todayYMD(), dueDate: r.dueDate ?? undefined, dueKm: num(r.dueKm, 999999), startKm: typeof r.startKm === 'number' && r.startKm >= 0 && r.startKm <= 999999 ? r.startKm : undefined,
-      repeatMonths: num(r.repeatMonths, 240), repeatKm: num(r.repeatKm, 999999) };
+      repeatMonths: num(r.repeatMonths, 240), repeatDays: num(r.repeatDays, 3650), repeatUnit: r.repeatUnit === 'w' || r.repeatUnit === 'd' ? r.repeatUnit : undefined, repeatKm: num(r.repeatKm, 999999) };
     if (!o.dueDate && o.dueKm == null) throw bad();
     if (typeof r.category === 'string' && r.category.trim()) o.category = r.category.trim().slice(0, 30);
     if (typeof r.note === 'string' && r.note.trim()) o.note = r.note.trim().slice(0, 300);
@@ -4125,7 +4137,7 @@ function renderRemBanner() {
   const { r, s } = cand, others = list.filter(x => x.r.id !== r.id && x.s.level !== 'ok');
   const overdue = (s.daysLeft != null && s.daysLeft < 0) || (s.kmLeft != null && s.kmLeft < 0);
   const label = overdue ? 'Überfällig' + (s.daysLeft != null && s.daysLeft < 0 ? ' · seit ' + (-s.daysLeft) + (s.daysLeft === -1 ? ' Tag' : ' Tagen') : '') : s.daysLeft === 0 ? 'Heute fällig' : 'Jetzt fällig';
-  const rep = r.repeatMonths > 0 ? 'Wiederholt sich ' + (RECUR_LABEL[r.repeatMonths] || 'alle ' + r.repeatMonths + ' Monate') : r.repeatKm > 0 ? 'Wiederholt sich alle ' + fmt(r.repeatKm, 0) + ' km' : 'Einmalige Erinnerung';
+  const rep = r.repeatMonths > 0 ? 'Wiederholt sich ' + (RECUR_LABEL[r.repeatMonths] || 'alle ' + r.repeatMonths + ' Monate') : r.repeatDays > 0 ? 'Wiederholt sich ' + remEveryText(r) : r.repeatKm > 0 ? 'Wiederholt sich alle ' + fmt(r.repeatKm, 0) + ' km' : 'Einmalige Erinnerung';
   const more = others.length ? ' · ' + others.length + ' weitere ' + (others.length === 1 ? (others[0].s.level === 'over' ? 'fällig' : 'bald fällig') : 'fällig oder bald fällig') : '';
   const color = overdue ? '#ef4444' : '#f59e0b';
   el.dataset.id = r.id;
@@ -7589,7 +7601,7 @@ async function pushTripMonths(prev, next) {
 }
 const sig = (r) => [r.id, r.date, r.totalReading, r.consumedSinceLast, r.cost, r.odometerKm, r.socStart, r.socEnd, r.capacityKwh, r.chargeStart, r.chargeEnd, r.avgPowerKw, r.meterReset, r.place, r.pricePerKwh, r.provider, r.fee, r.battTemp].join('|');
 
-const remSig = (r) => [r.id, r.title, r.category, r.note, r.dueDate, r.dueKm, r.startDate, r.startKm, r.repeatMonths, r.repeatKm, r.doneAt, r.lastDoneAt, r.lastDoneKm, r.guid].join('|');
+const remSig = (r) => [r.id, r.title, r.category, r.note, r.dueDate, r.dueKm, r.startDate, r.startKm, r.repeatMonths, r.repeatDays, r.repeatUnit, r.repeatKm, r.doneAt, r.lastDoneAt, r.lastDoneKm, r.guid].join('|');
 const recSig = (t) => [t.id, t.title, t.amount, t.category, t.note, t.intervalMonths, t.startDate, t.nextIdx].join('|');
 const costSig = (c) => [c.id, c.date, c.title, c.amount, c.category, c.note, c.odometerKm, c.guid, c.recurId, JSON.stringify(c.files || '')].join('|');
 /** Schreibt nur die Unterschiede zwischen prev und next (neu/geändert -> set, entfernt -> delete). */
