@@ -67,7 +67,7 @@
   /* Heller Modus: Segment-Leisten und graue Buttons ohne eigene Textfarbe erben sonst die helle Schrift des Body */
   @media (prefers-color-scheme: light) {
     .bg-slate-100:not([class*="text-"]), .bg-slate-200:not([class*="text-"]), .bg-white:not([class*="text-"]) { color: #0f172a; }
-    #cap-place button:not(.bg-white), #hist-filter button:not(.bg-white), #rep-mode button:not(.bg-white), #rep-place button:not(.bg-white), #dash-place button:not(.bg-white), #range-switch button:not(.bg-white) { color: #475569; }
+    #cap-place button:not(.bg-white), #hist-filter button:not(.bg-white), #rep-mode button:not(.bg-white), #bat-seg button:not(.bg-white), #rep-place button:not(.bg-white), #dash-place button:not(.bg-white), #range-switch button:not(.bg-white) { color: #475569; }
   }
   /* Statistik: Zahl groß, Einheit klein daneben, alles in einer Zeile */
   .st-u { font-size: .75rem; font-weight: 500; margin-left: .25rem; color: #64748b; }
@@ -775,18 +775,18 @@
     </div>
 
     <div id="rep-akku" class="hidden space-y-4">
-      <div class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4"><img src="/Bilder/Enyaq_4.webp" alt="Škoda Enyaq im Schnitt mit Hochvolt-Akku im Unterboden" width="966" height="745" decoding="async" draggable="false" class="mx-auto block max-h-48 w-auto object-contain select-none"></div>
-      <div class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
-        <p class="text-sm text-slate-500 dark:text-slate-400">Netto-Akkukapazität (geschätzt) <span class="whitespace-nowrap">· Langzeitwert</span></p>
+      <div class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4 relative overflow-hidden">
+        <p class="relative z-10 text-sm text-slate-500 dark:text-slate-400 text-left">Netto-Akkukapazität (geschätzt) <span class="whitespace-nowrap">· Langzeitwert</span></p>
         <div id="bat-value" class="hidden">
-          <p class="mt-1 text-5xl font-semibold tabular-nums text-emerald-600 dark:text-emerald-400"><span id="bat-net">–</span> <span class="text-3xl font-medium">kWh</span></p>
-          <p class="text-sm mt-1">nutzbar im Auto je 100 % Akku</p>
-          <p id="bat-c" class="text-xs text-slate-500 dark:text-slate-400 mt-0.5"></p>
-          <div class="mt-3 flex items-baseline justify-between gap-2 rounded-2xl bg-slate-100 dark:bg-slate-800/70 px-3 py-2">
+          <img src="/Bilder/Enyaq_4.webp" alt="Škoda Enyaq im Schnitt mit Hochvolt-Akku im Unterboden" width="966" height="745" decoding="async" draggable="false" class="pointer-events-none absolute right-[-4px] top-[62px] w-[40%] max-w-[200px] select-none object-contain">
+          <p class="relative mt-1 text-5xl font-semibold tabular-nums text-emerald-600 dark:text-emerald-400 text-left"><span id="bat-net">–</span> <span class="text-3xl font-medium">kWh</span></p>
+          <p class="relative text-sm mt-1 text-left">nutzbar im Auto je 100 % Akku</p>
+          <p id="bat-c" class="relative text-xs text-slate-500 dark:text-slate-400 mt-0.5 text-left"></p>
+          <div class="relative z-10 mt-3 flex items-baseline justify-between gap-2 rounded-2xl bg-slate-100 dark:bg-slate-800/70 px-3 py-2">
             <span class="text-sm text-slate-600 dark:text-slate-300">Brutto an der Steckdose</span>
             <span class="tabular-nums whitespace-nowrap"><span id="bat-k" class="text-lg font-semibold">–</span> <span class="text-xs text-slate-500 dark:text-slate-400">kWh <span id="bat-ci"></span></span></span>
           </div>
-          <p id="bat-basis" class="text-xs text-slate-500 dark:text-slate-400 mt-2"></p>
+          <p id="bat-basis" class="relative text-xs text-slate-500 dark:text-slate-400 mt-2"></p>
         </div>
         <div id="bat-few">
           <p class="mt-1 text-xl font-semibold">Noch zu wenige Daten</p>
@@ -797,6 +797,9 @@
           </div>
         </div>
       </div>
+      <div id="bat-seg" class="print:hidden flex bg-slate-200 dark:bg-slate-800 rounded-xl p-1"><button type="button" data-bt="pflege" class="bt-btn min-w-0 flex-auto px-2 py-1.5 rounded-lg text-[13px] font-medium whitespace-nowrap">Pflege</button><button type="button" data-bt="mehr" class="bt-btn min-w-0 flex-auto px-2 py-1.5 rounded-lg text-[13px] font-medium whitespace-nowrap">Mehrkonsum</button><button type="button" data-bt="alter" class="bt-btn min-w-0 flex-auto px-2 py-1.5 rounded-lg text-[13px] font-medium whitespace-nowrap">Alterung</button><button type="button" data-bt="kurve" class="bt-btn min-w-0 flex-auto px-2 py-1.5 rounded-lg text-[13px] font-medium whitespace-nowrap">Kurve</button></div>
+      <div id="bat-panes">
+      <div id="bt-pflege" class="space-y-4">
       <div id="care-card" class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
         <div class="flex items-center justify-between gap-2"><p class="text-sm text-slate-500 dark:text-slate-400">Akku-Pflege</p>
           <div id="care-seg" class="flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 text-xs"><button type="button" data-care="90" class="care-btn rounded-lg px-2.5 py-1 font-medium">90 Tage</button><button type="button" data-care="kauf" class="care-btn rounded-lg px-2.5 py-1 font-medium">Seit Kauf</button></div></div>
@@ -807,10 +810,8 @@
           <div id="acdc-seg" class="flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 text-xs"><button type="button" data-acdc="90" class="acdc-btn flex-1 rounded-lg px-2 py-1.5 font-medium whitespace-nowrap">90 Tage</button><button type="button" data-acdc="kauf" class="acdc-btn flex-1 rounded-lg px-2 py-1.5 font-medium whitespace-nowrap">Seit Kauf</button><button type="button" data-acdc="zul" class="acdc-btn flex-1 rounded-lg px-2 py-1.5 font-medium whitespace-nowrap">Seit Zulassung</button></div></div>
         <div id="acdc-body"></div>
       </div>
-      <div id="cv-card" class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
-        <div class="flex items-baseline justify-between gap-2"><p class="text-sm text-slate-500 dark:text-slate-400">DC-Ladekurve · Referenz</p><span id="cv-hdate" class="text-xs text-slate-500"></span></div>
-        <div id="cv-body"></div>
       </div>
+      <div id="bt-mehr" class="hidden space-y-4">
       <div id="temp-card" class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
         <p class="text-sm text-slate-500 dark:text-slate-400">Akku-Temperatur</p>
         <div id="temp-body"></div>
@@ -820,6 +821,8 @@
           <div id="tc-seg" class="flex shrink-0 whitespace-nowrap rounded-lg bg-slate-100 dark:bg-slate-800 p-0.5 text-[11px]"><button type="button" data-tc="akku" class="tc-btn rounded-md px-2 py-0.5 font-medium">Akku °C</button><button type="button" data-tc="aussen" class="tc-btn rounded-md px-2 py-0.5 font-medium">Außen °C</button></div></div>
         <div id="tc-body"></div>
       </div>
+      </div>
+      <div id="bt-alter" class="hidden space-y-4">
       <div id="av-card" class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
         <p class="text-sm text-slate-500 dark:text-slate-400">Alterung im Vergleich</p>
         <div id="av-body"></div>
@@ -845,6 +848,14 @@
           <p><b>Grenzen:</b> Sinkt der Wert, kann das Alterung sein, aber auch höhere Ladeverluste (Kabel, Wallbox, Batterieheizung). Die Akku-Anzeige ist nicht exakt linear. Dieser Wert ersetzt keine Auslesung des Akku-Zustands (State of Health) per OBD-Diagnose.</p>
         </div>
       </details>
+      </div>
+      <div id="bt-kurve" class="hidden space-y-4">
+      <div id="cv-card" class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
+        <div class="flex items-baseline justify-between gap-2"><p class="text-sm text-slate-500 dark:text-slate-400">DC-Ladekurve · Referenz</p><span id="cv-hdate" class="text-xs text-slate-500"></span></div>
+        <div id="cv-body"></div>
+      </div>
+      </div>
+      </div>
     </div>
 
     <div id="rep-fahrten" class="hidden space-y-4">
@@ -6921,7 +6932,7 @@ const NAV_GO = {
   'cap-home': () => { setCapPlace('home'); showView('capture'); setCapPlace('home'); }, 'cap-bosch': () => { setCapPlace('bosch'); showView('capture'); setCapPlace('bosch'); },
   'cap-away': () => { setCapPlace('away'); showView('capture'); setCapPlace('away'); }, costs: () => showView('costs'),
   eff: () => navStart('sec-eff'), trends: () => navStart('sec-trends'), recs: () => showView('recs'),
-  curve: () => { repMode = 'akku'; showView('report'); setTimeout(() => { const c = $('cv-card'); if (c) c.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 300); },
+  curve: () => { repMode = 'akku'; setBtTab('kurve', false); showView('report'); },
   rep: () => { repMode = 'laden'; showView('report'); }, akku: () => { repMode = 'akku'; showView('report'); }, stat: () => { repMode = 'stat'; setDpTab('stat', false); showView('report'); },
   trips: () => { histFilter = 'fahrten'; tripDays = 21; showView('history'); }, hist: () => { histFilter = 'all'; showView('history'); },
   badges: () => showView('badges'), wrap: () => $('btn-wrap-preview').click(),
@@ -6971,7 +6982,22 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && navOpen(
 setSettingsSec(setSec);
 /** Einstellungen direkt in einem Bereich öffnen (ohne Seitenleiste). */
 function openSettings(sec) { window.setNoDrawer = true; if (currentView !== 'settings') showView('settings'); else window.setNoDrawer = false; setSettingsSec(sec); }
-segSwipe($('view-report'), $('rep-mode'), '#rep-place,#dp-panes,#dp-seg');   // Berichte: Laden | Kosten | Akku | Datenpool | Fahrten (ganze Seite; im Datenpool wischen die Unter-Tabs)
+segSwipe($('view-report'), $('rep-mode'), '#rep-place,#dp-panes,#dp-seg,#bat-panes,#bat-seg');   // Berichte: Laden | Kosten | Akku | Datenpool | Fahrten (ganze Seite; im Datenpool wischen die Unter-Tabs)
+/* ---- Berichte → Akku: Unter-Tabs Pflege | Mehrkonsum | Alterung | Kurve ---- */
+const BT_TABS = ['pflege', 'mehr', 'alter', 'kurve'];
+let btTab = (() => { try { const t = localStorage.getItem('enyaq.batTab'); return BT_TABS.includes(t) ? t : 'pflege'; } catch (e) { return 'pflege'; } })();
+function setBtTab(t, anim = true) {
+  if (!BT_TABS.includes(t)) t = 'pflege';
+  const dir = BT_TABS.indexOf(t) - BT_TABS.indexOf(btTab); btTab = t; try { localStorage.setItem('enyaq.batTab', t); } catch (e) { }
+  segPaintKey('.bt-btn', 'bt', t);
+  BT_TABS.forEach(k => { const el = $('bt-' + k), on = k === t; el.classList.toggle('hidden', !on); el.classList.remove('dp-inL', 'dp-inR'); if (on && anim && dir) { void el.offsetWidth; el.classList.add(dir > 0 ? 'dp-inL' : 'dp-inR'); } });
+  if (t === 'alter') { try { const ch = Chart.getChart($('bat-chart')); if (ch) ch.resize(); } catch (e) { } }
+}
+document.querySelectorAll('.bt-btn').forEach(b => b.addEventListener('click', () => setBtTab(b.dataset.bt)));
+setBtTab(btTab, false);
+segSwipe($('bat-panes'), $('bat-seg'));
+segSwipe($('bat-seg'), $('bat-seg'));
+
 /* ---- Daten (Berichte, früher „Datenpool“): Unter-Tabs Statistik | Fahrzeugakte | Checkheft, per Antippen oder Wischen ---- */
 let dpTab = 'stat';
 const DP_TABS = ['stat', 'akte', 'checkheft'];
