@@ -794,7 +794,7 @@
           <p class="relative mt-1 text-5xl font-semibold tabular-nums text-emerald-600 dark:text-emerald-400 text-left"><span id="bat-net">–</span> <span class="text-3xl font-medium">kWh</span></p>
           <p class="relative text-sm mt-1 text-left">nutzbar je 100 % Akku</p>
           <p id="bat-c" class="relative text-xs text-slate-500 dark:text-slate-400 mt-0.5 text-left"></p>
-          <div id="bat-brutto" class="relative z-10 mt-10 flex items-baseline justify-between gap-2 rounded-2xl bg-slate-100 dark:bg-slate-800/70 px-3 py-2">
+          <div id="bat-brutto" class="relative z-10 mt-14 flex items-baseline justify-between gap-2 rounded-2xl bg-slate-100 dark:bg-slate-800/70 px-3 py-2">
             <span class="text-sm text-slate-600 dark:text-slate-300">Brutto an der Steckdose</span>
             <span class="tabular-nums whitespace-nowrap"><span id="bat-k" class="text-lg font-semibold">–</span> <span class="text-xs text-slate-500 dark:text-slate-400">kWh <span id="bat-ci"></span></span></span>
           </div>
@@ -4008,12 +4008,12 @@ const CAR_NAMES = [1, 2, '_4', 3, 4, 5], CAR_DOTS = 3, CAR_AUTO_MS = 30000;   //
 async function initCarousel() {
   const box = $('car-scroll'), dash = $('car-dashes'); if (!box) return;
   const found = await Promise.all(CAR_NAMES.map(n => findHeroImg(n))), names = CAR_NAMES.filter((_, i) => found[i]), srcs = found.filter(Boolean);
-  let imgs = await Promise.all(srcs.map(async (u, i) => ({ ...(await cutWhite(u)), tech: /Enyaq(_4|[45])\./.test(u), name: names[i] })));   // Bild 4/5 = Technik (Akku, Motor): mittig und etwas kleiner, ohne Standlinie
+  let imgs = await Promise.all(srcs.map(async (u, i) => ({ ...(await cutWhite(u)), tech: /Enyaq[45]\./.test(u), cut: /Enyaq_4\./.test(u), name: names[i] })));   // Bild 4/5 = Technik (Akku, Motor): mittig und etwas kleiner, ohne Standlinie
   if (!imgs.length) imgs = [{ src: HERO_FALLBACK, aspect: 700 / 391, extra: 0 }];
   /* Die Bilder liegen übereinander; ein Wisch (oder Pfeiltaste) blendet per CSS-Übergang auf das nächste bzw. vorherige Bild über. Pro Wisch genau ein Bild.
      Bewusst ohne mitlaufende Bewegung beim Wischen: Nur Deckkraft wird animiert (läuft ohne JavaScript pro Frame), dadurch ruckelt nichts.
      Der Schatten unter dem Auto kommt aus den Bildern selbst. */
-  box.innerHTML = imgs.map((m, i) => `<div class="car-slide absolute inset-0 pointer-events-none" style="opacity:${i === 0 ? 1 : 0};transition:opacity .45s ease-in-out;will-change:opacity"><img src="${m.src}" alt="Skoda Enyaq, Bild ${i + 1} von ${imgs.length}" draggable="false" class="${m.tech ? 'absolute inset-x-8 top-[8%] bottom-[14%] w-[calc(100%-4rem)] h-[78%] object-contain object-center' : 'absolute inset-x-4 top-0 bottom-2.5 w-[calc(100%-2rem)] h-[calc(100%-0.625rem)] object-contain object-bottom'}"></div>`).join('');
+  box.innerHTML = imgs.map((m, i) => `<div class="car-slide absolute inset-0 pointer-events-none" style="opacity:${i === 0 ? 1 : 0};transition:opacity .45s ease-in-out;will-change:opacity"><img src="${m.src}" alt="Skoda Enyaq, Bild ${i + 1} von ${imgs.length}" draggable="false" class="${m.cut ? 'absolute inset-x-1 top-[1%] bottom-[3%] w-[calc(100%-0.5rem)] h-[96%] object-contain object-center' : m.tech ? 'absolute inset-x-8 top-[8%] bottom-[14%] w-[calc(100%-4rem)] h-[78%] object-contain object-center' : 'absolute inset-x-4 top-0 bottom-2.5 w-[calc(100%-2rem)] h-[calc(100%-0.625rem)] object-contain object-bottom'}"></div>`).join('');
   dash.innerHTML = imgs.length > 1 ? imgs.slice(0, CAR_DOTS).map(() => '<span class="select-none text-[22px] leading-none text-white">•</span>').join('') : '';    // Zeichen statt Formen (Dark-Mode des Browsers), alle gleich, ohne Hervorhebung
   const slides = [...box.querySelectorAll('.car-slide')], els = [...box.querySelectorAll('img')]; let cur = 0, lock = false, sx = 0, sy = 0, tracking = false, autoT = 0;
   /* Auf dieselbe Standlinie ausrichten: Bild 1 ist die Referenz. Bilder mit mehr Schatten unter den Reifen werden so weit nach unten gesetzt, dass die Reifen auf gleicher Höhe stehen. */
