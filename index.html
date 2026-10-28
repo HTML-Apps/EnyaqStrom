@@ -547,7 +547,7 @@
   <section id="view-recs" class="view hidden space-y-3">
     <div class="-mt-2 flex h-[60px] items-center justify-between gap-3 -mb-[10px]">
       <h1 class="min-w-0 truncate font-barlow font-semibold text-2xl uppercase tracking-[0.14em] text-white">Rekorde &amp; Messreihe</h1>
-      <button id="rec-add" type="button" aria-label="Neuer Eintrag" class="shrink-0 h-10 w-10 rounded-xl bg-emerald-600 text-2xl font-semibold leading-none text-white active:scale-95 transition">+</button>
+      <button id="rec-add" type="button" aria-label="Neuer Eintrag" class="shrink-0 flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-white active:scale-95 transition"><svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
     </div>
     <div id="rec-chips" class="no-sb -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5"></div>
     <div id="rec-list" class="space-y-3"></div>
@@ -7185,7 +7185,7 @@ function renderRecs() {
   const recs = [...byRoute.values()].sort((a, b) => a.route.localeCompare(b.route, 'de'));
   if (recRoute !== 'all' && recRoute !== 'speed') recRoute = 'all';
   const chip = (k, l) => `<button type="button" data-rr="${esc(k)}" class="h-8 shrink-0 whitespace-nowrap rounded-full px-3 text-xs font-semibold ${recRoute === k ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900' : 'border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300'}">${esc(l)}</button>`;
-  $('rec-chips').innerHTML = chip('all', 'Strecken') + chip('speed', 'Tempomat-Messreihen');
+  $('rec-chips').innerHTML = chip('all', 'Streckenrekorde') + chip('speed', 'Tempomat-Messreihen');
   $('rec-add').setAttribute('aria-label', recRoute === 'speed' ? 'Neue Messreihe' : 'Neuer Rekord');
   let h = '';
   if (recRoute === 'all') {
