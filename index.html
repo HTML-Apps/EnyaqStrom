@@ -546,8 +546,8 @@
   <!-- ============ Rekorde (eigene Seite, Schnellmenü → „Rekorde“) ============ -->
   <section id="view-recs" class="view hidden space-y-3">
     <div class="-mt-2 flex h-[60px] items-center justify-between gap-3 -mb-[10px]">
-      <h1 class="min-w-0 truncate font-barlow font-semibold text-2xl uppercase tracking-[0.14em] text-white">Rekorde</h1>
-      <button id="rec-add" type="button" class="shrink-0 h-10 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white active:scale-95 transition">+ Neu</button>
+      <h1 class="min-w-0 truncate font-barlow font-semibold text-2xl uppercase tracking-[0.14em] text-white">Rekorde &amp; Messreihe</h1>
+      <button id="rec-add" type="button" aria-label="Neuer Eintrag" class="shrink-0 h-10 w-10 rounded-xl bg-emerald-600 text-2xl font-semibold leading-none text-white active:scale-95 transition">+</button>
     </div>
     <div id="rec-chips" class="no-sb -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5"></div>
     <div id="rec-list" class="space-y-3"></div>
@@ -7186,14 +7186,14 @@ function renderRecs() {
   if (recRoute !== 'all' && recRoute !== 'speed') recRoute = 'all';
   const chip = (k, l) => `<button type="button" data-rr="${esc(k)}" class="h-8 shrink-0 whitespace-nowrap rounded-full px-3 text-xs font-semibold ${recRoute === k ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900' : 'border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300'}">${esc(l)}</button>`;
   $('rec-chips').innerHTML = chip('all', 'Strecken') + chip('speed', 'Tempomat-Messreihen');
-  $('rec-add').textContent = recRoute === 'speed' ? '+ Messreihe' : '+ Neu';
+  $('rec-add').setAttribute('aria-label', recRoute === 'speed' ? 'Neue Messreihe' : 'Neuer Rekord');
   let h = '';
   if (recRoute === 'all') {
     h = recs.map(r => `<button type="button" data-rec="${esc(r.id)}" class="w-full rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 text-left active:scale-[0.99] transition space-y-2">
         <span class="flex items-baseline justify-between gap-2"><span class="min-w-0 truncate text-[15px] font-bold">${esc(r.route)}</span><span class="shrink-0 text-xs text-slate-500 dark:text-slate-400">${r.km ? fmt(r.km, 0) + ' km' : ''}</span></span>
         <span class="flex items-center gap-3"><span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-600 dark:bg-amber-950 dark:text-amber-400">${CUP}</span><span><span class="block font-barlow text-[30px] font-bold leading-none text-emerald-600 dark:text-emerald-400">${fmt(r.k100, 1)} <span class="font-sans text-[13px] font-medium text-slate-500 dark:text-slate-400">kWh/100 km</span></span><span class="block text-xs text-slate-500 dark:text-slate-400">Bestwert · ${labD(r.date)}</span></span></span>
         ${recChips(r) ? `<span class="flex flex-wrap gap-1">${recChips(r)}</span>` : ''}${r.note ? `<span class="block text-xs text-slate-500 dark:text-slate-400 text-left">${esc(r.note)}</span>` : ''}</button>`).join('')
-      || '<p class="rounded-3xl bg-white dark:bg-slate-900 p-4 text-sm text-slate-600 dark:text-slate-300 text-left">Noch keine Rekorde. Trage über „+ Neu“ deinen Bestwert je Strecke ein, mit Außentemperatur und Bedingungen. Ein neuer Eintrag für dieselbe Strecke ersetzt den alten.</p>';
+      || '<p class="rounded-3xl bg-white dark:bg-slate-900 p-4 text-sm text-slate-600 dark:text-slate-300 text-left">Noch keine Rekorde. Trage über „+“ deinen Bestwert je Strecke ein, mit Außentemperatur und Bedingungen. Ein neuer Eintrag für dieselbe Strecke ersetzt den alten.</p>';
   } else h = speedCard(lab.speeds);
   $('rec-list').innerHTML = h;
 }
@@ -7203,7 +7203,7 @@ let spdSel = null, spdEdit = null;
 const spdLabel = (s) => [s.season, s.klima ? 'Klima ' + s.klima : '', s.note].filter(Boolean).join(' · ') + (s.tOut != null ? ' · ' + fmt(s.tOut, 0) + ' °C' : '');
 function speedCard(list) {
   const ss = (list || []).filter(s => (s.rows || []).some(r => r.k > 0));
-  if (!ss.length) return '<p class="rounded-3xl bg-white dark:bg-slate-900 p-4 text-sm text-slate-600 dark:text-slate-300 text-left">Noch keine Messreihe. Über „+ Messreihe“ Verbräuche bei konstantem Tempo eintragen, je Jahreszeit und Klima.</p>';
+  if (!ss.length) return '<p class="rounded-3xl bg-white dark:bg-slate-900 p-4 text-sm text-slate-600 dark:text-slate-300 text-left">Noch keine Messreihe. Über „+“ Verbräuche bei konstantem Tempo eintragen, je Jahreszeit und Klima.</p>';
   if (!ss.some(s => s.id === spdSel)) spdSel = ss[0].id;
   const sp = ss.find(s => s.id === spdSel), ci = (s) => SPD_COL[list.indexOf(s) % SPD_COL.length];
   const rows = sp.rows.filter(r => r.v > 0 && r.k > 0).sort((a, b) => a.v - b.v);
