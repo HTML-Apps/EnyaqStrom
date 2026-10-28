@@ -6260,9 +6260,10 @@ window.onCloudPrefs = (d, first, uid) => {
   if (first && nk == null && lk) { nk = lk; up = true; }
   if (JSON.stringify(nk) !== JSON.stringify(lk)) { if (nk) save('enyaq.kb', nk); else localStorage.removeItem('enyaq.kb'); try { renderKbStart(); if (currentView === 'kb') renderKb(); } catch (e) { } }
   /* Labor (Ladekurven, Rekorde, Tempomat-Messreihe): wie Wissen */
-  const lq = load(KEY_LAB, null); let nq = d && d.lab && typeof d.lab === 'object' ? d.lab : null;
-  if (first && nq == null && lq) { nq = lq; up = true; }
-  if (JSON.stringify(nq) !== JSON.stringify(lq)) { if (nq) save(KEY_LAB, nq); else localStorage.removeItem(KEY_LAB); try { renderCurve(); if (currentView === 'recs') renderRecs(); } catch (e) { } }
+  /* Labor: zusammenführen (neuester Stand je Element), nie durch einen älteren oder fehlenden Cloud-Stand löschen */
+  const lq = load(KEY_LAB, null), cq = d && d.lab && typeof d.lab === 'object' ? d.lab : null; let nq = labMerge(lq, cq);
+  if (nq && labCanon(nq) !== labCanon(cq)) up = true;
+  if (labCanon(nq) !== labCanon(lq)) { if (nq) save(KEY_LAB, nq); try { renderCurve(); if (currentView === 'recs') renderRecs(); } catch (e) { } }
   if (up) window.cloud.setPrefs({ wltp: nw, wxLoc: nl, provInfo: np, settings: ns, kb: nk, lab: nq }).catch(() => { });
 };
 
@@ -7061,7 +7062,33 @@ const LAB_DEF = {
 const cvMig = (c) => c && c.id === 'c1' && c.date === '2026-08-21' && c.s1 === 80 && !c.tail ? { ...c, tail: LAB_DEF.curves[0].tail, pts: { ...LAB_DEF.curves[0].pts, ...(c.pts || {}) } } : c;   // 80→100 % nachgetragen (10 + 13 min)
 function getLab() { const o = load(KEY_LAB, null); return { curves: o && Array.isArray(o.curves) ? o.curves.map(cvMig) : LAB_DEF.curves.slice(), recs: o && Array.isArray(o.recs) ? o.recs : [], routes: o && o.routes && typeof o.routes === 'object' && !Array.isArray(o.routes) ? o.routes : {}, speeds: o && Array.isArray(o.speeds) ? o.speeds : o && o.speed && Array.isArray(o.speed.rows) ? [{ id: 's1', season: 'Sommer', klima: 'an', note: 'eben', rows: o.speed.rows }] : JSON.parse(JSON.stringify(LAB_DEF.speeds)) }; }
 const recKey = (r) => String(r || '').trim().toLowerCase();
-function setLab(o) { save(KEY_LAB, JSON.parse(JSON.stringify(o))); try { pushPrefs(); } catch (e) { } try { renderCurve(); } catch (e) { } if (currentView === 'recs') renderRecs(); }
+/* Zusammenführen statt Überschreiben: jedes Element (Kurve, Rekord, Messreihe, Strecke) trägt u = letzte Änderung (ms),
+   Löschungen stehen in del { id: ms }. So gewinnt beim Abgleich zwischen Geräten/Cloud immer der neueste Stand je Element. */
+const LAB_LISTS = ['curves', 'recs', 'speeds'];
+function labStamp(o) {
+  const prev = load(KEY_LAB, null) || {}, now = Date.now(), del = { ...(prev.del || {}) };
+  LAB_LISTS.forEach(k => { const pm = new Map((prev[k] || []).map(x => [String(x.id), x])), ids = new Set();
+    o[k] = (o[k] || []).map(x => { ids.add(String(x.id)); const old = pm.get(String(x.id)), a = { ...x }; delete a.u; const b = old ? { ...old } : null; if (b) delete b.u;
+      return !old || JSON.stringify(a) !== JSON.stringify(b) ? { ...a, u: now } : { ...a, u: old.u || 0 }; });
+    pm.forEach((x, id) => { if (!ids.has(id)) del[id] = now; }); });
+  const pr = prev.routes || {}, nr = {}; Object.entries(o.routes || {}).forEach(([k, v]) => { const a = { ...v }; delete a.u; const b = pr[k] ? { ...pr[k] } : null; if (b) delete b.u; nr[k] = !b || JSON.stringify(a) !== JSON.stringify(b) ? { ...a, u: now } : { ...a, u: pr[k].u || 0 }; });
+  Object.keys(pr).forEach(k => { if (!nr[k]) del['r_' + k] = now; });
+  const cut = now - 400 * 864e5; Object.keys(del).forEach(k => { if (del[k] < cut) delete del[k]; });
+  return { ...o, routes: nr, del };
+}
+function labMerge(a, b) {
+  if (!a) return b; if (!b) return a;
+  const del = { ...(a.del || {}) }; Object.entries(b.del || {}).forEach(([k, t]) => { if (!(del[k] >= t)) del[k] = t; });
+  const out = { del };
+  LAB_LISTS.forEach(k => { const m = new Map(); [a[k] || [], b[k] || []].forEach(l => l.forEach(x => { const id = String(x.id), c = m.get(id); if (!c || (x.u || 0) > (c.u || 0)) m.set(id, x); }));
+    out[k] = [...m.values()].filter(x => !(del[String(x.id)] >= (x.u || 0))); });
+  const ra = a.routes || {}, rb = b.routes || {}; out.routes = {};
+  new Set(Object.keys(ra).concat(Object.keys(rb))).forEach(k => { const x = ra[k], y = rb[k], w = !x ? y : !y ? x : (y.u || 0) > (x.u || 0) ? y : x; if (!(del['r_' + k] >= (w.u || 0))) out.routes[k] = w; });
+  if (!a.speeds && !b.speeds && (a.speed || b.speed)) out.speed = a.speed || b.speed;
+  return out;
+}
+const labCanon = (o) => JSON.stringify(o, (k, v) => v && typeof v === 'object' && !Array.isArray(v) ? Object.keys(v).sort().reduce((r, x) => (r[x] = v[x], r), {}) : v);
+function setLab(o) { save(KEY_LAB, JSON.parse(JSON.stringify(labStamp(o)))); try { pushPrefs(); } catch (e) { } try { renderCurve(); } catch (e) { } if (currentView === 'recs') renderRecs(); }
 const labId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 const deDec = (v) => { const t = String(v == null ? '' : v).trim().replace('−', '-').replace(',', '.'); return t === '' ? undefined : Number(t); };
 const labD = (iso) => { const d = new Date(iso + 'T12:00:00'); return isNaN(d) ? '' : d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }); };
