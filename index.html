@@ -7223,13 +7223,38 @@ function hpSvg(p, la = 'A', lb = 'B', mini = false) {
     + `<circle cx="${X(p.km)}" cy="${Y(l[1]).toFixed(1)}" r="3.5" fill="currentColor" class="text-slate-700 dark:text-slate-100"/><text x="${X(p.km) - 5}" y="${(Y(l[1]) + 13).toFixed(1)}" text-anchor="end" font-size="9.5" fill="#94a3b8">${lb}</text>`
     + `<text x="${Math.min(W - 24, Math.max(L + 20, X(mx[0]))).toFixed(1)}" y="${(Y(mx[1]) - 5).toFixed(1)}" text-anchor="middle" font-size="9.5" font-weight="600" fill="#10b981">${mx[1]} m</text></svg>`;
 }
-/* Ort auflösen: gespeicherter Ort (Name), „lat,lon“ oder Adresse (OpenStreetMap-Suche) */
+/* Ortssuche: gespeicherte Orte + Photon (OpenStreetMap, für Suche beim Tippen gedacht), Ergebnisse nahe Start/Zuhause bevorzugt */
+const hpPhLabel = (f) => { const q = f.properties || {}, st = [q.street, q.housenumber].filter(Boolean).join(' '), town = q.city || q.town || q.village || q.district || q.county || '';
+  const main = q.name && q.name !== town ? q.name : (st || town || q.name || ''); return { main, sub: [q.name && q.name !== town && st ? st : '', [q.postcode, town].filter(Boolean).join(' '), q.state && q.country !== 'Deutschland' ? q.country : ''].filter(x => x && x !== main).join(', ') }; };
+async function hpSearch(t, n = 5) {
+  const bias = recGeo.a || getTPlaces().find(p => p.kind === 'home') || null;
+  const r = await fetch('https://photon.komoot.io/api/?lang=de&limit=' + n + '&q=' + encodeURIComponent(t) + (bias ? '&lat=' + bias.lat.toFixed(3) + '&lon=' + bias.lon.toFixed(3) : ''));
+  if (!r.ok) throw new Error('Ortssuche nicht erreichbar'); const j = await r.json();
+  return (j.features || []).map(f => { const l = hpPhLabel(f); return { lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0], label: l.main, sub: l.sub }; }).filter(x => x.label);
+}
 async function hpResolve(txt) {
   const t = String(txt || '').trim(); if (!t) return null;
-  const pl = getTPlaces().find(p => p.name && p.name.toLowerCase() === t.toLowerCase()); if (pl) return { lat: pl.lat, lon: pl.lon, label: pl.name };
-  const g = geoOf(t); if (g) return { ...g, label: placeAt(t)?.name || t };
-  const r = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&accept-language=de&q=' + encodeURIComponent(t)); if (!r.ok) throw new Error('Adresssuche fehlgeschlagen');
-  const j = await r.json(); if (!j.length) throw new Error('„' + t + '“ nicht gefunden'); return { lat: +j[0].lat, lon: +j[0].lon, label: t };
+  const pl = getTPlaces().find(p => p.name && p.name.toLowerCase() === t.toLowerCase()); if (pl) return { lat: pl.lat, lon: pl.lon, label: pl.name, sub: 'Gespeicherter Ort' };
+  const g = geoOf(t); if (g) return { ...g, label: placeAt(t)?.name || t, sub: 'Koordinaten' };
+  const res = await hpSearch(t, 1); if (!res.length) throw new Error('„' + t + '“ nicht gefunden'); return res[0];
+}
+let hpSugT = 0, hpSugN = 0;
+function hpStatus(w, ok, txt) { const el = $('rec-st-' + w); if (!el) return; el.className = 'mt-1 text-xs text-left ' + (ok === true ? 'text-emerald-600 dark:text-emerald-400' : ok === false ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400'); el.textContent = txt || ''; }
+function hpSugHide(w) { const el = $('rec-sug-' + w); if (el) { el.innerHTML = ''; el.classList.add('hidden'); } }
+function hpSuggest(w) {
+  clearTimeout(hpSugT); const inp = $('rec-' + w), t = inp ? inp.value.trim() : ''; recGeo[w + 'Dirty'] = true;
+  if (t.length < 2 || geoOf(t)) { hpSugHide(w); hpStatus(w, null, geoOf(t) ? 'Koordinaten erkannt – Feld verlassen zum Übernehmen' : ''); return; }
+  const tl = t.toLowerCase(), own = getTPlaces().filter(p => p.name && p.name.toLowerCase().includes(tl)).slice(0, 4).map(p => ({ lat: p.lat, lon: p.lon, label: p.name, sub: 'Gespeicherter Ort' }));
+  const show = (list, more) => { const el = $('rec-sug-' + w); if (!el) return; recGeo['sug' + w] = list;
+    el.innerHTML = list.map((x, i) => `<button type="button" data-sug="${w}:${i}" class="flex w-full items-start gap-2 px-3 py-2 text-left active:bg-slate-100 dark:active:bg-slate-800"><svg class="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg><span class="min-w-0"><span class="block truncate text-sm font-medium">${esc(x.label)}</span>${x.sub ? `<span class="block truncate text-[11px] text-slate-500 dark:text-slate-400">${esc(x.sub)}</span>` : ''}</span></button>`).join('')
+      + (more ? `<p class="px-3 py-2 text-xs text-slate-500 dark:text-slate-400 text-left">${more}</p>` : '');
+    el.classList.toggle('hidden', !list.length && !more); };
+  show(own, 'Suche …'); const n = ++hpSugN;
+  hpSugT = setTimeout(async () => { try { const res = await hpSearch(t); if (n !== hpSugN) return; show(own.concat(res), res.length || own.length ? '' : 'Nichts gefunden – anders schreiben, z. B. mit Ort oder PLZ'); } catch (e) { if (n === hpSugN) show(own, 'Suche nicht erreichbar – Koordinaten (lat,lon) gehen immer'); } }, 400);
+}
+function hpPick(w, pt) {
+  recGeo[w] = pt; recGeo[w + 'Dirty'] = false; recGeo.err = ''; hpSugN++; clearTimeout(hpSugT); hpSugHide(w);
+  const inp = $('rec-' + w); if (inp) inp.value = hpLabel(pt); hpStatus(w, true, '✓ ' + [pt.label, pt.sub].filter(Boolean).join(' · ')); hpRefresh();
 }
 const hpLabel = (p) => { if (!p) return ''; const pl = placeAt(p.lat + ',' + p.lon); return p.label || (pl && pl.name) || (p.lat.toFixed(4) + ', ' + p.lon.toFixed(4)); };
 function hpBox() {
@@ -7239,8 +7264,7 @@ function hpBox() {
     : g.err ? `<p class="text-sm text-red-600 dark:text-red-400 text-left">${esc(g.err)}</p><button type="button" data-rs="hpload" class="mt-1 text-xs font-semibold text-sky-600 dark:text-sky-300">Erneut versuchen ›</button>`
     : g.prof ? `<div class="flex items-baseline justify-between gap-2 text-xs"><b class="text-sm whitespace-nowrap">Profil geladen</b><span class="text-[11px] text-slate-500 dark:text-slate-400 whitespace-nowrap">${fmt(g.prof.km, 1)} km · ↑ ${g.prof.up} m · ↓ ${g.prof.dn} m</span></div>${hpSvg(g.prof, 'A', 'B', true)}`
     : '';
-  el.innerHTML += `<div id="rec-via-row" class="${g.via || g.viaOpen ? '' : 'hidden'} mt-2"><label for="rec-via" class="text-xs text-slate-500 dark:text-slate-400">Zwischenpunkt</label><input id="rec-via" list="rec-places" type="text" value="${esc(g.via ? hpLabel(g.via) : '')}" placeholder="Ort, Adresse oder lat,lon" class="${inCls}"></div>`
-    + (g.via ? '' : `<button type="button" data-rs="via" class="mt-1 text-xs font-semibold text-sky-600 dark:text-sky-300">Andere Route? Zwischenpunkt setzen ›</button>`);
+  el.innerHTML += (g.via || g.viaOpen ? '' : `<button type="button" data-rs="via" class="mt-1 text-xs font-semibold text-sky-600 dark:text-sky-300">Andere Route? Zwischenpunkt setzen ›</button>`);
 }
 async function hpRefresh() {
   const g = recGeo; if (!g.a || !g.b) { g.prof = null; hpBox(); return; }
@@ -7250,9 +7274,9 @@ async function hpRefresh() {
 }
 async function hpField(which) {
   const inp = $('rec-' + which); if (!inp) return; const t = inp.value.trim(); const cur = recGeo[which];
-  if (!t) { recGeo[which] = null; hpRefresh(); return; } if (cur && hpLabel(cur) === t) return;
-  try { recGeo[which] = await hpResolve(t); recGeo.err = ''; } catch (e) { recGeo[which] = null; recGeo.err = e.message; hpBox(); return; }
-  hpRefresh();
+  if (!t) { recGeo[which] = null; hpSugHide(which); hpStatus(which, null, ''); hpRefresh(); return; } if (cur && hpLabel(cur) === t && !recGeo[which + 'Dirty']) return;
+  hpStatus(which, null, 'Suche …');
+  try { hpPick(which, await hpResolve(t)); } catch (e) { recGeo[which] = null; hpSugHide(which); hpStatus(which, false, ((e && e.message) || 'Nicht gefunden') + ' – bitte einen Vorschlag aus der Liste wählen'); hpRefresh(); }
 }
 
 function renderRecs() {
@@ -7278,11 +7302,11 @@ function renderRecs() {
       return `<div role="button" tabindex="0" data-rec="${esc(r ? r.id : '')}" data-newdir="${dir}" data-route="${esc(rs[0].route)}" class="block w-full cursor-pointer rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 text-left active:scale-[0.99] transition space-y-2.5">
         <span class="flex items-baseline justify-between gap-2"><span class="min-w-0 truncate text-[15px] font-bold">${esc(rs[0].route)}</span><span class="shrink-0 text-xs text-slate-500 dark:text-slate-400">${prof ? fmt(prof.km, 1) + ' km' : r && r.km ? fmt(r.km, 0) + ' km' : ''}</span></span>
         ${seg}${body}
-        ${meta.a && meta.b ? `<span class="block text-[11px] text-slate-500 dark:text-slate-400 truncate">${esc(hpLabel(dir === 'ba' ? meta.b : meta.a))} → ${esc(hpLabel(dir === 'ba' ? meta.a : meta.b))}</span>` : ''}
+        ${meta.a && meta.b ? `<span class="block text-[11px] text-slate-500 dark:text-slate-400 truncate">${esc(hpLabel(dir === 'ba' ? meta.b : meta.a))} → ${meta.via ? 'über ' + esc(hpLabel(meta.via)) + ' → ' : ''}${esc(hpLabel(dir === 'ba' ? meta.a : meta.b))}</span>` : ''}
         ${prof ? hpSvg(prof, la, lb) + `<span class="grid grid-cols-4 gap-1.5">${tile('Anstieg', '↑ ' + prof.up + ' m')}${tile('Gefälle', '↓ ' + prof.dn + ' m')}${tile('Netto', (net > 0 ? '+' : net < 0 ? '−' : '') + Math.abs(net) + ' m')}${tile('Höchster', mxh + ' m')}</span>`
           + `<span class="block rounded-xl bg-slate-100 dark:bg-slate-800/70 px-3 py-2 text-xs leading-relaxed text-slate-600 dark:text-slate-300 text-left"><b class="text-slate-900 dark:text-slate-100">Höhe ${cost >= 0 ? 'kostet' : 'spart'} hier ≈ ${fmt(Math.abs(cost), 1)} kWh/100 km</b> (${dir === 'ba' ? 'Hinweg' : 'Rückweg'} ≈ ${fmt(costO, 1)}).${r ? ` Höhenbereinigt wäre dein Bestwert ≈ <b class="text-emerald-600 dark:text-emerald-400">${fmt(r.k100 - cost, 1)}</b> – damit mit flachen Strecken vergleichbar.` : ''}</span>` : ''}
         ${r && recChips(r) ? `<span class="flex flex-wrap gap-1">${recChips(r)}</span>` : ''}${r && r.note ? `<span class="block text-xs text-slate-500 dark:text-slate-400 text-left">${esc(r.note)}</span>` : ''}
-        ${prof ? '<span class="block text-[10px] text-slate-400 dark:text-slate-500 text-left">Route: OSRM · © OpenStreetMap · Höhen: Open-Meteo (Copernicus DEM 90 m) · grobe Schätzung (2,1 t, 80 % bergab zurück)</span>' : ''}</div>`; }).join('')
+        ${prof ? '<span class="block text-[10px] text-slate-400 dark:text-slate-500 text-left">Route: OSRM · Suche: Photon · © OpenStreetMap · Höhen: Open-Meteo (Copernicus DEM 90 m) · grobe Schätzung (2,1 t, 80 % bergab zurück)</span>' : ''}</div>`; }).join('')
       || '<p class="rounded-3xl bg-white dark:bg-slate-900 p-4 text-sm text-slate-600 dark:text-slate-300 text-left">Noch keine Rekorde. Trage über „+“ deinen Bestwert je Strecke ein, mit Start und Ziel für das Höhenprofil. Ein neuer Eintrag für dieselbe Strecke und Richtung ersetzt den alten.</p>';
   } else h = speedCard(lab.speeds);
   $('rec-list').innerHTML = h;
@@ -7326,10 +7350,10 @@ function openRecSheet(id, pre) {
   recGeo = { a: meta.a || null, b: meta.b || null, via: meta.via || null, prof: hpN(meta.prof), both: !!meta.both || d.dir === 'ba', busy: false, err: '' };
   $('rec-sheet-box').innerHTML = `<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div><p class="text-lg font-bold">${r ? 'Rekord bearbeiten' : 'Rekord eintragen'}</p>
     <div><label for="rec-route" class="text-xs text-slate-500 dark:text-slate-400">Strecke</label><input id="rec-route" list="rec-routes" type="text" maxlength="40" value="${esc(d.route || '')}" placeholder="z. B. Arbeitsweg oder A6 Tempomat 110" class="${inCls}"><datalist id="rec-routes">${routes.map(x => `<option value="${esc(x)}"></option>`).join('')}</datalist></div>
-    <datalist id="rec-places">${getTPlaces().filter(p => p.name).map(p => `<option value="${esc(p.name)}"></option>`).join('')}</datalist>
-    <div><label for="rec-a" class="text-xs text-slate-500 dark:text-slate-400">Start (A)</label><input id="rec-a" list="rec-places" type="text" value="${esc(hpLabel(recGeo.a))}" placeholder="Ort, Adresse oder lat,lon" class="${inCls}"></div>
-    <div><label for="rec-b" class="text-xs text-slate-500 dark:text-slate-400">Ziel (B)</label><input id="rec-b" list="rec-places" type="text" value="${esc(hpLabel(recGeo.b))}" placeholder="Ort, Adresse oder lat,lon" class="${inCls}"></div>
-    <p class="-mt-1 text-[11px] text-slate-500 dark:text-slate-400 text-left">Aus deinen Orten, einer Fahrt aus dem Fahrtenbuch oder als Adresse</p>
+    <div class="relative"><label for="rec-a" class="text-xs text-slate-500 dark:text-slate-400">Start (A)</label><input id="rec-a" type="text" autocomplete="off" enterkeyhint="done" value="${esc(hpLabel(recGeo.a))}" placeholder="Ort, Adresse oder lat,lon" class="${inCls}"><div id="rec-sug-a" class="hidden mt-1 max-h-60 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-lg divide-y divide-slate-100 dark:divide-slate-800"></div><p id="rec-st-a" class="mt-1 text-xs text-left text-emerald-600 dark:text-emerald-400 empty:hidden">${hpLabel(recGeo.a) ? '✓ ' + esc(hpLabel(recGeo.a)) : ''}</p></div>
+    <div class="relative"><label for="rec-b" class="text-xs text-slate-500 dark:text-slate-400">Ziel (B)</label><input id="rec-b" type="text" autocomplete="off" enterkeyhint="done" value="${esc(hpLabel(recGeo.b))}" placeholder="Ort, Adresse oder lat,lon" class="${inCls}"><div id="rec-sug-b" class="hidden mt-1 max-h-60 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-lg divide-y divide-slate-100 dark:divide-slate-800"></div><p id="rec-st-b" class="mt-1 text-xs text-left text-emerald-600 dark:text-emerald-400 empty:hidden">${hpLabel(recGeo.b) ? '✓ ' + esc(hpLabel(recGeo.b)) : ''}</p></div>
+    <div id="rec-via-row" class="${recGeo.via ? '' : 'hidden'}"><div class="relative"><label for="rec-via" class="text-xs text-slate-500 dark:text-slate-400">Zwischenpunkt (optional)</label><input id="rec-via" type="text" autocomplete="off" enterkeyhint="done" value="${esc(hpLabel(recGeo.via))}" placeholder="Ort, Adresse oder lat,lon" class="${inCls}"><div id="rec-sug-via" class="hidden mt-1 max-h-60 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-lg divide-y divide-slate-100 dark:divide-slate-800"></div><p id="rec-st-via" class="mt-1 text-xs text-left text-emerald-600 dark:text-emerald-400 empty:hidden">${hpLabel(recGeo.via) ? '✓ ' + esc(hpLabel(recGeo.via)) : ''}</p></div></div>
+    <p class="-mt-1 text-[11px] text-slate-500 dark:text-slate-400 text-left">Beim Tippen erscheinen Vorschläge (deine Orte und Adressen) – einen antippen. Oder eine Fahrt aus dem Fahrtenbuch übernehmen.</p>
     <div id="rec-hp" class="rounded-xl bg-slate-100 dark:bg-slate-800/70 px-3 py-2.5"></div>
     <label class="flex items-center gap-2.5 text-sm"><input id="rec-both" type="checkbox" ${recGeo.both ? 'checked' : ''} class="h-5 w-5 accent-emerald-600">Rückweg B → A mit eigenem Bestwert führen</label>
     <div id="rec-dir-row" class="${recGeo.both ? '' : 'hidden'}"><p class="text-xs text-slate-500 dark:text-slate-400">Richtung</p><div id="rec-dir" class="mt-1 flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 text-sm">${[['ab', 'A → B · Hin'], ['ba', 'B → A · Rück']].map(([v, l]) => `<button type="button" data-dirv="${v}" class="flex-1 rounded-lg py-1.5 font-medium ${(d.dir === 'ba' ? 'ba' : 'ab') === v ? 'bg-white dark:bg-slate-600 shadow-sm' : 'text-slate-500 dark:text-slate-400'}">${l}</button>`).join('')}</div></div>
@@ -7348,7 +7372,9 @@ function recHint() {
   const dk = recKey(rt) + '|' + recDirVal(), own = recEdit ? getLab().recs.find(r => r.id === recEdit) : null, others = getLab().recs.filter(r => recDirKey(r) === dk && r.id !== recEdit), best = others.length ? Math.min(...others.map(r => r.k100)) : (own && recDirKey(own) === dk ? own.k100 : null);
   h.textContent = !rt || !(k > 0) || best == null ? (rt && k > 0 ? 'Erster Eintrag für „' + rt + '“' : '') : k < best ? 'Neuer Bestwert für „' + rt + '“ – ersetzt ' + fmt(best, 1) : k > best ? 'Achtung: Bisheriger Bestwert ' + fmt(best, 1) + ' ist besser. Speichern ersetzt ihn trotzdem.' : '';
 }
-$('rec-sheet').addEventListener('input', recHint);
+$('rec-sheet').addEventListener('input', (e) => { const m = /^rec-(a|b|via)$/.exec(e.target.id || ''); if (m) hpSuggest(m[1]); else recHint(); });
+$('rec-sheet').addEventListener('pointerdown', (e) => { if (e.target.closest('[data-sug]')) e.preventDefault(); });   // Fokus im Feld lassen, damit kein „change“ vor der Auswahl feuert
+$('rec-sheet').addEventListener('keydown', (e) => { const m = /^rec-(a|b|via)$/.exec(e.target.id || ''); if (m && e.key === 'Enter') { e.preventDefault(); const l = recGeo['sug' + m[1]]; if (l && l.length && !$('rec-sug-' + m[1]).classList.contains('hidden')) hpPick(m[1], l[0]); else e.target.blur(); } });
 $('rec-sheet').addEventListener('change', (e) => {
   const id = e.target.id;
   if (id === 'rec-a') hpField('a'); else if (id === 'rec-b') hpField('b'); else if (id === 'rec-via') hpField('via');
@@ -7358,11 +7384,12 @@ $('rec-sheet').addEventListener('change', (e) => {
 $('rec-sheet').addEventListener('click', (e) => {
   if (e.target === $('rec-sheet')) { $('rec-sheet').classList.add('hidden'); return; }
   const c = e.target.closest('[data-cond]'); if (c) { const on = c.getAttribute('aria-pressed') !== 'true'; c.setAttribute('aria-pressed', on); ['border-emerald-600', 'bg-emerald-600/15', 'text-emerald-700', 'dark:text-emerald-300'].forEach(x => c.classList.toggle(x, on)); ['border-slate-300', 'dark:border-slate-700', 'text-slate-600', 'dark:text-slate-300'].forEach(x => c.classList.toggle(x, !on)); return; }
+  const sg = e.target.closest('[data-sug]'); if (sg) { const [w, i] = sg.dataset.sug.split(':'); const pt = (recGeo['sug' + w] || [])[+i]; if (pt) hpPick(w, pt); return; }
   const dv = e.target.closest('[data-dirv]'); if (dv) { dv.parentElement.querySelectorAll('[data-dirv]').forEach(x => { const on = x === dv; x.classList.toggle('bg-white', on); x.classList.toggle('dark:bg-slate-600', on); x.classList.toggle('shadow-sm', on); x.classList.toggle('text-slate-500', !on); x.classList.toggle('dark:text-slate-400', !on); }); recHint(); return; }
-  const tp = e.target.closest('[data-trip]'); if (tp) { const t = getTrips().find(x => String(x.id) === tp.dataset.trip); if (t) { const g0 = geoOf(t.p0), g1 = geoOf(t.p1); if (g0 && g1 && !recGeo.a && !recGeo.b) { recGeo.a = { ...g0, label: placeAt(t.p0)?.name || recTown(t.a0) || '' }; recGeo.b = { ...g1, label: placeAt(t.p1)?.name || recTown(t.a1) || '' }; $('rec-a').value = hpLabel(recGeo.a); $('rec-b').value = hpLabel(recGeo.b); hpRefresh(); } $('rec-date').value = wxIso(new Date(t.s)); $('rec-km').value = String(t.km).replace('.', ','); if (t.k100) $('rec-k').value = String(t.k100).replace('.', ','); if (t.v) $('rec-v').value = String(Math.round(t.v)); $('rec-trips').classList.add('hidden'); recHint(); } return; }
+  const tp = e.target.closest('[data-trip]'); if (tp) { const t = getTrips().find(x => String(x.id) === tp.dataset.trip); if (t) { const g0 = geoOf(t.p0), g1 = geoOf(t.p1); if (g0 && g1 && !recGeo.a && !recGeo.b) { recGeo.a = { ...g0, label: placeAt(t.p0)?.name || recTown(t.a0) || '' }; recGeo.b = { ...g1, label: placeAt(t.p1)?.name || recTown(t.a1) || '' }; $('rec-a').value = hpLabel(recGeo.a); $('rec-b').value = hpLabel(recGeo.b); hpStatus('a', true, '✓ ' + hpLabel(recGeo.a) + ' · aus Fahrt'); hpStatus('b', true, '✓ ' + hpLabel(recGeo.b) + ' · aus Fahrt'); hpRefresh(); } $('rec-date').value = wxIso(new Date(t.s)); $('rec-km').value = String(t.km).replace('.', ','); if (t.k100) $('rec-k').value = String(t.k100).replace('.', ','); if (t.v) $('rec-v').value = String(Math.round(t.v)); $('rec-trips').classList.add('hidden'); recHint(); } return; }
   const b = e.target.closest('[data-rs]'); if (!b) return; const act = b.dataset.rs, lab = getLab();
   if (act === 'close') $('rec-sheet').classList.add('hidden');
-  else if (act === 'via') { recGeo.viaOpen = true; hpBox(); setTimeout(() => $('rec-via')?.focus(), 50); }
+  else if (act === 'via') { recGeo.viaOpen = true; $('rec-via-row').classList.remove('hidden'); hpBox(); setTimeout(() => { $('rec-via')?.focus(); $('rec-via-row').scrollIntoView({ block: 'center', behavior: 'smooth' }); }, 50); }
   else if (act === 'hpload') hpRefresh();
   else if (act === 'trip') { const box = $('rec-trips'), ts = getTrips().filter(t => t.km >= 3 && t.k100 > 0).sort((a, b) => Date.parse(b.s) - Date.parse(a.s)).slice(0, 12);
     box.innerHTML = ts.length ? ts.map(t => `<button type="button" data-trip="${esc(String(t.id))}" class="flex w-full items-center justify-between gap-2 rounded-xl bg-slate-100 dark:bg-slate-800 px-3 py-2 text-left text-sm"><span class="min-w-0 truncate">${new Date(t.s).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })} · ${fmt(t.km, 0)} km${t.v ? ' · Ø ' + fmt(t.v, 0) + ' km/h' : ''}${recTown(t.a0) && recTown(t.a1) ? ' · ' + esc(recTown(t.a0)) + ' → ' + esc(recTown(t.a1)) : ''}</span><b class="shrink-0 tabular-nums">${fmt(t.k100, 1)}</b></button>`).join('') : '<p class="text-xs text-slate-500">Keine Fahrten im Fahrtenbuch.</p>'; box.classList.toggle('hidden'); }
