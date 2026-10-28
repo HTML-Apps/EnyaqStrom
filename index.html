@@ -3224,7 +3224,8 @@ function importPrefsFromBackup(text) {
     const cur = load(KEY_LAB, null), base = getLab(), ids = new Set(base.curves.concat(base.recs).map(x => String(x.id)));
     const ac = (d.lab.curves || []).filter(x => x && x.id && !ids.has(String(x.id))), ar = (d.lab.recs || []).filter(x => x && x.id && !ids.has(String(x.id)));
     const sids = new Set(base.speeds.map(x => String(x.id))), as = (Array.isArray(d.lab.speeds) ? d.lab.speeds : []).filter(x => x && x.id && !sids.has(String(x.id)));
-    if (!cur || ac.length || ar.length || as.length) setLab({ curves: base.curves.concat(ac), recs: base.recs.concat(ar), speeds: base.speeds.concat(as) });
+    const rts = { ...(d.lab.routes && typeof d.lab.routes === 'object' ? d.lab.routes : {}), ...base.routes }, nr = Object.keys(rts).length !== Object.keys(base.routes).length;
+    if (!cur || ac.length || ar.length || as.length || nr) setLab({ curves: base.curves.concat(ac), recs: base.recs.concat(ar), speeds: base.speeds.concat(as), routes: rts });
   }
   if (d.settings && typeof d.settings === 'object' && Object.keys(d.settings).length && confirm('Die Sicherung enthält auch Einstellungen (Strompreis, Akku, Fahrzeugdaten, Kauftag …).\n\nOK = Einstellungen aus der Sicherung übernehmen\nAbbrechen = aktuelle Einstellungen behalten')) {
     const keep = load(KEY_SETTINGS, {}) || {}, n = { ...d.settings }; delete n.pin; if (keep.pin) n.pin = keep.pin;
@@ -7058,7 +7059,7 @@ const LAB_DEF = {
     pts: { 10: 101, 20: 102, 30: 94, 40: 83, 50: 74, 60: 66, 70: 58, 80: 55, 81: 40, 90: 30, 95: 27, 100: 22 }, tail: [{ a: 80, b: 90, min: 10 }, { a: 90, b: 100, min: 13 }] }],
   recs: [], speeds: [{ id: 's1', season: 'Sommer', klima: 'an', note: 'eben', rows: [{ v: 90, k: 13 }, { v: 100, k: 15 }, { v: 110, k: 17 }, { v: 120, k: 18.5 }, { v: 130, k: 21 }] }] };
 const cvMig = (c) => c && c.id === 'c1' && c.date === '2026-08-21' && c.s1 === 80 && !c.tail ? { ...c, tail: LAB_DEF.curves[0].tail, pts: { ...LAB_DEF.curves[0].pts, ...(c.pts || {}) } } : c;   // 80→100 % nachgetragen (10 + 13 min)
-function getLab() { const o = load(KEY_LAB, null); return { curves: o && Array.isArray(o.curves) ? o.curves.map(cvMig) : LAB_DEF.curves.slice(), recs: o && Array.isArray(o.recs) ? o.recs : [], speeds: o && Array.isArray(o.speeds) ? o.speeds : o && o.speed && Array.isArray(o.speed.rows) ? [{ id: 's1', season: 'Sommer', klima: 'an', note: 'eben', rows: o.speed.rows }] : JSON.parse(JSON.stringify(LAB_DEF.speeds)) }; }
+function getLab() { const o = load(KEY_LAB, null); return { curves: o && Array.isArray(o.curves) ? o.curves.map(cvMig) : LAB_DEF.curves.slice(), recs: o && Array.isArray(o.recs) ? o.recs : [], routes: o && o.routes && typeof o.routes === 'object' && !Array.isArray(o.routes) ? o.routes : {}, speeds: o && Array.isArray(o.speeds) ? o.speeds : o && o.speed && Array.isArray(o.speed.rows) ? [{ id: 's1', season: 'Sommer', klima: 'an', note: 'eben', rows: o.speed.rows }] : JSON.parse(JSON.stringify(LAB_DEF.speeds)) }; }
 const recKey = (r) => String(r || '').trim().toLowerCase();
 function setLab(o) { save(KEY_LAB, JSON.parse(JSON.stringify(o))); try { pushPrefs(); } catch (e) { } try { renderCurve(); } catch (e) { } if (currentView === 'recs') renderRecs(); }
 const labId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -7179,9 +7180,79 @@ const REC_COND = ['Klima aus', 'Klima an', 'Heizung', 'Tempomat', 'trocken', 'Re
 let recRoute = 'all', recEdit = null;
 function recChips(r) { return [r.tOut != null ? 'Außen ' + fmt(r.tOut, 0) + ' °C' : '', r.tBat != null ? 'Akku ' + fmt(r.tBat, 0) + ' °C' : '', r.v ? 'Ø ' + fmt(r.v, 0) + ' km/h' : ''].concat(r.cond || []).filter(Boolean).map(t => `<span class="inline-flex h-[22px] items-center rounded-md bg-slate-100 dark:bg-slate-800 px-1.5 text-[11px] text-slate-600 dark:text-slate-300">${esc(t)}</span>`).join(''); }
 const CUP = '<svg class="h-[22px] w-[22px]" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></svg>';
+/* ---- Höhenprofil je Strecke: Route über OSRM (OpenStreetMap), Höhen über Open-Meteo (Copernicus DEM 90 m); wird einmal geladen und mit der Strecke gespeichert (lab.routes) ---- */
+const HP_MASS = 2100, HP_ETA = 0.9, HP_RECUP = 0.8;                          // kg inkl. Fahrer; Antriebswirkungsgrad bergauf; bergab genutzter Anteil (Rollen + Rekuperation)
+const rtKey = (route) => recKey(route);
+const recDirKey = (r) => recKey(r.route) + '|' + (r.dir === 'ba' ? 'ba' : 'ab');
+let recGeo = { a: null, b: null, via: null, prof: null, busy: false, err: '' }, recDirSel = {};
+function hpRev(p) { return { ...p, up: p.dn, dn: p.up, pts: p.pts.map(([d, h]) => [Math.round((p.km - d) * 100) / 100, h]).reverse() }; }
+function hpCost(p) { const kwh = (h) => HP_MASS * 9.81 * h / 3.6e6; return p.km > 0 ? (kwh(p.up) / HP_ETA - kwh(p.dn) * HP_RECUP) / p.km * 100 : 0; }   // zusätzliche kWh/100 km durch die Höhe
+async function hpLoad(a, b, via) {
+  const wp = [a, via, b].filter(Boolean).map(p => p.lon.toFixed(5) + ',' + p.lat.toFixed(5)).join(';');
+  const rr = await fetch('https://router.project-osrm.org/route/v1/driving/' + wp + '?overview=full&geometries=geojson'); if (!rr.ok) throw new Error('Route nicht gefunden (' + rr.status + ')');
+  const rj = await rr.json(), rt = rj.routes && rj.routes[0]; if (!rt) throw new Error('Keine Route gefunden');
+  const cs = rt.geometry.coordinates.map(([lon, lat]) => ({ lat, lon })), cum = [0];
+  for (let i = 1; i < cs.length; i++) cum.push(cum[i - 1] + geoDist(cs[i - 1], cs[i]));
+  const tot = cum[cum.length - 1], N = Math.min(100, Math.max(2, cs.length)), smp = []; let j = 0;
+  for (let k = 0; k < N; k++) { const t = tot * k / (N - 1); while (j < cum.length - 2 && cum[j + 1] < t) j++; const f = cum[j + 1] > cum[j] ? (t - cum[j]) / (cum[j + 1] - cum[j]) : 0; smp.push({ d: t, lat: cs[j].lat + (cs[j + 1 < cs.length ? j + 1 : j].lat - cs[j].lat) * f, lon: cs[j].lon + (cs[j + 1 < cs.length ? j + 1 : j].lon - cs[j].lon) * f }); }
+  const er = await fetch('https://api.open-meteo.com/v1/elevation?latitude=' + smp.map(s => s.lat.toFixed(5)).join(',') + '&longitude=' + smp.map(s => s.lon.toFixed(5)).join(','));
+  if (!er.ok) throw new Error('Höhen nicht verfügbar (' + er.status + ')'); const ej = await er.json(), el = ej.elevation || [];
+  const hs = el.map((h, i) => (Number(el[i - 1] ?? h) + Number(h) * 2 + Number(el[i + 1] ?? h)) / 4);   // leicht geglättet gegen Rasterrauschen
+  let up = 0, dn = 0; for (let i = 1; i < hs.length; i++) { const dh = hs[i] - hs[i - 1]; if (dh > 0) up += dh; else dn -= dh; }
+  return { km: Math.round(tot / 10) / 100, up: Math.round(up), dn: Math.round(dn), pts: smp.map((s, i) => [Math.round(s.d / 10) / 100, Math.round(hs[i])]) };
+}
+function hpSvg(p, la = 'A', lb = 'B', mini = false) {
+  const W = 296, H = mini ? 56 : 110, L = mini ? 0 : 30, T = mini ? 4 : 14, B = mini ? 2 : 20, hs = p.pts.map(x => x[1]);
+  let y0 = Math.min(...hs), y1 = Math.max(...hs); const pad = Math.max(10, (y1 - y0) * 0.15); y0 = Math.floor((y0 - pad) / 10) * 10; y1 = Math.ceil((y1 + pad) / 10) * 10;
+  const X = (d) => L + d / (p.km || 1) * (W - L - 4), Y = (h) => T + (1 - (h - y0) / (y1 - y0 || 1)) * (H - T - B);
+  const d = 'M' + p.pts.map(([x, h]) => X(x).toFixed(1) + ' ' + Y(h).toFixed(1)).join(' L'), area = d + ` L${X(p.km).toFixed(1)} ${H - B} L${X(0).toFixed(1)} ${H - B} Z`;
+  if (mini) return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true" class="mt-1 w-full" style="height:${H}px"><path d="${area}" fill="#34d399" fill-opacity=".18"/><path d="${d}" fill="none" stroke="#34d399" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>`;
+  const mx = p.pts.reduce((a, x) => x[1] > a[1] ? x : a, p.pts[0]), st = Math.max(10, Math.ceil((y1 - y0) / 3 / 10) * 10), ticks = []; for (let v = Math.ceil(y0 / st) * st; v <= y1; v += st) ticks.push(v);
+  const xs = [0, 5, 10, 15, 20, 30, 40, 50, 75, 100, 150, 200].filter(v => v <= p.km).filter((v, i, a) => a.length <= 5 || v % 10 === 0 || v === 0 || v === 5 || v === 15).slice(0, 6);
+  const f = p.pts[0], l = p.pts[p.pts.length - 1];
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Höhenprofil ${la} nach ${lb}" class="w-full"><defs><linearGradient id="hpg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#34d399" stop-opacity=".35"/><stop offset="1" stop-color="#34d399" stop-opacity="0"/></linearGradient></defs>`
+    + ticks.map(v => `<line x1="${L}" x2="${W - 4}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="currentColor" class="text-slate-200 dark:text-slate-800"/><text x="${L - 4}" y="${(Y(v) + 3.5).toFixed(1)}" text-anchor="end" font-size="9.5" fill="#94a3b8">${v}</text>`).join('')
+    + xs.map(v => `<text x="${X(v).toFixed(1)}" y="${H - 4}" text-anchor="middle" font-size="9.5" fill="#94a3b8">${v} km</text>`).join('')
+    + `<path d="${area}" fill="url(#hpg)"/><path d="${d}" fill="none" stroke="#34d399" stroke-width="2" stroke-linejoin="round"/>`
+    + `<circle cx="${X(0)}" cy="${Y(f[1]).toFixed(1)}" r="3.5" fill="currentColor" class="text-slate-700 dark:text-slate-100"/><text x="${X(0) + 5}" y="${(Y(f[1]) + 13).toFixed(1)}" font-size="9.5" fill="#94a3b8">${la}</text>`
+    + `<circle cx="${X(p.km)}" cy="${Y(l[1]).toFixed(1)}" r="3.5" fill="currentColor" class="text-slate-700 dark:text-slate-100"/><text x="${X(p.km) - 5}" y="${(Y(l[1]) + 13).toFixed(1)}" text-anchor="end" font-size="9.5" fill="#94a3b8">${lb}</text>`
+    + `<text x="${Math.min(W - 24, Math.max(L + 20, X(mx[0]))).toFixed(1)}" y="${(Y(mx[1]) - 5).toFixed(1)}" text-anchor="middle" font-size="9.5" font-weight="600" fill="#10b981">${mx[1]} m</text></svg>`;
+}
+/* Ort auflösen: gespeicherter Ort (Name), „lat,lon“ oder Adresse (OpenStreetMap-Suche) */
+async function hpResolve(txt) {
+  const t = String(txt || '').trim(); if (!t) return null;
+  const pl = getTPlaces().find(p => p.name && p.name.toLowerCase() === t.toLowerCase()); if (pl) return { lat: pl.lat, lon: pl.lon, label: pl.name };
+  const g = geoOf(t); if (g) return { ...g, label: placeAt(t)?.name || t };
+  const r = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&accept-language=de&q=' + encodeURIComponent(t)); if (!r.ok) throw new Error('Adresssuche fehlgeschlagen');
+  const j = await r.json(); if (!j.length) throw new Error('„' + t + '“ nicht gefunden'); return { lat: +j[0].lat, lon: +j[0].lon, label: t };
+}
+const hpLabel = (p) => { if (!p) return ''; const pl = placeAt(p.lat + ',' + p.lon); return p.label || (pl && pl.name) || (p.lat.toFixed(4) + ', ' + p.lon.toFixed(4)); };
+function hpBox() {
+  const el = $('rec-hp'); if (!el) return; const g = recGeo;
+  if (!g.a || !g.b) { el.innerHTML = '<p class="text-xs text-slate-500 dark:text-slate-400 text-left">Mit Start und Ziel lädt die App das Höhenprofil der Route.</p>'; return; }
+  el.innerHTML = g.busy ? '<p class="text-sm text-slate-500 dark:text-slate-400 text-left">Höhenprofil wird geladen …</p>'
+    : g.err ? `<p class="text-sm text-red-600 dark:text-red-400 text-left">${esc(g.err)}</p><button type="button" data-rs="hpload" class="mt-1 text-xs font-semibold text-sky-600 dark:text-sky-300">Erneut versuchen ›</button>`
+    : g.prof ? `<div class="flex items-baseline justify-between gap-2 text-xs"><b class="text-sm whitespace-nowrap">Profil geladen</b><span class="text-[11px] text-slate-500 dark:text-slate-400 whitespace-nowrap">${fmt(g.prof.km, 1)} km · ↑ ${g.prof.up} m · ↓ ${g.prof.dn} m</span></div>${hpSvg(g.prof, 'A', 'B', true)}`
+    : '';
+  el.innerHTML += `<div id="rec-via-row" class="${g.via || g.viaOpen ? '' : 'hidden'} mt-2"><label for="rec-via" class="text-xs text-slate-500 dark:text-slate-400">Zwischenpunkt</label><input id="rec-via" list="rec-places" type="text" value="${esc(g.via ? hpLabel(g.via) : '')}" placeholder="Ort, Adresse oder lat,lon" class="${inCls}"></div>`
+    + (g.via ? '' : `<button type="button" data-rs="via" class="mt-1 text-xs font-semibold text-sky-600 dark:text-sky-300">Andere Route? Zwischenpunkt setzen ›</button>`);
+}
+async function hpRefresh() {
+  const g = recGeo; if (!g.a || !g.b) { g.prof = null; hpBox(); return; }
+  g.busy = true; g.err = ''; hpBox();
+  try { g.prof = await hpLoad(g.a, g.b, g.via); } catch (e) { g.prof = null; g.err = 'Höhenprofil nicht geladen: ' + ((e && e.message) || 'kein Internet?'); }
+  g.busy = false; hpBox(); recHint();
+}
+async function hpField(which) {
+  const inp = $('rec-' + which); if (!inp) return; const t = inp.value.trim(); const cur = recGeo[which];
+  if (!t) { recGeo[which] = null; hpRefresh(); return; } if (cur && hpLabel(cur) === t) return;
+  try { recGeo[which] = await hpResolve(t); recGeo.err = ''; } catch (e) { recGeo[which] = null; recGeo.err = e.message; hpBox(); return; }
+  hpRefresh();
+}
+
 function renderRecs() {
   const lab = getLab(), byRoute = new Map();
-  lab.recs.forEach(r => { const k = recKey(r.route), o = byRoute.get(k); if (!o || r.k100 < o.k100) byRoute.set(k, r); });   // je Strecke ein Eintrag (ältere Doppelte: der beste zählt)
+  lab.recs.forEach(r => { const k = recDirKey(r), o = byRoute.get(k); if (!o || r.k100 < o.k100) byRoute.set(k, r); });   // je Strecke ein Eintrag (ältere Doppelte: der beste zählt)
   const recs = [...byRoute.values()].sort((a, b) => a.route.localeCompare(b.route, 'de'));
   if (recRoute !== 'all' && recRoute !== 'speed') recRoute = 'all';
   const chip = (k, l) => `<button type="button" data-rr="${esc(k)}" class="h-8 shrink-0 whitespace-nowrap rounded-full px-3 text-xs font-semibold ${recRoute === k ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900' : 'border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300'}">${esc(l)}</button>`;
@@ -7189,11 +7260,25 @@ function renderRecs() {
   $('rec-add').setAttribute('aria-label', recRoute === 'speed' ? 'Neue Messreihe' : 'Neuer Rekord');
   let h = '';
   if (recRoute === 'all') {
-    h = recs.map(r => `<button type="button" data-rec="${esc(r.id)}" class="w-full rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 text-left active:scale-[0.99] transition space-y-2">
-        <span class="flex items-baseline justify-between gap-2"><span class="min-w-0 truncate text-[15px] font-bold">${esc(r.route)}</span><span class="shrink-0 text-xs text-slate-500 dark:text-slate-400">${r.km ? fmt(r.km, 0) + ' km' : ''}</span></span>
-        <span class="flex items-center gap-3"><span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-600 dark:bg-amber-950 dark:text-amber-400">${CUP}</span><span><span class="block font-barlow text-[30px] font-bold leading-none text-emerald-600 dark:text-emerald-400">${fmt(r.k100, 1)} <span class="font-sans text-[13px] font-medium text-slate-500 dark:text-slate-400">kWh/100 km</span></span><span class="block text-xs text-slate-500 dark:text-slate-400">Bestwert · ${labD(r.date)}</span></span></span>
-        ${recChips(r) ? `<span class="flex flex-wrap gap-1">${recChips(r)}</span>` : ''}${r.note ? `<span class="block text-xs text-slate-500 dark:text-slate-400 text-left">${esc(r.note)}</span>` : ''}</button>`).join('')
-      || '<p class="rounded-3xl bg-white dark:bg-slate-900 p-4 text-sm text-slate-600 dark:text-slate-300 text-left">Noch keine Rekorde. Trage über „+“ deinen Bestwert je Strecke ein, mit Außentemperatur und Bedingungen. Ein neuer Eintrag für dieselbe Strecke ersetzt den alten.</p>';
+    const groups = new Map(); recs.forEach(r => { const k = recKey(r.route); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); });
+    h = [...groups.entries()].sort((a, b) => a[1][0].route.localeCompare(b[1][0].route, 'de')).map(([k, rs]) => {
+      const meta = lab.routes[k] || {}, ab = rs.find(r => r.dir !== 'ba'), ba = rs.find(r => r.dir === 'ba'), two = !!(meta.both || (ab && ba));
+      const dir = two ? (recDirSel[k] || (ab ? 'ab' : 'ba')) : (ab ? 'ab' : 'ba'), r = (dir === 'ba' ? ba : ab), other = dir === 'ba' ? ab : ba;
+      const prof = meta.prof ? (dir === 'ba' ? hpRev(meta.prof) : meta.prof) : null, la = dir === 'ba' ? 'B' : 'A', lb = dir === 'ba' ? 'A' : 'B';
+      const seg = two ? `<span class="flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 text-xs font-semibold">${[['ab', 'Hin · A → B'], ['ba', 'Rück · B → A']].map(([v, l]) => `<span role="button" tabindex="0" data-rdir="${v}" data-rk="${esc(k)}" class="flex-1 rounded-lg py-1.5 text-center ${v === dir ? 'bg-white dark:bg-slate-600 shadow-sm' : 'text-slate-500 dark:text-slate-400'}">${l}</span>`).join('')}</span>` : '';
+      const cost = prof ? hpCost(prof) : null, costO = prof ? hpCost(hpRev(prof)) : null, tile = (l, v) => `<span class="rounded-xl bg-slate-100 dark:bg-slate-800/70 px-0.5 py-1.5 text-center"><span class="block text-[10.5px] text-slate-500 dark:text-slate-400">${l}</span><span class="block text-[14px] font-bold tabular-nums">${v}</span></span>`;
+      const net = prof ? prof.pts[prof.pts.length - 1][1] - prof.pts[0][1] : 0, mxh = prof ? Math.max(...prof.pts.map(x => x[1])) : 0;
+      const body = r ? `<span class="flex items-center gap-3"><span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-600 dark:bg-amber-950 dark:text-amber-400">${CUP}</span><span><span class="block font-barlow text-[30px] font-bold leading-none text-emerald-600 dark:text-emerald-400">${fmt(r.k100, 1)} <span class="font-sans text-[13px] font-medium text-slate-500 dark:text-slate-400">kWh/100 km</span></span><span class="block text-xs text-slate-500 dark:text-slate-400">Bestwert · ${labD(r.date)}${other ? ' · ' + (dir === 'ba' ? 'Hinweg ' : 'Rückweg ') + fmt(other.k100, 1) : ''}</span></span></span>`
+        : `<span class="block rounded-xl bg-slate-100 dark:bg-slate-800/70 px-3 py-2.5 text-sm text-slate-600 dark:text-slate-300 text-left">Für ${dir === 'ba' ? 'den Rückweg' : 'den Hinweg'} noch kein Bestwert. Antippen zum Eintragen.</span>`;
+      return `<div role="button" tabindex="0" data-rec="${esc(r ? r.id : '')}" data-newdir="${dir}" data-route="${esc(rs[0].route)}" class="block w-full cursor-pointer rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 text-left active:scale-[0.99] transition space-y-2.5">
+        <span class="flex items-baseline justify-between gap-2"><span class="min-w-0 truncate text-[15px] font-bold">${esc(rs[0].route)}</span><span class="shrink-0 text-xs text-slate-500 dark:text-slate-400">${prof ? fmt(prof.km, 1) + ' km' : r && r.km ? fmt(r.km, 0) + ' km' : ''}</span></span>
+        ${seg}${body}
+        ${meta.a && meta.b ? `<span class="block text-[11px] text-slate-500 dark:text-slate-400 truncate">${esc(hpLabel(dir === 'ba' ? meta.b : meta.a))} → ${esc(hpLabel(dir === 'ba' ? meta.a : meta.b))}</span>` : ''}
+        ${prof ? hpSvg(prof, la, lb) + `<span class="grid grid-cols-4 gap-1.5">${tile('Anstieg', '↑ ' + prof.up + ' m')}${tile('Gefälle', '↓ ' + prof.dn + ' m')}${tile('Netto', (net > 0 ? '+' : net < 0 ? '−' : '') + Math.abs(net) + ' m')}${tile('Höchster', mxh + ' m')}</span>`
+          + `<span class="block rounded-xl bg-slate-100 dark:bg-slate-800/70 px-3 py-2 text-xs leading-relaxed text-slate-600 dark:text-slate-300 text-left"><b class="text-slate-900 dark:text-slate-100">Höhe ${cost >= 0 ? 'kostet' : 'spart'} hier ≈ ${fmt(Math.abs(cost), 1)} kWh/100 km</b> (${dir === 'ba' ? 'Hinweg' : 'Rückweg'} ≈ ${fmt(costO, 1)}).${r ? ` Höhenbereinigt wäre dein Bestwert ≈ <b class="text-emerald-600 dark:text-emerald-400">${fmt(r.k100 - cost, 1)}</b> – damit mit flachen Strecken vergleichbar.` : ''}</span>` : ''}
+        ${r && recChips(r) ? `<span class="flex flex-wrap gap-1">${recChips(r)}</span>` : ''}${r && r.note ? `<span class="block text-xs text-slate-500 dark:text-slate-400 text-left">${esc(r.note)}</span>` : ''}
+        ${prof ? '<span class="block text-[10px] text-slate-400 dark:text-slate-500 text-left">Route: OSRM · © OpenStreetMap · Höhen: Open-Meteo (Copernicus DEM 90 m) · grobe Schätzung (2,1 t, 80 % bergab zurück)</span>' : ''}</div>`; }).join('')
+      || '<p class="rounded-3xl bg-white dark:bg-slate-900 p-4 text-sm text-slate-600 dark:text-slate-300 text-left">Noch keine Rekorde. Trage über „+“ deinen Bestwert je Strecke ein, mit Start und Ziel für das Höhenprofil. Ein neuer Eintrag für dieselbe Strecke und Richtung ersetzt den alten.</p>';
   } else h = speedCard(lab.speeds);
   $('rec-list').innerHTML = h;
 }
@@ -7224,16 +7309,25 @@ function speedCard(list) {
 $('rec-chips').addEventListener('click', (e) => { const b = e.target.closest('[data-rr]'); if (b) { recRoute = b.dataset.rr; renderRecs(); } });
 $('rec-list').addEventListener('click', (e) => {
   const s = e.target.closest('[data-spsel]'); if (s) { spdSel = s.dataset.spsel; renderRecs(); return; }
-  const it = e.target.closest('[data-rec]'); if (it) { openRecSheet(it.dataset.rec); return; }
+  const dt = e.target.closest('[data-rdir]'); if (dt) { recDirSel[dt.dataset.rk] = dt.dataset.rdir; renderRecs(); return; }
+  const it = e.target.closest('[data-rec]'); if (it) { if (it.dataset.rec) openRecSheet(it.dataset.rec); else openRecSheet(null, { route: it.dataset.route, dir: it.dataset.newdir }); return; }
   const sp = e.target.closest('[data-spd]'); if (sp) openSpdSheet(sp.dataset.spd);
 });
 $('rec-add').addEventListener('click', () => recRoute === 'speed' ? openSpdSheet(null) : openRecSheet(null));
 const recTown = (a) => { const m = /\d{5} ([^,]+)/.exec(String(a || '')); return m ? m[1].split('-')[0].trim() : ''; };
 function openRecSheet(id, pre) {
   const lab = getLab(), r = id ? lab.recs.find(x => x.id === id) : null, d = pre || r || {}; recEdit = r ? r.id : null;
-  const routes = [...new Set(lab.recs.map(x => x.route))];
+  const routes = [...new Set(lab.recs.map(x => x.route))], meta = (d.route && lab.routes[recKey(d.route)]) || {};
+  recGeo = { a: meta.a || null, b: meta.b || null, via: meta.via || null, prof: meta.prof || null, both: !!meta.both || d.dir === 'ba', busy: false, err: '' };
   $('rec-sheet-box').innerHTML = `<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div><p class="text-lg font-bold">${r ? 'Rekord bearbeiten' : 'Rekord eintragen'}</p>
     <div><label for="rec-route" class="text-xs text-slate-500 dark:text-slate-400">Strecke</label><input id="rec-route" list="rec-routes" type="text" maxlength="40" value="${esc(d.route || '')}" placeholder="z. B. Arbeitsweg oder A6 Tempomat 110" class="${inCls}"><datalist id="rec-routes">${routes.map(x => `<option value="${esc(x)}"></option>`).join('')}</datalist></div>
+    <datalist id="rec-places">${getTPlaces().filter(p => p.name).map(p => `<option value="${esc(p.name)}"></option>`).join('')}</datalist>
+    <div><label for="rec-a" class="text-xs text-slate-500 dark:text-slate-400">Start (A)</label><input id="rec-a" list="rec-places" type="text" value="${esc(hpLabel(recGeo.a))}" placeholder="Ort, Adresse oder lat,lon" class="${inCls}"></div>
+    <div><label for="rec-b" class="text-xs text-slate-500 dark:text-slate-400">Ziel (B)</label><input id="rec-b" list="rec-places" type="text" value="${esc(hpLabel(recGeo.b))}" placeholder="Ort, Adresse oder lat,lon" class="${inCls}"></div>
+    <p class="-mt-1 text-[11px] text-slate-500 dark:text-slate-400 text-left">Aus deinen Orten, einer Fahrt aus dem Fahrtenbuch oder als Adresse</p>
+    <div id="rec-hp" class="rounded-xl bg-slate-100 dark:bg-slate-800/70 px-3 py-2.5"></div>
+    <label class="flex items-center gap-2.5 text-sm"><input id="rec-both" type="checkbox" ${recGeo.both ? 'checked' : ''} class="h-5 w-5 accent-emerald-600">Rückweg B → A mit eigenem Bestwert führen</label>
+    <div id="rec-dir-row" class="${recGeo.both ? '' : 'hidden'}"><p class="text-xs text-slate-500 dark:text-slate-400">Richtung</p><div id="rec-dir" class="mt-1 flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 text-sm">${[['ab', 'A → B · Hin'], ['ba', 'B → A · Rück']].map(([v, l]) => `<button type="button" data-dirv="${v}" class="flex-1 rounded-lg py-1.5 font-medium ${(d.dir === 'ba' ? 'ba' : 'ab') === v ? 'bg-white dark:bg-slate-600 shadow-sm' : 'text-slate-500 dark:text-slate-400'}">${l}</button>`).join('')}</div></div>
     <div class="grid grid-cols-[1.35fr_0.8fr_1fr] gap-2"><div class="min-w-0"><label for="rec-date" class="text-xs text-slate-500 dark:text-slate-400">Datum</label><input id="rec-date" type="date" value="${esc(d.date || wxIso(new Date()))}" class="${inCls} !px-1.5 text-[13px]"></div>${fld('rec-km', 'km', d.km, '17')}${fld('rec-k', 'kWh/100 km', d.k100, '10,8')}${fld('rec-to', 'Außen °C', d.tOut, '18', 'text')}${fld('rec-tb', 'Akku °C', d.tBat, 'optional', 'text')}${fld('rec-v', 'Ø km/h', d.v, 'optional', 'numeric')}</div>
     <div><p class="text-xs text-slate-500 dark:text-slate-400">Bedingungen</p><div id="rec-cond" class="mt-1 flex flex-wrap gap-1.5">${REC_COND.map(c => { const on = (d.cond || []).includes(c); return `<button type="button" data-cond="${esc(c)}" aria-pressed="${on}" class="h-8 rounded-full border px-3 text-xs font-semibold ${on ? 'border-emerald-600 bg-emerald-600/15 text-emerald-700 dark:text-emerald-300' : 'border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300'}">${esc(c)}</button>`; }).join('')}</div></div>
     <div><label for="rec-note" class="text-xs text-slate-500 dark:text-slate-400">Notiz</label><input id="rec-note" type="text" maxlength="120" value="${esc(d.note || '')}" placeholder="z. B. Rekuperation B, Eco-Modus" class="${inCls}"></div>
@@ -7241,20 +7335,30 @@ function openRecSheet(id, pre) {
     ${r ? '' : '<button type="button" data-rs="trip" class="text-sm font-semibold text-sky-600 dark:text-sky-300">Aus dem Fahrtenbuch übernehmen ›</button><div id="rec-trips" class="hidden space-y-1"></div>'}
     <p id="rec-msg" class="text-sm text-red-600 dark:text-red-400 text-left empty:hidden"></p>
     <div class="grid grid-cols-2 gap-2.5"><button type="button" data-rs="${r ? 'del' : 'close'}" class="h-12 rounded-2xl border border-slate-300 dark:border-slate-700 text-sm font-semibold ${r ? 'text-red-600 dark:text-red-400' : ''}">${r ? 'Löschen' : 'Abbrechen'}</button><button type="button" data-rs="save" class="h-12 rounded-2xl bg-emerald-600 text-white text-sm font-semibold">Speichern</button></div>`;
-  $('rec-sheet').classList.remove('hidden'); recHint();
+  $('rec-sheet').classList.remove('hidden'); hpBox(); recHint();
 }
+const recDirVal = () => ($('rec-both')?.checked && document.querySelector('#rec-dir .bg-white')?.dataset.dirv === 'ba') ? 'ba' : 'ab';
 function recHint() {
   const rt = ($('rec-route')?.value || '').trim(), k = deDec($('rec-k')?.value), h = $('rec-hint'); if (!h) return;
-  const own = recEdit ? getLab().recs.find(r => r.id === recEdit) : null, others = getLab().recs.filter(r => recKey(r.route) === recKey(rt) && r.id !== recEdit), best = others.length ? Math.min(...others.map(r => r.k100)) : (own && recKey(own.route) === recKey(rt) ? own.k100 : null);
+  const dk = recKey(rt) + '|' + recDirVal(), own = recEdit ? getLab().recs.find(r => r.id === recEdit) : null, others = getLab().recs.filter(r => recDirKey(r) === dk && r.id !== recEdit), best = others.length ? Math.min(...others.map(r => r.k100)) : (own && recDirKey(own) === dk ? own.k100 : null);
   h.textContent = !rt || !(k > 0) || best == null ? (rt && k > 0 ? 'Erster Eintrag für „' + rt + '“' : '') : k < best ? 'Neuer Bestwert für „' + rt + '“ – ersetzt ' + fmt(best, 1) : k > best ? 'Achtung: Bisheriger Bestwert ' + fmt(best, 1) + ' ist besser. Speichern ersetzt ihn trotzdem.' : '';
 }
 $('rec-sheet').addEventListener('input', recHint);
+$('rec-sheet').addEventListener('change', (e) => {
+  const id = e.target.id;
+  if (id === 'rec-a') hpField('a'); else if (id === 'rec-b') hpField('b'); else if (id === 'rec-via') hpField('via');
+  else if (id === 'rec-both') { recGeo.both = e.target.checked; $('rec-dir-row').classList.toggle('hidden', !e.target.checked); recHint(); }
+  else if (id === 'rec-route' && !recGeo.a && !recGeo.b) { const m = getLab().routes[recKey(e.target.value)]; if (m && m.a && m.b) { Object.assign(recGeo, { a: m.a, b: m.b, via: m.via || null, prof: m.prof || null, both: !!m.both }); $('rec-a').value = hpLabel(m.a); $('rec-b').value = hpLabel(m.b); $('rec-both').checked = !!m.both; $('rec-dir-row').classList.toggle('hidden', !m.both); hpBox(); recHint(); } }
+});
 $('rec-sheet').addEventListener('click', (e) => {
   if (e.target === $('rec-sheet')) { $('rec-sheet').classList.add('hidden'); return; }
   const c = e.target.closest('[data-cond]'); if (c) { const on = c.getAttribute('aria-pressed') !== 'true'; c.setAttribute('aria-pressed', on); ['border-emerald-600', 'bg-emerald-600/15', 'text-emerald-700', 'dark:text-emerald-300'].forEach(x => c.classList.toggle(x, on)); ['border-slate-300', 'dark:border-slate-700', 'text-slate-600', 'dark:text-slate-300'].forEach(x => c.classList.toggle(x, !on)); return; }
-  const tp = e.target.closest('[data-trip]'); if (tp) { const t = getTrips().find(x => String(x.id) === tp.dataset.trip); if (t) { $('rec-date').value = wxIso(new Date(t.s)); $('rec-km').value = String(t.km).replace('.', ','); if (t.k100) $('rec-k').value = String(t.k100).replace('.', ','); if (t.v) $('rec-v').value = String(Math.round(t.v)); $('rec-trips').classList.add('hidden'); recHint(); } return; }
+  const dv = e.target.closest('[data-dirv]'); if (dv) { dv.parentElement.querySelectorAll('[data-dirv]').forEach(x => { const on = x === dv; x.classList.toggle('bg-white', on); x.classList.toggle('dark:bg-slate-600', on); x.classList.toggle('shadow-sm', on); x.classList.toggle('text-slate-500', !on); x.classList.toggle('dark:text-slate-400', !on); }); recHint(); return; }
+  const tp = e.target.closest('[data-trip]'); if (tp) { const t = getTrips().find(x => String(x.id) === tp.dataset.trip); if (t) { const g0 = geoOf(t.p0), g1 = geoOf(t.p1); if (g0 && g1 && !recGeo.a && !recGeo.b) { recGeo.a = { ...g0, label: placeAt(t.p0)?.name || recTown(t.a0) || '' }; recGeo.b = { ...g1, label: placeAt(t.p1)?.name || recTown(t.a1) || '' }; $('rec-a').value = hpLabel(recGeo.a); $('rec-b').value = hpLabel(recGeo.b); hpRefresh(); } $('rec-date').value = wxIso(new Date(t.s)); $('rec-km').value = String(t.km).replace('.', ','); if (t.k100) $('rec-k').value = String(t.k100).replace('.', ','); if (t.v) $('rec-v').value = String(Math.round(t.v)); $('rec-trips').classList.add('hidden'); recHint(); } return; }
   const b = e.target.closest('[data-rs]'); if (!b) return; const act = b.dataset.rs, lab = getLab();
   if (act === 'close') $('rec-sheet').classList.add('hidden');
+  else if (act === 'via') { recGeo.viaOpen = true; hpBox(); setTimeout(() => $('rec-via')?.focus(), 50); }
+  else if (act === 'hpload') hpRefresh();
   else if (act === 'trip') { const box = $('rec-trips'), ts = getTrips().filter(t => t.km >= 3 && t.k100 > 0).sort((a, b) => Date.parse(b.s) - Date.parse(a.s)).slice(0, 12);
     box.innerHTML = ts.length ? ts.map(t => `<button type="button" data-trip="${esc(String(t.id))}" class="flex w-full items-center justify-between gap-2 rounded-xl bg-slate-100 dark:bg-slate-800 px-3 py-2 text-left text-sm"><span class="min-w-0 truncate">${new Date(t.s).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })} · ${fmt(t.km, 0)} km${t.v ? ' · Ø ' + fmt(t.v, 0) + ' km/h' : ''}${recTown(t.a0) && recTown(t.a1) ? ' · ' + esc(recTown(t.a0)) + ' → ' + esc(recTown(t.a1)) : ''}</span><b class="shrink-0 tabular-nums">${fmt(t.k100, 1)}</b></button>`).join('') : '<p class="text-xs text-slate-500">Keine Fahrten im Fahrtenbuch.</p>'; box.classList.toggle('hidden'); }
   else if (act === 'del') { if (confirm('Diesen Rekord löschen?')) { lab.recs = lab.recs.filter(x => x.id !== recEdit); setLab(lab); $('rec-sheet').classList.add('hidden'); } }
@@ -7262,9 +7366,15 @@ $('rec-sheet').addEventListener('click', (e) => {
     const m = $('rec-msg'), route = $('rec-route').value.trim().slice(0, 40), k = deDec($('rec-k').value), opt = (id) => { const v = deDec($(id).value); return Number.isFinite(v) ? v : undefined; };
     if (!route) { m.textContent = 'Bitte eine Strecke angeben.'; return; } if (!(k > 3 && k < 60)) { m.textContent = 'Bitte den Verbrauch in kWh/100 km eintragen (z. B. 10,8).'; return; }
     const cond = [...document.querySelectorAll('#rec-cond [data-cond]')].filter(x => x.getAttribute('aria-pressed') === 'true').map(x => x.dataset.cond);
-    const r = { id: recEdit || labId(), route, date: $('rec-date').value || wxIso(new Date()), km: opt('rec-km'), k100: Math.round(k * 10) / 10, tOut: opt('rec-to'), tBat: opt('rec-tb'), v: opt('rec-v'), cond: cond.length ? cond : undefined, note: $('rec-note').value.trim() || undefined };
+    const r = { id: recEdit || labId(), route, date: $('rec-date').value || wxIso(new Date()), km: opt('rec-km'), k100: Math.round(k * 10) / 10, tOut: opt('rec-to'), tBat: opt('rec-tb'), v: opt('rec-v'), cond: cond.length ? cond : undefined, note: $('rec-note').value.trim() || undefined, dir: recDirVal() === 'ba' ? 'ba' : undefined };
     Object.keys(r).forEach(x => r[x] === undefined && delete r[x]);
-    lab.recs = lab.recs.filter(x => x.id !== r.id && recKey(x.route) !== recKey(route)).concat(r); recRoute = 'all'; setLab(lab); $('rec-sheet').classList.add('hidden');   // je Strecke genau ein Eintrag
+    if (recGeo.busy) { m.textContent = 'Höhenprofil lädt noch – bitte kurz warten.'; return; }
+    const rk = recKey(route), old = lab.routes[rk] || {};
+    if (recGeo.a && recGeo.b) lab.routes = { ...lab.routes, [rk]: { a: recGeo.a, b: recGeo.b, via: recGeo.via || undefined, prof: recGeo.prof || old.prof, both: !!recGeo.both || undefined } };
+    else if (!recGeo.a && !recGeo.b && old.a) { const o2 = { ...lab.routes }; if (lab.recs.every(x => recKey(x.route) !== rk || x.id === r.id)) delete o2[rk]; lab.routes = o2; }
+    else if (old.a) lab.routes = { ...lab.routes, [rk]: { ...old, both: !!recGeo.both || undefined } };
+    Object.values(lab.routes).forEach(o => Object.keys(o).forEach(x => o[x] === undefined && delete o[x]));
+    lab.recs = lab.recs.filter(x => x.id !== r.id && recDirKey(x) !== recDirKey(r)).concat(r); recRoute = 'all'; setLab(lab); $('rec-sheet').classList.add('hidden');   // je Strecke genau ein Eintrag
   }
 });
 function openSpdSheet(id) {
