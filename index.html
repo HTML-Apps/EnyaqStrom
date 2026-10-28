@@ -7016,9 +7016,10 @@ openDeepLink();
 const KEY_LAB = 'enyaq.lab';
 const LAB_DEF = {
   curves: [{ id: 'c1', name: 'Sommer', date: '2026-08-21', s0: 5, s1: 80, kwh: 37.17, min: 33, maxKw: 106.2, avgKw: 66.7, hi100: 25, tStart: 23, tEnd: 42, tOut: 20, loss: 5,
-    pts: { 10: 101, 20: 102, 30: 94, 40: 83, 50: 74, 60: 66, 70: 58, 80: 55 } }],
+    pts: { 10: 101, 20: 102, 30: 94, 40: 83, 50: 74, 60: 66, 70: 58, 80: 55, 81: 40, 90: 30, 95: 27, 100: 22 }, tail: [{ a: 80, b: 90, min: 10 }, { a: 90, b: 100, min: 13 }] }],
   recs: [], speed: { label: 'Sommer, eben, Klima an', rows: [{ v: 90, k: 13 }, { v: 100, k: 15 }, { v: 110, k: 17 }, { v: 120, k: 18.5 }, { v: 130, k: 21 }] } };
-function getLab() { const o = load(KEY_LAB, null); return { curves: o && Array.isArray(o.curves) ? o.curves : LAB_DEF.curves.slice(), recs: o && Array.isArray(o.recs) ? o.recs : [], speed: o && o.speed && Array.isArray(o.speed.rows) ? o.speed : JSON.parse(JSON.stringify(LAB_DEF.speed)) }; }
+const cvMig = (c) => c && c.id === 'c1' && c.date === '2026-08-21' && c.s1 === 80 && !c.tail ? { ...c, tail: LAB_DEF.curves[0].tail, pts: { ...LAB_DEF.curves[0].pts, ...(c.pts || {}) } } : c;   // 80→100 % nachgetragen (10 + 13 min)
+function getLab() { const o = load(KEY_LAB, null); return { curves: o && Array.isArray(o.curves) ? o.curves.map(cvMig) : LAB_DEF.curves.slice(), recs: o && Array.isArray(o.recs) ? o.recs : [], speed: o && o.speed && Array.isArray(o.speed.rows) ? o.speed : JSON.parse(JSON.stringify(LAB_DEF.speed)) }; }
 function setLab(o) { save(KEY_LAB, JSON.parse(JSON.stringify(o))); try { pushPrefs(); } catch (e) { } try { renderCurve(); } catch (e) { } if (currentView === 'recs') renderRecs(); }
 const labId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 const deDec = (v) => { const t = String(v == null ? '' : v).trim().replace('−', '-').replace(',', '.'); return t === '' ? undefined : Number(t); };
@@ -7031,6 +7032,8 @@ const fld = (id, label, val, ph, mode = 'decimal') => `<div class="min-w-0"><lab
 let cvSel = null;
 function cvPow(c, p) {                                                          // kW bei Ladestand p (lineare Interpolation der Stützpunkte; ohne Punkte: Ø-Leistung)
   const P = Object.entries(c.pts || {}).map(([k, v]) => [Number(k), Number(v)]).filter(x => x[1] > 0).sort((a, b) => a[0] - b[0]);
+  const sg = p > c.s1 && (c.tail || []).find(t => p >= t.a && p <= t.b && t.min > 0);
+  if (sg && !P.some(x => x[0] > c.s1)) return c.kwh / (c.s1 - c.s0) * (sg.b - sg.a) / (sg.min / 60);
   if (!P.length) return c.avgKw || (c.kwh && c.min ? c.kwh / (c.min / 60) : 50);
   if (p <= P[0][0]) return P[0][1]; if (p >= P[P.length - 1][0]) return P[P.length - 1][1];
   for (let i = 0; i < P.length - 1; i++) if (p <= P[i + 1][0]) return P[i][1] + (P[i + 1][1] - P[i][1]) * (p - P[i][0]) / (P[i + 1][0] - P[i][0]);
@@ -7038,7 +7041,12 @@ function cvPow(c, p) {                                                          
 }
 function cvMinutes(c, a, b) {                                                   // Ladezeit von a bis b %, auf die gemessene Dauer der Kurve geeicht
   const per = c.kwh / (c.s1 - c.s0), raw = (x, y) => { let m = 0; for (let p = x; p < y; p += 0.5) m += per * 0.5 / cvPow(c, p + 0.25) * 60; return m; };
-  const k = c.min > 0 ? c.min / raw(c.s0, c.s1) : 1; return raw(a, b) * k;
+  const k = c.min > 0 ? c.min / raw(c.s0, c.s1) : 1; let m = 0;
+  for (let p = a; p < b; p += 0.5) {                                            // über das Ende hinaus: je Abschnitt auf die gemessene Zeit geeicht
+    const sg = p >= c.s1 && (c.tail || []).find(t => p >= t.a && p < t.b && t.min > 0);
+    m += sg ? sg.min * raw(p, p + 0.5) / raw(sg.a, sg.b) : raw(p, p + 0.5) * k;
+  }
+  return m;
 }
 function renderCurve() {
   const el = $('cv-body'); if (!el) return;
@@ -7049,7 +7057,8 @@ function renderCurve() {
   const COL = ['#f59e0b', '#38bdf8', '#a78bfa', '#34d399'], col = (x) => COL[cs.indexOf(x) % COL.length];
   const chips = `<div class="mt-2 flex flex-wrap gap-1.5">${cs.map(x => `<button type="button" data-cv="${esc(x.id)}" class="inline-flex h-[30px] items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold ${x === c ? '' : 'border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300'}"${x === c ? ` style="background:${col(x)}26;color:${col(x)}"` : ''}><span class="h-[3px] w-2.5 rounded" style="background:${col(x)}"></span>${esc(x.name || 'Kurve')} · ${String(x.date || '').slice(5, 7)}/${String(x.date || '').slice(0, 4)}</button>`).join('')}<button type="button" data-cvact="new" class="inline-flex h-[30px] items-center rounded-full border border-dashed border-slate-400 dark:border-slate-600 px-2.5 text-xs font-semibold text-slate-500 dark:text-slate-400">+ Kurve hinzufügen</button></div>`;
   const W = 320, H = 170, L = 34, R = 8, T = 14, B = 26, X = (p) => L + p / 100 * (W - L - R), Y = (kw) => T + (1 - Math.min(150, kw) / 150) * (H - T - B);
-  const path = (x) => { let d = ''; for (let p = x.s0; p <= x.s1 + 0.01; p += 1) d += (d ? ' L' : 'M') + X(p).toFixed(1) + ' ' + Y(cvPow(x, p)).toFixed(1); return d; };
+  const cvEnd = (x) => Math.max(x.s1, ...(x.tail || []).filter(t => t.min > 0).map(t => t.b));
+  const path = (x, from = x.s0, to = cvEnd(x)) => { let d = ''; for (let p = from; p <= to + 0.01; p += 0.5) d += (d ? ' L' : 'M') + X(p).toFixed(1) + ' ' + Y(cvPow(x, p)).toFixed(1); return d; };
   const avg = c.avgKw || (c.kwh && c.min ? c.kwh / (c.min / 60) : null);
   let peakP = c.s0, peak = 0; for (let p = c.s0; p <= c.s1; p++) { const v = cvPow(c, p); if (v > peak) { peak = v; peakP = p; } }
   const svg = `<svg viewBox="0 0 ${W} ${H}" class="mt-2 w-full" role="img" aria-label="Ladeleistung über Ladestand">`
@@ -7057,7 +7066,8 @@ function renderCurve() {
     + `<line x1="${L}" x2="${W - R}" y1="${Y(0)}" y2="${Y(0)}" stroke="currentColor" class="text-slate-300 dark:text-slate-700"/>`
     + [0, 50, 80, 100].map(p => `<text x="${X(p)}" y="${H - 8}" text-anchor="${p === 100 ? 'end' : 'middle'}" font-size="10" fill="currentColor" class="text-slate-400">${p} %</text>`).join('')
     + others.map(x => `<path d="${path(x)}" fill="none" stroke="${col(x)}" stroke-width="1.6" stroke-dasharray="4 3" opacity=".7"/>`).join('')
-    + `<path d="${path(c)} L${X(c.s1)} ${Y(0)} L${X(c.s0)} ${Y(0)} Z" fill="${col(c)}" fill-opacity=".14"/><path d="${path(c)}" fill="none" stroke="${col(c)}" stroke-width="2.6" stroke-linejoin="round"/>`
+    + `<path d="${path(c, c.s0, c.s1)} L${X(c.s1)} ${Y(0)} L${X(c.s0)} ${Y(0)} Z" fill="${col(c)}" fill-opacity=".14"/><path d="${path(c, c.s0, c.s1)}" fill="none" stroke="${col(c)}" stroke-width="2.6" stroke-linejoin="round"/>`
+    + (cvEnd(c) > c.s1 ? `<path d="${path(c, c.s1, cvEnd(c))} L${X(cvEnd(c))} ${Y(0)} L${X(c.s1)} ${Y(0)} Z" fill="${col(c)}" fill-opacity=".07"/><path d="${path(c, c.s1, cvEnd(c))}" fill="none" stroke="${col(c)}" stroke-width="2" stroke-dasharray="5 3" stroke-linejoin="round"/><text x="${X((c.s1 + cvEnd(c)) / 2)}" y="${Y(cvPow(c, c.s1 + 1)) - 8}" text-anchor="middle" font-size="9.5" fill="${col(c)}">gedrosselt</text>` : '')
     + (avg ? `<line x1="${L}" x2="${W - R}" y1="${Y(avg)}" y2="${Y(avg)}" stroke="#64748b" stroke-dasharray="4 3"/><text x="${W - R - 2}" y="${Y(avg) - 4}" text-anchor="end" font-size="9.5" fill="#94a3b8">Ø ${fmt(avg, 1)} kW</text>` : '')
     + `<circle cx="${X(peakP)}" cy="${Y(c.maxKw || peak)}" r="3.5" fill="${col(c)}"/><text x="${X(peakP) + 5}" y="${Y(c.maxKw || peak) - 6}" font-size="10" font-weight="600" fill="${col(c)}">${fmt(c.maxKw || peak, 0)} kW</text></svg>`;
   const tile = (l, v) => v == null || v === '' ? '' : `<div class="rounded-2xl bg-slate-100 dark:bg-slate-800/70 px-1 py-2 text-center"><p class="text-[11px] text-slate-500 dark:text-slate-400">${l}</p><p class="text-[15px] font-bold tabular-nums">${v}</p></div>`;
@@ -7068,7 +7078,8 @@ function renderCurve() {
   el.innerHTML = chips
     + `<div class="mt-3 flex items-baseline gap-2"><span class="font-barlow text-[42px] font-bold leading-none" style="color:${col(c)}">${fmt(c.min, 0)} min</span><span class="text-sm text-slate-500 dark:text-slate-400">für ${c.s0} → ${c.s1} %</span></div>`
     + svg + (tiles ? `<div class="mt-2 grid grid-cols-3 gap-1.5">${tiles}</div>` : '')
-    + `<div class="mt-3 rounded-2xl bg-slate-100 dark:bg-slate-800/70 p-3"><p class="text-sm font-semibold text-left">Ladezeit-Rechner (diese Kurve)</p><div class="mt-2 flex items-center gap-2 text-sm"><span class="text-slate-500 dark:text-slate-400">von</span><select id="cv-a" aria-label="von" class="min-w-0 rounded-lg border border-slate-300 dark:border-slate-700 bg-transparent px-1.5 py-1.5 font-semibold">${opts(ra)}</select><span class="text-slate-500 dark:text-slate-400">bis</span><select id="cv-b" aria-label="bis" class="min-w-0 rounded-lg border border-slate-300 dark:border-slate-700 bg-transparent px-1.5 py-1.5 font-semibold">${opts(rb)}</select><span id="cv-res" class="ml-auto whitespace-nowrap font-barlow text-[26px] font-bold" style="color:${col(c)}"></span></div><p class="mt-1 text-[11px] text-slate-500 dark:text-slate-400 text-left">Bedingungen wie bei dieser Messung (Akku ${c.tStart != null ? fmt(c.tStart, 0) + ' °C' : 'warm'}). Bei kaltem Akku deutlich länger.${Object.keys(c.pts || {}).length ? '' : ' Ohne Leistungs-Stützpunkte gerechnet mit Ø-Leistung.'}</p></div>`
+    + ((c.tail || []).some(t => t.min > 0) ? `<div class="mt-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800/70 px-3 py-2"><p class="text-[11px] text-slate-500 dark:text-slate-400 text-left">Ab ${c.s1} % gedrosselt (nachgeladen, aus Zeiten gerechnet)</p><div class="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-sm">${c.tail.filter(t => t.min > 0).map(t => `<span><b class="tabular-nums">${t.a} → ${t.b} %</b> ${fmt(t.min, 0)} min <span class="text-slate-500 dark:text-slate-400">· Ø ${fmt(c.kwh / (c.s1 - c.s0) * (t.b - t.a) / (t.min / 60), 0)} kW</span></span>`).join('')}</div></div>` : '')
+    + `<div class="mt-3 rounded-2xl bg-slate-100 dark:bg-slate-800/70 p-3"><p class="text-sm font-semibold text-left">Ladezeit-Rechner (diese Kurve)</p><div class="mt-2 flex items-center gap-1.5 text-sm"><span class="text-slate-500 dark:text-slate-400">von</span><select id="cv-a" aria-label="von" class="shrink-0 rounded-lg border border-slate-300 dark:border-slate-700 bg-transparent px-0.5 py-1.5 font-semibold">${opts(ra)}</select><span class="text-slate-500 dark:text-slate-400">bis</span><select id="cv-b" aria-label="bis" class="shrink-0 rounded-lg border border-slate-300 dark:border-slate-700 bg-transparent px-0.5 py-1.5 font-semibold">${opts(rb)}</select><span id="cv-res" class="ml-auto whitespace-nowrap font-barlow text-[22px] font-bold" style="color:${col(c)}"></span></div><p class="mt-1 text-[11px] text-slate-500 dark:text-slate-400 text-left">Bedingungen wie bei dieser Messung (Akku ${c.tStart != null ? fmt(c.tStart, 0) + ' °C' : 'warm'}). Bei kaltem Akku deutlich länger.${Object.keys(c.pts || {}).length ? '' : ' Ohne Leistungs-Stützpunkte gerechnet mit Ø-Leistung.'}</p></div>`
     + `<div class="mt-3 flex items-center justify-between gap-2 text-sm font-semibold">${c.files && c.files.length ? `<a href="${dvLink(c.files[0].id)}" target="_blank" rel="noopener" class="text-sky-600 dark:text-sky-300">Foto der Säule ansehen ›</a>` : '<span></span>'}<button type="button" data-cvact="edit" class="text-sky-600 dark:text-sky-300">Bearbeiten ›</button></div>`;
   $('cv-hdate').textContent = labD(c.date);
   cvCalc();
@@ -7090,8 +7101,10 @@ function openCvSheet(id) {
   $('cv-sheet-box').innerHTML = `<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div><p class="text-lg font-bold">${c ? 'Ladekurve bearbeiten' : 'Ladekurve erfassen'}</p>
     <div class="grid grid-cols-2 gap-2"><div class="min-w-0"><label for="cv-name" class="text-xs text-slate-500 dark:text-slate-400">Name</label><input id="cv-name" type="text" maxlength="24" value="${esc((c && c.name) || '')}" placeholder="z. B. Winter" class="${inCls}"></div><div class="min-w-0"><label for="cv-date" class="text-xs text-slate-500 dark:text-slate-400">Datum</label><input id="cv-date" type="date" value="${esc((c && c.date) || wxIso(new Date()))}" class="${inCls}"></div></div>
     <div class="grid grid-cols-3 gap-2">${fld('cv-s0', 'Start %', v('s0'), '5', 'numeric')}${fld('cv-s1', 'Ende %', v('s1'), '80', 'numeric')}${fld('cv-kwh', 'Energie kWh', v('kwh'), '37,17')}${fld('cv-min', 'Dauer min', v('min'), '33', 'numeric')}${fld('cv-max', 'Max kW', v('maxKw'), '106,2')}${fld('cv-avg', 'Ø kW', v('avgKw'), 'optional')}${fld('cv-t0', 'Akku °C Start', v('tStart'), '', 'text')}${fld('cv-t1', 'Akku °C Ende', v('tEnd'), '', 'text')}${fld('cv-to', 'Außen °C', v('tOut'), '', 'text')}${fld('cv-hi', '> 100 kW bis %', v('hi100'), 'optional', 'numeric')}${fld('cv-loss', 'Verlust %', v('loss'), 'optional')}</div>
+    <p class="text-xs text-slate-500 dark:text-slate-400 text-left">Weitergeladen über das Ende hinaus? (optional)</p>
+    <div class="grid grid-cols-2 gap-2">${fld('cv-t90', 'Ende → 90 % · min', ((c && c.tail) || []).find(t => t.b === 90)?.min, 'z. B. 10', 'numeric')}${fld('cv-t100', '90 → 100 % · min', ((c && c.tail) || []).find(t => t.b === 100)?.min, 'z. B. 13', 'numeric')}</div>
     <p class="text-xs text-slate-500 dark:text-slate-400 text-left">Leistung (kW) bei Ladestand – optional, ergibt die Kurve</p>
-    <div class="grid grid-cols-8 gap-1 text-center">${[10, 20, 30, 40, 50, 60, 70, 80].map(p => `<label class="text-[10px] text-slate-500 dark:text-slate-400">${p}${p === 80 ? ' %' : ''}<input data-cvp="${p}" type="text" inputmode="decimal" value="${P[p] != null ? String(P[p]).replace('.', ',') : ''}" class="mt-1 w-full min-w-0 rounded-lg border border-slate-300 dark:border-slate-700 bg-transparent px-0.5 py-2 text-center text-[13px] text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"></label>`).join('')}</div>
+    <div class="grid grid-cols-5 gap-1.5 text-center">${[10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map(p => `<label class="text-[10px] text-slate-500 dark:text-slate-400">${p} %<input data-cvp="${p}" type="text" inputmode="decimal" value="${P[p] != null ? String(P[p]).replace('.', ',') : ''}" class="mt-1 w-full min-w-0 rounded-lg border border-slate-300 dark:border-slate-700 bg-transparent px-0.5 py-2 text-center text-[13px] text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"></label>`).join('')}</div>
     <div><button type="button" data-cvs="pick" class="w-full rounded-xl border border-dashed border-slate-300 dark:border-slate-600 py-2.5 text-sm">Foto der Säule anhängen (Google Drive)</button><p id="cv-fmsg" class="mt-1 text-xs text-slate-500 dark:text-slate-400 text-left empty:hidden">${c && c.files && c.files.length ? c.files.length + ' Foto in Google Drive' : ''}</p></div>
     <p id="cv-msg" class="text-sm text-red-600 dark:text-red-400 text-left empty:hidden"></p>
     <div class="grid grid-cols-2 gap-2.5"><button type="button" data-cvs="${c ? 'del' : 'close'}" class="h-12 rounded-2xl border border-slate-300 dark:border-slate-700 text-sm font-semibold ${c ? 'text-red-600 dark:text-red-400' : ''}">${c ? 'Löschen' : 'Abbrechen'}</button><button type="button" data-cvs="save" class="h-12 rounded-2xl bg-emerald-600 text-white text-sm font-semibold">Speichern</button></div>`;
@@ -7108,8 +7121,11 @@ $('cv-sheet').addEventListener('click', async (e) => {
     if (!(s0 >= 0 && s1 <= 100 && s1 > s0)) { m.textContent = 'Bitte Start- und Ende-% eintragen (Ende größer als Start).'; return; }
     if (!(kwh > 0 && min > 0 && mx > 0)) { m.textContent = 'Bitte Energie, Dauer und Max-Leistung eintragen.'; return; }
     const pts = {}; document.querySelectorAll('[data-cvp]').forEach(i => { const v = deDec(i.value); if (v > 0 && v < 400) pts[i.dataset.cvp] = v; });
+    const oldC = cvEdit ? lab.curves.find(x => x.id === cvEdit) : null; Object.entries((oldC && oldC.pts) || {}).forEach(([k, v]) => { if (Number(k) % 10) pts[k] = v; });   // Zwischenpunkte (z. B. 81 %) behalten
+    const t90 = n('cv-t90'), t100 = n('cv-t100'), tail = [];
+    if (t90 > 0 && s1 < 90) tail.push({ a: s1, b: 90, min: t90 }); if (t100 > 0 && (s1 <= 90)) tail.push({ a: Math.max(90, s1), b: 100, min: t100 }); else if (t100 > 0 && s1 < 100) tail.push({ a: s1, b: 100, min: t100 });
     const old = cvEdit ? lab.curves.find(x => x.id === cvEdit) : null, opt = (id) => { const v = n(id); return Number.isFinite(v) ? v : undefined; };
-    const c = { id: old ? old.id : labId(), name: $('cv-name').value.trim().slice(0, 24) || 'Kurve', date: $('cv-date').value || wxIso(new Date()), s0, s1, kwh, min, maxKw: mx, avgKw: opt('cv-avg'), hi100: opt('cv-hi'), tStart: opt('cv-t0'), tEnd: opt('cv-t1'), tOut: opt('cv-to'), loss: opt('cv-loss'), pts, files: old && old.files ? old.files : undefined };
+    const c = { id: old ? old.id : labId(), name: $('cv-name').value.trim().slice(0, 24) || 'Kurve', date: $('cv-date').value || wxIso(new Date()), s0, s1, kwh, min, maxKw: mx, avgKw: opt('cv-avg'), hi100: opt('cv-hi'), tStart: opt('cv-t0'), tEnd: opt('cv-t1'), tOut: opt('cv-to'), loss: opt('cv-loss'), pts, tail: tail.length ? tail : undefined, files: old && old.files ? old.files : undefined };
     Object.keys(c).forEach(k => c[k] === undefined && delete c[k]);
     let tokP = null; if (cvPend.length) { if (!window.cloud?.isSignedIn()) { m.textContent = 'Für das Foto bitte bei Google anmelden.'; return; } tokP = window.cloud.driveToken(); tokP.catch(() => { }); }
     lab.curves = old ? lab.curves.map(x => x.id === old.id ? c : x) : lab.curves.concat(c); cvSel = c.id; setLab(lab); $('cv-sheet').classList.add('hidden');
