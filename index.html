@@ -7210,8 +7210,10 @@ const CUP = '<svg class="h-[22px] w-[22px]" fill="none" stroke="currentColor" st
 /* ---- Höhenprofil je Strecke: Route über OSRM (OpenStreetMap), Höhen über Open-Meteo (Copernicus DEM 90 m); wird einmal geladen und mit der Strecke gespeichert (lab.routes) ---- */
 const HP_MASS = 2100, HP_ETA = 0.9, HP_RECUP = 0.8;                          // kg inkl. Fahrer; Antriebswirkungsgrad bergauf; bergab genutzter Anteil (Rollen + Rekuperation)
 const rtKey = (route) => recKey(route);
-const recDirKey = (r) => recKey(r.route) + '|' + (r.dir === 'ba' ? 'ba' : 'ab');
-let recGeo = { a: null, b: null, via: null, prof: null, busy: false, err: '' }, recDirSel = {};
+const recSeason = (r) => r.season === 'wi' || r.season === 'so' ? r.season : ((m) => m >= 4 && m <= 10 ? 'so' : 'wi')(Number(String((r && r.date) || wxIso(new Date())).slice(5, 7)));   // ohne Angabe: April–Oktober Sommer
+const SEA_L = { so: 'Sommer', wi: 'Winter' }, SEA_I = { so: '☀️', wi: '❄️' };
+const recDirKey = (r) => recKey(r.route) + '|' + (r.dir === 'ba' ? 'ba' : 'ab') + '|' + recSeason(r);
+let recGeo = { a: null, b: null, via: null, prof: null, busy: false, err: '' }, recDirSel = {}, recSeaSel = {};
 /* Speicherform ohne verschachtelte Arrays (Firestore erlaubt keine Arrays in Arrays): { km, up, dn, d: [km …], h: [m …] }; im Speicher zusätzlich pts = [[km, m] …] */
 function hpN(p) { if (!p) return null; if (Array.isArray(p.pts)) return p; const d = Array.isArray(p.d) ? p.d : [], h = Array.isArray(p.h) ? p.h : []; return d.length > 1 && d.length === h.length ? { ...p, pts: d.map((x, i) => [x, h[i]]) } : null; }
 function hpStore(p) { p = hpN(p); return p ? { km: p.km, up: p.up, dn: p.dn, d: p.pts.map(x => x[0]), h: p.pts.map(x => x[1]) } : undefined; }
@@ -7319,21 +7321,24 @@ function renderRecs() {
     const groups = new Map(); recs.forEach(r => { const k = recKey(r.route); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); });
     h = [...groups.entries()].sort((a, b) => a[1][0].route.localeCompare(b[1][0].route, 'de')).map(([k, rs]) => {
       const meta = lab.routes[k] || {}, ab = rs.find(r => r.dir !== 'ba'), ba = rs.find(r => r.dir === 'ba'), two = !!(meta.both || (ab && ba));
-      const dir = two ? (recDirSel[k] || (ab ? 'ab' : 'ba')) : (ab ? 'ab' : 'ba'), r = (dir === 'ba' ? ba : ab), other = dir === 'ba' ? ab : ba;
+      const dir = two ? (recDirSel[k] || (ab ? 'ab' : 'ba')) : (ab ? 'ab' : 'ba'), inDir = rs.filter(x => (x.dir === 'ba' ? 'ba' : 'ab') === dir), nowSea = recSeason({});
+      const sea = recSeaSel[k] || (inDir.some(x => recSeason(x) === nowSea) ? nowSea : inDir.length ? recSeason(inDir[0]) : nowSea);
+      const pick = (dd, ss) => rs.find(x => (x.dir === 'ba' ? 'ba' : 'ab') === dd && recSeason(x) === ss), r = pick(dir, sea), other = pick(dir === 'ba' ? 'ab' : 'ba', sea);
+      const seaSeg = `<span class="flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 text-xs font-semibold">${['so', 'wi'].map(v => { const x = pick(dir, v); return `<span role="button" tabindex="0" data-rsea="${v}" data-rk="${esc(k)}" class="flex-1 rounded-lg py-1.5 text-center ${v === sea ? 'bg-white dark:bg-slate-600 shadow-sm' : 'text-slate-500 dark:text-slate-400'}">${SEA_I[v]} ${SEA_L[v]}${x ? ' · <span class="tabular-nums">' + fmt(x.k100, 1) + '</span>' : ''}</span>`; }).join('')}</span>`;
       const mp = hpN(meta.prof), prof = mp ? (dir === 'ba' ? hpRev(mp) : mp) : null, la = dir === 'ba' ? 'B' : 'A', lb = dir === 'ba' ? 'A' : 'B';
       const seg = two ? `<span class="flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 text-xs font-semibold">${[['ab', 'Hin · A → B'], ['ba', 'Rück · B → A']].map(([v, l]) => `<span role="button" tabindex="0" data-rdir="${v}" data-rk="${esc(k)}" class="flex-1 rounded-lg py-1.5 text-center ${v === dir ? 'bg-white dark:bg-slate-600 shadow-sm' : 'text-slate-500 dark:text-slate-400'}">${l}</span>`).join('')}</span>` : '';
       const cost = prof ? hpCost(prof) : null, costO = prof ? hpCost(hpRev(prof)) : null, tile = (l, v) => `<span class="rounded-xl bg-slate-100 dark:bg-slate-800/70 px-0.5 py-1.5 text-center"><span class="block text-[10.5px] text-slate-500 dark:text-slate-400">${l}</span><span class="block text-[14px] font-bold tabular-nums">${v}</span></span>`;
       const net = prof ? prof.pts[prof.pts.length - 1][1] - prof.pts[0][1] : 0, mxh = prof ? Math.max(...prof.pts.map(x => x[1])) : 0;
       const body = r ? `<span class="flex items-center gap-3"><span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-600 dark:bg-amber-950 dark:text-amber-400">${CUP}</span><span><span class="block font-barlow text-[30px] font-bold leading-none text-emerald-600 dark:text-emerald-400">${fmt(r.k100, 1)} <span class="font-sans text-[13px] font-medium text-slate-500 dark:text-slate-400">kWh/100 km</span></span><span class="block text-xs text-slate-500 dark:text-slate-400">Bestwert · ${labD(r.date)}${other ? ' · ' + (dir === 'ba' ? 'Hinweg ' : 'Rückweg ') + fmt(other.k100, 1) : ''}</span></span></span>`
-        : `<span class="block rounded-xl bg-slate-100 dark:bg-slate-800/70 px-3 py-2.5 text-sm text-slate-600 dark:text-slate-300 text-left">Für ${dir === 'ba' ? 'den Rückweg' : 'den Hinweg'} noch kein Bestwert. Antippen zum Eintragen.</span>`;
-      return `<div role="button" tabindex="0" data-rec="${esc(r ? r.id : '')}" data-newdir="${dir}" data-route="${esc(rs[0].route)}" class="block w-full cursor-pointer rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 text-left active:scale-[0.99] transition space-y-2.5">
+        : `<span class="block rounded-xl bg-slate-100 dark:bg-slate-800/70 px-3 py-2.5 text-sm text-slate-600 dark:text-slate-300 text-left">Für ${two ? (dir === 'ba' ? 'den Rückweg' : 'den Hinweg') + ' im' : 'den'} ${SEA_L[sea]} noch kein Bestwert. Antippen zum Eintragen.</span>`;
+      return `<div role="button" tabindex="0" data-rec="${esc(r ? r.id : '')}" data-newdir="${dir}" data-newsea="${sea}" data-route="${esc(rs[0].route)}" class="block w-full cursor-pointer rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 text-left active:scale-[0.99] transition space-y-2.5">
         <span class="flex items-baseline justify-between gap-2"><span class="min-w-0 truncate text-[15px] font-bold">${esc(rs[0].route)}</span><span class="shrink-0 text-xs text-slate-500 dark:text-slate-400">${prof ? fmt(prof.km, 1) + ' km' : r && r.km ? fmt(r.km, 0) + ' km' : ''}</span></span>
-        ${seg}${body}
+        ${seg}${seaSeg}${body}
         ${meta.a && meta.b ? `<span class="block text-[11px] text-slate-500 dark:text-slate-400 truncate">${esc(hpLabel(dir === 'ba' ? meta.b : meta.a))} → ${meta.via ? 'über ' + esc(hpLabel(meta.via)) + ' → ' : ''}${esc(hpLabel(dir === 'ba' ? meta.a : meta.b))}</span>` : ''}
         ${prof ? hpSvg(prof, la, lb) + `<span class="grid grid-cols-4 gap-1.5">${tile('Anstieg', '↑ ' + prof.up + ' m')}${tile('Gefälle', '↓ ' + prof.dn + ' m')}${tile('Netto', (net > 0 ? '+' : net < 0 ? '−' : '') + Math.abs(net) + ' m')}${tile('Höchster', mxh + ' m')}</span>`
           + `<span class="block rounded-xl bg-slate-100 dark:bg-slate-800/70 px-3 py-2 text-xs leading-relaxed text-slate-600 dark:text-slate-300 text-left"><b class="text-slate-900 dark:text-slate-100">Höhe ${cost >= 0 ? 'kostet' : 'spart'} hier ≈ ${fmt(Math.abs(cost), 1)} kWh/100 km</b> (${dir === 'ba' ? 'Hinweg' : 'Rückweg'} ≈ ${fmt(costO, 1)}).${r ? ` Höhenbereinigt wäre dein Bestwert ≈ <b class="text-emerald-600 dark:text-emerald-400">${fmt(r.k100 - cost, 1)}</b> – damit mit flachen Strecken vergleichbar.` : ''}</span>` : ''}
         ${r && recChips(r) ? `<span class="flex flex-wrap gap-1">${recChips(r)}</span>` : ''}${r && r.note ? `<span class="block text-xs text-slate-500 dark:text-slate-400 text-left">${esc(r.note)}</span>` : ''}
-        ${prof ? '<span class="block text-[10px] text-slate-400 dark:text-slate-500 text-left">Route: OSRM · Suche: Photon · © OpenStreetMap · Höhen: Open-Meteo (Copernicus DEM 90 m) · grobe Schätzung (2,1 t, 80 % bergab zurück)</span>' : ''}</div>`; }).join('')
+        ${prof ? '<span class="block text-[10px] text-slate-400 dark:text-slate-500 text-left">Route: OSRM · Suche: Photon · © OpenStreetMap · Höhen: Open-Meteo (Copernicus DEM 90 m) · grobe Schätzung (2,1 t, 90 % Antrieb bergauf, 80 % bergab genutzt durch Rollen + Rekuperation)</span>' : ''}</div>`; }).join('')
       || '<p class="rounded-3xl bg-white dark:bg-slate-900 p-4 text-sm text-slate-600 dark:text-slate-300 text-left">Noch keine Rekorde. Trage über „+“ deinen Bestwert je Strecke ein, mit Start und Ziel für das Höhenprofil. Ein neuer Eintrag für dieselbe Strecke und Richtung ersetzt den alten.</p>';
   } else h = speedCard(lab.speeds);
   $('rec-list').innerHTML = h;
@@ -7366,7 +7371,8 @@ $('rec-chips').addEventListener('click', (e) => { const b = e.target.closest('[d
 $('rec-list').addEventListener('click', (e) => {
   const s = e.target.closest('[data-spsel]'); if (s) { spdSel = s.dataset.spsel; renderRecs(); return; }
   const dt = e.target.closest('[data-rdir]'); if (dt) { recDirSel[dt.dataset.rk] = dt.dataset.rdir; renderRecs(); return; }
-  const it = e.target.closest('[data-rec]'); if (it) { if (it.dataset.rec) openRecSheet(it.dataset.rec); else openRecSheet(null, { route: it.dataset.route, dir: it.dataset.newdir }); return; }
+  const ds = e.target.closest('[data-rsea]'); if (ds) { recSeaSel[ds.dataset.rk] = ds.dataset.rsea; renderRecs(); return; }
+  const it = e.target.closest('[data-rec]'); if (it) { if (it.dataset.rec) openRecSheet(it.dataset.rec); else openRecSheet(null, { route: it.dataset.route, dir: it.dataset.newdir, season: it.dataset.newsea }); return; }
   const sp = e.target.closest('[data-spd]'); if (sp) openSpdSheet(sp.dataset.spd);
 });
 $('rec-add').addEventListener('click', () => recRoute === 'speed' ? openSpdSheet(null) : openRecSheet(null));
@@ -7384,6 +7390,7 @@ function openRecSheet(id, pre) {
     <div id="rec-hp" class="rounded-xl bg-slate-100 dark:bg-slate-800/70 px-3 py-2.5"></div>
     <label class="flex items-center gap-2.5 text-sm"><input id="rec-both" type="checkbox" ${recGeo.both ? 'checked' : ''} class="h-5 w-5 accent-emerald-600">Rückweg B → A mit eigenem Bestwert führen</label>
     <div id="rec-dir-row" class="${recGeo.both ? '' : 'hidden'}"><p class="text-xs text-slate-500 dark:text-slate-400">Richtung</p><div id="rec-dir" class="mt-1 flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 text-sm">${[['ab', 'A → B · Hin'], ['ba', 'B → A · Rück']].map(([v, l]) => `<button type="button" data-dirv="${v}" class="flex-1 rounded-lg py-1.5 font-medium ${(d.dir === 'ba' ? 'ba' : 'ab') === v ? 'bg-white dark:bg-slate-600 shadow-sm' : 'text-slate-500 dark:text-slate-400'}">${l}</button>`).join('')}</div></div>
+    <div><p class="text-xs text-slate-500 dark:text-slate-400">Jahreszeit</p><div id="rec-sea" class="mt-1 flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 text-sm">${['so', 'wi'].map(v => `<button type="button" data-seav="${v}" class="flex-1 rounded-lg py-1.5 font-medium ${recSeason(d) === v ? 'bg-white dark:bg-slate-600 shadow-sm' : 'text-slate-500 dark:text-slate-400'}">${SEA_I[v]} ${SEA_L[v]}</button>`).join('')}</div></div>
     <div class="grid grid-cols-[1.35fr_0.8fr_1fr] gap-2"><div class="min-w-0"><label for="rec-date" class="text-xs text-slate-500 dark:text-slate-400">Datum</label><input id="rec-date" type="date" value="${esc(d.date || wxIso(new Date()))}" class="${inCls} !px-1.5 text-[13px]"></div>${fld('rec-km', 'km', d.km, '17')}${fld('rec-k', 'kWh/100 km', d.k100, '10,8')}${fld('rec-to', 'Außen °C', d.tOut, '18', 'text')}${fld('rec-tb', 'Akku °C', d.tBat, 'optional', 'text')}${fld('rec-v', 'Ø km/h', d.v, 'optional', 'numeric')}</div>
     <div><p class="text-xs text-slate-500 dark:text-slate-400">Bedingungen</p><div id="rec-cond" class="mt-1 flex flex-wrap gap-1.5">${REC_COND.map(c => { const on = (d.cond || []).includes(c); return `<button type="button" data-cond="${esc(c)}" aria-pressed="${on}" class="h-8 rounded-full border px-3 text-xs font-semibold ${on ? 'border-emerald-600 bg-emerald-600/15 text-emerald-700 dark:text-emerald-300' : 'border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300'}">${esc(c)}</button>`; }).join('')}</div></div>
     <div><label for="rec-note" class="text-xs text-slate-500 dark:text-slate-400">Notiz</label><input id="rec-note" type="text" maxlength="120" value="${esc(d.note || '')}" placeholder="z. B. Rekuperation B, Eco-Modus" class="${inCls}"></div>
@@ -7394,8 +7401,8 @@ function openRecSheet(id, pre) {
   $('rec-sheet').classList.remove('hidden'); hpBox(); recHint();
 }
 /* Richtung im Formular wechseln: Werte des Rekords dieser Richtung laden (oder leeren), statt den offenen Rekord umzuhängen */
-function recSwitchDir(dir) {
-  const rt = ($('rec-route')?.value || '').trim(), key = recKey(rt) + '|' + dir, r = getLab().recs.find(x => recDirKey(x) === key) || null;
+function recSwitchDir() {
+  const rt = ($('rec-route')?.value || '').trim(), key = recKey(rt) + '|' + recDirVal() + '|' + recSeaVal(), r = getLab().recs.find(x => recDirKey(x) === key) || null;
   recEdit = r ? r.id : null; const v = (x) => x == null ? '' : String(x).replace('.', ',');
   $('rec-date').value = r ? r.date : wxIso(new Date()); if (r && r.km) $('rec-km').value = v(r.km);
   [['rec-k', 'k100'], ['rec-to', 'tOut'], ['rec-tb', 'tBat'], ['rec-v', 'v']].forEach(([id, k]) => { $(id).value = r ? v(r[k]) : ''; }); $('rec-note').value = r ? (r.note || '') : '';
@@ -7404,11 +7411,12 @@ function recSwitchDir(dir) {
   const lb = $('rec-sheet-box').querySelector('[data-rs="del"],[data-rs="close"]'); if (lb) { lb.dataset.rs = r ? 'del' : 'close'; lb.textContent = r ? 'Löschen' : 'Abbrechen'; lb.classList.toggle('text-red-600', !!r); lb.classList.toggle('dark:text-red-400', !!r); }
   $('rec-msg').textContent = '';
 }
+const recSeaVal = () => document.querySelector('#rec-sea .bg-white')?.dataset.seav === 'wi' ? 'wi' : 'so';
 const recDirVal = () => ($('rec-both')?.checked && document.querySelector('#rec-dir .bg-white')?.dataset.dirv === 'ba') ? 'ba' : 'ab';
 function recHint() {
   const rt = ($('rec-route')?.value || '').trim(), k = deDec($('rec-k')?.value), h = $('rec-hint'); if (!h) return;
-  const dk = recKey(rt) + '|' + recDirVal(), own = recEdit ? getLab().recs.find(r => r.id === recEdit) : null, others = getLab().recs.filter(r => recDirKey(r) === dk && r.id !== recEdit), best = others.length ? Math.min(...others.map(r => r.k100)) : (own && recDirKey(own) === dk ? own.k100 : null);
-  h.textContent = !rt || !(k > 0) || best == null ? (rt && k > 0 ? 'Erster Eintrag für „' + rt + '“' : '') : k < best ? 'Neuer Bestwert für „' + rt + '“ – ersetzt ' + fmt(best, 1) : k > best ? 'Achtung: Bisheriger Bestwert ' + fmt(best, 1) + ' ist besser. Speichern ersetzt ihn trotzdem.' : '';
+  const dk = recKey(rt) + '|' + recDirVal() + '|' + recSeaVal(), lbl = '„' + rt + '“ (' + ($('rec-both')?.checked ? (recDirVal() === 'ba' ? 'Rück, ' : 'Hin, ') : '') + SEA_L[recSeaVal()] + ')', own = recEdit ? getLab().recs.find(r => r.id === recEdit) : null, others = getLab().recs.filter(r => recDirKey(r) === dk && r.id !== recEdit), best = others.length ? Math.min(...others.map(r => r.k100)) : (own && recDirKey(own) === dk ? own.k100 : null);
+  h.textContent = !rt || !(k > 0) || best == null ? (rt && k > 0 ? 'Erster Eintrag für ' + lbl : '') : k < best ? 'Neuer Bestwert für ' + lbl + ' – ersetzt ' + fmt(best, 1) : k > best ? 'Achtung: Bisheriger Bestwert ' + fmt(best, 1) + ' ist besser. Speichern ersetzt ihn trotzdem.' : '';
 }
 $('rec-sheet').addEventListener('input', (e) => { const m = /^rec-(a|b|via)$/.exec(e.target.id || ''); if (m) hpSuggest(m[1]); else recHint(); });
 $('rec-sheet').addEventListener('pointerdown', (e) => { if (e.target.closest('[data-sug]')) e.preventDefault(); });   // Fokus im Feld lassen, damit kein „change“ vor der Auswahl feuert
@@ -7423,7 +7431,8 @@ $('rec-sheet').addEventListener('click', (e) => {
   if (e.target === $('rec-sheet')) { $('rec-sheet').classList.add('hidden'); return; }
   const c = e.target.closest('[data-cond]'); if (c) { const on = c.getAttribute('aria-pressed') !== 'true'; c.setAttribute('aria-pressed', on); ['border-emerald-600', 'bg-emerald-600/15', 'text-emerald-700', 'dark:text-emerald-300'].forEach(x => c.classList.toggle(x, on)); ['border-slate-300', 'dark:border-slate-700', 'text-slate-600', 'dark:text-slate-300'].forEach(x => c.classList.toggle(x, !on)); return; }
   const sg = e.target.closest('[data-sug]'); if (sg) { const [w, i] = sg.dataset.sug.split(':'); const pt = (recGeo['sug' + w] || [])[+i]; if (pt) hpPick(w, pt); return; }
-  const dv = e.target.closest('[data-dirv]'); if (dv) { dv.parentElement.querySelectorAll('[data-dirv]').forEach(x => { const on = x === dv; x.classList.toggle('bg-white', on); x.classList.toggle('dark:bg-slate-600', on); x.classList.toggle('shadow-sm', on); x.classList.toggle('text-slate-500', !on); x.classList.toggle('dark:text-slate-400', !on); }); recSwitchDir(dv.dataset.dirv); recHint(); return; }
+  const dv = e.target.closest('[data-dirv]'); if (dv) { dv.parentElement.querySelectorAll('[data-dirv]').forEach(x => { const on = x === dv; x.classList.toggle('bg-white', on); x.classList.toggle('dark:bg-slate-600', on); x.classList.toggle('shadow-sm', on); x.classList.toggle('text-slate-500', !on); x.classList.toggle('dark:text-slate-400', !on); }); recSwitchDir(); recHint(); return; }
+  const sv = e.target.closest('[data-seav]'); if (sv) { sv.parentElement.querySelectorAll('[data-seav]').forEach(x => { const on = x === sv; x.classList.toggle('bg-white', on); x.classList.toggle('dark:bg-slate-600', on); x.classList.toggle('shadow-sm', on); x.classList.toggle('text-slate-500', !on); x.classList.toggle('dark:text-slate-400', !on); }); recSwitchDir(); recHint(); return; }
   const tp = e.target.closest('[data-trip]'); if (tp) { const t = getTrips().find(x => String(x.id) === tp.dataset.trip); if (t) { const g0 = geoOf(t.p0), g1 = geoOf(t.p1); if (g0 && g1 && !recGeo.a && !recGeo.b) { recGeo.a = { ...g0, label: placeAt(t.p0)?.name || recTown(t.a0) || '' }; recGeo.b = { ...g1, label: placeAt(t.p1)?.name || recTown(t.a1) || '' }; $('rec-a').value = hpLabel(recGeo.a); $('rec-b').value = hpLabel(recGeo.b); hpStatus('a', true, '✓ ' + hpLabel(recGeo.a) + ' · aus Fahrt'); hpStatus('b', true, '✓ ' + hpLabel(recGeo.b) + ' · aus Fahrt'); hpRefresh(); } $('rec-date').value = wxIso(new Date(t.s)); $('rec-km').value = String(t.km).replace('.', ','); if (t.k100) $('rec-k').value = String(t.k100).replace('.', ','); if (t.v) $('rec-v').value = String(Math.round(t.v)); $('rec-trips').classList.add('hidden'); recHint(); } return; }
   const b = e.target.closest('[data-rs]'); if (!b) return; const act = b.dataset.rs, lab = getLab();
   if (act === 'close') $('rec-sheet').classList.add('hidden');
@@ -7436,7 +7445,7 @@ $('rec-sheet').addEventListener('click', (e) => {
     const m = $('rec-msg'), route = $('rec-route').value.trim().slice(0, 40), k = deDec($('rec-k').value), opt = (id) => { const v = deDec($(id).value); return Number.isFinite(v) ? v : undefined; };
     if (!route) { m.textContent = 'Bitte eine Strecke angeben.'; return; } if (!(k > 3 && k < 60)) { m.textContent = 'Bitte den Verbrauch in kWh/100 km eintragen (z. B. 10,8).'; return; }
     const cond = [...document.querySelectorAll('#rec-cond [data-cond]')].filter(x => x.getAttribute('aria-pressed') === 'true').map(x => x.dataset.cond);
-    const r = { id: recEdit || labId(), route, date: $('rec-date').value || wxIso(new Date()), km: opt('rec-km'), k100: Math.round(k * 10) / 10, tOut: opt('rec-to'), tBat: opt('rec-tb'), v: opt('rec-v'), cond: cond.length ? cond : undefined, note: $('rec-note').value.trim() || undefined, dir: recDirVal() === 'ba' ? 'ba' : undefined };
+    const r = { id: recEdit || labId(), route, date: $('rec-date').value || wxIso(new Date()), km: opt('rec-km'), k100: Math.round(k * 10) / 10, tOut: opt('rec-to'), tBat: opt('rec-tb'), v: opt('rec-v'), cond: cond.length ? cond : undefined, note: $('rec-note').value.trim() || undefined, dir: recDirVal() === 'ba' ? 'ba' : undefined, season: recSeaVal() };
     Object.keys(r).forEach(x => r[x] === undefined && delete r[x]);
     if (recGeo.busy) { m.textContent = 'Höhenprofil lädt noch – bitte kurz warten.'; return; }
     const rk = recKey(route), old = lab.routes[rk] || {};
