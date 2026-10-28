@@ -549,7 +549,7 @@
       <h1 class="min-w-0 truncate font-barlow font-semibold text-2xl uppercase tracking-[0.14em] text-white">Rekorde &amp; Messreihe</h1>
       <button id="rec-add" type="button" aria-label="Neuer Eintrag" class="shrink-0 flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-white active:scale-95 transition"><svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
     </div>
-    <div id="rec-chips" class="no-sb -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5"></div>
+    <div id="rec-chips" class="flex bg-slate-200 dark:bg-slate-800 rounded-xl p-1"></div>
     <div id="rec-list" class="space-y-3"></div>
   </section>
 
@@ -3225,7 +3225,8 @@ function importPrefsFromBackup(text) {
     const ac = (d.lab.curves || []).filter(x => x && x.id && !ids.has(String(x.id))), ar = (d.lab.recs || []).filter(x => x && x.id && !ids.has(String(x.id)));
     const sids = new Set(base.speeds.map(x => String(x.id))), as = (Array.isArray(d.lab.speeds) ? d.lab.speeds : []).filter(x => x && x.id && !sids.has(String(x.id)));
     const rts = { ...(d.lab.routes && typeof d.lab.routes === 'object' ? d.lab.routes : {}), ...base.routes }, nr = Object.keys(rts).length !== Object.keys(base.routes).length;
-    if (!cur || ac.length || ar.length || as.length || nr) setLab({ curves: base.curves.concat(ac), recs: base.recs.concat(ar), speeds: base.speeds.concat(as), routes: rts });
+    const lids = new Set(base.lt.map(x => String(x.id))), al = (Array.isArray(d.lab.lt) ? d.lab.lt : []).filter(x => x && x.id && !lids.has(String(x.id)));
+    if (!cur || ac.length || ar.length || as.length || nr || al.length) setLab({ curves: base.curves.concat(ac), recs: base.recs.concat(ar), speeds: base.speeds.concat(as), routes: rts, lt: base.lt.concat(al) });
   }
   if (d.settings && typeof d.settings === 'object' && Object.keys(d.settings).length && confirm('Die Sicherung enthält auch Einstellungen (Strompreis, Akku, Fahrzeugdaten, Kauftag …).\n\nOK = Einstellungen aus der Sicherung übernehmen\nAbbrechen = aktuelle Einstellungen behalten')) {
     const keep = load(KEY_SETTINGS, {}) || {}, n = { ...d.settings }; delete n.pin; if (keep.pin) n.pin = keep.pin;
@@ -6965,7 +6966,7 @@ const NAV_GO = {
 const NAV_IDX = [
   ['cap-home', 'Laden Zuhause erfassen', 'Laden', 'wallbox zähler foto heim'], ['cap-bosch', 'Laden Bosch erfassen', 'Laden', 'arbeit werk lichtblick'], ['cap-away', 'Laden unterwegs erfassen', 'Laden', 'schnelllader dc ladesäule'],
   ['costs', 'Kosten erfassen', 'Kosten', 'ausgabe beleg rechnung versicherung'], ['rep', 'Bericht Laden', 'Berichte › Laden', 'monat kwh'], ['rep-kosten', 'Bericht Kosten', 'Berichte › Kosten', 'tco ausgaben'],
-  ['eff', 'Verbräuche & Effizienz', 'Start', 'verbrauch kwh/100 km ladekosten pro km strompreis'], ['trends', 'Trends', 'Start', 'laufleistung stromkosten gesamtkosten monate'], ['recs', 'Rekorde', 'Rekorde', 'verbrauch bestwert strecke tempomat messreihe reichweite'],
+  ['eff', 'Verbräuche & Effizienz', 'Start', 'verbrauch kwh/100 km ladekosten pro km strompreis'], ['trends', 'Trends', 'Start', 'laufleistung stromkosten gesamtkosten monate'], ['recs', 'Rekorde', 'Rekorde', 'verbrauch bestwert strecke tempomat messreihe reichweite langzeitverbrauch seit kauf bordcomputer'],
   ['curve', 'DC-Ladekurve', 'Berichte › Akku', 'schnellladen ladeleistung kw ladezeit rechner sommer winter'],
   ['akku', 'Akku', 'Berichte › Akku', 'kapazität pflege temperatur soh netto rebalancing'], ['stat', 'Statistik', 'Berichte › Daten', 'fahrzeugdaten verbrauch laufleistung'], ['badges', 'Abzeichen', 'Abzeichen', 'badges erfolge'],
   ['akte', 'Fahrzeugakte', 'Berichte › Daten', 'verkauf historie'], ['akte-pdf', 'Fahrzeugakte als PDF', 'Aktion', 'drucken export'], ['checkheft', 'Checkheft', 'Berichte › Daten', 'service reparatur tüv hu werkstatt'],
@@ -7060,11 +7061,11 @@ const LAB_DEF = {
     pts: { 10: 101, 20: 102, 30: 94, 40: 83, 50: 74, 60: 66, 70: 58, 80: 55, 81: 40, 90: 30, 95: 27, 100: 22 }, tail: [{ a: 80, b: 90, min: 10 }, { a: 90, b: 100, min: 13 }] }],
   recs: [], speeds: [{ id: 's1', season: 'Sommer', klima: 'an', note: 'eben', rows: [{ v: 90, k: 13 }, { v: 100, k: 15 }, { v: 110, k: 17 }, { v: 120, k: 18.5 }, { v: 130, k: 21 }] }] };
 const cvMig = (c) => c && c.id === 'c1' && c.date === '2026-08-21' && c.s1 === 80 && !c.tail ? { ...c, tail: LAB_DEF.curves[0].tail, pts: { ...LAB_DEF.curves[0].pts, ...(c.pts || {}) } } : c;   // 80→100 % nachgetragen (10 + 13 min)
-function getLab() { const o = load(KEY_LAB, null); return { curves: o && Array.isArray(o.curves) ? o.curves.map(cvMig) : LAB_DEF.curves.slice(), recs: o && Array.isArray(o.recs) ? o.recs : [], routes: o && o.routes && typeof o.routes === 'object' && !Array.isArray(o.routes) ? o.routes : {}, speeds: o && Array.isArray(o.speeds) ? o.speeds : o && o.speed && Array.isArray(o.speed.rows) ? [{ id: 's1', season: 'Sommer', klima: 'an', note: 'eben', rows: o.speed.rows }] : JSON.parse(JSON.stringify(LAB_DEF.speeds)) }; }
+function getLab() { const o = load(KEY_LAB, null); return { curves: o && Array.isArray(o.curves) ? o.curves.map(cvMig) : LAB_DEF.curves.slice(), recs: o && Array.isArray(o.recs) ? o.recs : [], routes: o && o.routes && typeof o.routes === 'object' && !Array.isArray(o.routes) ? o.routes : {}, lt: o && Array.isArray(o.lt) ? o.lt : [], speeds: o && Array.isArray(o.speeds) ? o.speeds : o && o.speed && Array.isArray(o.speed.rows) ? [{ id: 's1', season: 'Sommer', klima: 'an', note: 'eben', rows: o.speed.rows }] : JSON.parse(JSON.stringify(LAB_DEF.speeds)) }; }
 const recKey = (r) => String(r || '').trim().toLowerCase();
 /* Zusammenführen statt Überschreiben: jedes Element (Kurve, Rekord, Messreihe, Strecke) trägt u = letzte Änderung (ms),
    Löschungen stehen in del { id: ms }. So gewinnt beim Abgleich zwischen Geräten/Cloud immer der neueste Stand je Element. */
-const LAB_LISTS = ['curves', 'recs', 'speeds'];
+const LAB_LISTS = ['curves', 'recs', 'speeds', 'lt'];
 function labStamp(o) {
   const prev = load(KEY_LAB, null) || {}, now = Date.now(), del = { ...(prev.del || {}) };
   LAB_LISTS.forEach(k => { const pm = new Map((prev[k] || []).map(x => [String(x.id), x])), ids = new Set();
@@ -7308,14 +7309,71 @@ async function hpField(which) {
   try { hpPick(which, await hpResolve(t)); } catch (e) { recGeo[which] = null; hpSugHide(which); hpStatus(which, false, ((e && e.message) || 'Nicht gefunden') + ' – bitte einen Vorschlag aus der Liste wählen'); hpRefresh(); }
 }
 
+/* ---- Langzeitverbrauch: Ablesungen „Seit Kauf“ aus dem Bordcomputer (lab.lt), Verlauf über die Jahre ---- */
+let ltEdit = null;
+function ltApp() { try { const rs = getReadings(); if (!rs.length) return null; const t = consumptionTotals(rs, rs.map((_, i) => i)); return t && t.km >= 100 ? t.kwh100 : null; } catch (e) { return null; } }
+function ltSvg(es, app) {
+  const W = 296, H = 124, L = 32, R = 12, T = 16, B = 20, t0 = Date.parse(es[0].date), t1 = Date.parse(es[es.length - 1].date), span = Math.max(1, t1 - t0);
+  const vs = es.map(e => e.k100).concat(app != null ? [app] : []); let y0 = Math.floor(Math.min(...vs) - 0.6), y1 = Math.ceil(Math.max(...vs) + 0.6); if (y1 - y0 < 2) y1 = y0 + 2;
+  const X = (d) => es.length < 2 ? (L + W - R) / 2 : L + (Date.parse(d) - t0) / span * (W - L - R), Y = (v) => T + (1 - (v - y0) / (y1 - y0)) * (H - T - B);
+  const st = y1 - y0 > 6 ? 2 : 1, tk = []; for (let v = y0; v <= y1; v += st) tk.push(v);
+  const multiYear = new Date(es[0].date).getFullYear() !== new Date(es[es.length - 1].date).getFullYear();
+  const lbl = (d) => new Date(d + 'T12:00:00').toLocaleDateString('de-DE', multiYear ? { month: '2-digit', year: '2-digit' } : { day: '2-digit', month: '2-digit' });
+  const xi = es.length <= 5 ? es.map((_, i) => i) : [0, Math.round((es.length - 1) / 2), es.length - 1];
+  return `<svg viewBox="0 0 ${W} ${H}" class="mt-1 w-full" role="img" aria-label="Langzeitverbrauch über die Zeit">`
+    + tk.map(v => `<line x1="${L}" x2="${W - R}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="currentColor" class="text-slate-200 dark:text-slate-800"/><text x="${L - 6}" y="${(Y(v) + 3.5).toFixed(1)}" text-anchor="end" font-size="9.5" fill="#94a3b8">${v}</text>`).join('')
+    + (app != null ? `<line x1="${L}" x2="${W - R}" y1="${Y(app).toFixed(1)}" y2="${Y(app).toFixed(1)}" stroke="#38bdf8" stroke-dasharray="4 3"/><text x="${W - R}" y="${(Y(app) - 4).toFixed(1)}" text-anchor="end" font-size="9" fill="#0ea5e9">App: ${fmt(app, 1)} (ab Steckdose)</text>` : '')
+    + (es.length > 1 ? `<polyline points="${es.map(e => X(e.date).toFixed(1) + ',' + Y(e.k100).toFixed(1)).join(' ')}" fill="none" stroke="#10b981" stroke-width="2.4" stroke-linejoin="round"/>` : '')
+    + es.map((e, i) => `<circle cx="${X(e.date).toFixed(1)}" cy="${Y(e.k100).toFixed(1)}" r="3.5" fill="#10b981"/>${es.length <= 8 || i === es.length - 1 ? `<text x="${Math.min(W - R - 8, Math.max(L + 10, X(e.date))).toFixed(1)}" y="${(Y(e.k100) + (app != null && Math.abs(Y(e.k100) - 4 - Y(app)) < 12 ? 14 : -8)).toFixed(1)}" text-anchor="middle" font-size="9.5" fill="currentColor" class="text-slate-500 dark:text-slate-300">${fmt(e.k100, 1)}</text>` : ''}`).join('')
+    + xi.map(i => `<text x="${Math.min(W - R - 6, Math.max(L + 6, X(es[i].date))).toFixed(1)}" y="${H - 5}" text-anchor="middle" font-size="9.5" fill="#94a3b8">${lbl(es[i].date)}</text>`).join('') + '</svg>';
+}
+function ltCard(list) {
+  const es = (list || []).filter(e => e.k100 > 0 && e.date).sort((a, b) => a.date.localeCompare(b.date) || (a.km || 0) - (b.km || 0)), app = ltApp();
+  if (!es.length) return `<p class="rounded-3xl bg-white dark:bg-slate-900 p-4 text-sm text-slate-600 dark:text-slate-300 text-left">Noch keine Ablesung. Lies im Auto unter Fahrdaten den Langzeitspeicher „Seit Kauf“ ab und trage den Verbrauch über „+“ ein – am besten alle paar Wochen. So siehst du, wie sich dein Langzeitverbrauch über die Jahre entwickelt.${app != null ? ` Die App rechnet aus deinen Ladungen aktuell ${fmt(app, 1)} kWh/100 km ab Steckdose.` : ''}</p>`;
+  const cur = es[es.length - 1], prev = es[es.length - 2], dl = prev ? cur.k100 - prev.k100 : null, first = es[0];
+  const dChip = dl == null ? '' : `<span class="ml-auto shrink-0 rounded-lg px-2 py-0.5 text-xs font-semibold ${dl > 0.05 ? 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300' : dl < -0.05 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}">${dl > 0 ? '+' : dl < 0 ? '−' : '±'}${fmt(Math.abs(dl), 1)} seit ${labD(prev.date).slice(0, 6)}</span>`;
+  const rows = es.slice().reverse().map((e, i, a) => { const p = a[i + 1], d = p ? e.k100 - p.k100 : null;
+    return `<button type="button" data-lt="${esc(e.id)}" class="grid w-full grid-cols-[1.2fr_1fr_0.8fr_0.6fr] items-baseline gap-1.5 border-t border-slate-100 dark:border-slate-800 py-2.5 text-left text-[13px] active:bg-slate-50 dark:active:bg-slate-800/50"><span>${labD(e.date)}</span><span class="text-xs text-slate-500 dark:text-slate-400">${e.km ? fmt(e.km, 0) + ' km' : '–'}</span><b class="text-right tabular-nums">${fmt(e.k100, 1)}</b><span class="text-right text-[11px] ${d == null ? 'text-slate-400' : d > 0.05 ? 'text-amber-600 dark:text-amber-400' : d < -0.05 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500'}">${d == null ? 'Start' : (d > 0 ? '+' : d < 0 ? '−' : '±') + fmt(Math.abs(d), 1)}</span></button>`; }).join('');
+  return `<div class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 space-y-2">
+    <div class="flex items-baseline justify-between gap-2"><p class="text-sm text-slate-500 dark:text-slate-400 text-left">Langzeitverbrauch seit Kauf</p><span class="text-xs text-slate-500">${labD(cur.date)}</span></div>
+    <div class="flex items-baseline gap-2"><span class="font-barlow text-[44px] font-bold leading-none text-emerald-600 dark:text-emerald-400">${fmt(cur.k100, 1)}</span><span class="text-sm text-slate-500 dark:text-slate-400">kWh/100 km</span>${dChip}</div>
+    <p class="text-xs text-slate-500 dark:text-slate-400 text-left">Bordcomputer „Seit Kauf“${cur.km ? ' · ' + fmt(cur.km, 0) + ' km' : ''}${first !== cur && first.km && cur.km ? ' · ' + fmt(cur.km - first.km, 0) + ' km seit der ersten Ablesung' : ''}${cur.v ? ' · Ø ' + fmt(cur.v, 0) + ' km/h' : ''}</p>
+    ${ltSvg(es, app)}
+    <p class="text-[11px] text-slate-500 dark:text-slate-400 text-left">Grün: deine Ablesungen.${app != null ? ' Blau gestrichelt: was die App aus deinen Ladungen rechnet. Sie misst ab Steckdose (inkl. Ladeverluste), das Auto ab Akku – deshalb liegt die App normalerweise etwas höher.' : ''}</p></div>
+    <div class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm px-4 pb-1.5 pt-2"><div class="grid grid-cols-[1.2fr_1fr_0.8fr_0.6fr] gap-1.5 py-1.5 text-[11px] text-slate-500 dark:text-slate-400"><span>Datum</span><span>km-Stand</span><span class="text-right">kWh/100</span><span class="text-right">Δ</span></div>${rows}</div>`;
+}
+function openLtSheet(id) {
+  const e = id ? (getLab().lt || []).find(x => x.id === id) : null; ltEdit = e ? e.id : null; const app = ltApp(), km0 = (() => { try { return lastKnownKm(); } catch (_) { return null; } })();
+  $('rec-sheet-box').innerHTML = `<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div><p class="text-lg font-bold">${e ? 'Ablesung bearbeiten' : 'Langzeitverbrauch festhalten'}</p>
+    <p class="text-xs text-slate-500 dark:text-slate-400 text-left">Im Auto: Fahrdaten → „Seit Kauf“ (Langzeitspeicher) ablesen</p>
+    <div class="grid grid-cols-[1.35fr_1fr_1fr] gap-2"><div class="min-w-0"><label for="lt-date" class="text-xs text-slate-500 dark:text-slate-400">Datum</label><input id="lt-date" type="date" value="${esc(e ? e.date : wxIso(new Date()))}" class="${inCls} !px-1.5 text-[13px]"></div>${fld('lt-km', 'km-Stand', e ? e.km : (km0 || undefined), '20.401', 'numeric')}${fld('lt-k', 'kWh/100 km', e ? e.k100 : undefined, '15,3')}${fld('lt-v', 'Ø km/h', e ? e.v : undefined, 'optional', 'numeric')}${fld('lt-h', 'Fahrzeit h', e ? e.h : undefined, 'optional')}<div class="min-w-0"><label for="lt-note" class="text-xs text-slate-500 dark:text-slate-400">Notiz</label><input id="lt-note" type="text" maxlength="80" value="${esc((e && e.note) || '')}" placeholder="…" class="${inCls}"></div></div>
+    ${app != null ? `<p class="rounded-xl bg-slate-100 dark:bg-slate-800/70 px-3 py-2 text-xs text-slate-600 dark:text-slate-300 text-left">Zum Vergleich rechnet die App aktuell <b>${fmt(app, 1)}</b> (ab Steckdose, inkl. Ladeverluste)</p>` : ''}
+    <p id="lt-msg" class="text-sm text-red-600 dark:text-red-400 text-left empty:hidden"></p>
+    <div class="grid grid-cols-2 gap-2.5"><button type="button" data-lts="${e ? 'del' : 'close'}" class="h-12 rounded-2xl border border-slate-300 dark:border-slate-700 text-sm font-semibold ${e ? 'text-red-600 dark:text-red-400' : ''}">${e ? 'Löschen' : 'Abbrechen'}</button><button type="button" data-lts="save" class="h-12 rounded-2xl bg-emerald-600 text-white text-sm font-semibold">Speichern</button></div>`;
+  $('rec-sheet').classList.remove('hidden');
+}
+$('rec-sheet').addEventListener('click', (ev) => {
+  const b = ev.target.closest('[data-lts]'); if (!b) return; const act = b.dataset.lts, lab = getLab(); lab.lt = lab.lt || [];
+  if (act === 'del') { if (!confirm('Diese Ablesung löschen?')) return; lab.lt = lab.lt.filter(x => x.id !== ltEdit); setLab(lab); }
+  else if (act === 'save') {
+    const k = deDec($('lt-k').value), km = deDec(String($('lt-km').value).replace(/\./g, '')), opt = (id) => { const v = deDec($(id).value); return Number.isFinite(v) && v > 0 ? v : undefined; };
+    if (!(k > 5 && k < 50)) { $('lt-msg').textContent = 'Bitte den Verbrauch in kWh/100 km eintragen (z. B. 15,3).'; return; }
+    const e = { id: ltEdit || labId(), date: $('lt-date').value || wxIso(new Date()), km: Number.isFinite(km) && km > 0 ? Math.round(km) : undefined, k100: Math.round(k * 10) / 10, v: opt('lt-v'), h: opt('lt-h'), note: $('lt-note').value.trim() || undefined };
+    Object.keys(e).forEach(x => e[x] === undefined && delete e[x]);
+    lab.lt = ltEdit ? lab.lt.map(x => x.id === ltEdit ? e : x) : lab.lt.concat(e); recRoute = 'lt'; setLab(lab);
+  }
+  $('rec-sheet').classList.add('hidden');
+});
+
 function renderRecs() {
   const lab = getLab(), byRoute = new Map();
   lab.recs.forEach(r => { const k = recDirKey(r), o = byRoute.get(k); if (!o || r.k100 < o.k100) byRoute.set(k, r); });   // je Strecke ein Eintrag (ältere Doppelte: der beste zählt)
   const recs = [...byRoute.values()].sort((a, b) => a.route.localeCompare(b.route, 'de'));
-  if (recRoute !== 'all' && recRoute !== 'speed') recRoute = 'all';
+  if (!['all', 'speed', 'lt'].includes(recRoute)) recRoute = 'all';
   const chip = (k, l) => `<button type="button" data-rr="${esc(k)}" class="h-8 shrink-0 whitespace-nowrap rounded-full px-3 text-xs font-semibold ${recRoute === k ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900' : 'border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300'}">${esc(l)}</button>`;
-  $('rec-chips').innerHTML = chip('all', 'Streckenrekorde') + chip('speed', 'Tempomat-Messreihen');
-  $('rec-add').setAttribute('aria-label', recRoute === 'speed' ? 'Neue Messreihe' : 'Neuer Rekord');
+  const rc = $('rec-chips'); rc.className = 'flex bg-slate-200 dark:bg-slate-800 rounded-xl p-1';
+  rc.innerHTML = [['all', 'Strecken'], ['speed', 'Tempomat'], ['lt', 'Langzeit']].map(([k2, l]) => `<button type="button" data-rr="${k2}" class="flex-1 py-1.5 rounded-lg text-sm font-medium ${recRoute === k2 ? 'bg-white dark:bg-slate-700 shadow-sm' : 'text-slate-600 dark:text-slate-400'}">${l}</button>`).join('');
+  $('rec-add').setAttribute('aria-label', recRoute === 'speed' ? 'Neue Messreihe' : recRoute === 'lt' ? 'Neue Ablesung' : 'Neuer Rekord');
   let h = '';
   if (recRoute === 'all') {
     const groups = new Map(); recs.forEach(r => { const k = recKey(r.route); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); });
@@ -7342,7 +7400,8 @@ function renderRecs() {
         ${r && recChips(r) ? `<span class="flex flex-wrap gap-1">${recChips(r)}</span>` : ''}${r && r.note ? `<span class="block text-xs text-slate-500 dark:text-slate-400 text-left">${esc(r.note)}</span>` : ''}
         ${prof ? '<span class="block text-[10px] text-slate-400 dark:text-slate-500 text-left">Route: OSRM · Suche: Photon · © OpenStreetMap · Höhen: Open-Meteo (Copernicus DEM 90 m) · grobe Schätzung (2,1 t, 90 % Antrieb bergauf, 80 % bergab genutzt durch Rollen + Rekuperation)</span>' : ''}</div>`; }).join('')
       || '<p class="rounded-3xl bg-white dark:bg-slate-900 p-4 text-sm text-slate-600 dark:text-slate-300 text-left">Noch keine Rekorde. Trage über „+“ deinen Bestwert je Strecke ein, mit Start und Ziel für das Höhenprofil. Ein neuer Eintrag für dieselbe Strecke und Richtung ersetzt den alten.</p>';
-  } else h = speedCard(lab.speeds);
+  } else if (recRoute === 'lt') h = ltCard(lab.lt);
+  else h = speedCard(lab.speeds);
   $('rec-list').innerHTML = h;
 }
 /* ---- Tempomat-Messreihen: mehrere je Bedingung (Sommer/Winter/Übergang, Klima an/aus) ---- */
@@ -7372,12 +7431,14 @@ function speedCard(list) {
 $('rec-chips').addEventListener('click', (e) => { const b = e.target.closest('[data-rr]'); if (b) { recRoute = b.dataset.rr; renderRecs(); } });
 $('rec-list').addEventListener('click', (e) => {
   const s = e.target.closest('[data-spsel]'); if (s) { spdSel = s.dataset.spsel; renderRecs(); return; }
+  const lt = e.target.closest('[data-lt]'); if (lt) { openLtSheet(lt.dataset.lt); return; }
   const dt = e.target.closest('[data-rdir]'); if (dt) { recDirSel[dt.dataset.rk] = dt.dataset.rdir; renderRecs(); return; }
   const ds = e.target.closest('[data-rsea]'); if (ds) { recSeaSel[ds.dataset.rk] = ds.dataset.rsea; renderRecs(); return; }
   const it = e.target.closest('[data-rec]'); if (it) { if (it.dataset.rec) openRecSheet(it.dataset.rec); else openRecSheet(null, { route: it.dataset.route, dir: it.dataset.newdir, season: it.dataset.newsea }); return; }
   const sp = e.target.closest('[data-spd]'); if (sp) openSpdSheet(sp.dataset.spd);
 });
-$('rec-add').addEventListener('click', () => recRoute === 'speed' ? openSpdSheet(null) : openRecSheet(null));
+segSwipe($('rec-list'), $('rec-chips'));                                    // Rekorde: Strecken | Tempomat | Langzeit per Wischen
+$('rec-add').addEventListener('click', () => recRoute === 'speed' ? openSpdSheet(null) : recRoute === 'lt' ? openLtSheet(null) : openRecSheet(null));
 const recTown = (a) => { const m = /\d{5} ([^,]+)/.exec(String(a || '')); return m ? m[1].split('-')[0].trim() : ''; };
 function openRecSheet(id, pre) {
   const lab = getLab(), r = id ? lab.recs.find(x => x.id === id) : null, d = pre || r || {}; recEdit = r ? r.id : null;
