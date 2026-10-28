@@ -7185,6 +7185,11 @@ const HP_MASS = 2100, HP_ETA = 0.9, HP_RECUP = 0.8;                          // 
 const rtKey = (route) => recKey(route);
 const recDirKey = (r) => recKey(r.route) + '|' + (r.dir === 'ba' ? 'ba' : 'ab');
 let recGeo = { a: null, b: null, via: null, prof: null, busy: false, err: '' }, recDirSel = {};
+/* Speicherform ohne verschachtelte Arrays (Firestore erlaubt keine Arrays in Arrays): { km, up, dn, d: [km …], h: [m …] }; im Speicher zusätzlich pts = [[km, m] …] */
+function hpN(p) { if (!p) return null; if (Array.isArray(p.pts)) return p; const d = Array.isArray(p.d) ? p.d : [], h = Array.isArray(p.h) ? p.h : []; return d.length > 1 && d.length === h.length ? { ...p, pts: d.map((x, i) => [x, h[i]]) } : null; }
+function hpStore(p) { p = hpN(p); return p ? { km: p.km, up: p.up, dn: p.dn, d: p.pts.map(x => x[0]), h: p.pts.map(x => x[1]) } : undefined; }
+(function hpMigrate() { const o = load(KEY_LAB, null); if (!o || !o.routes || typeof o.routes !== 'object') return; let ch = false;
+  Object.values(o.routes).forEach(m => { if (m && m.prof && Array.isArray(m.prof.pts)) { m.prof = hpStore(m.prof); ch = true; } }); if (ch) save(KEY_LAB, o); })();
 function hpRev(p) { return { ...p, up: p.dn, dn: p.up, pts: p.pts.map(([d, h]) => [Math.round((p.km - d) * 100) / 100, h]).reverse() }; }
 function hpCost(p) { const kwh = (h) => HP_MASS * 9.81 * h / 3.6e6; return p.km > 0 ? (kwh(p.up) / HP_ETA - kwh(p.dn) * HP_RECUP) / p.km * 100 : 0; }   // zusätzliche kWh/100 km durch die Höhe
 async function hpLoad(a, b, via) {
@@ -7264,7 +7269,7 @@ function renderRecs() {
     h = [...groups.entries()].sort((a, b) => a[1][0].route.localeCompare(b[1][0].route, 'de')).map(([k, rs]) => {
       const meta = lab.routes[k] || {}, ab = rs.find(r => r.dir !== 'ba'), ba = rs.find(r => r.dir === 'ba'), two = !!(meta.both || (ab && ba));
       const dir = two ? (recDirSel[k] || (ab ? 'ab' : 'ba')) : (ab ? 'ab' : 'ba'), r = (dir === 'ba' ? ba : ab), other = dir === 'ba' ? ab : ba;
-      const prof = meta.prof ? (dir === 'ba' ? hpRev(meta.prof) : meta.prof) : null, la = dir === 'ba' ? 'B' : 'A', lb = dir === 'ba' ? 'A' : 'B';
+      const mp = hpN(meta.prof), prof = mp ? (dir === 'ba' ? hpRev(mp) : mp) : null, la = dir === 'ba' ? 'B' : 'A', lb = dir === 'ba' ? 'A' : 'B';
       const seg = two ? `<span class="flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 text-xs font-semibold">${[['ab', 'Hin · A → B'], ['ba', 'Rück · B → A']].map(([v, l]) => `<span role="button" tabindex="0" data-rdir="${v}" data-rk="${esc(k)}" class="flex-1 rounded-lg py-1.5 text-center ${v === dir ? 'bg-white dark:bg-slate-600 shadow-sm' : 'text-slate-500 dark:text-slate-400'}">${l}</span>`).join('')}</span>` : '';
       const cost = prof ? hpCost(prof) : null, costO = prof ? hpCost(hpRev(prof)) : null, tile = (l, v) => `<span class="rounded-xl bg-slate-100 dark:bg-slate-800/70 px-0.5 py-1.5 text-center"><span class="block text-[10.5px] text-slate-500 dark:text-slate-400">${l}</span><span class="block text-[14px] font-bold tabular-nums">${v}</span></span>`;
       const net = prof ? prof.pts[prof.pts.length - 1][1] - prof.pts[0][1] : 0, mxh = prof ? Math.max(...prof.pts.map(x => x[1])) : 0;
@@ -7318,7 +7323,7 @@ const recTown = (a) => { const m = /\d{5} ([^,]+)/.exec(String(a || '')); return
 function openRecSheet(id, pre) {
   const lab = getLab(), r = id ? lab.recs.find(x => x.id === id) : null, d = pre || r || {}; recEdit = r ? r.id : null;
   const routes = [...new Set(lab.recs.map(x => x.route))], meta = (d.route && lab.routes[recKey(d.route)]) || {};
-  recGeo = { a: meta.a || null, b: meta.b || null, via: meta.via || null, prof: meta.prof || null, both: !!meta.both || d.dir === 'ba', busy: false, err: '' };
+  recGeo = { a: meta.a || null, b: meta.b || null, via: meta.via || null, prof: hpN(meta.prof), both: !!meta.both || d.dir === 'ba', busy: false, err: '' };
   $('rec-sheet-box').innerHTML = `<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div><p class="text-lg font-bold">${r ? 'Rekord bearbeiten' : 'Rekord eintragen'}</p>
     <div><label for="rec-route" class="text-xs text-slate-500 dark:text-slate-400">Strecke</label><input id="rec-route" list="rec-routes" type="text" maxlength="40" value="${esc(d.route || '')}" placeholder="z. B. Arbeitsweg oder A6 Tempomat 110" class="${inCls}"><datalist id="rec-routes">${routes.map(x => `<option value="${esc(x)}"></option>`).join('')}</datalist></div>
     <datalist id="rec-places">${getTPlaces().filter(p => p.name).map(p => `<option value="${esc(p.name)}"></option>`).join('')}</datalist>
@@ -7348,7 +7353,7 @@ $('rec-sheet').addEventListener('change', (e) => {
   const id = e.target.id;
   if (id === 'rec-a') hpField('a'); else if (id === 'rec-b') hpField('b'); else if (id === 'rec-via') hpField('via');
   else if (id === 'rec-both') { recGeo.both = e.target.checked; $('rec-dir-row').classList.toggle('hidden', !e.target.checked); recHint(); }
-  else if (id === 'rec-route' && !recGeo.a && !recGeo.b) { const m = getLab().routes[recKey(e.target.value)]; if (m && m.a && m.b) { Object.assign(recGeo, { a: m.a, b: m.b, via: m.via || null, prof: m.prof || null, both: !!m.both }); $('rec-a').value = hpLabel(m.a); $('rec-b').value = hpLabel(m.b); $('rec-both').checked = !!m.both; $('rec-dir-row').classList.toggle('hidden', !m.both); hpBox(); recHint(); } }
+  else if (id === 'rec-route' && !recGeo.a && !recGeo.b) { const m = getLab().routes[recKey(e.target.value)]; if (m && m.a && m.b) { Object.assign(recGeo, { a: m.a, b: m.b, via: m.via || null, prof: hpN(m.prof), both: !!m.both }); $('rec-a').value = hpLabel(m.a); $('rec-b').value = hpLabel(m.b); $('rec-both').checked = !!m.both; $('rec-dir-row').classList.toggle('hidden', !m.both); hpBox(); recHint(); } }
 });
 $('rec-sheet').addEventListener('click', (e) => {
   if (e.target === $('rec-sheet')) { $('rec-sheet').classList.add('hidden'); return; }
@@ -7370,7 +7375,7 @@ $('rec-sheet').addEventListener('click', (e) => {
     Object.keys(r).forEach(x => r[x] === undefined && delete r[x]);
     if (recGeo.busy) { m.textContent = 'Höhenprofil lädt noch – bitte kurz warten.'; return; }
     const rk = recKey(route), old = lab.routes[rk] || {};
-    if (recGeo.a && recGeo.b) lab.routes = { ...lab.routes, [rk]: { a: recGeo.a, b: recGeo.b, via: recGeo.via || undefined, prof: recGeo.prof || old.prof, both: !!recGeo.both || undefined } };
+    if (recGeo.a && recGeo.b) lab.routes = { ...lab.routes, [rk]: { a: recGeo.a, b: recGeo.b, via: recGeo.via || undefined, prof: hpStore(recGeo.prof || old.prof), both: !!recGeo.both || undefined } };
     else if (!recGeo.a && !recGeo.b && old.a) { const o2 = { ...lab.routes }; if (lab.recs.every(x => recKey(x.route) !== rk || x.id === r.id)) delete o2[rk]; lab.routes = o2; }
     else if (old.a) lab.routes = { ...lab.routes, [rk]: { ...old, both: !!recGeo.both || undefined } };
     Object.values(lab.routes).forEach(o => Object.keys(o).forEach(x => o[x] === undefined && delete o[x]));
