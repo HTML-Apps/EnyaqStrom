@@ -14,6 +14,18 @@
 <!-- Manifest verlinken -->
 <link rel="manifest" href="/manifest.json">
 
+<script>
+/* Ist der Browser-Speicher gesperrt (Website-Daten blockiert, eingebettete Ansicht …), wirft schon das Lesen von localStorage.
+   Dann ersatzweise ein Speicher im Arbeitsspeicher, damit die App startet; ein Hinweis erklärt, dass lokal nichts erhalten bleibt. */
+(function () {
+  ['localStorage', 'sessionStorage'].forEach(function (n) {
+    try { window[n].getItem('__t'); return; } catch (e) { }
+    var m = new Map(), shim = { getItem: function (k) { return m.has(String(k)) ? m.get(String(k)) : null; }, setItem: function (k, v) { m.set(String(k), String(v)); }, removeItem: function (k) { m.delete(String(k)); }, clear: function () { m.clear(); }, key: function (i) { var a = Array.from(m.keys()); return i < a.length ? a[i] : null; }, get length() { return m.size; } };
+    try { Object.defineProperty(window, n, { value: shim, configurable: true }); } catch (e) { }
+    if (n === 'localStorage') window.__noStorage = true;
+  });
+})();
+</script>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -7252,6 +7264,12 @@ function openSpdSheet() {
 }
 $('rec-sheet').addEventListener('click', (e) => { const b = e.target.closest('[data-ss]'); if (!b) return; if (b.dataset.ss === 'save') { const lab = getLab(); lab.speed = { label: $('spd-l').value.trim().slice(0, 50), rows: [90, 100, 110, 120, 130, 140].map(v => ({ v, k: deDec($('spd-' + v).value) })).filter(r => r.k > 0) }; setLab(lab); } $('rec-sheet').classList.add('hidden'); });
 
+if (window.__noStorage) {                                                       // Hinweis: Browser-Speicher gesperrt
+  const d = document.createElement('div'); d.setAttribute('role', 'alert');
+  d.className = 'fixed inset-x-3 top-3 z-[70] rounded-2xl bg-amber-500 text-slate-950 px-4 py-3 text-sm shadow-xl text-left';
+  d.innerHTML = '<b>Browser-Speicher gesperrt.</b> Die App läuft, kann aber nichts dauerhaft auf diesem Gerät speichern. Öffne sie direkt in Chrome (nicht in einer anderen App) und erlaube unter Website-Einstellungen → Cookies und Websitedaten diese Seite. <button type="button" class="ml-1 underline font-semibold">Ausblenden</button>';
+  d.querySelector('button').addEventListener('click', () => d.remove()); document.body.appendChild(d);
+}
 </script>
 <script type="module">
 /* Firebase (modular SDK). Die Konfiguration ist kein Geheimnis – geschützt wird über Auth + Firestore-Regeln. */
