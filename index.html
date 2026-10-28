@@ -3958,7 +3958,7 @@ function renderHeroReminder() {
 }
 $('hero-rem').addEventListener('click', () => showView('reminders'));
 const probeImg = (src) => new Promise(res => { const i = new Image(); i.onload = () => res(src); i.onerror = () => res(null); i.src = src; });
-const HERO_VER = '5';                                    // bei neuen Bildern hochzählen (umgeht den Browser- und Service-Worker-Cache)
+const HERO_VER = '6';                                    // bei neuen Bildern hochzählen (umgeht den Browser- und Service-Worker-Cache)
 async function findHeroImg(n) { for (const e of ['png', 'webp', 'jpg', 'jpeg']) { const ok = await probeImg('Bilder/Enyaq' + n + '.' + e + '?v=' + HERO_VER); if (ok) return ok; } return null; }
 /** Bereitet ein Karussell-Bild auf: (1) opaker weißer Rand wird transparent gemacht (nicht wirklich freigestellte Bilder), (2) transparenter Rand wird weggeschnitten,
     damit das Auto den Bildbereich ausfüllt. Liefert { src, aspect, extra }: Seitenverhältnis des zugeschnittenen Bilds und den Anteil der Bildhöhe unterhalb der Aufstandslinie
@@ -4004,11 +4004,11 @@ function setLiveHero(on) {
 new MutationObserver(() => $('view-dashboard').classList.toggle('live-setup-open', !$('live-setup').classList.contains('hidden')))
   .observe($('live-setup'), { attributes: true, attributeFilter: ['class'] });
 let lbOpen = false;
-const CAR_COUNT = 5, CAR_DOTS = 3, CAR_AUTO_MS = 30000;                  // Enyaq1 … Enyaq5 (unten bleiben 3 Punkte als Deko); automatischer Wechsel alle 30 Sekunden
+const CAR_NAMES = [1, 2, '_4', 3, 4, 5], CAR_DOTS = 3, CAR_AUTO_MS = 30000;   // Bilder/Enyaq1, 2, _4 (Akku-Schnitt), 3, 4, 5 (unten bleiben 3 Punkte als Deko); automatischer Wechsel alle 30 Sekunden
 async function initCarousel() {
   const box = $('car-scroll'), dash = $('car-dashes'); if (!box) return;
-  let srcs = (await Promise.all(Array.from({ length: CAR_COUNT }, (_, i) => findHeroImg(i + 1)))).filter(Boolean);
-  let imgs = await Promise.all(srcs.map(async (u) => ({ ...(await cutWhite(u)), tech: /Enyaq[45]\./.test(u) })));   // Bild 4/5 = Technik (Akku, Motor): mittig und etwas kleiner, ohne Standlinie
+  const found = await Promise.all(CAR_NAMES.map(n => findHeroImg(n))), names = CAR_NAMES.filter((_, i) => found[i]), srcs = found.filter(Boolean);
+  let imgs = await Promise.all(srcs.map(async (u, i) => ({ ...(await cutWhite(u)), tech: /Enyaq(_4|[45])\./.test(u), name: names[i] })));   // Bild 4/5 = Technik (Akku, Motor): mittig und etwas kleiner, ohne Standlinie
   if (!imgs.length) imgs = [{ src: HERO_FALLBACK, aspect: 700 / 391, extra: 0 }];
   /* Die Bilder liegen übereinander; ein Wisch (oder Pfeiltaste) blendet per CSS-Übergang auf das nächste bzw. vorherige Bild über. Pro Wisch genau ein Bild.
      Bewusst ohne mitlaufende Bewegung beim Wischen: Nur Deckkraft wird animiert (läuft ohne JavaScript pro Frame), dadurch ruckelt nichts.
@@ -4053,7 +4053,7 @@ async function initCarousel() {
   const setImg = (i) => {
     lbi = ((i % imgs.length) + imgs.length) % imgs.length; sc = 1; tx = 0; ty = 0; apply(false); li.style.opacity = '1';
     li.src = hd[lbi] || imgs[lbi].src; ov.querySelector('#car-lb-n').textContent = imgs.length > 1 ? (lbi + 1) + ' / ' + imgs.length : '';
-    if (hd[lbi] === undefined) { const n = lbi, t = new Image(); hd[n] = null; t.onload = () => { hd[n] = t.src; if (lbi === n && lbOpen) li.src = t.src; }; t.src = 'Bilder/Enyaq' + (n + 1) + '-hd.webp?v=' + HERO_VER; }
+    if (hd[lbi] === undefined) { const n = lbi, t = new Image(); hd[n] = null; t.onload = () => { hd[n] = t.src; if (lbi === n && lbOpen) li.src = t.src; }; t.src = 'Bilder/Enyaq' + (imgs[n].name != null ? imgs[n].name : n + 1) + '-hd.webp?v=' + HERO_VER; }
   };
   function lbShow(i) { if (lbOpen) return; lbOpen = true; setImg(i); ov.classList.remove('hidden'); document.body.style.overflow = 'hidden'; clearTimeout(autoT); try { history.pushState({ carLb: 1 }, ''); pushed = true; } catch (e) { pushed = false; } }
   const lbClose = (fromPop) => {
