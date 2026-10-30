@@ -3239,7 +3239,8 @@ function importPrefsFromBackup(text) {
     const sids = new Set(base.speeds.map(x => String(x.id))), as = (Array.isArray(d.lab.speeds) ? d.lab.speeds : []).filter(x => x && x.id && !sids.has(String(x.id)));
     const rts = { ...(d.lab.routes && typeof d.lab.routes === 'object' ? d.lab.routes : {}), ...base.routes }, nr = Object.keys(rts).length !== Object.keys(base.routes).length;
     const lids = new Set(base.lt.map(x => String(x.id))), al = (Array.isArray(d.lab.lt) ? d.lab.lt : []).filter(x => x && x.id && !lids.has(String(x.id)));
-    if (!cur || ac.length || ar.length || as.length || nr || al.length) setLab({ curves: base.curves.concat(ac), recs: base.recs.concat(ar), speeds: base.speeds.concat(as), routes: rts, lt: base.lt.concat(al) });
+    const bids = new Set(base.bt.map(x => String(x.id))), ab = (Array.isArray(d.lab.bt) ? d.lab.bt : []).filter(x => x && x.id && !bids.has(String(x.id)));
+    if (!cur || ac.length || ar.length || as.length || nr || al.length || ab.length) setLab({ curves: base.curves.concat(ac), recs: base.recs.concat(ar), speeds: base.speeds.concat(as), routes: rts, lt: base.lt.concat(al), bt: base.bt.concat(ab) });
   }
   if (d.settings && typeof d.settings === 'object' && Object.keys(d.settings).length && confirm('Die Sicherung enthält auch Einstellungen (Strompreis, Akku, Fahrzeugdaten, Kauftag …).\n\nOK = Einstellungen aus der Sicherung übernehmen\nAbbrechen = aktuelle Einstellungen behalten')) {
     const keep = load(KEY_SETTINGS, {}) || {}, n = { ...d.settings }; delete n.pin; if (keep.pin) n.pin = keep.pin;
@@ -6991,7 +6992,7 @@ const NAV_GO = {
 const NAV_IDX = [
   ['cap-home', 'Laden Zuhause erfassen', 'Laden', 'wallbox zähler foto heim'], ['cap-bosch', 'Laden Bosch erfassen', 'Laden', 'arbeit werk lichtblick'], ['cap-away', 'Laden unterwegs erfassen', 'Laden', 'schnelllader dc ladesäule'],
   ['costs', 'Kosten erfassen', 'Kosten', 'ausgabe beleg rechnung versicherung'], ['rep', 'Bericht Laden', 'Berichte › Laden', 'monat kwh'], ['rep-kosten', 'Bericht Kosten', 'Berichte › Kosten', 'tco ausgaben'],
-  ['eff', 'Verbräuche & Effizienz', 'Start', 'verbrauch kwh/100 km ladekosten pro km strompreis'], ['trends', 'Trends', 'Start', 'laufleistung stromkosten gesamtkosten monate'], ['recs', 'Rekorde', 'Rekorde', 'verbrauch bestwert strecke tempomat messreihe reichweite langzeitverbrauch seit kauf bordcomputer'],
+  ['eff', 'Verbräuche & Effizienz', 'Start', 'verbrauch kwh/100 km ladekosten pro km strompreis'], ['trends', 'Trends', 'Start', 'laufleistung stromkosten gesamtkosten monate'], ['recs', 'Rekorde', 'Rekorde', 'verbrauch bestwert strecke tempomat messreihe reichweite langzeitverbrauch seit kauf bordcomputer akku temperatur °c notieren'],
   ['curve', 'DC-Ladekurve', 'Berichte › Akku', 'schnellladen ladeleistung kw ladezeit rechner sommer winter'],
   ['akku', 'Akku', 'Berichte › Akku', 'kapazität pflege temperatur soh netto rebalancing'], ['stat', 'Statistik', 'Berichte › Daten', 'fahrzeugdaten verbrauch laufleistung'], ['badges', 'Abzeichen', 'Abzeichen', 'badges erfolge'],
   ['akte', 'Fahrzeugakte', 'Berichte › Daten', 'verkauf historie'], ['akte-pdf', 'Fahrzeugakte als PDF', 'Aktion', 'drucken export'], ['checkheft', 'Checkheft', 'Berichte › Daten', 'service reparatur tüv hu werkstatt'],
@@ -7086,11 +7087,11 @@ const LAB_DEF = {
     pts: { 10: 101, 20: 102, 30: 94, 40: 83, 50: 74, 60: 66, 70: 58, 80: 55, 81: 40, 90: 30, 95: 27, 100: 22 }, tail: [{ a: 80, b: 90, min: 10 }, { a: 90, b: 100, min: 13 }] }],
   recs: [], speeds: [{ id: 's1', season: 'Sommer', klima: 'an', note: 'eben', rows: [{ v: 90, k: 13 }, { v: 100, k: 15 }, { v: 110, k: 17 }, { v: 120, k: 18.5 }, { v: 130, k: 21 }] }] };
 const cvMig = (c) => c && c.id === 'c1' && c.date === '2026-08-21' && c.s1 === 80 && !c.tail ? { ...c, tail: LAB_DEF.curves[0].tail, pts: { ...LAB_DEF.curves[0].pts, ...(c.pts || {}) } } : c;   // 80→100 % nachgetragen (10 + 13 min)
-function getLab() { const o = load(KEY_LAB, null); return { curves: o && Array.isArray(o.curves) ? o.curves.map(cvMig) : LAB_DEF.curves.slice(), recs: o && Array.isArray(o.recs) ? o.recs : [], routes: o && o.routes && typeof o.routes === 'object' && !Array.isArray(o.routes) ? o.routes : {}, lt: o && Array.isArray(o.lt) ? o.lt : [], speeds: o && Array.isArray(o.speeds) ? o.speeds : o && o.speed && Array.isArray(o.speed.rows) ? [{ id: 's1', season: 'Sommer', klima: 'an', note: 'eben', rows: o.speed.rows }] : JSON.parse(JSON.stringify(LAB_DEF.speeds)) }; }
+function getLab() { const o = load(KEY_LAB, null); return { curves: o && Array.isArray(o.curves) ? o.curves.map(cvMig) : LAB_DEF.curves.slice(), recs: o && Array.isArray(o.recs) ? o.recs : [], routes: o && o.routes && typeof o.routes === 'object' && !Array.isArray(o.routes) ? o.routes : {}, lt: o && Array.isArray(o.lt) ? o.lt : [], bt: o && Array.isArray(o.bt) ? o.bt : [], speeds: o && Array.isArray(o.speeds) ? o.speeds : o && o.speed && Array.isArray(o.speed.rows) ? [{ id: 's1', season: 'Sommer', klima: 'an', note: 'eben', rows: o.speed.rows }] : JSON.parse(JSON.stringify(LAB_DEF.speeds)) }; }
 const recKey = (r) => String(r || '').trim().toLowerCase();
 /* Zusammenführen statt Überschreiben: jedes Element (Kurve, Rekord, Messreihe, Strecke) trägt u = letzte Änderung (ms),
    Löschungen stehen in del { id: ms }. So gewinnt beim Abgleich zwischen Geräten/Cloud immer der neueste Stand je Element. */
-const LAB_LISTS = ['curves', 'recs', 'speeds', 'lt'];
+const LAB_LISTS = ['curves', 'recs', 'speeds', 'lt', 'bt'];
 function labStamp(o) {
   const prev = load(KEY_LAB, null) || {}, now = Date.now(), del = { ...(prev.del || {}) };
   LAB_LISTS.forEach(k => { const pm = new Map((prev[k] || []).map(x => [String(x.id), x])), ids = new Set();
@@ -7390,15 +7391,72 @@ $('rec-sheet').addEventListener('click', (ev) => {
   $('rec-sheet').classList.add('hidden');
 });
 
+/* ---- Akku-Temperatur: schnelle Notizen (lab.bt = [{ id, at (ISO), t °C, out? °C, ctx? 'fahrt'|'geparkt'|'laden' }]), Verlauf Akku vs. Außen ---- */
+const BT_CTX = [['fahrt', 'nach Fahrt'], ['geparkt', 'geparkt'], ['laden', 'vor Laden']];
+let btVal = null, btCtx = null, btRange = '30', btOut = { t: 0, v: null }, btLastSaved = null;
+async function btOutside() {
+  if (Date.now() - btOut.t < 15 * 60000) return btOut.v; const l = wxLoc(); if (!l) return null;
+  try { const r = await fetch('https://api.open-meteo.com/v1/forecast?latitude=' + l.lat + '&longitude=' + l.lon + '&current=temperature_2m&timezone=auto'); const j = await r.json(); const v = j && j.current ? Number(j.current.temperature_2m) : null; btOut = { t: Date.now(), v: Number.isFinite(v) ? v : null }; } catch (e) { btOut = { t: Date.now() - 14 * 60000, v: null }; }
+  return btOut.v;
+}
+function btSvg(es) {
+  const W = 296, H = 132, L = 30, R = 8, T = 10, B = 20, now = Date.now(), span = btRange === '30' ? 30 : btRange === '365' ? 365 : null;
+  const t0 = span ? now - span * 864e5 : Math.min(...es.map(e => Date.parse(e.at))), t1 = now, xs = (t) => L + (t - t0) / Math.max(1, t1 - t0) * (W - L - R);
+  const vs = es.flatMap(e => [e.t].concat(Number.isFinite(e.out) ? [e.out] : [])); let y0 = Math.floor(Math.min(0, ...vs) / 10) * 10, y1 = Math.ceil(Math.max(30, ...vs) / 10) * 10;
+  const Y = (v) => T + (1 - (v - y0) / (y1 - y0)) * (H - T - B), tk = []; for (let v = y0; v <= y1; v += 10) tk.push(v);
+  const line = (k) => { const p = es.filter(e => Number.isFinite(e[k])); return p.length > 1 ? p.map(e => xs(Date.parse(e.at)).toFixed(1) + ',' + Y(e[k]).toFixed(1)).join(' ') : ''; };
+  const fmtX = (t) => new Date(t).toLocaleDateString('de-DE', span === 30 ? { day: '2-digit', month: '2-digit' } : { month: '2-digit', year: '2-digit' });
+  const la = line('t'), lo = line('out');
+  return `<svg viewBox="0 0 ${W} ${H}" class="w-full" role="img" aria-label="Verlauf Akku- und Außentemperatur">`
+    + tk.map(v => `<line x1="${L}" x2="${W - R}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="currentColor" class="text-slate-200 dark:text-slate-800"/><text x="${L - 5}" y="${(Y(v) + 3.5).toFixed(1)}" text-anchor="end" font-size="9.5" fill="#94a3b8">${v}°</text>`).join('')
+    + (lo ? `<polyline points="${lo}" fill="none" stroke="#38bdf8" stroke-width="1.6" stroke-dasharray="4 3"/>` : '')
+    + (la ? `<polyline points="${la}" fill="none" stroke="#f97316" stroke-width="2.4" stroke-linejoin="round"/>` : '')
+    + es.map(e => `<circle cx="${xs(Date.parse(e.at)).toFixed(1)}" cy="${Y(e.t).toFixed(1)}" r="2.4" fill="#f97316"/>`).join('')
+    + [t0, (t0 + t1) / 2, t1].map((t, i) => `<text x="${xs(t).toFixed(1)}" y="${H - 5}" text-anchor="${i === 0 ? 'start' : i === 2 ? 'end' : 'middle'}" font-size="9.5" fill="#94a3b8">${fmtX(t)}</text>`).join('') + '</svg>';
+}
+function btCard(list) {
+  const all = (list || []).filter(e => Number.isFinite(e.t) && e.at).sort((a, b) => Date.parse(a.at) - Date.parse(b.at)), last = all[all.length - 1];
+  if (btVal == null) btVal = last ? Math.round(last.t) : 15;
+  const span = btRange === '30' ? 30 : btRange === '365' ? 365 : null, es = span ? all.filter(e => Date.parse(e.at) >= Date.now() - span * 864e5) : all;
+  const pill = (on) => on ? 'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300 border-transparent' : 'border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300';
+  const now = new Date(), stepB = 'flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-800 text-3xl font-semibold active:scale-90 transition select-none';
+  let h = `<div id="bt-card" class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 space-y-3">
+    <div class="flex items-baseline justify-between gap-2"><p class="text-sm text-slate-500 dark:text-slate-400 text-left">Akku-Temperatur jetzt</p><span class="text-xs text-slate-500">${now.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })} · ${hhmm(now.getTime())}</span></div>
+    <div class="flex items-center gap-2.5"><button type="button" data-bt="-1" aria-label="1 Grad weniger" class="${stepB}">−</button><span class="flex-1 text-center font-barlow text-[56px] font-bold leading-none text-orange-500 dark:text-orange-400 tabular-nums"><span id="bt-val">${btVal}</span> <span class="text-[28px]">°C</span></span><button type="button" data-bt="1" aria-label="1 Grad mehr" class="${stepB}">+</button></div>
+    <div class="flex gap-1.5">${BT_CTX.map(([k, l]) => `<button type="button" data-btctx="${k}" aria-pressed="${btCtx === k}" class="flex-1 rounded-full border py-1.5 text-xs font-semibold ${pill(btCtx === k)}">${l}</button>`).join('')}</div>
+    <div class="flex items-center gap-2"><span id="bt-out" class="min-w-0 text-xs text-slate-500 dark:text-slate-400 text-left">${btOut.v != null ? 'Außen ' + fmt(btOut.v, 0) + ' °C · automatisch' : wxLoc() ? 'Außen wird geladen …' : 'Außen: Standort unter Einstellungen → Wetter'}</span><button type="button" data-bt="save" class="ml-auto h-11 shrink-0 rounded-2xl bg-emerald-600 px-6 text-sm font-semibold text-white active:scale-95 transition">Speichern</button></div>
+    ${btLastSaved ? `<div class="flex items-center justify-between gap-2 text-xs"><span class="text-emerald-600 dark:text-emerald-400">✓ ${fmt(btLastSaved.t, 0)} °C um ${hhmm(Date.parse(btLastSaved.at))} gespeichert</span><button type="button" data-bt="undo" class="font-semibold text-sky-600 dark:text-sky-300">Rückgängig</button></div>` : ''}</div>`;
+  h += `<div class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 space-y-1.5"><div class="flex items-center justify-between gap-2"><p class="text-sm font-bold">Verlauf</p><div class="flex rounded-lg bg-slate-100 dark:bg-slate-800 p-0.5 text-[11px] font-semibold">${[['30', '30 T'], ['365', '1 J'], ['all', 'Alle']].map(([k, l]) => `<button type="button" data-btr="${k}" class="rounded-md px-2 py-0.5 ${btRange === k ? 'bg-white dark:bg-slate-600 shadow-sm' : 'text-slate-500 dark:text-slate-400'}">${l}</button>`).join('')}</div></div>`
+    + (es.length ? btSvg(es) + `<div class="flex items-center gap-3.5 text-[11px] text-slate-500 dark:text-slate-400"><span><span class="inline-block h-[3px] w-3 bg-orange-500 align-middle"></span> Akku</span><span><span class="inline-block w-3 border-t-2 border-dashed border-sky-400 align-middle"></span> Außen</span><span class="ml-auto">${es.length} ${es.length === 1 ? 'Wert' : 'Werte'}</span></div>`
+      : `<p class="py-4 text-sm text-slate-500 dark:text-slate-400 text-left">${all.length ? 'Keine Werte in diesem Zeitraum.' : 'Noch keine Werte. Temperatur oben einstellen und speichern – die App merkt sich den letzten Wert, beim nächsten Mal reicht oft ein Tipp.'}</p>`) + '</div>';
+  if (all.length) h += `<details class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm px-4 py-3"><summary class="cursor-pointer text-sm font-semibold">Alle Einträge (${all.length})</summary><div class="mt-2">${all.slice().reverse().slice(0, 200).map(e => `<div class="flex items-center gap-2 border-t border-slate-100 dark:border-slate-800 py-2 text-[13px]"><span class="w-[92px] shrink-0 tabular-nums">${new Date(e.at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' })} ${hhmm(Date.parse(e.at))}</span><b class="w-12 shrink-0 tabular-nums text-orange-600 dark:text-orange-400">${fmt(e.t, 0)} °C</b><span class="min-w-0 flex-1 truncate text-xs text-slate-500 dark:text-slate-400">${[Number.isFinite(e.out) ? 'außen ' + fmt(e.out, 0) + ' °C' : '', (BT_CTX.find(c => c[0] === e.ctx) || [])[1] || ''].filter(Boolean).join(' · ')}</span><button type="button" data-btdel="${esc(e.id)}" aria-label="Eintrag löschen" class="shrink-0 px-1.5 text-slate-400 active:text-red-500">✕</button></div>`).join('')}</div></details>`;
+  if (btOut.v == null && wxLoc() && Date.now() - btOut.t > 15 * 60000) btOutside().then(v => { const el = $('bt-out'); if (el) el.textContent = v != null ? 'Außen ' + fmt(v, 0) + ' °C · automatisch' : 'Außen nicht verfügbar'; });
+  return h;
+}
+$('rec-list').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-bt]'), c = e.target.closest('[data-btctx]'), r = e.target.closest('[data-btr]'), d = e.target.closest('[data-btdel]');
+  if (c) { btCtx = btCtx === c.dataset.btctx ? null : c.dataset.btctx; renderRecs(); return; }
+  if (r) { btRange = r.dataset.btr; renderRecs(); return; }
+  if (d) { if (!confirm('Diesen Eintrag löschen?')) return; const lab = getLab(); lab.bt = (lab.bt || []).filter(x => x.id !== d.dataset.btdel); setLab(lab); return; }
+  if (!b) return; const a = b.dataset.bt;
+  if (a === '1' || a === '-1') { btVal = Math.max(-30, Math.min(70, btVal + Number(a))); $('bt-val').textContent = btVal; btLastSaved = null; return; }
+  if (a === 'save') {
+    const out = await btOutside(), lab = getLab(), en = { id: labId(), at: new Date().toISOString(), t: btVal };
+    if (Number.isFinite(out)) en.out = Math.round(out * 10) / 10; if (btCtx) en.ctx = btCtx;
+    lab.bt = (lab.bt || []).concat(en); btLastSaved = en; btCtx = null; setLab(lab); return;
+  }
+  if (a === 'undo' && btLastSaved) { const lab = getLab(), id = btLastSaved.id; lab.bt = (lab.bt || []).filter(x => x.id !== id); btLastSaved = null; setLab(lab); }
+});
+
 function renderRecs() {
   const lab = getLab(), byRoute = new Map();
   lab.recs.forEach(r => { const k = recDirKey(r), o = byRoute.get(k); if (!o || r.k100 < o.k100) byRoute.set(k, r); });   // je Strecke ein Eintrag (ältere Doppelte: der beste zählt)
   const recs = [...byRoute.values()].sort((a, b) => a.route.localeCompare(b.route, 'de'));
-  if (!['all', 'speed', 'lt'].includes(recRoute)) recRoute = 'all';
+  if (!['all', 'speed', 'lt', 'bt'].includes(recRoute)) recRoute = 'all';
   const chip = (k, l) => `<button type="button" data-rr="${esc(k)}" class="h-8 shrink-0 whitespace-nowrap rounded-full px-3 text-xs font-semibold ${recRoute === k ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900' : 'border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300'}">${esc(l)}</button>`;
   const rc = $('rec-chips'); rc.className = 'flex bg-slate-200 dark:bg-slate-800 rounded-xl p-1';
-  rc.innerHTML = [['all', 'Strecken'], ['speed', 'Tempomat'], ['lt', 'Langzeit']].map(([k2, l]) => `<button type="button" data-rr="${k2}" class="flex-1 py-1.5 rounded-lg text-sm font-medium ${recRoute === k2 ? 'bg-white dark:bg-slate-700 shadow-sm' : 'text-slate-600 dark:text-slate-400'}">${l}</button>`).join('');
-  $('rec-add').setAttribute('aria-label', recRoute === 'speed' ? 'Neue Messreihe' : recRoute === 'lt' ? 'Neue Ablesung' : 'Neuer Rekord');
+  rc.innerHTML = [['all', 'Strecken'], ['speed', 'Tempomat'], ['lt', 'Langzeit'], ['bt', 'Akku °C']].map(([k2, l]) => `<button type="button" data-rr="${k2}" class="flex-1 py-1.5 rounded-lg text-[13px] font-medium whitespace-nowrap ${recRoute === k2 ? 'bg-white dark:bg-slate-700 shadow-sm' : 'text-slate-600 dark:text-slate-400'}">${l}</button>`).join('');
+  $('rec-add').setAttribute('aria-label', recRoute === 'speed' ? 'Neue Messreihe' : recRoute === 'lt' ? 'Neue Ablesung' : recRoute === 'bt' ? 'Akku-Temperatur notieren' : 'Neuer Rekord');
   let h = '';
   if (recRoute === 'all') {
     const groups = new Map(); recs.forEach(r => { const k = recKey(r.route); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); });
@@ -7426,6 +7484,7 @@ function renderRecs() {
         ${prof ? '<span class="block text-[10px] text-slate-400 dark:text-slate-500 text-left">Route: OSRM · Suche: Photon · © OpenStreetMap · Höhen: Open-Meteo (Copernicus DEM 90 m) · grobe Schätzung (2,1 t, 90 % Antrieb bergauf, 80 % bergab genutzt durch Rollen + Rekuperation)</span>' : ''}</div>`; }).join('')
       || '<p class="rounded-3xl bg-white dark:bg-slate-900 p-4 text-sm text-slate-600 dark:text-slate-300 text-left">Noch keine Rekorde. Trage über „+“ deinen Bestwert je Strecke ein, mit Start und Ziel für das Höhenprofil. Ein neuer Eintrag für dieselbe Strecke und Richtung ersetzt den alten.</p>';
   } else if (recRoute === 'lt') h = ltCard(lab.lt);
+  else if (recRoute === 'bt') h = btCard(lab.bt);
   else h = speedCard(lab.speeds);
   $('rec-list').innerHTML = h;
 }
@@ -7463,7 +7522,7 @@ $('rec-list').addEventListener('click', (e) => {
   const sp = e.target.closest('[data-spd]'); if (sp) openSpdSheet(sp.dataset.spd);
 });
 segSwipe($('rec-list'), $('rec-chips'));                                    // Rekorde: Strecken | Tempomat | Langzeit per Wischen
-$('rec-add').addEventListener('click', () => recRoute === 'speed' ? openSpdSheet(null) : recRoute === 'lt' ? openLtSheet(null) : openRecSheet(null));
+$('rec-add').addEventListener('click', () => recRoute === 'speed' ? openSpdSheet(null) : recRoute === 'lt' ? openLtSheet(null) : recRoute === 'bt' ? $('bt-card')?.scrollIntoView({ behavior: 'smooth', block: 'center' }) : openRecSheet(null));
 const recTown = (a) => { const m = /\d{5} ([^,]+)/.exec(String(a || '')); return m ? m[1].split('-')[0].trim() : ''; };
 function openRecSheet(id, pre) {
   const lab = getLab(), r = id ? lab.recs.find(x => x.id === id) : null, d = pre || r || {}; recEdit = r ? r.id : null;
