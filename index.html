@@ -130,7 +130,8 @@
   p.text-sm.text-slate-600:not(.text-center):not(.text-right):not(.text-left):not(.truncate),
   p.text-\[11px\].text-slate-500:not(.text-center):not(.text-right):not(.text-left):not(.truncate),
   #care-body .rounded-2xl.text-xs, #tax-gap, #pv-hint, #bak-msg + p { text-align: justify; hyphens: auto; -webkit-hyphens: auto; hyphenate-limit-chars: 6 3 3; }
-  main .rounded-3xl.p-4 { padding-left: .875rem; padding-right: .875rem; }   /* Karten innen etwas schmaler: mehr Platz auf schmalen Handys */
+  main .rounded-3xl.p-4 { padding-left: .875rem; padding-right: .875rem; }
+  #view-history { padding-bottom: 4rem; }   /* Platz für die schwebenden Bearbeiten-Knöpfe über der Leiste */   /* Karten innen etwas schmaler: mehr Platz auf schmalen Handys */
   #dp-panes, #bat-panes { overflow-x: clip; overflow-clip-margin: 16px; }   /* hereingleitender Tab darf nicht über den Bildschirmrand ragen (Chrome vergrößert sonst die Seite) */
   @media (prefers-reduced-motion: reduce) { .dp-inL, .dp-inR { animation: none; } }
   @media (prefers-reduced-motion: reduce) { #bd-conf i, #bdg-conf i { animation: none; top: var(--y, 10%); } #bd-card, #bdg-card { animation: none; } }
@@ -138,7 +139,7 @@
 </head>
 <body class="bg-black text-slate-100 min-h-screen">
 
-<main class="max-w-xl mx-auto px-3 pt-5 pb-28">
+<main class="max-w-xl mx-auto px-3 pt-5" style="padding-bottom: calc(81px + env(safe-area-inset-bottom))">
 
   <!-- ============ VIEW 1: DASHBOARD ============ -->
   <section id="view-dashboard" class="view space-y-4 relative isolate">
