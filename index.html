@@ -1019,6 +1019,11 @@
           <p class="mt-1.5 text-xs text-slate-500 dark:text-slate-400">Für den Vergleich im Rückblick. Škoda Enyaq iV 50: ca. 15,8 bis 16,1. Leer = 16,0.</p>
         </div>
         <div class="py-4 first:pt-4 last:pb-0">
+          <label for="set-wltp-net" class="block text-sm font-medium text-slate-700 dark:text-slate-300">WLTP-Verbrauch ohne Ladeverluste [kWh/100 km]</label>
+          <input id="set-wltp-net" type="text" inputmode="decimal" placeholder="z. B. 14,7" autocomplete="off" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+          <p class="mt-1.5 text-xs text-slate-500 dark:text-slate-400 text-left">Vergleichswert für den Langzeitverbrauch aus dem Bordcomputer (der misst ab Akku, ohne Ladeverluste). Leer = WLTP − 8 %.</p>
+        </div>
+        <div class="py-4 first:pt-4 last:pb-0">
           <p class="text-sm font-medium text-slate-700 dark:text-slate-300">Referenzbereich Akku-Temperatur [°C]</p>
           <div class="mt-1.5 grid grid-cols-2 gap-2">
             <div><label for="set-ref-lo" class="text-xs text-slate-500 dark:text-slate-400">von</label><input id="set-ref-lo" type="text" inputmode="text" placeholder="15" autocomplete="off" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
@@ -2271,7 +2276,7 @@ function fillSettings() {
   $('set-power').value = String(chargePowerKw()).replace('.', ',');
   $('set-cert-ac').value = s.certAcKwh != null ? fmt(s.certAcKwh, 0) : ''; $('set-cert-dc').value = s.certDcKwh != null ? fmt(s.certDcKwh, 0) : ''; $('set-cert-km').value = s.certKm != null ? fmt(s.certKm, 0) : ''; certRatioHint();
   $('set-ref-lo').value = s.refLo != null ? String(s.refLo).replace('.', ',') : ''; $('set-ref-hi').value = s.refHi != null ? String(s.refHi).replace('.', ',') : '';
-  renderDvInfo(); $('set-purchase').value = purchaseDay(); $('set-purchase-km').value = s.purchaseKm != null ? fmt(s.purchaseKm, 0) : ''; $('set-purchase-price').value = s.purchasePrice != null ? fmt(s.purchasePrice, 2) : ''; $('set-wltp').value = s.wltp ? String(s.wltp).replace('.', ',') : ''; renderWxLoc();
+  renderDvInfo(); $('set-purchase').value = purchaseDay(); $('set-purchase-km').value = s.purchaseKm != null ? fmt(s.purchaseKm, 0) : ''; $('set-purchase-price').value = s.purchasePrice != null ? fmt(s.purchasePrice, 2) : ''; $('set-wltp').value = s.wltp ? String(s.wltp).replace('.', ',') : ''; $('set-wltp-net').value = s.wltpNet ? String(s.wltpNet).replace('.', ',') : ''; renderWxLoc();
   $('set-rem-days').value = String(remWarn().days); $('set-rem-km').value = String(remWarn().km); $('set-next-hu').value = s.nextHu || ''; $('set-next-svc').value = s.nextService || '';
 }
 /** Ladeanbieter: speichern sofort (lokal und, wenn angemeldet, in der Cloud). Ältere Einträge behalten ihren Anbieter-Namen. */
@@ -2329,6 +2334,7 @@ $('btn-save-settings').addEventListener('click', () => {
   if (!Number.isInteger(remKm) || remKm < 0 || remKm > 20000) { alert('Bitte die Vorwarnung in km als ganze Zahl von 0 bis 20000 eingeben.'); return; }
   const pd = $('set-purchase').value, purchase = /^\d{4}-\d{2}-\d{2}$/.test(pd) && !isNaN(Date.parse(pd)) ? pd : '2026-06-08';
   const wl = $('set-wltp').value.trim() === '' ? undefined : parseFloat($('set-wltp').value.replace(',', '.'));
+  const wln = $('set-wltp-net').value.trim() === '' ? undefined : parseFloat($('set-wltp-net').value.replace(',', '.'));
   const tnum = (id) => { const t = $(id).value.trim().replace('−', '-').replace(',', '.'); return t === '' ? undefined : Number(t); };
   const rlo = tnum('set-ref-lo'), rhi = tnum('set-ref-hi');
   if ([rlo, rhi].some(v => v !== undefined && !(Number.isFinite(v) && v >= -20 && v <= 45)) || (rlo !== undefined) !== (rhi !== undefined) || (rlo !== undefined && rhi - rlo < 2)) {
@@ -2341,6 +2347,7 @@ $('btn-save-settings').addEventListener('click', () => {
   if (pk !== undefined && !(pk >= 0 && pk <= 2e6)) { alert('Bitte den Kilometerstand bei Kauf als Zahl eingeben (z. B. 16.969) oder das Feld leer lassen.'); return; }
   if (pp !== undefined && !(pp >= 0 && pp <= 1e7)) { alert('Bitte den Kaufpreis in Euro als Zahl eingeben (z. B. 32.500) oder das Feld leer lassen.'); return; }
   if (wl !== undefined && !(wl > 5 && wl < 40)) { alert('Bitte den WLTP-Verbrauch in kWh/100 km eingeben (z. B. 16,0) oder das Feld leer lassen.'); return; }
+  if (wln !== undefined && !(wln > 5 && wln < 40)) { alert('Bitte den WLTP-Verbrauch ohne Ladeverluste in kWh/100 km eingeben (z. B. 14,7) oder das Feld leer lassen.'); return; }
   const vin = $('set-vin').value.trim().toUpperCase().replace(/\s+/g, ''), yr = $('set-year').value.trim();
   if (vin && !/^[A-HJ-NPR-Z0-9]{17}$/.test(vin)) { alert('Die Fahrgestellnummer (FIN) hat 17 Zeichen aus Ziffern und Buchstaben (ohne I, O und Q). Bitte prüfen oder das Feld leer lassen.'); return; }
   if (yr) {                                                                         // Baujahr immer als MM/JJJJ, nicht in der Zukunft
@@ -2349,7 +2356,7 @@ $('btn-save-settings').addEventListener('click', () => {
     if (+m[2] < 1990 || +m[2] * 12 + +m[1] > now.getFullYear() * 12 + now.getMonth() + 1) { alert('Das Baujahr ' + yr + ' kann nicht stimmen: Es muss zwischen 01/1990 und ' + String(now.getMonth() + 1).padStart(2, '0') + '/' + now.getFullYear() + ' liegen.'); $('set-year').focus(); return; }
   }
   const txt = (id, n) => $(id).value.trim().replace(/\s+/g, ' ').slice(0, n) || undefined;
-  if (save(KEY_SETTINGS, { title: $('set-title').value.trim() || DEFAULT_TITLE, brand: txt('set-brand', 30), model: txt('set-model', 40), plate: (txt('set-plate', 15) || '').toUpperCase() || undefined, year: yr || undefined, vin: vin || undefined, price, battery, power, remDays, remKm, purchase, wltp: wl, purchaseKm: pk !== undefined ? Math.round(pk) : undefined, purchasePrice: pp !== undefined ? Math.round(pp * 100) / 100 : undefined, commuteKm: getSettings().commuteKm || undefined, refLo: rlo, refHi: rhi, nextHu, nextService, certAcKwh: certAcKwh !== undefined ? Math.round(certAcKwh * 10) / 10 : undefined, certDcKwh: certDcKwh !== undefined ? Math.round(certDcKwh * 10) / 10 : undefined, certKm: certKm !== undefined ? Math.round(certKm) : undefined })) {   // commuteKm: im Steuerhelfer (Berichte → Fahrten) gepflegt
+  if (save(KEY_SETTINGS, { title: $('set-title').value.trim() || DEFAULT_TITLE, brand: txt('set-brand', 30), model: txt('set-model', 40), plate: (txt('set-plate', 15) || '').toUpperCase() || undefined, year: yr || undefined, vin: vin || undefined, price, battery, power, remDays, remKm, purchase, wltp: wl, wltpNet: wln !== undefined ? Math.round(wln * 100) / 100 : undefined, purchaseKm: pk !== undefined ? Math.round(pk) : undefined, purchasePrice: pp !== undefined ? Math.round(pp * 100) / 100 : undefined, commuteKm: getSettings().commuteKm || undefined, refLo: rlo, refHi: rhi, nextHu, nextService, certAcKwh: certAcKwh !== undefined ? Math.round(certAcKwh * 10) / 10 : undefined, certDcKwh: certDcKwh !== undefined ? Math.round(certDcKwh * 10) / 10 : undefined, certKm: certKm !== undefined ? Math.round(certKm) : undefined })) {   // commuteKm: im Steuerhelfer (Berichte → Fahrten) gepflegt
     renderReminderBadges(); renderHeroStats(); pushPrefs();
     $('settings-msg').classList.remove('hidden'); setTimeout(() => $('settings-msg').classList.add('hidden'), 2500);
   }
@@ -6265,7 +6272,7 @@ try { renderWrapCard(); } catch (e) { }
    im Dokument enyaqStrom/<uid>/settings/prefs, gleiche Regel wie Anbieter und Kategorien. Die PIN bleibt nur auf dem Gerät.
    Erster Abgleich: Was die Cloud hat, gilt; fehlt dort etwas und ist lokal vorhanden, wird es hochgeladen. Danach gilt die Cloud (Änderung auf einem Gerät wirkt auf allen).
    ===================================================================== */
-const SYNC_SET_KEYS = ['title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAcKwh', 'certDcKwh', 'certKm'];
+const SYNC_SET_KEYS = ['title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAcKwh', 'certDcKwh', 'certKm', 'wltpNet'];
 /** Einstellungen für die Cloud: feste Reihenfolge, ohne leere Werte (Firestore verbietet undefined). null = nichts vorhanden. */
 function syncSet(src) {
   const o = {}; if (src && typeof src === 'object') SYNC_SET_KEYS.forEach(k => { const v = src[k]; if (v != null && v !== '' && !(typeof v === 'number' && !isFinite(v))) o[k] = v; });
@@ -7352,9 +7359,11 @@ async function hpField(which) {
 /* ---- Langzeitverbrauch: Ablesungen „Seit Kauf“ aus dem Bordcomputer (lab.lt), Verlauf über die Jahre ---- */
 let ltEdit = null;
 function ltApp() { try { const rs = getReadings(); if (!rs.length) return null; const t = consumptionTotals(rs, rs.map((_, i) => i)); return t && t.km >= 100 ? t.kwh100 : null; } catch (e) { return null; } }
-function ltSvg(es, app) {
+/** WLTP ohne Ladeverluste: eigener Wert aus den Einstellungen, sonst WLTP − 8 % (geschätzt) */
+function wltpNet() { const s = getSettings(), n = Number(s.wltpNet); if (n > 0) return { v: n, est: false }; const w = Number(s.wltp) > 0 ? Number(s.wltp) : 16; return { v: Math.round(w * 0.92 * 10) / 10, est: true }; }
+function ltSvg(es, app, wl) {
   const W = 296, H = 124, L = 32, R = 12, T = 16, B = 20, t0 = Date.parse(es[0].date), t1 = Date.parse(es[es.length - 1].date), span = Math.max(1, t1 - t0);
-  const vs = es.map(e => e.k100).concat(app != null ? [app] : []); let y0 = Math.floor(Math.min(...vs) - 0.6), y1 = Math.ceil(Math.max(...vs) + 0.6); if (y1 - y0 < 2) y1 = y0 + 2;
+  const vs = es.map(e => e.k100).concat(app != null ? [app] : [], wl != null ? [wl] : []); let y0 = Math.floor(Math.min(...vs) - 0.6), y1 = Math.ceil(Math.max(...vs) + 0.6); if (y1 - y0 < 2) y1 = y0 + 2;
   const X = (d) => es.length < 2 ? (L + W - R) / 2 : L + (Date.parse(d) - t0) / span * (W - L - R), Y = (v) => T + (1 - (v - y0) / (y1 - y0)) * (H - T - B);
   const st = y1 - y0 > 6 ? 2 : 1, tk = []; for (let v = y0; v <= y1; v += st) tk.push(v);
   const multiYear = new Date(es[0].date).getFullYear() !== new Date(es[es.length - 1].date).getFullYear();
@@ -7362,13 +7371,14 @@ function ltSvg(es, app) {
   const xi = es.length <= 5 ? es.map((_, i) => i) : [0, Math.round((es.length - 1) / 2), es.length - 1];
   return `<svg viewBox="0 0 ${W} ${H}" class="mt-1 w-full" role="img" aria-label="Langzeitverbrauch über die Zeit">`
     + tk.map(v => `<line x1="${L}" x2="${W - R}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="currentColor" class="text-slate-200 dark:text-slate-800"/><text x="${L - 6}" y="${(Y(v) + 3.5).toFixed(1)}" text-anchor="end" font-size="9.5" fill="#94a3b8">${v}</text>`).join('')
-    + (app != null ? `<line x1="${L}" x2="${W - R}" y1="${Y(app).toFixed(1)}" y2="${Y(app).toFixed(1)}" stroke="#38bdf8" stroke-dasharray="4 3"/><text x="${W - R}" y="${(Y(app) - 4).toFixed(1)}" text-anchor="end" font-size="9" fill="#0ea5e9">App: ${fmt(app, 1)} (ab Steckdose)</text>` : '')
+    + (app != null ? `<line x1="${L}" x2="${W - R}" y1="${Y(app).toFixed(1)}" y2="${Y(app).toFixed(1)}" stroke="#38bdf8" stroke-dasharray="4 3"/><text x="${W - R}" y="${(Y(app) + (wl != null && app < wl ? 11 : -4)).toFixed(1)}" text-anchor="end" font-size="9" fill="#0ea5e9">App: ${fmt(app, 1)} (ab Steckdose)</text>` : '')
+    + (wl != null ? `<line x1="${L}" x2="${W - R}" y1="${Y(wl).toFixed(1)}" y2="${Y(wl).toFixed(1)}" stroke="#a78bfa" stroke-width="1.6" stroke-dasharray="2 3"/><text x="${L + 2}" y="${(Y(wl) + (app != null && app > wl ? 11 : -4)).toFixed(1)}" font-size="9" fill="#8b5cf6">WLTP ohne Verluste ${fmt(wl, 1)}</text>` : '')
     + (es.length > 1 ? `<polyline points="${es.map(e => X(e.date).toFixed(1) + ',' + Y(e.k100).toFixed(1)).join(' ')}" fill="none" stroke="#10b981" stroke-width="2.4" stroke-linejoin="round"/>` : '')
     + es.map((e, i) => `<circle cx="${X(e.date).toFixed(1)}" cy="${Y(e.k100).toFixed(1)}" r="3.5" fill="#10b981"/>${es.length <= 8 || i === es.length - 1 ? `<text x="${Math.min(W - R - 8, Math.max(L + 10, X(e.date))).toFixed(1)}" y="${(Y(e.k100) + (app != null && Math.abs(Y(e.k100) - 4 - Y(app)) < 12 ? 14 : -8)).toFixed(1)}" text-anchor="middle" font-size="9.5" fill="currentColor" class="text-slate-500 dark:text-slate-300">${fmt(e.k100, 1)}</text>` : ''}`).join('')
     + xi.map(i => `<text x="${Math.min(W - R - 6, Math.max(L + 6, X(es[i].date))).toFixed(1)}" y="${H - 5}" text-anchor="middle" font-size="9.5" fill="#94a3b8">${lbl(es[i].date)}</text>`).join('') + '</svg>';
 }
 function ltCard(list) {
-  const es = (list || []).filter(e => e.k100 > 0 && e.date).sort((a, b) => a.date.localeCompare(b.date) || (a.km || 0) - (b.km || 0)), app = ltApp();
+  const es = (list || []).filter(e => e.k100 > 0 && e.date).sort((a, b) => a.date.localeCompare(b.date) || (a.km || 0) - (b.km || 0)), app = ltApp(), wn = wltpNet();
   if (!es.length) return `<p class="rounded-3xl bg-white dark:bg-slate-900 p-4 text-sm text-slate-600 dark:text-slate-300 text-left">Noch keine Ablesung. Lies im Auto unter Fahrdaten den Langzeitspeicher „Seit Kauf“ ab und trage den Verbrauch über „+“ ein – am besten alle paar Wochen. So siehst du, wie sich dein Langzeitverbrauch über die Jahre entwickelt.${app != null ? ` Die App rechnet aus deinen Ladungen aktuell ${fmt(app, 1)} kWh/100 km ab Steckdose.` : ''}</p>`;
   const cur = es[es.length - 1], prev = es[es.length - 2], dl = prev ? cur.k100 - prev.k100 : null, first = es[0];
   const dChip = dl == null ? '' : `<span class="ml-auto shrink-0 rounded-lg px-2 py-0.5 text-xs font-semibold ${dl > 0.05 ? 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300' : dl < -0.05 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}">${dl > 0 ? '+' : dl < 0 ? '−' : '±'}${fmt(Math.abs(dl), 1)} seit ${labD(prev.date).slice(0, 6)}</span>`;
@@ -7378,8 +7388,9 @@ function ltCard(list) {
     <div class="flex items-baseline justify-between gap-2"><p class="text-sm text-slate-500 dark:text-slate-400 text-left">Langzeitverbrauch seit Kauf</p><span class="text-xs text-slate-500">${labD(cur.date)}</span></div>
     <div class="flex items-baseline gap-2"><span class="font-barlow text-[44px] font-bold leading-none text-emerald-600 dark:text-emerald-400">${fmt(cur.k100, 1)}</span><span class="text-sm text-slate-500 dark:text-slate-400">kWh/100 km</span>${dChip}</div>
     <p class="text-xs text-slate-500 dark:text-slate-400 text-left">Bordcomputer „Seit Kauf“${cur.km ? ' · ' + fmt(cur.km, 0) + ' km' : ''}${first !== cur && first.km && cur.km ? ' · ' + fmt(cur.km - first.km, 0) + ' km seit der ersten Ablesung' : ''}${cur.v ? ' · Ø ' + fmt(cur.v, 0) + ' km/h' : ''}</p>
-    ${ltSvg(es, app)}
-    <p class="text-[11px] text-slate-500 dark:text-slate-400 text-left">Grün: deine Ablesungen.${app != null ? ' Blau gestrichelt: was die App aus deinen Ladungen rechnet. Sie misst ab Steckdose (inkl. Ladeverluste), das Auto ab Akku – deshalb liegt die App normalerweise etwas höher.' : ''}</p></div>
+    ${(() => { const d = cur.k100 - wn.v, pc = d / wn.v * 100; return `<p class="rounded-xl bg-slate-100 dark:bg-slate-800/70 px-3 py-2 text-xs text-slate-600 dark:text-slate-300 text-left">Zum WLTP ohne Ladeverluste (${fmt(wn.v, 1)}${wn.est ? ', geschätzt' : ''}): <b class="${d > 0.05 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}">${d > 0 ? '+' : d < 0 ? '−' : '±'}${fmt(Math.abs(d), 1)} kWh/100 km (${d > 0 ? '+' : d < 0 ? '−' : '±'}${fmt(Math.abs(pc), 0)} %)</b> – ${d > 0.05 ? 'über' : d < -0.05 ? 'unter' : 'genau auf'} der Werksangabe.</p>`; })()}
+    ${ltSvg(es, app, wn.v)}
+    <p class="text-[11px] text-slate-500 dark:text-slate-400 text-left">Grün: deine Ablesungen. Lila gepunktet: WLTP ohne Ladeverluste${wn.est ? ' (WLTP − 8 %, eigenen Wert unter Einstellungen → Laden & Akku eintragen)' : ''} – der passende Vergleich, weil auch der Bordcomputer ohne Ladeverluste misst.${app != null ? ' Blau gestrichelt: was die App aus deinen Ladungen rechnet. Sie misst ab Steckdose (inkl. Ladeverluste), das Auto ab Akku – deshalb liegt die App normalerweise etwas höher.' : ''}</p></div>
     <div class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm px-4 pb-1.5 pt-2"><div class="grid grid-cols-[1.2fr_1fr_0.8fr_0.6fr] gap-1.5 py-1.5 text-[11px] text-slate-500 dark:text-slate-400"><span>Datum</span><span>km-Stand</span><span class="text-right">kWh/100</span><span class="text-right">Δ</span></div>${rows}</div>`;
 }
 function openLtSheet(id) {
@@ -7387,7 +7398,7 @@ function openLtSheet(id) {
   $('rec-sheet-box').innerHTML = `<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div><p class="text-lg font-bold">${e ? 'Ablesung bearbeiten' : 'Langzeitverbrauch festhalten'}</p>
     <p class="text-xs text-slate-500 dark:text-slate-400 text-left">Im Auto: Fahrdaten → „Seit Kauf“ (Langzeitspeicher) ablesen</p>
     <div class="grid grid-cols-[1.35fr_1fr_1fr] gap-2"><div class="min-w-0"><label for="lt-date" class="text-xs text-slate-500 dark:text-slate-400">Datum</label><input id="lt-date" type="date" value="${esc(e ? e.date : wxIso(new Date()))}" class="${inCls} !px-1.5 text-[13px]"></div>${fld('lt-km', 'km-Stand', e ? e.km : (km0 || undefined), '20.401', 'numeric').replace('>km-Stand</label>', '>km-Stand</label><button type="button" data-kmfetch data-kmfor="lt-km" title="Aktuellen km-Stand vom Auto holen" aria-label="Aktuellen km-Stand vom Auto holen" class="kmf ml-1 align-middle relative inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[15px] font-bold leading-none text-emerald-600 dark:text-emerald-400 active:scale-90 transition after:absolute after:-inset-2.5">↻</button>')}${fld('lt-k', 'kWh/100 km', e ? e.k100 : undefined, '15,3')}${fld('lt-v', 'Ø km/h', e ? e.v : undefined, 'optional', 'numeric')}${fld('lt-h', 'Fahrzeit h', e ? e.h : undefined, 'optional')}<div class="min-w-0"><label for="lt-note" class="text-xs text-slate-500 dark:text-slate-400">Notiz</label><input id="lt-note" type="text" maxlength="80" value="${esc((e && e.note) || '')}" placeholder="…" class="${inCls}"></div></div>
-    ${app != null ? `<p class="rounded-xl bg-slate-100 dark:bg-slate-800/70 px-3 py-2 text-xs text-slate-600 dark:text-slate-300 text-left">Zum Vergleich rechnet die App aktuell <b>${fmt(app, 1)}</b> (ab Steckdose, inkl. Ladeverluste)</p>` : ''}
+    <p class="rounded-xl bg-slate-100 dark:bg-slate-800/70 px-3 py-2 text-xs text-slate-600 dark:text-slate-300 text-left">Vergleich: WLTP ohne Ladeverluste <b>${fmt(wltpNet().v, 1)}</b>${wltpNet().est ? ' (geschätzt)' : ''}${app != null ? ` · App ab Steckdose <b>${fmt(app, 1)}</b>` : ''}</p>
     <p id="lt-msg" class="text-sm text-red-600 dark:text-red-400 text-left empty:hidden"></p>
     <div class="grid grid-cols-2 gap-2.5"><button type="button" data-lts="${e ? 'del' : 'close'}" class="h-12 rounded-2xl border border-slate-300 dark:border-slate-700 text-sm font-semibold ${e ? 'text-red-600 dark:text-red-400' : ''}">${e ? 'Löschen' : 'Abbrechen'}</button><button type="button" data-lts="save" class="h-12 rounded-2xl bg-emerald-600 text-white text-sm font-semibold">Speichern</button></div>`;
   $('rec-sheet').classList.remove('hidden');
