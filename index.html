@@ -130,6 +130,7 @@
   p.text-sm.text-slate-600:not(.text-center):not(.text-right):not(.text-left):not(.truncate),
   p.text-\[11px\].text-slate-500:not(.text-center):not(.text-right):not(.text-left):not(.truncate),
   #care-body .rounded-2xl.text-xs, #tax-gap, #pv-hint, #bak-msg + p { text-align: justify; hyphens: auto; -webkit-hyphens: auto; hyphenate-limit-chars: 6 3 3; }
+  main .rounded-3xl.p-4 { padding-left: .875rem; padding-right: .875rem; }   /* Karten innen etwas schmaler: mehr Platz auf schmalen Handys */
   #dp-panes, #bat-panes { overflow-x: clip; overflow-clip-margin: 16px; }   /* hereingleitender Tab darf nicht über den Bildschirmrand ragen (Chrome vergrößert sonst die Seite) */
   @media (prefers-reduced-motion: reduce) { .dp-inL, .dp-inR { animation: none; } }
   @media (prefers-reduced-motion: reduce) { #bd-conf i, #bdg-conf i { animation: none; top: var(--y, 10%); } #bd-card, #bdg-card { animation: none; } }
@@ -137,7 +138,7 @@
 </head>
 <body class="bg-black text-slate-100 min-h-screen">
 
-<main class="max-w-xl mx-auto px-4 pt-5 pb-28">
+<main class="max-w-xl mx-auto px-3 pt-5 pb-28">
 
   <!-- ============ VIEW 1: DASHBOARD ============ -->
   <section id="view-dashboard" class="view space-y-4 relative isolate">
@@ -163,7 +164,7 @@
         <span aria-hidden="true" class="select-none text-[30px] font-light leading-none text-slate-400">|</span>
         <span class="hs-cell block"><span class="block text-[21px] leading-tight font-semibold tabular-nums text-white"><span id="hs-kwh">–</span> <span class="text-[13px] font-medium text-white/70">kWh</span></span><span id="hs-kwh-l" class="mt-0.5 block truncate px-1 text-xs text-white/60">&nbsp;</span></span>
       </button>
-      <div class="relative -mx-4 mt-3 h-[clamp(230px,64vw,340px)]">
+      <div class="relative -mx-3 mt-3 h-[clamp(230px,64vw,340px)]">
         <div id="car-scroll" class="absolute inset-0 overflow-hidden select-none touch-pan-y focus:outline-none transition-opacity duration-500" tabindex="0" role="group" aria-roledescription="Karussell" aria-label="Bilder vom Enyaq, nach links oder rechts wischen zum Wechseln"></div>
         <div id="car-live" class="absolute inset-0 flex items-end justify-center opacity-0 pointer-events-none transition-opacity duration-500" aria-hidden="true"><img src="/Bilder/Enyaq_live.webp" alt="Enyaq lädt" width="1074" height="584" decoding="async" draggable="false" class="max-h-full w-full object-contain object-bottom select-none"></div>
       </div>
@@ -331,7 +332,7 @@
     </div>
     <div id="trends" class="flex snap-x snap-mandatory gap-4 overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-roledescription="Karussell" aria-label="Trends der letzten 8 Monate"></div>
     <div id="trends-dots" class="!mt-2 flex justify-center gap-2" aria-hidden="true"></div>
-    <div id="hero-bg" aria-hidden="true" class="absolute -top-5 -inset-x-4 -z-10 h-[620px] pointer-events-none !mt-0" style="background:radial-gradient(ellipse 72% 190px at 50% 190px,rgba(80,150,255,.40),rgba(80,150,255,0) 70%),linear-gradient(180deg,#000 0,#000 28px,#030b24 70px,#061a52 160px,#0b2f8a 280px,#0a2466 370px,#050f2e 470px,#000 600px)"></div>
+    <div id="hero-bg" aria-hidden="true" class="absolute -top-5 -inset-x-3 -z-10 h-[620px] pointer-events-none !mt-0" style="background:radial-gradient(ellipse 72% 190px at 50% 190px,rgba(80,150,255,.40),rgba(80,150,255,0) 70%),linear-gradient(180deg,#000 0,#000 28px,#030b24 70px,#061a52 160px,#0b2f8a 280px,#0a2466 370px,#050f2e 470px,#000 600px)"></div>
   </section>
 
   <!-- ============ VIEW 2: ERFASSEN ============ -->
@@ -419,7 +420,7 @@
       </div>
       <div class="mt-2 flex items-center justify-between bg-slate-100 dark:bg-slate-800 rounded-xl p-1">
         <button id="bt-minus" type="button" aria-label="Akku-Temperatur verringern" class="w-10 h-9 shrink-0 rounded-lg bg-white dark:bg-slate-700 text-xl leading-none font-medium active:scale-95 transition select-none touch-manipulation">−</button>
-        <button id="bt-clear" type="button" class="min-w-0 flex-1 text-center text-sm" title="Antippen: Wert entfernen"><span class="block text-[11px] text-slate-500 dark:text-slate-400">Akku °C beim Anstecken</span><span id="bt-val" class="font-medium">–</span></button>
+        <button id="bt-clear" type="button" class="min-w-0 flex-1 text-center text-sm" title="Antippen: letzten Wert übernehmen bzw. Wert entfernen"><span class="block text-[11px] text-slate-500 dark:text-slate-400">Akku °C beim Anstecken</span><span id="bt-val" class="font-medium">–</span></button>
         <button id="bt-plus" type="button" aria-label="Akku-Temperatur erhöhen" class="w-10 h-9 shrink-0 rounded-lg bg-white dark:bg-slate-700 text-xl leading-none font-medium active:scale-95 transition select-none touch-manipulation">+</button>
       </div>
       <input id="soc0-input" type="hidden"><input id="soc1-input" type="hidden"><input id="bt-input" type="hidden">
@@ -560,7 +561,7 @@
       <button id="kb-add" type="button" class="px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-semibold active:scale-95 transition">+ Neu</button>
     </div>
     <label class="flex items-center gap-2 rounded-xl bg-white dark:bg-slate-800 px-3 text-slate-500 dark:text-slate-400"><svg class="h-4 w-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><input id="kb-q" type="search" autocomplete="off" placeholder="Suchen …" aria-label="Wissen durchsuchen" class="min-w-0 flex-1 bg-transparent py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:outline-none"></label>
-    <div id="kb-cats" class="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-0.5 text-xs font-medium whitespace-nowrap [scrollbar-width:none]"></div>
+    <div id="kb-cats" class="-mx-3 flex gap-1.5 overflow-x-auto px-3 pb-0.5 text-xs font-medium whitespace-nowrap [scrollbar-width:none]"></div>
     <div id="kb-pin-wrap" class="hidden"><p class="mb-1.5 px-1 text-[11px] uppercase tracking-wider text-slate-500">Angeheftet</p><div id="kb-pins" class="grid grid-cols-2 gap-2"></div></div>
     <div id="kb-list-wrap"><p class="mb-1.5 px-1 text-[11px] uppercase tracking-wider text-slate-500">Alle Einträge</p><ul id="kb-list" class="rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm divide-y divide-slate-200 dark:divide-slate-800 overflow-hidden"></ul></div>
     <p id="kb-empty" class="hidden px-1 py-6 text-center text-sm text-slate-500 dark:text-slate-400">Noch nichts gespeichert. Lege mit „+ Neu“ zum Beispiel den Link zum Handbuch, Reifendruck-Werte oder die Nummer deiner Werkstatt an.</p>
@@ -1705,17 +1706,29 @@ function paintBatt() {
   ad.textContent = has0 && has1 && b - a >= 12 ? '+' + (b - a) + ' %' + (b - a >= 40 ? ' ≈ ' + fmt((b - a) / 100 * batteryKwh(), 1) + ' kWh' : '') : '';
 }
 function paintCapture() { paintReading(); paintBatt(); paintBattTemp(); }
-/* Akku-Temperatur (optional, Infotainment ab ME3.8): Stepper −/+ in 1-°C-Schritten, erster Tipp startet bei 20 °C, Mitte antippen = leeren */
+/* Akku-Temperatur (optional, Infotainment ab ME3.8): Stepper −/+ in 1-°C-Schritten. Leer zeigt grau den zuletzt gespeicherten Wert; Mitte antippen übernimmt ihn (bzw. leert), erster −/+ startet dort */
 const BT_MIN = -30, BT_MAX = 60;
-function paintBattTemp() { const v = optNum($('bt-input').value); $('bt-val').textContent = v == null || Number.isNaN(v) ? '–' : String(v).replace('-', '−') + ' °C'; }
+/** Zuletzt gespeicherte Akku-Temperatur: neuester Wert aus Ladungen (battTemp) und Rekorde → Akku °C */
+function lastBattTemp() {
+  let best = null; const take = (t, v) => { if (Number.isFinite(t) && Number.isFinite(v) && (!best || t > best.t)) best = { t, v }; };
+  try { getReadings().forEach(r => take(Date.parse(r.date), r.battTemp)); } catch (e) { }
+  try { const o = load(KEY_LAB, null); (o && o.bt || []).forEach(e => take(Date.parse(e.at), e.t)); } catch (e) { }
+  return best;
+}
+function paintBattTemp() {
+  const v = optNum($('bt-input').value), el = $('bt-val');
+  if (v != null && !Number.isNaN(v)) { el.textContent = String(v).replace('-', '−') + ' °C'; el.className = 'font-medium'; return; }
+  const l = lastBattTemp(); el.className = 'font-medium text-slate-400 dark:text-slate-500';
+  el.textContent = l ? 'zuletzt ' + String(Math.round(l.v)).replace('-', '−') + ' °C · ' + (new Date(l.t).toDateString() === new Date().toDateString() ? 'heute ' + hhmm(l.t) : new Date(l.t).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })) : '–';
+}
 (() => {
-  const step = (d) => { const v = optNum($('bt-input').value); const n = v == null || Number.isNaN(v) ? 20 : Math.max(BT_MIN, Math.min(BT_MAX, v + d)); $('bt-input').value = String(n); paintBattTemp(); };
+  const step = (d) => { const v = optNum($('bt-input').value); const n = v == null || Number.isNaN(v) ? (lastBattTemp() ? Math.round(lastBattTemp().v) : 20) : Math.max(BT_MIN, Math.min(BT_MAX, v + d)); $('bt-input').value = String(n); paintBattTemp(); };
   [['bt-minus', -1], ['bt-plus', 1]].forEach(([id, d]) => {
     const b = $(id); let t1 = 0, t2 = 0; const stop = () => { clearTimeout(t1); clearInterval(t2); };
     b.addEventListener('pointerdown', (e) => { e.preventDefault(); step(d); t1 = setTimeout(() => { t2 = setInterval(() => step(d), 110); }, 450); });
     ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => b.addEventListener(ev, stop)); b.addEventListener('contextmenu', e => e.preventDefault());
   });
-  $('bt-clear').addEventListener('click', () => { $('bt-input').value = ''; paintBattTemp(); });
+  $('bt-clear').addEventListener('click', () => { const v = optNum($('bt-input').value), l = lastBattTemp(); $('bt-input').value = (v == null || Number.isNaN(v)) && l ? String(Math.round(l.v)) : ''; paintBattTemp(); });   // leer: letzten Wert übernehmen, sonst leeren
 })();
 
 $('reading-input').addEventListener('input', e => { delete e.target.dataset.live; paintReading(); });
