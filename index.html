@@ -484,7 +484,7 @@
       <div><label for="cost-title" class="text-xs font-medium text-slate-500 dark:text-slate-400">Titel</label><input id="cost-title" type="text" maxlength="80" autocomplete="off" placeholder="z. B. SB-Wäsche" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
       <div class="grid grid-cols-2 gap-2">
         <div><div class="flex h-5 items-center"><label for="cost-date" class="truncate text-xs font-medium text-slate-500 dark:text-slate-400">Datum und Zeit</label></div><input id="cost-date" type="datetime-local" onclick="try{this.showPicker()}catch(e){}" class="mt-1 block h-11 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-2 py-0 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-xs tabular-nums"></div>
-        <div><div class="flex h-5 items-center justify-between gap-1"><label for="cost-km" class="min-w-0 truncate text-xs font-medium text-slate-500 dark:text-slate-400">km-Stand</label><button id="cost-km-upd" type="button" title="Aktuellen km-Stand vom Auto holen" class="shrink-0 h-5 rounded-md px-1.5 text-xs font-semibold leading-5 text-emerald-600 dark:text-emerald-400 active:scale-95 transition after:absolute after:-inset-y-3 after:inset-x-0 relative">Update</button></div><input id="cost-km" type="text" inputmode="decimal" autocomplete="off" placeholder="" class="mt-1 block h-11 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-0 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
+        <div><div class="flex h-5 items-center justify-between gap-1"><label for="cost-km" class="min-w-0 truncate text-xs font-medium text-slate-500 dark:text-slate-400">km-Stand</label><button type="button" id="cost-km-upd" data-kmfetch data-kmfor="cost-km" title="Aktuellen km-Stand vom Auto holen" aria-label="Aktuellen km-Stand vom Auto holen" class="kmf relative inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[15px] font-bold leading-none text-emerald-600 dark:text-emerald-400 active:scale-90 transition after:absolute after:-inset-2.5">↻</button></div><input id="cost-km" type="text" inputmode="decimal" autocomplete="off" placeholder="" class="mt-1 block h-11 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-0 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
       </div>
       <div><label for="cost-note" class="text-xs font-medium text-slate-500 dark:text-slate-400">Notiz (optional)</label><textarea id="cost-note" rows="2" maxlength="300" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></textarea></div>
       <div><p class="text-xs font-medium text-slate-500 dark:text-slate-400">Belege (optional, werden in Google Drive abgelegt)</p><div id="cost-belege" data-dv-block="form" class="mt-1"></div></div>
@@ -1444,7 +1444,7 @@
     <p id="done-title" class="text-sm text-slate-500 dark:text-slate-400 break-words"></p>
     <div><label for="done-date" class="text-xs text-slate-500 dark:text-slate-400">Datum und Zeit</label><input id="done-date" type="datetime-local" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
     <div class="grid grid-cols-2 gap-2">
-      <div><label for="done-km" class="text-xs text-slate-500 dark:text-slate-400">km-Stand (optional)</label><input id="done-km" type="text" inputmode="numeric" autocomplete="off" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
+      <div><div class="flex items-center gap-1.5"><label for="done-km" class="text-xs text-slate-500 dark:text-slate-400">km-Stand (optional)</label><button type="button" data-kmfetch data-kmfor="done-km" title="Aktuellen km-Stand vom Auto holen" aria-label="Aktuellen km-Stand vom Auto holen" class="kmf relative inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[15px] font-bold leading-none text-emerald-600 dark:text-emerald-400 active:scale-90 transition after:absolute after:-inset-2.5">↻</button></div><input id="done-km" type="text" inputmode="numeric" autocomplete="off" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
       <div><label for="done-cost" class="text-xs text-slate-500 dark:text-slate-400">Kosten € (optional)</label><input id="done-cost" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
     </div>
     <p id="done-next" class="text-sm text-slate-600 dark:text-slate-300 min-h-[1.25rem]"></p>
@@ -1838,21 +1838,34 @@ $('btn-odo').addEventListener('click', async () => {                      // km-
   } catch (e) { info.textContent = 'Nicht verfügbar: ' + e.message; info.title = e.message; }
 });
 
-/* Kosten erfassen: aktuellen km-Stand vom Škoda-Server eintragen */
-$('cost-km-upd').addEventListener('click', async () => {
-  const b = $('cost-km-upd'), set = (t, tip) => { b.textContent = t; b.title = tip || 'Aktuellen km-Stand vom Auto holen'; };
-  if (!apiEnabled()) { set('–'); flash($('cost-msg'), 'Keine Fahrzeugdaten eingerichtet (Einstellungen → Fahrzeugdaten).', false); setTimeout(() => set('Update'), 2500); return; }
-  set('…'); b.disabled = true;
+/* ↻ neben jedem km-Stand-Feld: aktuellen km-Stand vom Škoda-Server holen (30 s zwischengespeichert, damit mehrere Felder nicht mehrfach abfragen) */
+let carKmCache = null;
+async function fetchCarKm() {
+  if (carKmCache && Date.now() - carKmCache.t < 30000) return carKmCache;
+  const res = await fetch('/api/vehicle', { headers: await authHeaders() }), d = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(d.error || 'HTTP ' + res.status);
+  if (d.odometerKm == null) throw new Error('Das Auto meldet keinen km-Stand');
+  carKmCache = { t: Date.now(), km: Math.round(d.odometerKm), at: d.capturedAt || null }; return carKmCache;
+}
+function kmFetchNote(inp, text, ok) {
+  const host = inp.parentElement; let n = host.querySelector(':scope > [data-kmnote]');
+  if (!n) { n = document.createElement('p'); n.dataset.kmnote = ''; host.appendChild(n); }
+  n.className = 'mt-1 text-[11px] leading-snug text-left ' + (ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'); n.textContent = text;
+  clearTimeout(n._t); n._t = setTimeout(() => n.remove(), ok ? 3000 : 6000);
+}
+document.addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-kmfetch]'); if (!b) return; e.preventDefault(); e.stopPropagation();
+  const inp = b.dataset.kmfor ? $(b.dataset.kmfor) : b.closest('[data-kmwrap]')?.querySelector('input'); if (!inp || b.disabled) return;
+  if (!apiEnabled()) { kmFetchNote(inp, 'Keine Fahrzeugdaten eingerichtet (Einstellungen → Konto & Cloud).', false); return; }
+  b.disabled = true; b.classList.add('animate-spin');
   try {
-    const res = await fetch('/api/vehicle', { headers: await authHeaders() }), d = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(d.error || 'HTTP ' + res.status);
-    if (d.odometerKm == null) throw new Error('Das Auto meldet keinen km-Stand');
-    $('cost-km').value = String(Math.round(d.odometerKm));   // ohne Tausenderpunkt (optNum liest „18.500“ sonst als 18,5)
-    $('cost-km').dispatchEvent(new Event('input', { bubbles: true }));
-    set('✓', 'Vom Auto' + (d.capturedAt ? ' (Stand ' + hhmm(new Date(d.capturedAt).getTime()) + ' Uhr)' : ''));
-  } catch (e) { set('Fehler'); flash($('cost-msg'), 'km-Stand nicht verfügbar: ' + e.message, false); }
-  finally { b.disabled = false; setTimeout(() => set('Update'), 2500); }
-});
+    const r = await fetchCarKm();
+    inp.value = String(r.km);                                    // ohne Tausenderpunkt (optNum liest „18.500“ sonst als 18,5)
+    inp.dispatchEvent(new Event('input', { bubbles: true })); inp.dispatchEvent(new Event('change', { bubbles: true }));
+    kmFetchNote(inp, '✓ vom Auto' + (r.at ? ' · Stand ' + new Date(r.at).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) + ' Uhr' : ''), true);
+  } catch (er) { kmFetchNote(inp, 'km-Stand nicht verfügbar: ' + ((er && er.message) || er), false); }
+  finally { b.disabled = false; b.classList.remove('animate-spin'); }
+}, true);
 function updateCaptureDefaults() {
   const withKm = getReadings().filter(r => r.odometerKm != null), last = withKm[withKm.length - 1];
   $('km-input').placeholder = last ? String(last.odometerKm) : 'optional';
@@ -2882,7 +2895,7 @@ function renderHistory() {
           </div>
         </div>
         <div class="grid grid-cols-3 gap-2 mt-3 text-center">
-          <div><p class="text-xs text-slate-500 dark:text-slate-400 mb-1">km-Stand</p><input data-f="km" type="text" inputmode="decimal" value="${r.odometerKm ?? ''}" class="${INPUT_CLS}"></div>
+          <div data-kmwrap><p class="flex items-center justify-center gap-1 text-xs text-slate-500 dark:text-slate-400 mb-1">km-Stand <button type="button" data-kmfetch title="Aktuellen km-Stand vom Auto holen" aria-label="Aktuellen km-Stand vom Auto holen" class="kmf relative inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[15px] font-bold leading-none text-emerald-600 dark:text-emerald-400 active:scale-90 transition after:absolute after:-inset-2.5">↻</button></p><input data-f="km" type="text" inputmode="decimal" value="${r.odometerKm ?? ''}" class="${INPUT_CLS}"></div>
           <div><p class="text-xs text-slate-500 dark:text-slate-400 mb-1">Akku Start %</p><input data-f="s0" type="text" inputmode="decimal" value="${r.socStart ?? ''}" class="${INPUT_CLS}"></div>
           <div><p class="text-xs text-slate-500 dark:text-slate-400 mb-1">Akku Ende %</p><input data-f="s1" type="text" inputmode="decimal" value="${r.socEnd ?? ''}" class="${INPUT_CLS}"></div>
         </div>
@@ -2942,8 +2955,8 @@ function renderHistory() {
         <select data-cf="cat" aria-label="Kategorie" class="${INPUT_CLS} mt-3">${catOptions(c.category || '')}</select>
         <input data-cf="title" type="text" maxlength="80" value="${esc(c.title || '')}" placeholder="Titel" class="${INPUT_CLS} mt-3 !text-left">
         <div class="grid grid-cols-2 gap-2 mt-3 text-center">
-          <div><p class="${lbl} mb-1">Betrag € (Minus = Einnahme)</p><input data-cf="amount" type="text" inputmode="decimal" value="${String(amt).replace('.', ',')}" class="${INPUT_CLS}"></div>
-          <div><p class="${lbl} mb-1">km-Stand</p><input data-cf="km" type="text" inputmode="decimal" value="${c.odometerKm ?? ''}" class="${INPUT_CLS}"></div>
+          <div><p class="${lbl} mb-1 text-center">Betrag € (Minus = Einnahme)</p><input data-cf="amount" type="text" inputmode="decimal" value="${String(amt).replace('.', ',')}" class="${INPUT_CLS}"></div>
+          <div data-kmwrap><p class="${lbl} mb-1 flex items-center justify-center gap-1">km-Stand <button type="button" data-kmfetch title="Aktuellen km-Stand vom Auto holen" aria-label="Aktuellen km-Stand vom Auto holen" class="kmf relative inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[15px] font-bold leading-none text-emerald-600 dark:text-emerald-400 active:scale-90 transition after:absolute after:-inset-2.5">↻</button></p><input data-cf="km" type="text" inputmode="decimal" value="${c.odometerKm ?? ''}" class="${INPUT_CLS}"></div>
         </div>
         <input data-cf="note" type="text" maxlength="300" value="${esc(c.note || '')}" placeholder="Notiz" class="${INPUT_CLS} mt-3 !text-left">
  <div data-dv-block="c${c.id}" class="mt-3">${dvBlockInner('c' + c.id, c)}</div>
@@ -7358,7 +7371,7 @@ function openLtSheet(id) {
   const e = id ? (getLab().lt || []).find(x => x.id === id) : null; ltEdit = e ? e.id : null; const app = ltApp(), km0 = (() => { try { return lastKnownKm(); } catch (_) { return null; } })();
   $('rec-sheet-box').innerHTML = `<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div><p class="text-lg font-bold">${e ? 'Ablesung bearbeiten' : 'Langzeitverbrauch festhalten'}</p>
     <p class="text-xs text-slate-500 dark:text-slate-400 text-left">Im Auto: Fahrdaten → „Seit Kauf“ (Langzeitspeicher) ablesen</p>
-    <div class="grid grid-cols-[1.35fr_1fr_1fr] gap-2"><div class="min-w-0"><label for="lt-date" class="text-xs text-slate-500 dark:text-slate-400">Datum</label><input id="lt-date" type="date" value="${esc(e ? e.date : wxIso(new Date()))}" class="${inCls} !px-1.5 text-[13px]"></div>${fld('lt-km', 'km-Stand', e ? e.km : (km0 || undefined), '20.401', 'numeric')}${fld('lt-k', 'kWh/100 km', e ? e.k100 : undefined, '15,3')}${fld('lt-v', 'Ø km/h', e ? e.v : undefined, 'optional', 'numeric')}${fld('lt-h', 'Fahrzeit h', e ? e.h : undefined, 'optional')}<div class="min-w-0"><label for="lt-note" class="text-xs text-slate-500 dark:text-slate-400">Notiz</label><input id="lt-note" type="text" maxlength="80" value="${esc((e && e.note) || '')}" placeholder="…" class="${inCls}"></div></div>
+    <div class="grid grid-cols-[1.35fr_1fr_1fr] gap-2"><div class="min-w-0"><label for="lt-date" class="text-xs text-slate-500 dark:text-slate-400">Datum</label><input id="lt-date" type="date" value="${esc(e ? e.date : wxIso(new Date()))}" class="${inCls} !px-1.5 text-[13px]"></div>${fld('lt-km', 'km-Stand', e ? e.km : (km0 || undefined), '20.401', 'numeric').replace('>km-Stand</label>', '>km-Stand</label><button type="button" data-kmfetch data-kmfor="lt-km" title="Aktuellen km-Stand vom Auto holen" aria-label="Aktuellen km-Stand vom Auto holen" class="kmf ml-1 align-middle relative inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[15px] font-bold leading-none text-emerald-600 dark:text-emerald-400 active:scale-90 transition after:absolute after:-inset-2.5">↻</button>')}${fld('lt-k', 'kWh/100 km', e ? e.k100 : undefined, '15,3')}${fld('lt-v', 'Ø km/h', e ? e.v : undefined, 'optional', 'numeric')}${fld('lt-h', 'Fahrzeit h', e ? e.h : undefined, 'optional')}<div class="min-w-0"><label for="lt-note" class="text-xs text-slate-500 dark:text-slate-400">Notiz</label><input id="lt-note" type="text" maxlength="80" value="${esc((e && e.note) || '')}" placeholder="…" class="${inCls}"></div></div>
     ${app != null ? `<p class="rounded-xl bg-slate-100 dark:bg-slate-800/70 px-3 py-2 text-xs text-slate-600 dark:text-slate-300 text-left">Zum Vergleich rechnet die App aktuell <b>${fmt(app, 1)}</b> (ab Steckdose, inkl. Ladeverluste)</p>` : ''}
     <p id="lt-msg" class="text-sm text-red-600 dark:text-red-400 text-left empty:hidden"></p>
     <div class="grid grid-cols-2 gap-2.5"><button type="button" data-lts="${e ? 'del' : 'close'}" class="h-12 rounded-2xl border border-slate-300 dark:border-slate-700 text-sm font-semibold ${e ? 'text-red-600 dark:text-red-400' : ''}">${e ? 'Löschen' : 'Abbrechen'}</button><button type="button" data-lts="save" class="h-12 rounded-2xl bg-emerald-600 text-white text-sm font-semibold">Speichern</button></div>`;
