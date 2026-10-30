@@ -546,6 +546,15 @@
   </section>
 
   <!-- ============ Rekorde (eigene Seite, Schnellmenü → „Rekorde“) ============ -->
+  <section id="view-wish" class="view hidden space-y-3">
+    <div class="-mt-2 flex h-[60px] items-center justify-between gap-3 -mb-[10px]">
+      <h1 class="min-w-0 truncate font-barlow font-semibold text-2xl uppercase tracking-[0.14em] text-white">Wunschliste</h1>
+      <button id="wish-add" type="button" aria-label="Wunsch hinzufügen" class="shrink-0 flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-white active:scale-95 transition"><svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+    </div>
+    <div id="wish-seg" class="flex bg-slate-200 dark:bg-slate-800 rounded-xl p-1"></div>
+    <div id="wish-body" class="space-y-2.5"></div>
+  </section>
+
   <section id="view-tires" class="view hidden space-y-3">
     <div class="-mt-2 flex h-[60px] items-center justify-between gap-3 -mb-[10px]">
       <h1 class="min-w-0 truncate font-barlow font-semibold text-2xl uppercase tracking-[0.14em] text-white">Reifen</h1>
@@ -1294,6 +1303,7 @@
       <button type="button" data-nav="kb" class="relative flex min-w-0 flex-col items-center gap-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800 px-0.5 py-2.5 text-[10.5px] font-semibold leading-tight tracking-tight active:scale-95 transition"><svg class="h-[22px] w-[22px] text-violet-600 dark:text-violet-300" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h12v18H6a2 2 0 0 1-2-2z"/><path d="M8 7h7"/></svg><span class="max-w-full truncate">Wissen</span></button>
       <button type="button" data-nav="providers" class="relative flex min-w-0 flex-col items-center gap-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800 px-0.5 py-2.5 text-[10.5px] font-semibold leading-tight tracking-tight active:scale-95 transition"><svg class="h-[22px] w-[22px] text-violet-600 dark:text-violet-300" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18"/></svg><span class="max-w-full truncate">Ladekarten</span></button>
       <button type="button" data-nav="tires" class="relative flex min-w-0 flex-col items-center gap-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800 px-0.5 py-2.5 text-[10.5px] font-semibold leading-tight tracking-tight active:scale-95 transition"><svg class="h-[22px] w-[22px] text-violet-600 dark:text-violet-300" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5"/><path d="M12 3v5.5M12 15.5V21M3 12h5.5M15.5 12H21"/></svg><span class="max-w-full truncate">Reifen</span></button>
+      <button type="button" data-nav="wish" class="relative flex min-w-0 flex-col items-center gap-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800 px-0.5 py-2.5 text-[10.5px] font-semibold leading-tight tracking-tight active:scale-95 transition"><svg class="h-[22px] w-[22px] text-violet-600 dark:text-violet-300" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.3-9.2C1.4 8.4 3.5 4.5 7.3 4.5c2 0 3.4 1.1 4.7 2.7 1.3-1.6 2.7-2.7 4.7-2.7 3.8 0 5.9 3.9 4.6 7.3C19.5 16.4 12 21 12 21z"/></svg><span class="max-w-full truncate">Wunschliste</span></button>
       <button type="button" data-nav="backup" class="relative flex min-w-0 flex-col items-center gap-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800 px-0.5 py-2.5 text-[10.5px] font-semibold leading-tight tracking-tight active:scale-95 transition"><svg class="h-[22px] w-[22px] text-violet-600 dark:text-violet-300" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9"/><path d="M12 7v5h5"/></svg><span class="max-w-full truncate">Sicherung</span></button>
       <button type="button" data-nav="car" class="relative flex min-w-0 flex-col items-center gap-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800 px-0.5 py-2.5 text-[10.5px] font-semibold leading-tight tracking-tight active:scale-95 transition"><svg class="h-[22px] w-[22px] text-violet-600 dark:text-violet-300" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 17h14M6 17v2M18 17v2M4 13l2-5h12l2 5v4H4z"/><circle cx="8" cy="14" r="1"/><circle cx="16" cy="14" r="1"/></svg><span class="max-w-full truncate">Fahrzeug</span></button>
       <button type="button" data-nav="settings" class="relative flex min-w-0 flex-col items-center gap-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800 px-0.5 py-2.5 text-[10.5px] font-semibold leading-tight tracking-tight active:scale-95 transition"><svg class="h-[22px] w-[22px] text-violet-600 dark:text-violet-300" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></svg><span class="max-w-full truncate">Einstellungen</span></button>
@@ -1413,6 +1423,7 @@
 <!-- Wissen: Eintrag ansehen / bearbeiten -->
 <div id="cv-sheet" class="hidden fixed inset-0 z-50 bg-black/60 flex items-end justify-center"><div id="cv-sheet-box" class="w-full max-w-md max-h-[92vh] overflow-y-auto rounded-t-[28px] bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-4 pt-2.5 pb-5 space-y-3"></div></div>
 <input id="cv-file" type="file" accept="image/*,application/pdf" class="hidden">
+<div id="wish-sheet" class="hidden fixed inset-0 z-50 bg-black/60 flex items-end justify-center"><div id="wish-sheet-box" class="w-full max-w-md max-h-[92vh] overflow-y-auto rounded-t-[28px] bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-4 pt-2.5 pb-5 space-y-3"></div></div>
 <div id="tire-sheet" class="hidden fixed inset-0 z-50 bg-black/60 flex items-end justify-center"><div id="tire-sheet-box" class="w-full max-w-md max-h-[92vh] overflow-y-auto rounded-t-[28px] bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-4 pt-2.5 pb-5 space-y-3"></div></div>
 <div id="rec-sheet" class="hidden fixed inset-0 z-50 bg-black/60 flex items-end justify-center"><div id="rec-sheet-box" class="w-full max-w-md max-h-[92vh] overflow-y-auto rounded-t-[28px] bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-4 pt-2.5 pb-5 space-y-3"></div></div>
 <div id="ch-sheet" class="hidden fixed inset-0 z-50 bg-black/60 flex items-end justify-center">
@@ -2061,6 +2072,7 @@ function showView(name) {
   if (name === 'kb') renderKb();
   if (name === 'badges') { try { renderBadges(); } catch (e) { } }
   if (name === 'recs') { try { renderRecs(); } catch (e) { console.error(e); } }
+  if (name === 'wish') { try { renderWish(); } catch (e) { console.error(e); } }
   if (name === 'tires') { tireSet = 'aw'; tireSel = null; try { renderTires(); } catch (e) { console.error(e); } }   // beim Öffnen immer Allwetter
   if (name !== 'history' && editMode) setEditMode(false);
   if (name === 'history') renderHistory();
@@ -3275,7 +3287,8 @@ function importPrefsFromBackup(text) {
     const lids = new Set(base.lt.map(x => String(x.id))), al = (Array.isArray(d.lab.lt) ? d.lab.lt : []).filter(x => x && x.id && !lids.has(String(x.id)));
     const bids = new Set(base.bt.map(x => String(x.id))), ab = (Array.isArray(d.lab.bt) ? d.lab.bt : []).filter(x => x && x.id && !bids.has(String(x.id)));
     const tids = new Set(base.tires.map(x => String(x.id))), at = (Array.isArray(d.lab.tires) ? d.lab.tires : []).filter(x => x && x.id && x.v && !tids.has(String(x.id)));
-    if (!cur || ac.length || ar.length || as.length || nr || al.length || ab.length || at.length) setLab({ curves: base.curves.concat(ac), recs: base.recs.concat(ar), speeds: base.speeds.concat(as), routes: rts, lt: base.lt.concat(al), bt: base.bt.concat(ab), tires: base.tires.concat(at) });
+    const wids = new Set(base.wish.map(x => String(x.id))), aw = (Array.isArray(d.lab.wish) ? d.lab.wish : []).filter(x => x && x.id && x.title && !wids.has(String(x.id)));
+    if (!cur || ac.length || ar.length || as.length || nr || al.length || ab.length || at.length || aw.length) setLab({ curves: base.curves.concat(ac), recs: base.recs.concat(ar), speeds: base.speeds.concat(as), routes: rts, lt: base.lt.concat(al), bt: base.bt.concat(ab), tires: base.tires.concat(at), wish: base.wish.concat(aw) });
   }
   if (d.settings && typeof d.settings === 'object' && Object.keys(d.settings).length && confirm('Die Sicherung enthält auch Einstellungen (Strompreis, Akku, Fahrzeugdaten, Kauftag …).\n\nOK = Einstellungen aus der Sicherung übernehmen\nAbbrechen = aktuelle Einstellungen behalten')) {
     const keep = load(KEY_SETTINGS, {}) || {}, n = { ...d.settings }; delete n.pin; if (keep.pin) n.pin = keep.pin;
@@ -6325,7 +6338,7 @@ window.onCloudPrefs = (d, first, uid) => {
   /* Labor: zusammenführen (neuester Stand je Element), nie durch einen älteren oder fehlenden Cloud-Stand löschen */
   const lq = load(KEY_LAB, null), cq = d && d.lab && typeof d.lab === 'object' ? d.lab : null; let nq = labMerge(lq, cq);
   if (nq && labCanon(nq) !== labCanon(cq)) up = true;
-  if (labCanon(nq) !== labCanon(lq)) { if (nq) save(KEY_LAB, nq); try { renderCurve(); if (currentView === 'recs') renderRecs(); if (currentView === 'tires') renderTires(); } catch (e) { } }
+  if (labCanon(nq) !== labCanon(lq)) { if (nq) save(KEY_LAB, nq); try { renderCurve(); if (currentView === 'recs') renderRecs(); if (currentView === 'tires') renderTires(); if (currentView === 'wish') renderWish(); } catch (e) { } }
   if (up) window.cloud.setPrefs({ wltp: nw, wxLoc: nl, provInfo: np, settings: ns, kb: nk, lab: nq }).catch(() => { });
 };
 
@@ -7015,7 +7028,7 @@ const NAV_GO = {
   badges: () => showView('badges'), wrap: () => $('btn-wrap-preview').click(),
   tax: () => { repMode = 'fahrten'; showView('report'); setTimeout(() => { const t = $('tax-card'); if (t && !t.classList.contains('hidden')) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 250); },
   akte: () => { repMode = 'stat'; setDpTab('akte', false); showView('report'); }, checkheft: () => { repMode = 'stat'; setDpTab('checkheft', false); showView('report'); },
-  reminders: () => showView('reminders'), kb: () => showView('kb'), providers: () => showView('providers'), tires: () => showView('tires'),
+  reminders: () => showView('reminders'), kb: () => showView('kb'), providers: () => showView('providers'), tires: () => showView('tires'), wish: () => { wishTab = 'open'; showView('wish'); },
   backup: () => openSettings('daten'), car: () => openSettings('fahrzeug'), settings: () => showView('settings'), account: () => openSettings('konto'),
   'rep-kosten': () => { repMode = 'kosten'; showView('report'); }, 'rep-fahrten': () => { repMode = 'fahrten'; showView('report'); },
   'hist-kosten': () => { histFilter = 'kosten'; showView('history'); }, 'hist-laden': () => { histFilter = 'laden'; showView('history'); },
@@ -7033,7 +7046,7 @@ const NAV_IDX = [
   ['akte', 'Fahrzeugakte', 'Berichte › Daten', 'verkauf historie'], ['akte-pdf', 'Fahrzeugakte als PDF', 'Aktion', 'drucken export'], ['checkheft', 'Checkheft', 'Berichte › Daten', 'service reparatur tüv hu werkstatt'],
   ['ch-pdf', 'Checkheft als PDF', 'Aktion', 'belege mappe drucken'], ['rep-fahrten', 'Fahrten-Bericht', 'Berichte › Fahrten', 'fahrtenbuch arbeitsweg'], ['tax', 'Steuer · Arbeitsweg', 'Berichte › Fahrten', 'pendlerpauschale entfernungspauschale werbungskosten'],
   ['hist', 'Historie', 'Historie', 'verlauf bearbeiten datenprüfung'], ['hist-laden', 'Ladungen', 'Historie › Laden', 'verlauf'], ['hist-kosten', 'Kosten-Verlauf', 'Historie › Kosten', 'etiketten kategorien filter'], ['trips', 'Fahrten', 'Historie › Fahrten', 'fahrtenbuch'],
-  ['wrap', 'Rückblick', 'Start', 'jahr wrapped'], ['reminders', 'Erinnerungen', 'Erinnerungen', 'wartung termine fällig'], ['kb', 'Wissen', 'Wissen', 'notizen links tipps'], ['tires', 'Reifen', 'Reifen', 'profiltiefe profil reifenprofil mm sommer winter allwetter messen'], ['providers', 'Ladekarten', 'Ladeanbieter', 'anbieter tarife preise'],
+  ['wrap', 'Rückblick', 'Start', 'jahr wrapped'], ['reminders', 'Erinnerungen', 'Erinnerungen', 'wartung termine fällig'], ['kb', 'Wissen', 'Wissen', 'notizen links tipps'], ['wish', 'Wunschliste', 'Wunschliste', 'zubehör kaufen wunsch matten kofferraum links shop'], ['tires', 'Reifen', 'Reifen', 'profiltiefe profil reifenprofil mm sommer winter allwetter messen'], ['providers', 'Ladekarten', 'Ladeanbieter', 'anbieter tarife preise'],
   ['bak-now', 'Jetzt in Google Drive sichern', 'Einstellungen › Sicherung & Belege', 'backup drive'], ['backup', 'Sicherung & Belege', 'Einstellungen', 'export import drive'],
   ['car', 'Fahrzeug & Kauf', 'Einstellungen', 'kennzeichen fin kaufpreis kauftag'], ['set-laden', 'Laden & Akku', 'Einstellungen', 'strompreis kapazität wltp referenz temperatur'], ['set-rem', 'Nächste HU / Service', 'Einstellungen › Erinnerungen', 'vorwarnung fälligkeit tüv'],
   ['set-fahrten', 'Fahrtenbuch-Einstellungen', 'Einstellungen', 'orte etiketten regeln import'], ['set-listen', 'Anbieter & Kategorien', 'Einstellungen', 'etiketten liste'], ['set-wetter', 'Wetter', 'Einstellungen', 'standort frost'],
@@ -7122,11 +7135,11 @@ const LAB_DEF = {
     pts: { 10: 101, 20: 102, 30: 94, 40: 83, 50: 74, 60: 66, 70: 58, 80: 55, 81: 40, 90: 30, 95: 27, 100: 22 }, tail: [{ a: 80, b: 90, min: 10 }, { a: 90, b: 100, min: 13 }] }],
   recs: [], speeds: [{ id: 's1', season: 'Sommer', klima: 'an', note: 'eben', rows: [{ v: 90, k: 13 }, { v: 100, k: 15 }, { v: 110, k: 17 }, { v: 120, k: 18.5 }, { v: 130, k: 21 }] }] };
 const cvMig = (c) => c && c.id === 'c1' && c.date === '2026-08-21' && c.s1 === 80 && !c.tail ? { ...c, tail: LAB_DEF.curves[0].tail, pts: { ...LAB_DEF.curves[0].pts, ...(c.pts || {}) } } : c;   // 80→100 % nachgetragen (10 + 13 min)
-function getLab() { const o = load(KEY_LAB, null); return { curves: o && Array.isArray(o.curves) ? o.curves.map(cvMig) : LAB_DEF.curves.slice(), recs: o && Array.isArray(o.recs) ? o.recs : [], routes: o && o.routes && typeof o.routes === 'object' && !Array.isArray(o.routes) ? o.routes : {}, lt: o && Array.isArray(o.lt) ? o.lt : [], bt: o && Array.isArray(o.bt) ? o.bt : [], tires: o && Array.isArray(o.tires) ? o.tires : [], speeds: o && Array.isArray(o.speeds) ? o.speeds : o && o.speed && Array.isArray(o.speed.rows) ? [{ id: 's1', season: 'Sommer', klima: 'an', note: 'eben', rows: o.speed.rows }] : JSON.parse(JSON.stringify(LAB_DEF.speeds)) }; }
+function getLab() { const o = load(KEY_LAB, null); return { curves: o && Array.isArray(o.curves) ? o.curves.map(cvMig) : LAB_DEF.curves.slice(), recs: o && Array.isArray(o.recs) ? o.recs : [], routes: o && o.routes && typeof o.routes === 'object' && !Array.isArray(o.routes) ? o.routes : {}, lt: o && Array.isArray(o.lt) ? o.lt : [], bt: o && Array.isArray(o.bt) ? o.bt : [], tires: o && Array.isArray(o.tires) ? o.tires : [], wish: o && Array.isArray(o.wish) ? o.wish : [], speeds: o && Array.isArray(o.speeds) ? o.speeds : o && o.speed && Array.isArray(o.speed.rows) ? [{ id: 's1', season: 'Sommer', klima: 'an', note: 'eben', rows: o.speed.rows }] : JSON.parse(JSON.stringify(LAB_DEF.speeds)) }; }
 const recKey = (r) => String(r || '').trim().toLowerCase();
 /* Zusammenführen statt Überschreiben: jedes Element (Kurve, Rekord, Messreihe, Strecke) trägt u = letzte Änderung (ms),
    Löschungen stehen in del { id: ms }. So gewinnt beim Abgleich zwischen Geräten/Cloud immer der neueste Stand je Element. */
-const LAB_LISTS = ['curves', 'recs', 'speeds', 'lt', 'bt', 'tires'];
+const LAB_LISTS = ['curves', 'recs', 'speeds', 'lt', 'bt', 'tires', 'wish'];
 function labStamp(o) {
   const prev = load(KEY_LAB, null) || {}, now = Date.now(), del = { ...(prev.del || {}) };
   LAB_LISTS.forEach(k => { const pm = new Map((prev[k] || []).map(x => [String(x.id), x])), ids = new Set();
@@ -7150,7 +7163,7 @@ function labMerge(a, b) {
   return out;
 }
 const labCanon = (o) => JSON.stringify(o, (k, v) => v && typeof v === 'object' && !Array.isArray(v) ? Object.keys(v).sort().reduce((r, x) => (r[x] = v[x], r), {}) : v);
-function setLab(o) { save(KEY_LAB, JSON.parse(JSON.stringify(labStamp(o)))); try { pushPrefs(); } catch (e) { } try { renderCurve(); } catch (e) { } if (currentView === 'recs') renderRecs(); if (currentView === 'tires') renderTires(); }
+function setLab(o) { save(KEY_LAB, JSON.parse(JSON.stringify(labStamp(o)))); try { pushPrefs(); } catch (e) { } try { renderCurve(); } catch (e) { } if (currentView === 'recs') renderRecs(); if (currentView === 'tires') renderTires(); if (currentView === 'wish') renderWish(); }
 const labId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 const deDec = (v) => { const t = String(v == null ? '' : v).trim().replace('−', '-').replace(',', '.'); return t === '' ? undefined : Number(t); };
 const labD = (iso) => { const d = new Date(iso + 'T12:00:00'); return isNaN(d) ? '' : d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }); };
@@ -7586,6 +7599,94 @@ $('tire-sheet').addEventListener('click', (e) => {
   if (Number.isFinite(km) && km > 0) m.km = Math.round(km); const note = $('tire-note').value.trim(); if (note) m.note = note;
   lab.tires = tireEdit ? lab.tires.map(x => x.id === tireEdit ? m : x) : lab.tires.concat(m); tireSet = set; setLab(lab); $('tire-sheet').classList.add('hidden');
 });
+
+/* =====================================================================
+   Wunschliste (Zubehör): lab.wish = [{ id, title, desc?, price?, prio: 'hoch'|'mittel'|'niedrig', when?, links?: [url], note?, bought? (JJJJ-MM-TT) }]
+   ===================================================================== */
+const WISH_PRIO = [['hoch', '#ef4444', 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300'], ['mittel', '#f59e0b', 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300'], ['niedrig', '#64748b', 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200']];
+const WISH_WHEN = ['❄️ vor dem Winter', '☀️ vor dem Sommer', '🧳 vor dem Urlaub', '🎁 Geschenkidee'];
+let wishTab = 'open', wishEdit = null, wishLinks = [];
+const wHost = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (e) { return u; } };
+const wUrl = (t) => { t = String(t || '').trim(); if (!t) return null; if (!/^https?:\/\//i.test(t) && /^[\w-]+(\.[\w-]+)+(\/|$)/.test(t)) t = 'https://' + t; try { const u = new URL(t); return /^https?:$/.test(u.protocol) ? u.href : null; } catch (e) { return null; } };
+const LINK_I = '<svg class="h-3 w-3 shrink-0" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>';
+function renderWish() {
+  const el = $('wish-body'); if (!el) return; const all = getLab().wish || [], open = all.filter(w => !w.bought), done = all.filter(w => w.bought);
+  const rank = (p) => WISH_PRIO.findIndex(x => x[0] === p);
+  $('wish-seg').innerHTML = [['open', 'Offen · ' + open.length], ['done', 'Gekauft · ' + done.length]].map(([k, l]) => `<button type="button" data-wtab="${k}" class="flex-1 py-1.5 rounded-lg text-[13px] font-medium ${wishTab === k ? 'bg-white dark:bg-slate-700 shadow-sm' : 'text-slate-600 dark:text-slate-400'}">${l}</button>`).join('');
+  const list = wishTab === 'open' ? open.slice().sort((a, b) => rank(a.prio) - rank(b.prio) || String(a.id).localeCompare(String(b.id))) : done.slice().sort((a, b) => String(b.bought).localeCompare(String(a.bought)));
+  const sum = list.reduce((s, w) => s + (w.price > 0 ? w.price : 0), 0);
+  const chip = (t, cls) => `<span class="inline-flex h-[22px] items-center gap-1 rounded-md px-1.5 text-[11px] ${cls}">${t}</span>`;
+  let h = list.length ? `<div class="flex items-baseline justify-between px-1 text-xs text-slate-500 dark:text-slate-400"><span>${wishTab === 'open' ? 'Summe offen' : 'Summe gekauft'}</span><b class="text-base text-slate-900 dark:text-slate-100 tabular-nums">${eur(sum)}</b></div>` : '';
+  h += list.map(w => { const pr = WISH_PRIO.find(x => x[0] === w.prio) || WISH_PRIO[1];
+    return `<div data-wish="${esc(w.id)}" role="button" tabindex="0" class="flex cursor-pointer gap-2.5 rounded-2xl bg-white dark:bg-slate-900 shadow-sm p-3 active:scale-[0.99] transition">
+      <button type="button" data-wbuy="${esc(w.id)}" aria-label="${w.bought ? 'Wieder auf offen setzen' : 'Als gekauft markieren'}" class="mt-0.5 flex h-[24px] w-[24px] shrink-0 items-center justify-center rounded-lg border-2 ${w.bought ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-300 dark:border-slate-600'}">${w.bought ? '<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg>' : ''}</button>
+      <span class="min-w-0 flex-1 space-y-1"><span class="flex items-baseline justify-between gap-2"><b class="min-w-0 text-[14.5px] ${w.bought ? 'text-slate-500 line-through decoration-1' : ''} text-left">${esc(w.title)}</b>${w.price > 0 ? `<b class="shrink-0 text-[14.5px] tabular-nums">${eur(w.price)}</b>` : ''}</span>
+      ${w.desc ? `<span class="block text-xs text-slate-500 dark:text-slate-400 text-left">${esc(w.desc)}</span>` : ''}
+      <span class="flex flex-wrap gap-1">${w.bought ? chip('✓ gekauft ' + labD(w.bought), 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300') : chip(`<span style="color:${pr[1]}">●</span> ${pr[0]}`, 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300')}${w.when && !w.bought ? chip(esc(w.when), 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300') : ''}${(w.links || []).map(u => `<a href="${esc(u)}" target="_blank" rel="noopener" data-wlink class="inline-flex h-[22px] max-w-full items-center gap-1 rounded-md bg-sky-50 dark:bg-slate-800 px-1.5 text-[11px] text-sky-700 dark:text-sky-300">${LINK_I}<span class="truncate">${esc(wHost(u))}</span></a>`).join('')}</span>
+      ${w.note ? `<span class="block text-[11px] text-slate-500 dark:text-slate-400 text-left">${esc(w.note)}</span>` : ''}</span></div>`; }).join('');
+  if (!list.length) h = `<p class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 text-sm text-slate-600 dark:text-slate-300 text-left">${wishTab === 'open' ? 'Noch keine Wünsche. Über „+“ Zubehör eintragen, das du dir irgendwann zulegen möchtest – mit Preis, Wichtigkeit und Links zum Shop.' : 'Noch nichts gekauft. Kästchen bei einem Wunsch antippen, wenn du ihn gekauft hast.'}</p>`;
+  else if (wishTab === 'open') h += '<p class="text-center text-[11px] text-slate-500 dark:text-slate-400">Kästchen antippen = gekauft (auf Wunsch gleich als Kosten gebucht)</p>';
+  el.innerHTML = h;
+}
+function wishLinksPaint() {
+  $('wish-links').innerHTML = wishLinks.map((u, i) => `<div class="flex h-10 items-center gap-2 rounded-xl bg-slate-100 dark:bg-slate-800 px-3 text-[13px] text-sky-700 dark:text-sky-300">${LINK_I}<span class="min-w-0 flex-1 truncate">${esc(u.replace(/^https?:\/\/(www\.)?/, ''))}</span><button type="button" data-wlx="${i}" aria-label="Link entfernen" class="shrink-0 px-1 text-slate-400">✕</button></div>`).join('');
+}
+function openWishSheet(id) {
+  const w = id ? (getLab().wish || []).find(x => x.id === id) : null; wishEdit = w ? w.id : null; wishLinks = (w && w.links || []).slice();
+  $('wish-sheet-box').innerHTML = `<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div><p class="text-lg font-bold">${w ? 'Wunsch bearbeiten' : 'Wunsch hinzufügen'}</p>
+    <div><label for="wish-title" class="text-xs text-slate-500 dark:text-slate-400">Was?</label><input id="wish-title" type="text" maxlength="60" value="${esc((w && w.title) || '')}" placeholder="z. B. Gummimatten Winter" class="${inCls}"></div>
+    <div><label for="wish-desc" class="text-xs text-slate-500 dark:text-slate-400">Kurzbeschreibung (optional)</label><input id="wish-desc" type="text" maxlength="80" value="${esc((w && w.desc) || '')}" placeholder="z. B. Original Škoda, 4-teilig" class="${inCls}"></div>
+    <div class="grid grid-cols-[0.8fr_1.2fr] gap-2">${fld('wish-price', 'ca. Preis €', w ? w.price : undefined, 'optional')}<div class="min-w-0"><label for="wish-when" class="text-xs text-slate-500 dark:text-slate-400">Wann?</label><input id="wish-when" list="wish-whens" type="text" maxlength="30" value="${esc((w && w.when) || '')}" placeholder="optional" class="${inCls}"><datalist id="wish-whens">${WISH_WHEN.map(x => `<option value="${esc(x)}"></option>`).join('')}</datalist></div></div>
+    <div><p class="text-xs text-slate-500 dark:text-slate-400">Wichtigkeit</p><div id="wish-prio" class="mt-1 flex gap-1.5">${WISH_PRIO.map(([k, c, cls]) => `<button type="button" data-wprio="${k}" class="flex-1 rounded-full border py-1.5 text-xs font-semibold ${((w && w.prio) || 'mittel') === k ? cls + ' border-transparent' : 'border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300'}">${k}</button>`).join('')}</div></div>
+    <div><p class="text-xs text-slate-500 dark:text-slate-400">Links</p><div id="wish-links" class="mt-1 space-y-1.5"></div>
+      <button type="button" data-ws="paste" class="mt-1.5 flex h-10 w-full items-center justify-center rounded-xl border border-dashed border-slate-400 dark:border-slate-600 text-[13px] text-slate-600 dark:text-slate-300">+ Link einfügen (aus Zwischenablage)</button>
+      <div id="wish-lrow" class="mt-1.5 hidden flex gap-2"><input id="wish-lin" type="url" inputmode="url" autocomplete="off" placeholder="https://…" class="${inCls} !mt-0"><button type="button" data-ws="addl" class="shrink-0 rounded-xl bg-slate-200 dark:bg-slate-800 px-3 text-sm font-semibold">OK</button></div>
+      <p id="wish-lmsg" class="mt-1 text-xs text-left text-slate-500 dark:text-slate-400 empty:hidden"></p></div>
+    <div><label for="wish-note" class="text-xs text-slate-500 dark:text-slate-400">Notiz</label><input id="wish-note" type="text" maxlength="120" value="${esc((w && w.note) || '')}" placeholder="z. B. Größe, Farbe, Alternative" class="${inCls}"></div>
+    <p id="wish-msg" class="text-sm text-red-600 dark:text-red-400 text-left empty:hidden"></p>
+    <div class="grid grid-cols-2 gap-2.5"><button type="button" data-ws="${w ? 'del' : 'close'}" class="h-12 rounded-2xl border border-slate-300 dark:border-slate-700 text-sm font-semibold ${w ? 'text-red-600 dark:text-red-400' : ''}">${w ? 'Löschen' : 'Abbrechen'}</button><button type="button" data-ws="save" class="h-12 rounded-2xl bg-emerald-600 text-white text-sm font-semibold">Speichern</button></div>`;
+  wishLinksPaint(); $('wish-sheet').classList.remove('hidden');
+}
+function wishAddLink(t) {
+  const u = wUrl(t), m = $('wish-lmsg'); if (!u) { m.textContent = 'Das sieht nicht nach einem Link aus. Bitte die Adresse unten einfügen.'; $('wish-lrow').classList.remove('hidden'); return false; }
+  if (!wishLinks.includes(u)) wishLinks.push(u); wishLinksPaint(); m.textContent = '✓ ' + wHost(u) + ' hinzugefügt'; $('wish-lin').value = ''; return true;
+}
+$('wish-seg').addEventListener('click', (e) => { const b = e.target.closest('[data-wtab]'); if (b) { wishTab = b.dataset.wtab; renderWish(); } });
+$('wish-add').addEventListener('click', () => openWishSheet(null));
+$('wish-body').addEventListener('click', (e) => {
+  if (e.target.closest('[data-wlink]')) return;                                   // Link öffnet den Shop, nicht das Formular
+  const bb = e.target.closest('[data-wbuy]');
+  if (bb) {
+    const lab = getLab(), w = (lab.wish || []).find(x => x.id === bb.dataset.wbuy); if (!w) return;
+    if (w.bought) { lab.wish = lab.wish.map(x => x.id === w.id ? (({ bought, ...r }) => r)(x) : x); setLab(lab); return; }
+    const today = wxIso(new Date()); lab.wish = lab.wish.map(x => x.id === w.id ? { ...x, bought: today } : x); setLab(lab);
+    if (w.price > 0 && confirm('„' + w.title + '“ als gekauft markiert.\n\nAuch als Kosten buchen (' + eur(w.price) + ', heute)?\nDen Betrag kannst du danach in der Historie anpassen.')) {
+      const cat = getCategories().includes('Zubehör') ? 'Zubehör' : 'Sonstiges';
+      commitCosts(getCosts().concat({ id: Date.now(), date: new Date().toISOString(), title: w.title.slice(0, 80), amount: Math.round(w.price * 100) / 100, category: cat }));
+    }
+    return;
+  }
+  const c = e.target.closest('[data-wish]'); if (c) openWishSheet(c.dataset.wish);
+});
+$('wish-sheet').addEventListener('click', async (e) => {
+  if (e.target === $('wish-sheet')) { $('wish-sheet').classList.add('hidden'); return; }
+  const pr = e.target.closest('[data-wprio]'); if (pr) { pr.parentElement.querySelectorAll('[data-wprio]').forEach(x => { const on = x === pr, cls = WISH_PRIO.find(p => p[0] === x.dataset.wprio)[2].split(' '); cls.concat('border-transparent').forEach(c => x.classList.toggle(c, on)); ['border-slate-300', 'dark:border-slate-700', 'text-slate-600', 'dark:text-slate-300'].forEach(c => x.classList.toggle(c, !on)); x.dataset.on = on ? '1' : ''; }); return; }
+  const lx = e.target.closest('[data-wlx]'); if (lx) { wishLinks.splice(Number(lx.dataset.wlx), 1); wishLinksPaint(); return; }
+  const b = e.target.closest('[data-ws]'); if (!b) return; const act = b.dataset.ws, lab = getLab(); lab.wish = lab.wish || [];
+  if (act === 'paste') { let t = ''; try { t = await navigator.clipboard.readText(); } catch (er) { } if (t && wishAddLink(t)) return; $('wish-lrow').classList.remove('hidden'); $('wish-lmsg').textContent = t ? $('wish-lmsg').textContent : 'Zwischenablage nicht lesbar – Link hier einfügen:'; $('wish-lin').focus(); return; }
+  if (act === 'addl') { wishAddLink($('wish-lin').value); return; }
+  if (act === 'close') { $('wish-sheet').classList.add('hidden'); return; }
+  if (act === 'del') { if (!confirm('Diesen Wunsch löschen?')) return; lab.wish = lab.wish.filter(x => x.id !== wishEdit); setLab(lab); $('wish-sheet').classList.add('hidden'); return; }
+  const title = $('wish-title').value.trim(); if (!title) { $('wish-msg').textContent = 'Bitte angeben, was du dir wünschst.'; return; }
+  const lt = $('wish-lin').value.trim(); if (lt && !wishAddLink(lt)) return;
+  const price = deDec($('wish-price').value), prioEl = document.querySelector('#wish-prio [data-wprio].border-transparent');
+  const old = wishEdit ? lab.wish.find(x => x.id === wishEdit) : null;
+  const w = { id: wishEdit || labId(), title: title.slice(0, 60), prio: prioEl ? prioEl.dataset.wprio : 'mittel' };
+  const desc = $('wish-desc').value.trim(), when = $('wish-when').value.trim(), note = $('wish-note').value.trim();
+  if (desc) w.desc = desc; if (Number.isFinite(price) && price > 0) w.price = Math.round(price * 100) / 100; if (when) w.when = when; if (wishLinks.length) w.links = wishLinks.slice(); if (note) w.note = note; if (old && old.bought) w.bought = old.bought;
+  lab.wish = old ? lab.wish.map(x => x.id === old.id ? w : x) : lab.wish.concat(w); setLab(lab); $('wish-sheet').classList.add('hidden');
+});
+$('wish-sheet').addEventListener('keydown', (e) => { if (e.target.id === 'wish-lin' && e.key === 'Enter') { e.preventDefault(); wishAddLink(e.target.value); } });
 
 function renderRecs() {
   const lab = getLab(), byRoute = new Map();
