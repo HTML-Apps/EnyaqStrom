@@ -7625,8 +7625,19 @@ function renderWish() {
       <span class="flex flex-wrap gap-1">${w.bought ? chip('✓ gekauft ' + labD(w.bought), 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300') : chip(`<span style="color:${pr[1]}">●</span> ${pr[0]}`, 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300')}${w.when && !w.bought ? chip(esc(w.when), 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300') : ''}${(w.links || []).map(u => `<a href="${esc(u)}" target="_blank" rel="noopener" data-wlink class="inline-flex h-[22px] max-w-full items-center gap-1 rounded-md bg-sky-50 dark:bg-slate-800 px-1.5 text-[11px] text-sky-700 dark:text-sky-300">${LINK_I}<span class="truncate">${esc(wHost(u))}</span></a>`).join('')}</span>
       ${w.note ? `<span class="block text-[11px] text-slate-500 dark:text-slate-400 text-left">${esc(w.note)}</span>` : ''}</span></div>`; }).join('');
   if (!list.length) h = `<p class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 text-sm text-slate-600 dark:text-slate-300 text-left">${wishTab === 'open' ? 'Noch keine Wünsche. Über „+“ Zubehör eintragen, das du dir irgendwann zulegen möchtest – mit Preis, Wichtigkeit und Links zum Shop.' : 'Noch nichts gekauft. Kästchen bei einem Wunsch antippen, wenn du ihn gekauft hast.'}</p>`;
-  else if (wishTab === 'open') h += '<p class="text-center text-[11px] text-slate-500 dark:text-slate-400">Kästchen antippen = gekauft (auf Wunsch gleich als Kosten gebucht)</p>';
+  else if (wishTab === 'open') h += '<p class="text-center text-[11px] text-slate-500 dark:text-slate-400">Kästchen antippen = als gekauft markieren (auf Wunsch gleich als Kosten buchen)</p>';
   el.innerHTML = h;
+}
+/* Gekauft-Dialog: Abbrechen lässt den Wunsch unverändert offen */
+let wishBuyId = null;
+function openWishBuy(w) {
+  wishBuyId = w.id; const btn = 'h-12 w-full rounded-2xl text-sm font-semibold active:scale-[0.98] transition';
+  $('wish-sheet-box').innerHTML = `<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div><p class="text-lg font-bold text-left">„${esc(w.title)}“ gekauft?</p>
+    <p class="text-sm text-slate-600 dark:text-slate-300 text-left">Der Wunsch wandert zu „Gekauft“.${w.price > 0 ? ' Du kannst ihn gleich als Kosten buchen (' + eur(w.price) + ', heute) – den Betrag passt du bei Bedarf in der Historie an.' : ''}</p>
+    ${w.price > 0 ? `<button type="button" data-wb="cost" class="${btn} bg-emerald-600 text-white">Gekauft + als Kosten buchen</button>` : ''}
+    <button type="button" data-wb="only" class="${btn} ${w.price > 0 ? 'bg-slate-200 dark:bg-slate-800' : 'bg-emerald-600 text-white'}">${w.price > 0 ? 'Nur als gekauft markieren' : 'Als gekauft markieren'}</button>
+    <button type="button" data-wb="cancel" class="${btn} border border-slate-300 dark:border-slate-700">Abbrechen</button>`;
+  $('wish-sheet').classList.remove('hidden');
 }
 function wishLinksPaint() {
   $('wish-links').innerHTML = wishLinks.map((u, i) => `<div class="flex h-10 items-center gap-2 rounded-xl bg-slate-100 dark:bg-slate-800 px-3 text-[13px] text-sky-700 dark:text-sky-300">${LINK_I}<span class="min-w-0 flex-1 truncate">${esc(u.replace(/^https?:\/\/(www\.)?/, ''))}</span><button type="button" data-wlx="${i}" aria-label="Link entfernen" class="shrink-0 px-1 text-slate-400">✕</button></div>`).join('');
@@ -7659,18 +7670,22 @@ $('wish-body').addEventListener('click', (e) => {
   if (bb) {
     const lab = getLab(), w = (lab.wish || []).find(x => x.id === bb.dataset.wbuy); if (!w) return;
     if (w.bought) { lab.wish = lab.wish.map(x => x.id === w.id ? (({ bought, ...r }) => r)(x) : x); setLab(lab); return; }
-    const today = wxIso(new Date()); lab.wish = lab.wish.map(x => x.id === w.id ? { ...x, bought: today } : x); setLab(lab);
-    if (w.price > 0 && confirm('„' + w.title + '“ als gekauft markiert.\n\nAuch als Kosten buchen (' + eur(w.price) + ', heute)?\nDen Betrag kannst du danach in der Historie anpassen.')) {
-      const cat = getCategories().includes('Zubehör') ? 'Zubehör' : 'Sonstiges';
-      commitCosts(getCosts().concat({ id: Date.now(), date: new Date().toISOString(), title: w.title.slice(0, 80), amount: Math.round(w.price * 100) / 100, category: cat }));
-    }
-    return;
+    openWishBuy(w); return;                                                       // erst nach Bestätigung im Dialog als gekauft markieren
   }
   const c = e.target.closest('[data-wish]'); if (c) openWishSheet(c.dataset.wish);
 });
 $('wish-sheet').addEventListener('click', async (e) => {
-  if (e.target === $('wish-sheet')) { $('wish-sheet').classList.add('hidden'); return; }
+  if (e.target === $('wish-sheet')) { wishBuyId = null; $('wish-sheet').classList.add('hidden'); return; }
   const pr = e.target.closest('[data-wprio]'); if (pr) { pr.parentElement.querySelectorAll('[data-wprio]').forEach(x => { const on = x === pr, cls = WISH_PRIO.find(p => p[0] === x.dataset.wprio)[2].split(' '); cls.concat('border-transparent').forEach(c => x.classList.toggle(c, on)); ['border-slate-300', 'dark:border-slate-700', 'text-slate-600', 'dark:text-slate-300'].forEach(c => x.classList.toggle(c, !on)); x.dataset.on = on ? '1' : ''; }); return; }
+  const wb = e.target.closest('[data-wb]');
+  if (wb) {
+    const act = wb.dataset.wb, id = wishBuyId; wishBuyId = null; $('wish-sheet').classList.add('hidden'); if (act === 'cancel') return;
+    const lab = getLab(), w = (lab.wish || []).find(x => x.id === id); if (!w || w.bought) return;
+    lab.wish = lab.wish.map(x => x.id === w.id ? { ...x, bought: wxIso(new Date()) } : x); setLab(lab);
+    if (act === 'cost' && w.price > 0) { const cat = getCategories().includes('Zubehör') ? 'Zubehör' : 'Sonstiges';
+      commitCosts(getCosts().concat({ id: Date.now(), date: new Date().toISOString(), title: w.title.slice(0, 80), amount: Math.round(w.price * 100) / 100, category: cat })); }
+    return;
+  }
   const lx = e.target.closest('[data-wlx]'); if (lx) { wishLinks.splice(Number(lx.dataset.wlx), 1); wishLinksPaint(); return; }
   const b = e.target.closest('[data-ws]'); if (!b) return; const act = b.dataset.ws, lab = getLab(); lab.wish = lab.wish || [];
   if (act === 'paste') { let t = ''; try { t = await navigator.clipboard.readText(); } catch (er) { } if (t && wishAddLink(t)) return; $('wish-lrow').classList.remove('hidden'); $('wish-lmsg').textContent = t ? $('wish-lmsg').textContent : 'Zwischenablage nicht lesbar – Link hier einfügen:'; $('wish-lin').focus(); return; }
