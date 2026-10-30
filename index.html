@@ -2061,7 +2061,7 @@ function showView(name) {
   if (name === 'kb') renderKb();
   if (name === 'badges') { try { renderBadges(); } catch (e) { } }
   if (name === 'recs') { try { renderRecs(); } catch (e) { console.error(e); } }
-  if (name === 'tires') { try { renderTires(); } catch (e) { console.error(e); } }
+  if (name === 'tires') { tireSet = 'aw'; tireSel = null; try { renderTires(); } catch (e) { console.error(e); } }   // beim Öffnen immer Allwetter
   if (name !== 'history' && editMode) setEditMode(false);
   if (name === 'history') renderHistory();
   updateHistFab();
