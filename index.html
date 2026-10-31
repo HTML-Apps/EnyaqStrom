@@ -5897,8 +5897,8 @@ async function renderWxo() {
   $('wxo-days').innerHTML = days.slice(0, wxoNLast).map((x, i) => { const on = i === hl;
     return `<div class="min-w-0 rounded-2xl px-1.5 py-2 text-center ${on ? 'bg-sky-50 dark:bg-sky-950/60 ring-[1.5px] ring-sky-400' : 'bg-slate-100 dark:bg-slate-800/60'}">
       <p class="text-center text-[11px] font-semibold ${on ? 'text-sky-700 dark:text-sky-300' : 'text-slate-500 dark:text-slate-400'}">${lab(i)}</p>
-      <p class="mt-0.5 text-center text-[22px] leading-none">${wxoIconHtml(x.w, 30)}</p><p class="mt-0.5 text-center text-[13px] font-semibold">${fmt(x.T, 0).replace('-', '−')}°</p>
-      <p class="mt-1 text-center text-[17px] font-bold leading-tight">${fmt(x.k, 1)}</p><p class="text-center text-[9.5px] leading-tight text-slate-500 dark:text-slate-400">kWh/100 km</p>
+      <p class="mt-0.5 text-center text-[22px] leading-none">${wxoIconHtml(x.w, wxIconStyle() === 'meteo' ? 40 : 30)}</p><p class="text-center text-[12.5px] font-semibold leading-tight">${fmt(x.T, 0).replace('-', '−')}°</p>
+      <p class="mt-0.5 text-center text-[15px] font-bold leading-tight">${fmt(x.k, 1)}</p><p class="text-center text-[9.5px] leading-tight text-slate-500 dark:text-slate-400">kWh/100 km</p>
       <div class="mx-1.5 mt-1.5 h-[5px] rounded-full bg-slate-200 dark:bg-slate-700"><div class="h-[5px] rounded-full bg-gradient-to-r from-emerald-500 to-sky-400" style="width:${Math.max(8, Math.min(100, x.r / best * 100)).toFixed(0)}%"></div></div>
       <p class="mt-0.5 text-center text-[12px]"><b>${wxoFmtR(x.r)}</b> <span class="text-slate-500 dark:text-slate-400">km</span></p></div>`; }).join('');
   /* Reicht-bis: aktueller Akkustand vom Auto (Škoda-API) bis 20 % Reserve, mit Ø km/Tag und dem vorhergesagten Verbrauch des jeweiligen Tages.
