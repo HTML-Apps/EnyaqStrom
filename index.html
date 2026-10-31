@@ -148,17 +148,22 @@
   /* ===== PC / Querformat ab 1280 px: Schnellmenü fest links, App mittig wie am Handy, Erinnerungen fest rechts (am Handy unverändert) ===== */
   #desk-rem { display: none; }
   @media (min-width: 1280px) {
-    body { padding-left: 300px; padding-right: 372px; }
+    body { padding-left: var(--dl); padding-right: var(--dr); }
+    :root { --dl: clamp(300px, 18vw, 360px); --dr: clamp(372px, 24vw, 480px); }
+    main.max-w-xl { max-width: 1100px; padding-left: 24px; padding-right: 24px; }
+    #nav-home { display: flex; }
+    #hero-bg { left: -24px; right: -24px; }
+    #nav-home:hover, #nav-home.nav-on { background: rgb(30 41 59); }
     main { padding-bottom: 2rem !important; }
     #bottom-nav, #btn-nav, #btn-bell, #nav-drawer-bg, #nav-drawer-panel [data-nav="close"] { display: none !important; }
-    #nav-drawer { right: auto; width: 300px; z-index: 40; pointer-events: auto !important; }
-    #nav-drawer-panel { width: 300px; max-width: none; transform: none !important; border-radius: 0; box-shadow: none; border-right: 1px solid rgb(30 41 59); transition: none; }
+    #nav-drawer { right: auto; width: var(--dl); z-index: 40; pointer-events: auto !important; }
+    #nav-drawer-panel { width: var(--dl); max-width: none; transform: none !important; border-radius: 0; box-shadow: none; border-right: 1px solid rgb(30 41 59); transition: none; }
     #nav-tiles .grid { grid-template-columns: 1fr 1fr; gap: 2px 4px; }
     #nav-tiles .grid > button { flex-direction: row; justify-content: flex-start; gap: 9px; padding: 7px 9px !important; border-radius: 10px; background: transparent; font-size: 12.5px; font-weight: 500; text-align: left; }
     #nav-tiles .grid > button:hover { background: rgb(30 41 59); }
     #nav-tiles .grid > button > svg { width: 18px; height: 18px; flex-shrink: 0; }
     #nav-tiles .grid > button.nav-on { background: rgb(30 41 59); font-weight: 700; }
-    #desk-rem { display: block; position: fixed; top: 0; right: 0; bottom: 0; width: 372px; overflow-y: auto; background: #05080f; border-left: 1px solid rgb(30 41 59); padding: 20px 16px 24px; z-index: 30; }
+    #desk-rem { display: block; position: fixed; top: 0; right: 0; bottom: 0; width: var(--dr); overflow-y: auto; background: #05080f; border-left: 1px solid rgb(30 41 59); padding: 20px 16px 24px; z-index: 30; }
     #desk-rem #view-reminders { margin: 0; }
     #desk-rem #view-reminders h1 { font-size: 1.3rem; letter-spacing: .1em; overflow: visible; }
   }
@@ -1337,6 +1342,7 @@
   <nav id="nav-drawer-panel" aria-label="Alles auf einen Blick" class="absolute inset-y-0 left-0 w-[340px] max-w-[94vw] -translate-x-full overflow-y-auto rounded-r-[28px] flex flex-col bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-2xl transition-transform duration-300 ease-out" style="padding:max(14px,env(safe-area-inset-top)) 12px max(16px,env(safe-area-inset-bottom))">
     <div class="flex items-center justify-between gap-2"><p class="font-barlow text-[22px] font-bold uppercase tracking-[0.08em]">Alles auf einen Blick</p><button type="button" data-nav="close" aria-label="Schließen" class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-800"><svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
     <label class="mt-3 flex h-11 shrink-0 items-center gap-2 rounded-2xl bg-slate-100 dark:bg-slate-800 px-3 focus-within:ring-2 focus-within:ring-emerald-500"><svg class="h-[18px] w-[18px] shrink-0 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><input id="nav-q" type="search" autocomplete="off" enterkeyhint="search" placeholder="Seite oder Funktion suchen …" aria-label="Seite oder Funktion suchen" class="min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-slate-400"></label>
+    <button id="nav-home" type="button" data-nav="home" class="hidden mt-3 w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13.5px] font-semibold active:scale-95 transition"><svg class="h-[19px] w-[19px] text-emerald-600 dark:text-emerald-300" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h5v-6h4v6h5V9.5"/></svg>Start</button>
     <div id="nav-results" class="hidden mt-3 space-y-1"></div>
     <div id="nav-tiles" class="pb-2">
     <p class="mt-3 mb-1.5 text-[11px] font-bold uppercase tracking-[0.1em] text-emerald-700 dark:text-emerald-300">Erfassen</p>
@@ -7381,6 +7387,7 @@ function closeNavDrawer() {
 }
 const navStart = (id) => { if (currentView !== 'dashboard') showView('dashboard'); setTimeout(() => { const el = $(id); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 320); };
 const NAV_GO = {
+  home: () => showView('dashboard'),
   'cap-home': () => { setCapPlace('home'); showView('capture'); setCapPlace('home'); }, 'cap-bosch': () => { setCapPlace('bosch'); showView('capture'); setCapPlace('bosch'); },
   'cap-away': () => { setCapPlace('away'); showView('capture'); setCapPlace('away'); }, costs: () => showView('costs'),
   eff: () => navStart('sec-eff'), trends: () => navStart('sec-trends'), recs: () => { if (recRoute === 'bt') recRoute = 'all'; showView('recs'); }, akkutemp: () => { recRoute = 'bt'; showView('recs'); },
@@ -7427,8 +7434,8 @@ $('btn-nav').addEventListener('click', openNavDrawer);
 $('nav-drawer-bg').addEventListener('click', closeNavDrawer);
 $('nav-drawer').addEventListener('click', (e) => { const b = e.target.closest('[data-nav]'); if (!b) return; closeNavDrawer(); const f = NAV_GO[b.dataset.nav]; if (f) f(); });
 /* PC (≥ 1280 px): Erinnerungen-Seite fest in die rechte Spalte, Schnellmenü dauerhaft offen; zurück, sobald das Fenster schmaler wird */
-const NAV_VIEW = { 'cap-home': 'capture', 'cap-bosch': 'capture', 'cap-away': 'capture', costs: 'costs', rep: 'report', hist: 'history', badges: 'badges', recs: 'recs', akkutemp: 'recs', kb: 'kb', providers: 'providers', tires: 'tires', wish: 'wish', settings: 'settings' };
-function deskNavMark(name) { document.querySelectorAll('#nav-tiles [data-nav]').forEach(b => b.classList.toggle('nav-on', NAV_VIEW[b.dataset.nav] === name && name !== 'capture')); }
+const NAV_VIEW = { home: 'dashboard', 'cap-home': 'capture', 'cap-bosch': 'capture', 'cap-away': 'capture', costs: 'costs', rep: 'report', hist: 'history', badges: 'badges', recs: 'recs', akkutemp: 'recs', kb: 'kb', providers: 'providers', tires: 'tires', wish: 'wish', settings: 'settings' };
+function deskNavMark(name) { $('nav-home').classList.toggle('nav-on', name === 'dashboard'); document.querySelectorAll('#nav-tiles [data-nav]').forEach(b => b.classList.toggle('nav-on', NAV_VIEW[b.dataset.nav] === name && name !== 'capture')); }
 function applyDesk() {
   const vr = $('view-reminders'), aside = $('desk-rem');
   if (isDesk()) {
