@@ -153,7 +153,6 @@
     :root { --dl: clamp(300px, 18vw, 360px); --dr: clamp(372px, 24vw, 480px); }
     main.max-w-xl { max-width: 1100px; padding-left: 24px; padding-right: 24px; }
     #nav-home { display: flex; }
-    #wxo-days { grid-template-columns: repeat(5, minmax(0, 1fr)); }
     #hero-bg { left: -24px; right: -24px; }
     #nav-home:hover, #nav-home.nav-on { background: rgb(30 41 59); }
     main { padding-bottom: 2rem !important; }
@@ -5871,7 +5870,8 @@ $('set-wxo-cut').addEventListener('change', (e) => { setQuickSetting('wxoCut', N
 $('set-car-n').addEventListener('change', (e) => { setQuickSetting('carN', Number(e.target.value)); try { window.carReschedule && window.carReschedule(); } catch (er) { } });
 $('set-car-sec').addEventListener('change', (e) => { setQuickSetting('carSec', Number(e.target.value)); try { window.carReschedule && window.carReschedule(); } catch (er) { } });
 $('set-dash-first').addEventListener('change', (e) => { setQuickSetting('dashFirst', e.target.value); });
-const wxoN = () => isDesk() ? 5 : 3;                                                  // Tage in der Vorschau: PC 5, Handy 3
+const wxoN = () => !isDesk() ? 3 : ($('wxo-card').clientWidth || document.querySelector('main').clientWidth) >= 760 ? 7 : 5;   // Tage in der Vorschau: Handy 3, PC je nach Breite 5 oder 7
+let wxoNLast = 0; window.addEventListener('resize', () => { clearTimeout(window.__wxoRs); window.__wxoRs = setTimeout(() => { if (wxoN() !== wxoNLast) try { renderWxo(); } catch (e) { } }, 250); });
 let wxoTok = 0, wxoLast = null;
 const wxoFmtR = (km) => fmt(Math.round(km / 5) * 5, 0);
 async function renderWxo() {
@@ -5885,7 +5885,8 @@ async function renderWxo() {
   days.forEach(x => { x.k = wxoPred(m, x.T, x.p >= 1, x.hum); x.r = rng(x.k); x.parts = wxoParts(m, x.T, x.p >= 1, x.hum); });
   const best = rng(m.a), hl = new Date().getHours() >= wxoCut() ? 1 : 0, lab = (i) => i === 0 ? 'Heute' : i === 1 ? 'Morgen' : wxDay(days[i].d).wd + '.';
   wxoLast = { m, days, eff, cap };
-  $('wxo-days').innerHTML = days.slice(0, wxoN()).map((x, i) => { const on = i === hl;
+  wxoNLast = wxoN(); $('wxo-days').style.gridTemplateColumns = 'repeat(' + wxoNLast + ', minmax(0, 1fr))';
+  $('wxo-days').innerHTML = days.slice(0, wxoNLast).map((x, i) => { const on = i === hl;
     return `<div class="min-w-0 rounded-2xl px-1.5 py-2 text-center ${on ? 'bg-sky-50 dark:bg-sky-950/60 ring-[1.5px] ring-sky-400' : 'bg-slate-100 dark:bg-slate-800/60'}">
       <p class="text-center text-[11px] font-semibold ${on ? 'text-sky-700 dark:text-sky-300' : 'text-slate-500 dark:text-slate-400'}">${lab(i)}</p>
       <p class="mt-0.5 text-center text-[22px] leading-none">${wxoIcon(x.w)}</p><p class="mt-0.5 text-center text-[13px] font-semibold">${fmt(x.T, 0).replace('-', '−')}°</p>
@@ -5911,6 +5912,7 @@ async function renderWxo() {
 function wxoBoot() {
   if (!wxLoc() || liveHero) return;
   const c = load(KEY_WXO + 'H', null), sk = '<div class="h-[148px] rounded-2xl bg-slate-100 dark:bg-slate-800/60 animate-pulse"></div>';
+  $('wxo-days').style.gridTemplateColumns = 'repeat(' + wxoN() + ', minmax(0, 1fr))';
   $('wxo-days').innerHTML = c && c.day === todayYMD() && c.days && (c.n || 3) === wxoN() ? c.days : sk.repeat(wxoN());
   const tip = $('wxo-tip'); tip.textContent = c && c.day === todayYMD() ? c.tip || '' : ''; tip.classList.toggle('hidden', !tip.textContent);
   if (!tip.textContent) { tip.textContent = ' '; tip.classList.remove('hidden'); }       // gleiche Höhe wie mit Text
