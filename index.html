@@ -800,6 +800,7 @@
         <p id="au-sub" class="mt-0.5 text-xs text-slate-500 dark:text-slate-400"></p>
         <div id="au-tiles" class="mt-3 grid grid-cols-2 gap-2"></div>
       </div>
+      <div class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4 !py-3"><button id="au-tech-btn" type="button" class="flex w-full items-center gap-3 text-left"><span class="text-lg">⚙️</span><span class="min-w-0 flex-1"><span class="block text-base font-bold">Technische Daten</span><span id="au-tech-sum" class="block truncate text-xs text-slate-500 dark:text-slate-400"></span></span><span id="au-tech-chev" class="w-4 text-center text-slate-400 transition">›</span></button><div id="au-tech" class="hidden"></div></div>
       <button id="au-cc" type="button" class="w-full flex items-center gap-3 rounded-3xl bg-sky-50 dark:bg-blue-950 px-4 py-3 text-left text-[13px] text-sky-900 dark:text-blue-200 active:scale-[0.99] transition"></button>
       <div class="rcard rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
         <div class="flex items-baseline justify-between gap-2"><p class="text-base font-bold">Sonderausstattung</p><span id="au-count" class="text-xs text-slate-500 dark:text-slate-400"></span></div>
@@ -5817,6 +5818,7 @@ function akteHtml() {
   const SV = getSettings(), mm = [SV.brand, SV.model].filter(Boolean).join(' ');
   h += H2('Fahrzeug') + kv([mm ? ['Fahrzeug', esc(mm)] : null, SV.year ? ['Baujahr', esc(SV.year)] : null, SV.plate ? ['Kennzeichen', esc(SV.plate)] : null, SV.vin ? ['Fahrgestellnummer (FIN)', esc(SV.vin)] : null, ['Kauftag', D1(P0)], ['Nutzungsdauer', fmt((now - P0) / 864e5 / 30.4375, 1) + ' Monate'], pk != null ? ['Kilometerstand bei Kauf', fmt(pk, 0) + ' km'] : null, pp != null ? ['Kaufpreis', eur(pp)] : null, ['Aktueller km-Stand', km != null ? fmt(km, 0) + ' km' : '–'], sincePk != null ? ['Gefahren seit Kauf', fmt(sincePk, 0) + ' km' + (yrs >= .25 ? ' (Ø ' + fmt(sincePk / yrs, 0) + ' km pro Jahr)' : '')] : null, driven != null ? ['Aufgezeichnet', fmt(driven, 0) + ' km seit ' + D1(Date.parse(od[0].date))] : null, ['Batterie (Nettokapazität laut Einstellung)', fmt(batteryKwh(), 0) + ' kWh'], rs.length ? ['Aufzeichnung', D1(Date.parse(rs[0].date)) + ' bis ' + D1(Date.parse(rs[rs.length - 1].date))] : null]);
   { const cc = getSettings().ccEnd; h += H2('Ausstattung') + kv(AUSST.pdf.map(([k, v]) => [k, esc(v)]).concat(/^\d{4}-\d{2}-\d{2}$/.test(cc || '') ? [['Care Connect bis', fmtYMD(cc)]] : []))
+    + CAP('Technische Daten') + kv(AUSST.tech.flatMap(g => g[2]).map(([k, v]) => [esc(k), esc(v)]))
     + AUSST.groups.map(([name, , items]) => CAP(esc(name)) + tbl(['Code', 'Bezeichnung'], items.map(([c, t]) => [c || 'Serie', esc(t)]), [], 11)).join(''); }
   h += H2('Betrieb und Kosten gesamt') + kv([['Ladungen', fmt(n, 0)], ['Geladene Energie', fmt(kwh, 0) + ' kWh'], tot && tot.km ? ['Ø Verbrauch inkl. Ladeverluste', fmt(tot.kwh100, 1) + ' kWh/100 km (WLTP-Angabe ' + fmt(wltpVal(), 1) + ')'] : null, loss != null ? ['Ø Ladeverlust', fmt(loss, 1) + ' %'] : null, kwh > 0 ? ['Ø Strompreis', fmt(laden / kwh * 100, 1) + ' ct/kWh'] : null, ['Ladekosten', eur(laden)], ['Sonstige Kosten (Service, Reifen, …)', eur(other)], income ? ['Einnahmen und Erstattungen', eur(income)] : null, ['Betriebskosten gesamt (ohne Kaufpreis)', eur(total)], driven > 0 ? ['Betriebskosten pro km', fmt(total / driven * 100, 1) + ' ct/km'] : null]);
   const placeRows = PLACE_KEYS.filter(k => pl[k].kwh > 0 || pl[k].n > 0).map(k => [PLACES[k], fmt(pl[k].n, 0), fmt(pl[k].kwh, 0), kwh ? fmt(pl[k].kwh / kwh * 100, 0) + ' %' : '–', eur(pl[k].cost), pl[k].ck > 0 ? fmt(pl[k].cost / pl[k].ck * 100, 1) : '–']);
@@ -7114,6 +7116,13 @@ const AUSST = {
   model: 'Škoda Enyaq 50 iV Loft', extras: 'Climatronic · Kessy · SHZ · PDC · ACC',
   tiles: [['Modell', 'Enyaq 50 iV Loft', 'Design Selection Loft'], ['Farbe', 'Graphite-Grau', 'Metallic'], ['Räder', '19" Regulus Aero', '235/55 R19 rundum'], ['Innen', 'Stoff/Kunstleder', 'Dunkelgrau (Loft)']],
   pdf: [['Modell', 'Škoda Enyaq 50 iV Loft (Climatronic, Kessy, SHZ, PDC, ACC)'], ['Lackierung', 'Graphite-Grau Metallic'], ['Innenausstattung', 'Stoff/Kunstleder-Kombination in Dunkelgrau (Loft)'], ['Räder', '19" Leichtmetallfelgen Regulus Aero Anthrazit-glanzgedreht, Reifen 235/55 R19']],
+  tech: [
+    ['Antrieb', '⚡', [['Leistung', '109 kW (148 PS)'], ['Drehmoment (Hinterachse, Peak)', '220 Nm'], ['Antrieb', 'Heckantrieb, 1-Gang (EV)'], ['Motor', 'Hinterachse APP310'], ['Motorart', '1 × Wechselstrom-Elektromaschine'], ['Motorbauart', '1 × permanentmagneterregte Synchronmaschine']]],
+    ['Fahrleistung & Akku', '🔋', [['Beschleunigung 0–100 km/h', '11,3 s'], ['Zellchemie', 'NMC']]],
+    ['Karosserie & Gewicht', '📐', [['cw-Wert', '0,272'], ['Leergewicht mit Fahrer', '1.941 kg']]],
+    ['Preis', '🏷️', [['Listenpreis', '46.000 €']]],
+  ],
+  techSum: '109 kW · 220 Nm · 0–100 in 11,3 s',
   groups: [
     ['Räder & Reifen', '🛞', [['C6H', '19" Leichtmetallfelge Regulus Aero Anthrazit-glanzgedreht'], ['J27', 'Reifen 235/55 R19']]],
     ['Laden', '🔌', [['PUA', 'Mobile Ladestation „iV Universal Charger“ mit austauschbaren Anschlussadaptern']]],
@@ -7131,6 +7140,9 @@ const auNorm = (t) => String(t).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/
 function renderAusst() {
   $('au-sub').textContent = AUSST.model + ' · ' + AUSST.extras;
   $('au-tiles').innerHTML = AUSST.tiles.map(([k, v, d]) => `<div class="min-w-0 rounded-2xl bg-slate-100 dark:bg-slate-800/70 px-3 py-2.5"><p class="text-[11px] text-slate-500 dark:text-slate-400">${k}</p><p class="mt-0.5 truncate text-[14px] font-bold">${esc(v)}</p><p class="truncate text-[11px] text-slate-500 dark:text-slate-400">${esc(d)}</p></div>`).join('');
+  $('au-tech-sum').textContent = AUSST.techSum;
+  $('au-tech').innerHTML = AUSST.tech.map(([name, ico, rows]) => `<div class="mt-3"><p class="mb-1 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500 dark:text-slate-400"><span class="text-sm">${ico}</span>${esc(name)}</p>`
+    + rows.map(([k, v]) => `<div class="flex items-baseline justify-between gap-3 border-t border-slate-200 dark:border-slate-800 py-1.5"><span class="min-w-0 text-[13px] text-slate-500 dark:text-slate-400">${esc(k)}</span><span class="text-right text-[13px] font-semibold">${esc(v)}</span></div>`).join('') + '</div>').join('');
   renderCcBanner(); renderAuList();
 }
 function renderAuList() {
@@ -7180,6 +7192,7 @@ function ccSetEnd(end, withRem) {
   renderCcBanner();
 }
 $('au-cc').addEventListener('click', openCcSheet);
+$('au-tech-btn').addEventListener('click', () => { const open = $('au-tech').classList.toggle('hidden') === false; $('au-tech-chev').classList.toggle('rotate-90', open); });
 $('au-sheet').addEventListener('click', (e) => {
   if (e.target === $('au-sheet')) { $('au-sheet').classList.add('hidden'); return; }
   const b = e.target.closest('[data-cc]'); if (!b) return; const act = b.dataset.cc;
