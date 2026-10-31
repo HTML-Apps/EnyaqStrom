@@ -1073,6 +1073,14 @@
           <p class="block text-sm font-medium text-slate-700 dark:text-slate-300">Hintergrundfarbe der Start-Seite</p>
           <div id="hero-swatches" class="mt-2 grid grid-cols-5 gap-2" role="group" aria-label="Hintergrundfarbe der Start-Seite"></div>
         </div>
+        <div class="py-4 first:pt-4 last:pb-0">
+          <p class="block text-sm font-medium text-slate-700 dark:text-slate-300">Bilder-Karussell auf Start</p>
+          <div class="mt-1 grid grid-cols-2 gap-2">
+            <div><label for="set-car-n" class="text-xs text-slate-500 dark:text-slate-400">Automatisch wechseln</label><select id="set-car-n" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"><option value="1">1 Bild (kein Wechsel)</option><option value="2">2 Bilder</option><option value="3">3 Bilder</option><option value="4">4 Bilder</option><option value="5">5 Bilder</option><option value="6">6 Bilder</option></select></div>
+            <div><label for="set-car-sec" class="text-xs text-slate-500 dark:text-slate-400">Wechsel alle</label><select id="set-car-sec" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"><option value="5">5 Sekunden</option><option value="10">10 Sekunden</option><option value="15">15 Sekunden</option><option value="20">20 Sekunden</option><option value="30">30 Sekunden</option><option value="45">45 Sekunden</option><option value="60">1 Minute</option><option value="120">2 Minuten</option><option value="300">5 Minuten</option></select></div>
+          </div>
+          <p class="mt-1.5 text-xs text-left text-slate-500 dark:text-slate-400">Die ersten X Bilder wechseln automatisch im Kreis. Per Wischen erreichst du weiterhin alle Bilder. Wird mit deinem Konto synchronisiert.</p>
+        </div>
       </div>
     </div>
     <div class="rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
@@ -2381,6 +2389,7 @@ $('prov-input').addEventListener('change', (e) => { delete e.target.dataset.auto
    Einstellungen
    ===================================================================== */
 function fillSettings() {
+  try { fillWxoPrefs(); } catch (e) { }
   renderProviders(); renderCategories(); renderTPlaceList(); renderTLabelSettings(); renderTripsLast();
   const s = getSettings();
   $('set-price').value = String(s.price).replace('.', ',');
@@ -2470,7 +2479,7 @@ $('btn-save-settings').addEventListener('click', () => {
     if (+m[2] < 1990 || +m[2] * 12 + +m[1] > now.getFullYear() * 12 + now.getMonth() + 1) { alert('Das Baujahr ' + yr + ' kann nicht stimmen: Es muss zwischen 01/1990 und ' + String(now.getMonth() + 1).padStart(2, '0') + '/' + now.getFullYear() + ' liegen.'); $('set-year').focus(); return; }
   }
   const txt = (id, n) => $(id).value.trim().replace(/\s+/g, ' ').slice(0, n) || undefined;
-  if (save(KEY_SETTINGS, { title: $('set-title').value.trim() || DEFAULT_TITLE, brand: txt('set-brand', 30), model: txt('set-model', 40), plate: (txt('set-plate', 15) || '').toUpperCase() || undefined, year: yr || undefined, vin: vin || undefined, price, battery, power, remDays, remKm, purchase, wltp: wl, wltpNet: wln !== undefined ? Math.round(wln * 100) / 100 : undefined, purchaseKm: pk !== undefined ? Math.round(pk) : undefined, purchasePrice: pp !== undefined ? Math.round(pp * 100) / 100 : undefined, commuteKm: getSettings().commuteKm || undefined, ccEnd: getSettings().ccEnd || undefined, wxoCut: getSettings().wxoCut ?? undefined, dashFirst: getSettings().dashFirst || undefined, refLo: rlo, refHi: rhi, nextHu, nextService, certAcKwh: certAcKwh !== undefined ? Math.round(certAcKwh * 10) / 10 : undefined, certDcKwh: certDcKwh !== undefined ? Math.round(certDcKwh * 10) / 10 : undefined, certKm: certKm !== undefined ? Math.round(certKm) : undefined })) {   // commuteKm: im Steuerhelfer (Berichte → Fahrten) gepflegt
+  if (save(KEY_SETTINGS, { title: $('set-title').value.trim() || DEFAULT_TITLE, brand: txt('set-brand', 30), model: txt('set-model', 40), plate: (txt('set-plate', 15) || '').toUpperCase() || undefined, year: yr || undefined, vin: vin || undefined, price, battery, power, remDays, remKm, purchase, wltp: wl, wltpNet: wln !== undefined ? Math.round(wln * 100) / 100 : undefined, purchaseKm: pk !== undefined ? Math.round(pk) : undefined, purchasePrice: pp !== undefined ? Math.round(pp * 100) / 100 : undefined, commuteKm: getSettings().commuteKm || undefined, ccEnd: getSettings().ccEnd || undefined, carN: getSettings().carN ?? undefined, carSec: getSettings().carSec ?? undefined, wxoCut: getSettings().wxoCut ?? undefined, dashFirst: getSettings().dashFirst || undefined, refLo: rlo, refHi: rhi, nextHu, nextService, certAcKwh: certAcKwh !== undefined ? Math.round(certAcKwh * 10) / 10 : undefined, certDcKwh: certDcKwh !== undefined ? Math.round(certDcKwh * 10) / 10 : undefined, certKm: certKm !== undefined ? Math.round(certKm) : undefined })) {   // commuteKm: im Steuerhelfer (Berichte → Fahrten) gepflegt
     renderReminderBadges(); renderHeroStats(); pushPrefs();
     $('settings-msg').classList.remove('hidden'); setTimeout(() => $('settings-msg').classList.add('hidden'), 2500);
   }
@@ -4246,7 +4255,9 @@ function setLiveHero(on) {
 new MutationObserver(() => $('view-dashboard').classList.toggle('live-setup-open', !$('live-setup').classList.contains('hidden')))
   .observe($('live-setup'), { attributes: true, attributeFilter: ['class'] });
 let lbOpen = false;
-const CAR_NAMES = [1, 2, '_4', 3, 4, 5], CAR_DOTS = 3, CAR_AUTO_MS = 30000;   // Bilder/Enyaq1, 2, _4 (Akku-Schnitt), 3, 4, 5 (unten bleiben 3 Punkte als Deko); automatischer Wechsel alle 30 Sekunden
+const CAR_NAMES = [1, 2, '_4', 3, 4, 5], CAR_DOTS = 3;
+const carAutoN = () => { const v = Number(getSettings().carN); return Number.isInteger(v) && v >= 1 && v <= 6 ? v : 6; };            // Einstellung: so viele Bilder wechseln automatisch
+const carAutoMs = () => { const v = Number(getSettings().carSec); return (Number.isFinite(v) && v >= 5 && v <= 600 ? v : 30) * 1000; };   // Bilder/Enyaq1, 2, _4 (Akku-Schnitt), 3, 4, 5 (unten bleiben 3 Punkte als Deko); automatischer Wechsel alle 30 Sekunden
 async function initCarousel() {
   const box = $('car-scroll'), dash = $('car-dashes'); if (!box) return;
   const found = await Promise.all(CAR_NAMES.map(n => findHeroImg(n))), names = CAR_NAMES.filter((_, i) => found[i]), srcs = found.filter(Boolean);
@@ -4272,8 +4283,9 @@ async function initCarousel() {
     lock = true; slides[cur].style.opacity = '0'; slides[n].style.opacity = '1'; cur = n; setTimeout(() => { lock = false; }, 450); schedule();
   };
   /* Automatisch weiterschalten (im Kreis), nur wenn die Start-Ansicht sichtbar ist; jede Bedienung startet die 30 Sekunden neu */
-  const schedule = () => { clearTimeout(autoT); if (slides.length > 1) autoT = setTimeout(tick, CAR_AUTO_MS); };
-  const tick = () => { if (!document.hidden && !liveHero && !lbOpen && !$('view-dashboard').classList.contains('hidden')) show((cur + 1) % slides.length); schedule(); };   // im Live-Modus pausiert
+  const schedule = () => { clearTimeout(autoT); if (Math.min(slides.length, carAutoN()) > 1) autoT = setTimeout(tick, carAutoMs()); };
+  window.carReschedule = schedule;
+  const tick = () => { if (!document.hidden && !liveHero && !lbOpen && !$('view-dashboard').classList.contains('hidden')) show(cur + 1 < Math.min(slides.length, carAutoN()) ? cur + 1 : 0); schedule(); };   // im Live-Modus pausiert
   schedule();
   box.addEventListener('pointerdown', (e) => { sx = e.clientX; sy = e.clientY; tracking = e.clientX >= 40; });   // vom linken Rand: öffnet das Schnellmenü, nicht das Karussell
   box.addEventListener('pointerup', (e) => { if (!tracking) return; tracking = false; const dx = e.clientX - sx, dy = e.clientY - sy; if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.3) show(cur + (dx < 0 ? 1 : -1)); else if (Math.abs(dx) < 10 && Math.abs(dy) < 10 && !liveHero) lbShow(cur); });   // kurzer Tipp: Vollbild mit Zoom
@@ -5837,8 +5849,11 @@ async function wxoSoc() {
 const wxoCut = () => { const v = Number(getSettings().wxoCut); return Number.isInteger(v) && v >= 0 && v <= 24 ? v : 18; };   // ab dieser Stunde gilt „Morgen“
 const dashFirst = () => getSettings().dashFirst === 'meter' ? 'meter' : 'wx';
 function setQuickSetting(k, v) { const st = load(KEY_SETTINGS, {}) || {}; if (v === undefined) delete st[k]; else st[k] = v; save(KEY_SETTINGS, st); try { pushPrefs(); } catch (e) { } }
-function fillWxoPrefs() { const a = $('set-wxo-cut'), b = $('set-dash-first'); if (a && document.activeElement !== a) a.value = String(wxoCut()); if (b && document.activeElement !== b) b.value = dashFirst(); }
+function fillWxoPrefs() {
+  const cn = $('set-car-n'), cs = $('set-car-sec'); if (cn && document.activeElement !== cn) cn.value = String(carAutoN()); if (cs && document.activeElement !== cs) { const v = String(carAutoMs() / 1000); cs.value = [...cs.options].some(o => o.value === v) ? v : '30'; } const a = $('set-wxo-cut'), b = $('set-dash-first'); if (a && document.activeElement !== a) a.value = String(wxoCut()); if (b && document.activeElement !== b) b.value = dashFirst(); }
 $('set-wxo-cut').addEventListener('change', (e) => { setQuickSetting('wxoCut', Number(e.target.value)); renderWxo(); });
+$('set-car-n').addEventListener('change', (e) => { setQuickSetting('carN', Number(e.target.value)); try { window.carReschedule && window.carReschedule(); } catch (er) { } });
+$('set-car-sec').addEventListener('change', (e) => { setQuickSetting('carSec', Number(e.target.value)); try { window.carReschedule && window.carReschedule(); } catch (er) { } });
 $('set-dash-first').addEventListener('change', (e) => { setQuickSetting('dashFirst', e.target.value); });
 let wxoTok = 0, wxoLast = null;
 const wxoFmtR = (km) => fmt(Math.round(km / 5) * 5, 0);
@@ -6666,7 +6681,7 @@ try { renderWrapCard(); } catch (e) { }
    im Dokument enyaqStrom/<uid>/settings/prefs, gleiche Regel wie Anbieter und Kategorien. Die PIN bleibt nur auf dem Gerät.
    Erster Abgleich: Was die Cloud hat, gilt; fehlt dort etwas und ist lokal vorhanden, wird es hochgeladen. Danach gilt die Cloud (Änderung auf einem Gerät wirkt auf allen).
    ===================================================================== */
-const SYNC_SET_KEYS = ['title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAcKwh', 'certDcKwh', 'certKm', 'wltpNet', 'ccEnd', 'wxoCut', 'dashFirst'];
+const SYNC_SET_KEYS = ['title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAcKwh', 'certDcKwh', 'certKm', 'wltpNet', 'ccEnd', 'wxoCut', 'dashFirst', 'carN', 'carSec'];
 /** Einstellungen für die Cloud: feste Reihenfolge, ohne leere Werte (Firestore verbietet undefined). null = nichts vorhanden. */
 function syncSet(src) {
   const o = {}; if (src && typeof src === 'object') SYNC_SET_KEYS.forEach(k => { const v = src[k]; if (v != null && v !== '' && !(typeof v === 'number' && !isFinite(v))) o[k] = v; });
@@ -6693,7 +6708,7 @@ window.onCloudPrefs = (d, first, uid) => {
   if (first && ns == null && ls) { ns = ls; up = true; }
   if (ns && JSON.stringify(ns) !== JSON.stringify(ls)) {
     const raw = load(KEY_SETTINGS, {}) || {}; SYNC_SET_KEYS.forEach(k => delete raw[k]); save(KEY_SETTINGS, { ...raw, ...ns });   // PIN, WLTP usw. bleiben
-    applyTitle(); renderReminderBadges(); renderHeroStats(); try { fillWxoPrefs(); } catch (e) { }
+    applyTitle(); renderReminderBadges(); renderHeroStats(); try { fillWxoPrefs(); window.carReschedule && window.carReschedule(); } catch (e) { }
     if (currentView === 'settings' && !$('view-settings').contains(document.activeElement)) fillSettings();   // nicht mitten in eine Eingabe schreiben
     if (currentView === 'dashboard') renderDashboard();
   }
