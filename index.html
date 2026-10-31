@@ -147,6 +147,7 @@
   #view-dashboard:not(.live-mode) #meter-card > .grid.grid-cols-2 > div { padding-top: .5rem; padding-bottom: .5rem; }
   /* ===== PC / Querformat ab 1280 px: Schnellmenü fest links, App mittig wie am Handy, Erinnerungen fest rechts (am Handy unverändert) ===== */
   #desk-rem { display: none; }
+  #view-dashboard.live-mode #btm-card { display: none; }
   @media (min-width: 1280px) {
     body { padding-left: var(--dl); padding-right: var(--dr); }
     :root { --dl: clamp(300px, 18vw, 360px); --dr: clamp(372px, 24vw, 480px); }
@@ -230,6 +231,7 @@
 
     <div id="dash-swipe" class="relative">
     <div id="dash-swipe-track" class="no-scrollbar flex gap-3 overflow-x-auto snap-x snap-mandatory overscroll-x-contain">
+    <div id="btm-card" class="flex flex-col w-full shrink-0 snap-center snap-always rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4"></div>
     <div id="wxo-card" class="hidden flex flex-col w-full shrink-0 snap-center snap-always rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
       <div class="flex items-center justify-between gap-2"><div class="min-w-0"><p class="font-barlow text-xl font-bold uppercase tracking-[0.08em] leading-6">Verbrauchs-Prognose</p></div><button id="wxo-more" type="button" class="shrink-0 text-xs font-semibold text-sky-700 dark:text-sky-300 active:opacity-70">7 Tage ›</button></div>
       <div id="wxo-days" class="mt-2 grid grid-cols-3 gap-1.5"></div>
@@ -5902,7 +5904,7 @@ async function renderWxo() {
     tip.classList.remove('hidden');
   } else tip.classList.add('hidden');
   el.classList.remove('hidden');
-  if (dashFirst() === 'dyn' && !window.dSwUser) { const want = dashFirstSlide(soc) === 'wx' ? 0 : 1; if (dSw.idx !== want) setTimeout(() => dashSwipeTo(want), 50); }
+  if (dashFirst() === 'dyn' && !window.dSwUser) { const want = dashFirstSlide(soc) === 'wx' ? dashIdx('wxo-card') : dashIdx('meter-card'); if (dSw.idx !== want) setTimeout(() => dashSwipeTo(want), 50); }
   try { save(KEY_WXO + 'H', { day: todayYMD(), n: wxoN(), cut: hl, days: $('wxo-days').innerHTML, tip: tip.classList.contains('hidden') ? '' : tip.textContent }); } catch (e) { }   // für den sofortigen Aufbau beim nächsten Öffnen
 }
 /** Beim Laden: Karte sofort aus dem letzten Stand zeigen (oder als Platzhalter in gleicher Höhe), damit nichts springt; renderWxo füllt sie danach neu */
@@ -5941,19 +5943,23 @@ function openWxoSheet() {
 }
 /* Start: Verbrauchs-Prognose und Zählerstand seitlich wischen (Standard: Prognose). Höhe folgt der sichtbaren Karte. */
 const dSw = { tr: $('dash-swipe-track'), idx: 0 };
-function dashSlides() { return [$('wxo-card'), $('meter-card')].filter(x => !x.classList.contains('hidden')); }
+function dashSlides() { return [$('btm-card'), $('wxo-card'), $('meter-card')].filter(x => x && !x.classList.contains('hidden') && !(x.id === 'btm-card' && liveHero)); }
+const dashIdx = (id) => Math.max(0, dashSlides().indexOf($(id)));
+/** Karte beim Öffnen: Prognose oder Zählerstand (Akku-Temperatur liegt links davon und wird nur per Wischen erreicht) */
+const dashDefaultIdx = () => dashFirstSlide() === 'wx' && !$('wxo-card').classList.contains('hidden') ? dashIdx('wxo-card') : dashIdx('meter-card');
 function dashSwipeSync() {
   const sl = dashSlides(), w = dSw.tr.clientWidth + 12, i = Math.max(0, Math.min(sl.length - 1, Math.round(dSw.tr.scrollLeft / (w || 1)))); dSw.idx = i;
-  const two = sl.length > 1; $('dash-dots').classList.toggle('hidden', !two);
-  $('dash-dots').querySelectorAll('[data-dslide]').forEach((b, k) => { const on = k === i; b.classList.toggle('w-4', on); b.classList.toggle('w-1.5', !on); ['bg-slate-400', 'dark:bg-slate-500'].forEach(c => b.classList.toggle(c, on)); ['bg-slate-300', 'dark:bg-slate-700'].forEach(c => b.classList.toggle(c, !on)); });
+  const two = sl.length > 1, dd = $('dash-dots'); dd.classList.toggle('hidden', !two);
+  if (dd.children.length !== sl.length) dd.innerHTML = sl.map((x, k) => `<button type="button" data-dslide="${k}" aria-label="${x.id === 'btm-card' ? 'Akku-Temperatur' : x.id === 'wxo-card' ? 'Verbrauchs-Prognose' : 'Zählerstand'}" class="pointer-events-auto h-1.5 w-1.5 rounded-full bg-slate-300 dark:bg-slate-700 transition-all"></button>`).join('');
+  dd.querySelectorAll('[data-dslide]').forEach((b, k) => { const on = k === i; b.classList.toggle('w-4', on); b.classList.toggle('w-1.5', !on); ['bg-slate-400', 'dark:bg-slate-500'].forEach(c => b.classList.toggle(c, on)); ['bg-slate-300', 'dark:bg-slate-700'].forEach(c => b.classList.toggle(c, !on)); });
 }
 function dashSwipeTo(i, smooth = true) { const sl = dashSlides(); if (!sl[i]) return; dSw.tr.scrollTo({ left: sl[i].offsetLeft - dSw.tr.offsetLeft, behavior: smooth ? 'smooth' : 'auto' }); }
 ['pointerdown', 'touchstart', 'wheel'].forEach(ev => dSw.tr.addEventListener(ev, () => { window.dSwUser = true; }, { passive: true }));   // selbst gewischt: nicht mehr automatisch umschalten
 $('dash-dots').addEventListener('pointerdown', () => { window.dSwUser = true; });
 let dSwT = null; dSw.tr.addEventListener('scroll', () => { clearTimeout(dSwT); dSwT = setTimeout(dashSwipeSync, 60); }, { passive: true });
 $('dash-dots').addEventListener('click', (e) => { const b = e.target.closest('[data-dslide]'); if (b) dashSwipeTo(Number(b.dataset.dslide)); });
-try { new ResizeObserver(() => dashSwipeSync()).observe($('wxo-card')); new ResizeObserver(() => dashSwipeSync()).observe($('meter-card')); } catch (e) { }
-let dSwVis = false; new MutationObserver(() => { const v = !$('wxo-card').classList.contains('hidden'); if (v !== dSwVis) { dSwVis = v; dashSwipeTo(v && dashFirstSlide() === 'wx' ? 0 : dashSlides().length - 1, false); } dashSwipeSync(); }).observe($('wxo-card'), { attributes: true, attributeFilter: ['class'] });
+try { new ResizeObserver(() => dashSwipeSync()).observe($('btm-card')); new ResizeObserver(() => dashSwipeSync()).observe($('wxo-card')); new ResizeObserver(() => dashSwipeSync()).observe($('meter-card')); } catch (e) { }
+let dSwVis = false; new MutationObserver(() => { const v = !$('wxo-card').classList.contains('hidden'); if (v !== dSwVis) { dSwVis = v; dashSwipeTo(dashDefaultIdx(), false); } dashSwipeSync(); }).observe($('wxo-card'), { attributes: true, attributeFilter: ['class'] });
 $('btn-live').addEventListener('click', () => setTimeout(() => dashSwipeTo(dashSlides().length - 1), 0));
 dashSwipeSync();
 $('wxo-more').addEventListener('click', openWxoSheet);
@@ -8020,6 +8026,39 @@ $('rec-list').addEventListener('click', async (e) => {
   }
   if (a === 'undo' && btLastSaved) { const lab = getLab(), id = btLastSaved.id; lab.bt = (lab.bt || []).filter(x => x.id !== id); btLastSaved = null; setLab(lab); }
 });
+/* Start: kleine Akku-Temperatur-Karte (links der Verbrauchs-Prognose im Wisch-Bereich). Speichert in dieselbe Liste wie Rekorde → Akku °C (lab.bt). */
+let btmVal = null, btmCtx = null, btmSaved = null;
+function renderBtm() {
+  const el = $('btm-card'); if (!el) return;
+  const all = (getLab().bt || []).filter(e => Number.isFinite(e.t) && e.at).sort((a, b) => Date.parse(a.at) - Date.parse(b.at)), last = all[all.length - 1];
+  if (btmVal == null) btmVal = last ? Math.round(last.t) : 15;
+  const now = new Date(), stepB = 'flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-800 text-2xl font-semibold active:scale-90 transition select-none';
+  const pill = (on) => on ? 'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300 border-transparent' : 'border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300';
+  const info = btmSaved ? `<span class="text-emerald-600 dark:text-emerald-400">✓ ${fmt(btmSaved.t, 0)} °C um ${hhmm(Date.parse(btmSaved.at))} gespeichert</span>`
+    : [btOut.v != null ? 'Außen ' + fmt(btOut.v, 0) + ' °C' : '', last ? 'zuletzt ' + fmt(last.t, 0) + ' °C · ' + new Date(last.at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }) : 'noch kein Wert'].filter(Boolean).join(' · ');
+  el.innerHTML = `<div class="flex items-baseline justify-between gap-2"><p class="font-barlow text-xl font-bold uppercase tracking-[0.08em] leading-6">Akku-Temperatur</p><button type="button" data-btm="open" class="shrink-0 text-xs font-semibold text-sky-700 dark:text-sky-300">Verlauf ›</button></div>
+    <div class="mt-2 flex items-center gap-2.5"><button type="button" data-btm="-1" aria-label="1 Grad weniger" class="${stepB}">−</button><span class="flex-1 text-center font-barlow text-[50px] font-bold leading-none text-orange-500 dark:text-orange-400 tabular-nums"><span id="btm-val">${btmVal}</span> <span class="text-[24px]">°C</span></span><button type="button" data-btm="1" aria-label="1 Grad mehr" class="${stepB}">+</button></div>
+    <div class="mt-2.5 flex gap-1.5">${BT_CTX.map(([k, l]) => `<button type="button" data-btmctx="${k}" aria-pressed="${btmCtx === k}" class="flex-1 rounded-full border py-1.5 text-xs font-semibold ${pill(btmCtx === k)}">${l}</button>`).join('')}</div>
+    <div class="min-h-2 flex-1"></div>
+    <div class="flex items-center gap-2"><span class="min-w-0 truncate text-xs text-left text-slate-500 dark:text-slate-400">${info}</span>${btmSaved ? '<button type="button" data-btm="undo" class="ml-auto h-10 shrink-0 rounded-2xl bg-slate-200 dark:bg-slate-800 px-4 text-sm font-semibold text-sky-700 dark:text-sky-300 active:scale-95 transition">Rückgängig</button>' : '<button type="button" data-btm="save" class="ml-auto h-10 shrink-0 rounded-2xl bg-emerald-600 px-5 text-sm font-semibold text-white active:scale-95 transition">Speichern</button>'}</div>
+    <p class="sr-only">${now.toLocaleDateString('de-DE')}</p>`;
+}
+$('btm-card').addEventListener('click', async (e) => {
+  const c = e.target.closest('[data-btmctx]'); if (c) { btmCtx = btmCtx === c.dataset.btmctx ? null : c.dataset.btmctx; renderBtm(); return; }
+  const b = e.target.closest('[data-btm]'); if (!b) return; const a = b.dataset.btm;
+  if (a === '1' || a === '-1') { btmVal = Math.max(-30, Math.min(70, btmVal + Number(a))); $('btm-val').textContent = btmVal; if (btmSaved) { btmSaved = null; renderBtm(); } return; }
+  if (a === 'open') { NAV_GO.akkutemp ? NAV_GO.akkutemp() : showView('recs'); return; }
+  if (a === 'save') {
+    b.disabled = true; const out = await btOutside(), lab = getLab(), en = { id: labId(), at: new Date().toISOString(), t: btmVal };
+    if (Number.isFinite(out)) en.out = Math.round(out * 10) / 10; if (btmCtx) en.ctx = btmCtx;
+    lab.bt = (lab.bt || []).concat(en); btmSaved = en; btmCtx = null; setLab(lab); renderBtm(); return;
+  }
+  if (a === 'undo' && btmSaved) { const lab = getLab(), id = btmSaved.id; lab.bt = (lab.bt || []).filter(x => x.id !== id); btmSaved = null; setLab(lab); renderBtm(); }
+});
+renderBtm();
+if (wxLoc() && !$('wxo-card').classList.contains('hidden')) { /* Prognose sichtbar: Beobachter setzt die Startkarte */ } else dashSwipeTo(dashDefaultIdx(), false);
+dashSwipeSync();
+if (btOut.v == null && wxLoc()) btOutside().then(() => { if (!btmSaved) renderBtm(); }).catch(() => { });
 
 /* =====================================================================
    Reifen: Profiltiefe je Satz (Sommer/Allwetter/Winter), 4 Reifen × 3 Messpunkte (außen, mitte, innen) in mm.
