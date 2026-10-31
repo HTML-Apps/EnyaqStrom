@@ -30,8 +30,14 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&display=block" rel="stylesheet">
+<script>
+  /* Überschriften (Barlow Condensed) erst zeigen, wenn die Schrift da ist – kein Springen von Ersatzschrift zu Barlow; spätestens nach 1,5 s */
+  (function () { var d = document.documentElement; d.classList.add('fl'); var done = function () { d.classList.remove('fl'); };
+    try { document.fonts.load('700 20px "Barlow Condensed"').then(done, done); } catch (e) { done(); } setTimeout(done, 1500); })();
+</script>
 <style>
+  html.fl .font-barlow { visibility: hidden; }
   /* Dark-Mode folgt dem System (Tailwind-CDN: darkMode = media) */
   body { padding-top: env(safe-area-inset-top); -webkit-tap-highlight-color: transparent; }
   .lcd { background: linear-gradient(180deg,#1e4fd8,#2f6bff); color:#eaf2ff; font-family: ui-monospace,Menlo,Consolas,monospace;
@@ -1235,6 +1241,14 @@
         <div id="wx-results" class="mt-2 flex flex-col gap-1.5"></div>
         <p id="wx-msg" class="text-xs text-slate-500 dark:text-slate-400 mt-1 min-h-[1rem]"></p>
         </div>
+        <div class="py-4 first:pt-4 last:pb-0">
+          <p class="block text-sm font-medium text-slate-700 dark:text-slate-300">Verbrauchs-Prognose auf Start</p>
+          <div class="mt-1 grid grid-cols-2 gap-2">
+            <div><label for="set-wxo-cut" class="text-xs text-slate-500 dark:text-slate-400">„Morgen“ hervorheben</label><select id="set-wxo-cut" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"><option value="6">ab 6 Uhr</option><option value="7">ab 7 Uhr</option><option value="8">ab 8 Uhr</option><option value="9">ab 9 Uhr</option><option value="10">ab 10 Uhr</option><option value="11">ab 11 Uhr</option><option value="12">ab 12 Uhr</option><option value="13">ab 13 Uhr</option><option value="14">ab 14 Uhr</option><option value="15">ab 15 Uhr</option><option value="16">ab 16 Uhr</option><option value="17">ab 17 Uhr</option><option value="18">ab 18 Uhr</option><option value="19">ab 19 Uhr</option><option value="20">ab 20 Uhr</option><option value="21">ab 21 Uhr</option><option value="22">ab 22 Uhr</option><option value="23">ab 23 Uhr</option><option value="24">nie (immer heute)</option></select></div>
+            <div><label for="set-dash-first" class="text-xs text-slate-500 dark:text-slate-400">Beim Öffnen zeigen</label><select id="set-dash-first" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"><option value="wx">Prognose</option><option value="meter">Zählerstand</option></select></div>
+          </div>
+          <p class="mt-1.5 text-xs text-left text-slate-500 dark:text-slate-400">Ab dieser Uhrzeit wird „Morgen“ umrandet und „Restakku – reicht bis …“ rechnet ab morgen. Wird mit deinem Konto synchronisiert.</p>
+        </div>
       </div>
     </div>
     <div class="rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
@@ -2429,7 +2443,7 @@ $('btn-save-settings').addEventListener('click', () => {
     if (+m[2] < 1990 || +m[2] * 12 + +m[1] > now.getFullYear() * 12 + now.getMonth() + 1) { alert('Das Baujahr ' + yr + ' kann nicht stimmen: Es muss zwischen 01/1990 und ' + String(now.getMonth() + 1).padStart(2, '0') + '/' + now.getFullYear() + ' liegen.'); $('set-year').focus(); return; }
   }
   const txt = (id, n) => $(id).value.trim().replace(/\s+/g, ' ').slice(0, n) || undefined;
-  if (save(KEY_SETTINGS, { title: $('set-title').value.trim() || DEFAULT_TITLE, brand: txt('set-brand', 30), model: txt('set-model', 40), plate: (txt('set-plate', 15) || '').toUpperCase() || undefined, year: yr || undefined, vin: vin || undefined, price, battery, power, remDays, remKm, purchase, wltp: wl, wltpNet: wln !== undefined ? Math.round(wln * 100) / 100 : undefined, purchaseKm: pk !== undefined ? Math.round(pk) : undefined, purchasePrice: pp !== undefined ? Math.round(pp * 100) / 100 : undefined, commuteKm: getSettings().commuteKm || undefined, ccEnd: getSettings().ccEnd || undefined, refLo: rlo, refHi: rhi, nextHu, nextService, certAcKwh: certAcKwh !== undefined ? Math.round(certAcKwh * 10) / 10 : undefined, certDcKwh: certDcKwh !== undefined ? Math.round(certDcKwh * 10) / 10 : undefined, certKm: certKm !== undefined ? Math.round(certKm) : undefined })) {   // commuteKm: im Steuerhelfer (Berichte → Fahrten) gepflegt
+  if (save(KEY_SETTINGS, { title: $('set-title').value.trim() || DEFAULT_TITLE, brand: txt('set-brand', 30), model: txt('set-model', 40), plate: (txt('set-plate', 15) || '').toUpperCase() || undefined, year: yr || undefined, vin: vin || undefined, price, battery, power, remDays, remKm, purchase, wltp: wl, wltpNet: wln !== undefined ? Math.round(wln * 100) / 100 : undefined, purchaseKm: pk !== undefined ? Math.round(pk) : undefined, purchasePrice: pp !== undefined ? Math.round(pp * 100) / 100 : undefined, commuteKm: getSettings().commuteKm || undefined, ccEnd: getSettings().ccEnd || undefined, wxoCut: getSettings().wxoCut ?? undefined, dashFirst: getSettings().dashFirst || undefined, refLo: rlo, refHi: rhi, nextHu, nextService, certAcKwh: certAcKwh !== undefined ? Math.round(certAcKwh * 10) / 10 : undefined, certDcKwh: certDcKwh !== undefined ? Math.round(certDcKwh * 10) / 10 : undefined, certKm: certKm !== undefined ? Math.round(certKm) : undefined })) {   // commuteKm: im Steuerhelfer (Berichte → Fahrten) gepflegt
     renderReminderBadges(); renderHeroStats(); pushPrefs();
     $('settings-msg').classList.remove('hidden'); setTimeout(() => $('settings-msg').classList.add('hidden'), 2500);
   }
@@ -5774,6 +5788,12 @@ async function wxoSoc() {
     save(KEY_WXO + 'S', { t: Date.now(), soc: d.soc }); return d.soc;
   } catch (e) { return old; }
 }
+const wxoCut = () => { const v = Number(getSettings().wxoCut); return Number.isInteger(v) && v >= 0 && v <= 24 ? v : 18; };   // ab dieser Stunde gilt „Morgen“
+const dashFirst = () => getSettings().dashFirst === 'meter' ? 'meter' : 'wx';
+function setQuickSetting(k, v) { const st = load(KEY_SETTINGS, {}) || {}; if (v === undefined) delete st[k]; else st[k] = v; save(KEY_SETTINGS, st); try { pushPrefs(); } catch (e) { } }
+function fillWxoPrefs() { const a = $('set-wxo-cut'), b = $('set-dash-first'); if (a && document.activeElement !== a) a.value = String(wxoCut()); if (b && document.activeElement !== b) b.value = dashFirst(); }
+$('set-wxo-cut').addEventListener('change', (e) => { setQuickSetting('wxoCut', Number(e.target.value)); renderWxo(); });
+$('set-dash-first').addEventListener('change', (e) => { setQuickSetting('dashFirst', e.target.value); });
 let wxoTok = 0, wxoLast = null;
 const wxoFmtR = (km) => fmt(Math.round(km / 5) * 5, 0);
 async function renderWxo() {
@@ -5785,7 +5805,7 @@ async function renderWxo() {
   const today = wxIso(new Date()), days = fc.filter(x => x.d >= today).slice(0, 7); if (days.length < 3) { el.classList.add('hidden'); return; }
   const eff = (() => { try { return avgEff(getReadings()); } catch (e) { return BAT.eta; } })(), cap = batteryKwh(), rng = (k) => cap / k * 100;
   days.forEach(x => { x.k = wxoPred(m, x.T, x.p >= 1); x.r = rng(x.k); });
-  const best = rng(m.a), hl = new Date().getHours() >= 18 ? 1 : 0, lab = (i) => i === 0 ? 'Heute' : i === 1 ? 'Morgen' : wxDay(days[i].d).wd + '.';
+  const best = rng(m.a), hl = new Date().getHours() >= wxoCut() ? 1 : 0, lab = (i) => i === 0 ? 'Heute' : i === 1 ? 'Morgen' : wxDay(days[i].d).wd + '.';
   wxoLast = { m, days, eff, cap };
   $('wxo-days').innerHTML = days.slice(0, 3).map((x, i) => { const on = i === hl;
     return `<div class="min-w-0 rounded-2xl px-1.5 py-2 text-center ${on ? 'bg-sky-50 dark:bg-sky-950/60 ring-[1.5px] ring-sky-400' : 'bg-slate-100 dark:bg-slate-800/60'}">
@@ -5806,6 +5826,16 @@ async function renderWxo() {
     tip.classList.remove('hidden');
   } else tip.classList.add('hidden');
   el.classList.remove('hidden');
+  try { save(KEY_WXO + 'H', { day: todayYMD(), cut: hl, days: $('wxo-days').innerHTML, tip: tip.classList.contains('hidden') ? '' : tip.textContent }); } catch (e) { }   // für den sofortigen Aufbau beim nächsten Öffnen
+}
+/** Beim Laden: Karte sofort aus dem letzten Stand zeigen (oder als Platzhalter in gleicher Höhe), damit nichts springt; renderWxo füllt sie danach neu */
+function wxoBoot() {
+  if (!wxLoc() || liveHero) return;
+  const c = load(KEY_WXO + 'H', null), sk = '<div class="h-[148px] rounded-2xl bg-slate-100 dark:bg-slate-800/60 animate-pulse"></div>';
+  $('wxo-days').innerHTML = c && c.day === todayYMD() && c.days ? c.days : sk + sk + sk;
+  const tip = $('wxo-tip'); tip.textContent = c && c.day === todayYMD() ? c.tip || '' : ''; tip.classList.toggle('hidden', !tip.textContent);
+  if (!tip.textContent) { tip.textContent = ' '; tip.classList.remove('hidden'); }       // gleiche Höhe wie mit Text
+  $('wxo-card').classList.remove('hidden');
 }
 function openWxoSheet() {
   const o = wxoLast; if (!o) return; const { m, days } = o, P = WXO_PRIOR;
@@ -5836,13 +5866,13 @@ function dashSwipeTo(i, smooth = true) { const sl = dashSlides(); if (!sl[i]) re
 let dSwT = null; dSw.tr.addEventListener('scroll', () => { clearTimeout(dSwT); dSwT = setTimeout(dashSwipeSync, 60); }, { passive: true });
 $('dash-dots').addEventListener('click', (e) => { const b = e.target.closest('[data-dslide]'); if (b) dashSwipeTo(Number(b.dataset.dslide)); });
 try { new ResizeObserver(() => dashSwipeSync()).observe($('wxo-card')); new ResizeObserver(() => dashSwipeSync()).observe($('meter-card')); } catch (e) { }
-let dSwVis = false; new MutationObserver(() => { const v = !$('wxo-card').classList.contains('hidden'); if (v !== dSwVis) { dSwVis = v; dashSwipeTo(v ? 0 : dashSlides().length - 1, false); } dashSwipeSync(); }).observe($('wxo-card'), { attributes: true, attributeFilter: ['class'] });
+let dSwVis = false; new MutationObserver(() => { const v = !$('wxo-card').classList.contains('hidden'); if (v !== dSwVis) { dSwVis = v; dashSwipeTo(v && dashFirst() === 'wx' ? 0 : dashSlides().length - 1, false); } dashSwipeSync(); }).observe($('wxo-card'), { attributes: true, attributeFilter: ['class'] });
 $('btn-live').addEventListener('click', () => setTimeout(() => dashSwipeTo(dashSlides().length - 1), 0));
 dashSwipeSync();
 $('wxo-more').addEventListener('click', openWxoSheet);
 $('wxo-days').addEventListener('click', openWxoSheet);
 $('wxo-sheet').addEventListener('click', (e) => { if (e.target === $('wxo-sheet') || e.target.closest('[data-wxo="close"]')) $('wxo-sheet').classList.add('hidden'); });
-setTimeout(() => renderWxo(), 1700); setInterval(() => { if (!document.hidden && currentView === 'dashboard') renderWxo(); }, 30 * 60 * 1000);
+wxoBoot(); fillWxoPrefs(); renderWxo(); setInterval(() => { if (!document.hidden && currentView === 'dashboard') renderWxo(); }, 30 * 60 * 1000);
 setTimeout(() => renderFrost(), 1500); setInterval(() => { if (!document.hidden && currentView === 'dashboard') renderFrost(); }, 15 * 60 * 1000);
 let wxTimer = null, wxTok = 0, wxChart = null;
 function wxKill() { if (wxChart) { wxChart.destroy(); wxChart = null; } }
@@ -6582,7 +6612,7 @@ try { renderWrapCard(); } catch (e) { }
    im Dokument enyaqStrom/<uid>/settings/prefs, gleiche Regel wie Anbieter und Kategorien. Die PIN bleibt nur auf dem Gerät.
    Erster Abgleich: Was die Cloud hat, gilt; fehlt dort etwas und ist lokal vorhanden, wird es hochgeladen. Danach gilt die Cloud (Änderung auf einem Gerät wirkt auf allen).
    ===================================================================== */
-const SYNC_SET_KEYS = ['title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAcKwh', 'certDcKwh', 'certKm', 'wltpNet', 'ccEnd'];
+const SYNC_SET_KEYS = ['title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAcKwh', 'certDcKwh', 'certKm', 'wltpNet', 'ccEnd', 'wxoCut', 'dashFirst'];
 /** Einstellungen für die Cloud: feste Reihenfolge, ohne leere Werte (Firestore verbietet undefined). null = nichts vorhanden. */
 function syncSet(src) {
   const o = {}; if (src && typeof src === 'object') SYNC_SET_KEYS.forEach(k => { const v = src[k]; if (v != null && v !== '' && !(typeof v === 'number' && !isFinite(v))) o[k] = v; });
@@ -6609,7 +6639,7 @@ window.onCloudPrefs = (d, first, uid) => {
   if (first && ns == null && ls) { ns = ls; up = true; }
   if (ns && JSON.stringify(ns) !== JSON.stringify(ls)) {
     const raw = load(KEY_SETTINGS, {}) || {}; SYNC_SET_KEYS.forEach(k => delete raw[k]); save(KEY_SETTINGS, { ...raw, ...ns });   // PIN, WLTP usw. bleiben
-    applyTitle(); renderReminderBadges(); renderHeroStats();
+    applyTitle(); renderReminderBadges(); renderHeroStats(); try { fillWxoPrefs(); } catch (e) { }
     if (currentView === 'settings' && !$('view-settings').contains(document.activeElement)) fillSettings();   // nicht mitten in eine Eingabe schreiben
     if (currentView === 'dashboard') renderDashboard();
   }
