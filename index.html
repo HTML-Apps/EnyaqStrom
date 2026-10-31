@@ -196,11 +196,12 @@
     </div>
 
     <div id="dash-swipe" class="relative">
-    <div id="dash-swipe-track" class="no-scrollbar flex items-start gap-3 overflow-x-auto snap-x snap-mandatory overscroll-x-contain transition-[height] duration-300">
-    <div id="wxo-card" class="hidden w-full shrink-0 snap-center snap-always rounded-3xl bg-white dark:bg-[#141414]/80 dark:backdrop-blur-md dark:border dark:border-white/5 text-slate-900 dark:text-slate-100 shadow-sm p-4">
+    <div id="dash-swipe-track" class="no-scrollbar flex gap-3 overflow-x-auto snap-x snap-mandatory overscroll-x-contain">
+    <div id="wxo-card" class="hidden flex flex-col w-full shrink-0 snap-center snap-always rounded-3xl bg-white dark:bg-[#141414]/80 dark:backdrop-blur-md dark:border dark:border-white/5 text-slate-900 dark:text-slate-100 shadow-sm p-4">
       <div class="flex items-center justify-between gap-2"><div class="min-w-0"><p class="font-barlow text-xl font-bold uppercase tracking-[0.08em] leading-6">Verbrauchs-Prognose</p></div><button id="wxo-more" type="button" class="shrink-0 text-xs font-semibold text-sky-700 dark:text-sky-300 active:opacity-70">7 Tage ›</button></div>
       <div id="wxo-days" class="mt-2 grid grid-cols-3 gap-1.5"></div>
-      <p id="wxo-tip" class="mt-2 hidden flex gap-2 rounded-2xl bg-emerald-50 dark:bg-emerald-950/70 px-3 py-2 text-[12.5px] leading-snug text-emerald-900 dark:text-emerald-200"></p>
+      <span class="block min-h-2 flex-1"></span>
+      <p id="wxo-tip" class="hidden flex gap-2 rounded-2xl bg-emerald-50 dark:bg-emerald-950/70 px-3 py-2 text-[12.5px] leading-snug text-emerald-900 dark:text-emerald-200"></p>
     </div>
     <div id="meter-card" class="w-full shrink-0 snap-center snap-always rounded-3xl bg-white dark:bg-[#141414]/80 dark:backdrop-blur-md dark:border dark:border-white/5 text-slate-900 dark:text-slate-100 shadow-sm p-4">
       <div class="flex items-center justify-between h-7 mb-2">
@@ -5682,8 +5683,8 @@ async function renderWxo() {
   if (hb.kmDay > 3) {
     let e = cap * eff * (hb.target - WXO_RES) / 100, i = hl, n = 0;
     while (n < 30) { const x = days[Math.min(i, days.length - 1)], need = hb.kmDay * x.k / 100 * eff; if (e < need) break; e -= need; i++; n++; }
-    const until = n <= 0 ? 'keinen vollen Tag' : n === 1 ? 'bis ' + (hl ? 'morgen Abend' : 'heute Abend') : hl + n - 1 < days.length ? 'bis ' + wxDay(days[hl + n - 1].d).long + ' (' + n + ' Tage)' : 'ca. ' + n + ' Tage weit';
-    tip.innerHTML = `<span>🔌</span><span class="min-w-0 flex-1">Mit ${hb.target} % kommst du ${until} – bei deinen Ø ${fmt(hb.kmDay, 0)} km/Tag, ${WXO_RES} % Reserve.</span>`;
+    const hub = `Ladehub ${WXO_RES}–${hb.target} %`, until = n <= 0 ? 'reicht keinen vollen Tag' : n === 1 ? 'reicht bis ' + (hl ? 'morgen' : 'heute Abend') : hl + n - 1 < days.length ? 'reicht bis ' + wxDay(days[hl + n - 1].d).wd + ' (' + n + ' Tage)' : 'reicht ca. ' + n + ' Tage';
+    tip.innerHTML = `<span>🔌</span><span class="min-w-0 flex-1 truncate">${hub} ${until}</span>`;
     tip.classList.remove('hidden');
   } else tip.classList.add('hidden');
   el.classList.remove('hidden');
@@ -5710,7 +5711,6 @@ const dSw = { tr: $('dash-swipe-track'), idx: 0 };
 function dashSlides() { return [$('wxo-card'), $('meter-card')].filter(x => !x.classList.contains('hidden')); }
 function dashSwipeSync() {
   const sl = dashSlides(), w = dSw.tr.clientWidth + 12, i = Math.max(0, Math.min(sl.length - 1, Math.round(dSw.tr.scrollLeft / (w || 1)))); dSw.idx = i;
-  if (sl[i]) dSw.tr.style.height = sl[i].offsetHeight + 'px';
   const two = sl.length > 1; $('dash-dots').classList.toggle('hidden', !two);
   $('dash-dots').querySelectorAll('[data-dslide]').forEach((b, k) => { const on = k === i; b.classList.toggle('w-4', on); b.classList.toggle('w-1.5', !on); ['bg-slate-400', 'dark:bg-slate-500'].forEach(c => b.classList.toggle(c, on)); ['bg-slate-300', 'dark:bg-slate-700'].forEach(c => b.classList.toggle(c, !on)); });
 }
