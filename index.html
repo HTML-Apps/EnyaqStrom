@@ -608,21 +608,23 @@
     <div class="-mt-2 flex h-[60px] items-center justify-between gap-3 -mb-[10px]">
       <h1 class="min-w-0 truncate font-barlow font-semibold text-2xl uppercase tracking-[0.14em] text-white">Erinnerungen</h1>
       <div class="flex gap-2">
-        <button id="rem-ics-all" type="button" class="px-3 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 text-sm font-medium active:scale-95 transition">Kalender</button>
-        <button id="rem-add" type="button" class="px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-semibold active:scale-95 transition">+ Neu</button>
+        <button id="rem-ics-all" type="button" class="whitespace-nowrap px-3 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 text-sm font-medium active:scale-95 transition">Kalender</button>
+        <button id="rem-add" type="button" class="whitespace-nowrap px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-semibold active:scale-95 transition">+ Neu</button>
       </div>
     </div>
     <p id="rem-summary" class="text-sm text-slate-500 dark:text-slate-400"></p>
+    <div id="rem-tabs" class="flex bg-slate-200 dark:bg-slate-800 rounded-xl p-1"><button type="button" data-rtab="due" class="rem-tab min-w-0 flex-1 px-2 py-1.5 rounded-lg text-[13px] font-medium whitespace-nowrap">Fälligkeiten</button><button type="button" data-rtab="run" class="rem-tab min-w-0 flex-1 px-2 py-1.5 rounded-lg text-[13px] font-medium whitespace-nowrap">Laufzeit</button></div>
     <div id="rem-empty" class="hidden rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-5 text-center">
-      <p class="font-medium">Noch keine Erinnerungen</p>
-      <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Lege mit „+ Neu“ eine an.</p>
+      <p id="rem-empty-h" class="font-medium">Noch keine Erinnerungen</p>
+      <p id="rem-empty-t" class="text-sm text-slate-500 dark:text-slate-400 mt-1">Lege mit „+ Neu“ eine an.</p>
     </div>
     <ul id="rem-list" class="space-y-3"></ul>
+    <ul id="rem-run-list" class="hidden space-y-3"></ul>
     <div id="rem-done-wrap" class="hidden space-y-2">
       <button id="rem-done-toggle" type="button" class="flex w-full justify-between items-center rounded-2xl bg-slate-200 dark:bg-slate-800 px-4 py-2.5 text-sm font-medium"><span id="rem-done-label">Erledigt</span><span id="rem-done-arrow" aria-hidden="true">▾</span></button>
       <ul id="rem-done-list" class="hidden space-y-2"></ul>
     </div>
-    <p class="text-xs text-slate-500 dark:text-slate-400 text-center">Der Kalender-Export enthält den nächsten Termin mit Vorab-Hinweis. Nach „Erledigt“ bei Bedarf neu exportieren. Erinnerungen nur nach km erscheinen nicht im Kalender.</p>
+    <p id="rem-ics-note" class="text-xs text-slate-500 dark:text-slate-400 text-center">Der Kalender-Export enthält den nächsten Termin mit Vorab-Hinweis. Nach „Erledigt“ bei Bedarf neu exportieren. Erinnerungen nur nach km erscheinen nicht im Kalender.</p>
   </section>
 
   <section id="view-history" class="view hidden space-y-4">
@@ -1434,8 +1436,10 @@
 <div id="rem-dialog" class="hidden fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-3">
   <div class="w-full max-w-sm max-h-[92vh] overflow-y-auto rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 p-5 space-y-3">
     <p id="rem-dialog-title" class="font-semibold">Neue Erinnerung</p>
+    <div id="rem-kind" class="flex bg-slate-200 dark:bg-slate-800 rounded-xl p-1"><button type="button" data-rkind="due" class="rem-kind min-w-0 flex-1 px-2 py-1.5 rounded-lg text-[13px] font-medium whitespace-nowrap">Fälligkeit</button><button type="button" data-rkind="run" class="rem-kind min-w-0 flex-1 px-2 py-1.5 rounded-lg text-[13px] font-medium whitespace-nowrap">Laufzeit</button></div>
     <div><label for="rem-title" class="text-xs text-slate-500 dark:text-slate-400">Titel</label><input id="rem-title" type="text" maxlength="80" autocomplete="off" placeholder="z. B. Reifendruck prüfen" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
     <div><label for="rem-cat" class="text-xs text-slate-500 dark:text-slate-400">Kategorie</label><select id="rem-cat" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></select></div>
+    <div id="rem-f-due" class="space-y-3">
     <div class="grid grid-cols-2 gap-2">
       <div><label for="rem-due" class="text-xs text-slate-500 dark:text-slate-400">Fällig am</label><input id="rem-due" type="date" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
       <div><label for="rem-due-km" class="text-xs text-slate-500 dark:text-slate-400">Fällig bei km</label><input id="rem-due-km" type="text" inputmode="numeric" autocomplete="off" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
@@ -1444,8 +1448,15 @@
       <div><label for="rem-rep-m" class="text-xs text-slate-500 dark:text-slate-400">Wiederholen alle …</label><div class="mt-1 flex min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 focus-within:ring-2 focus-within:ring-emerald-500"><input id="rem-rep-m" type="text" inputmode="numeric" autocomplete="off" placeholder="leer = einmalig" class="w-full min-w-0 rounded-l-xl bg-transparent px-3 py-2.5 focus:outline-none"><select id="rem-rep-unit" aria-label="Einheit" class="shrink-0 rounded-r-xl border-l border-slate-300 dark:border-slate-700 bg-transparent px-1.5 text-sm font-medium focus:outline-none"><option value="d">Tage</option><option value="w">Wochen</option><option value="m" selected>Monate</option></select></div></div>
       <div><label for="rem-rep-km" class="text-xs text-slate-500 dark:text-slate-400">Wiederholen alle … km</label><input id="rem-rep-km" type="text" inputmode="numeric" autocomplete="off" placeholder="leer = einmalig" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
     </div>
-    <div><label for="rem-note" class="text-xs text-slate-500 dark:text-slate-400">Notiz (optional)</label><textarea id="rem-note" rows="2" maxlength="300" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></textarea></div>
-    <p class="text-xs text-slate-500 dark:text-slate-400">Datum und km können zusammen gelten: Es zählt, was zuerst erreicht wird.</p>
+    </div>
+    <div id="rem-f-run" class="hidden space-y-3">
+      <div class="grid grid-cols-2 gap-2">
+        <div><label for="rem-since" class="text-xs text-slate-500 dark:text-slate-400">Seit</label><input id="rem-since" type="date" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"><button id="rem-since-today" type="button" class="mt-1 text-xs font-semibold text-sky-700 dark:text-sky-300">heute</button></div>
+        <div><label for="rem-life" class="text-xs text-slate-500 dark:text-slate-400">Hält ca. (optional)</label><div class="mt-1 flex min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 focus-within:ring-2 focus-within:ring-emerald-500"><input id="rem-life" type="text" inputmode="numeric" autocomplete="off" placeholder="leer" class="w-full min-w-0 rounded-l-xl bg-transparent px-3 py-2.5 focus:outline-none"><select id="rem-life-unit" aria-label="Einheit" class="shrink-0 rounded-r-xl border-l border-slate-300 dark:border-slate-700 bg-transparent px-1.5 text-sm font-medium focus:outline-none"><option value="d">Tage</option><option value="w" selected>Wochen</option><option value="m">Monate</option></select></div></div>
+      </div>
+    </div>
+    <div><label id="rem-note-l" for="rem-note" class="text-xs text-slate-500 dark:text-slate-400">Notiz (optional)</label><textarea id="rem-note" rows="2" maxlength="300" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></textarea></div>
+    <p id="rem-hint" class="text-xs text-left text-slate-500 dark:text-slate-400">Datum und km können zusammen gelten: Es zählt, was zuerst erreicht wird.</p>
     <p id="rem-dialog-msg" class="hidden text-sm"></p>
     <div class="grid grid-cols-2 gap-2">
       <button id="rem-cancel" type="button" class="py-3 rounded-2xl bg-slate-200 dark:bg-slate-800 font-medium active:scale-95 transition">Abbrechen</button>
@@ -3614,7 +3625,20 @@ function addMonths(d, n) {                                 // 31.01. + 1 Monat =
 }
 const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n, 12);
 const cleanRem = (o) => { Object.keys(o).forEach(k => { if (o[k] === undefined || o[k] === null || (typeof o[k] === 'number' && !isFinite(o[k]))) delete o[k]; }); return o; };
-const isRepeating = (r) => r.repeatMonths > 0 || r.repeatDays > 0 || r.repeatKm > 0;
+const isRun = (r) => r && r.kind === 'run';                         // Laufzeit: „seit …“, optional mit Haltbarkeit (dueDate = Ablauf)
+const isRepeating = (r) => !isRun(r) && (r.repeatMonths > 0 || r.repeatDays > 0 || r.repeatKm > 0);
+/** Ablauf einer Laufzeit: Beginn + Haltbarkeit (Tage, Wochen, Monate) */
+const runDue = (since, n, u) => !(n > 0) || !since ? null : ymd(u === 'm' ? addMonths(parseYMD(since), n) : addDays(parseYMD(since), n * (u === 'w' ? 7 : 1)));
+const runLifeText = (r) => !(r.lifeN > 0) ? '' : r.lifeN + ' ' + (r.lifeUnit === 'm' ? (r.lifeN === 1 ? 'Monat' : 'Monate') : r.lifeUnit === 'd' ? (r.lifeN === 1 ? 'Tag' : 'Tage') : (r.lifeN === 1 ? 'Woche' : 'Wochen'));
+function agoText(days) {                                               // „vor 12 Tagen“, „vor 4 Monaten“
+  if (days <= 0) return 'heute'; if (days === 1) return 'gestern'; if (days < 14) return 'vor ' + days + ' Tagen';
+  if (days < 60) return 'vor ' + Math.round(days / 7) + ' Wochen'; if (days < 730) return 'vor ' + Math.round(days / 30.44) + ' Monaten';
+  const y = days / 365.25; return 'vor ' + fmt(Math.round(y * 10) / 10, 1).replace(/,0$/, '') + ' Jahren';
+}
+function leftText(days) {                                              // „noch ~2 Tage“, „noch ~20 Monate“
+  if (days < 14) return 'noch ' + days + (days === 1 ? ' Tag' : ' Tage'); if (days < 60) return 'noch ~' + Math.round(days / 7) + ' Wochen';
+  return 'noch ~' + Math.round(days / 30.44) + ' Monate';
+}
 const hasRepTime = (r) => r.repeatMonths > 0 || r.repeatDays > 0;
 /** Zeit-Intervall anwenden (n = +1 vor, −1 zurück): Monate oder Tage (wöchentlich = 7 Tage) */
 const remStep = (d, r, n = 1) => r.repeatMonths > 0 ? addMonths(d, n * r.repeatMonths) : addDays(d, n * r.repeatDays);
@@ -3655,13 +3679,14 @@ function remStatus(r, km = lastKnownKm(), today = dayStart()) {
   }
   st.frac = fr.length ? Math.max(...fr) : null;
   const over = (st.daysLeft != null && st.daysLeft <= 0) || (st.kmLeft != null && st.kmLeft <= 0);
-  const wd = r.repeatDays > 0 ? Math.min(w.days, Math.floor(r.repeatDays / 3)) : w.days;
+  const runTot = isRun(r) && r.dueDate && r.startDate ? daysBetween(parseYMD(r.dueDate), parseYMD(r.startDate)) : 0;
+  const wd = r.repeatDays > 0 ? Math.min(w.days, Math.floor(r.repeatDays / 3)) : runTot > 0 ? Math.min(w.days, Math.floor(runTot / 3)) : w.days;
   const soon = (st.daysLeft != null && st.daysLeft <= wd) || (st.kmLeft != null && st.kmLeft <= w.km);
   st.level = over ? 'over' : soon ? 'soon' : 'ok';
   return st;
 }
 const REM_RANK = { over: 0, soon: 1, ok: 2 };
-const sortedOpenReminders = (km = lastKnownKm()) => getReminders().filter(r => !r.doneAt).map(r => ({ r, s: remStatus(r, km) }))
+const sortedOpenReminders = (km = lastKnownKm()) => getReminders().filter(r => !r.doneAt && (!isRun(r) || r.dueDate)).map(r => ({ r, s: remStatus(r, km) }))
   .sort((a, b) => REM_RANK[a.s.level] - REM_RANK[b.s.level] || (a.s.daysLeft ?? 1e9) - (b.s.daysLeft ?? 1e9) || (a.s.kmLeft ?? 1e9) - (b.s.kmLeft ?? 1e9) || a.r.title.localeCompare(b.r.title, 'de'));
 
 /** Zähler an Glocke (Start-Seite) und am Start-Tab: Erinnerungen, die fällig, überfällig oder innerhalb der Vorwarnung sind. */
@@ -3700,12 +3725,33 @@ function remLines(r, s, km) {
   }
   return out;
 }
+const KEY_REMTAB = 'enyaq.remTab';
+let remTab = load(KEY_REMTAB, 'due') === 'run' ? 'run' : 'due';
 function renderReminders() {
-  const km = lastKnownKm(), open = sortedOpenReminders(km), done = getReminders().filter(r => r.doneAt).sort((a, b) => new Date(b.doneAt) - new Date(a.doneAt));
-  const n = open.filter(x => x.s.level !== 'ok').length, over = open.filter(x => x.s.level === 'over').length;
-  $('rem-summary').textContent = open.length ? (n ? over + (over === 1 ? ' fällig' : ' fällig') + ' · ' + (n - over) + ' bald' : 'Alles im grünen Bereich') + ' · ' + open.length + (open.length === 1 ? ' Erinnerung' : ' Erinnerungen') + (km != null ? ' · km-Stand ' + fmt(km, 0) : '') : '';
-  $('rem-empty').classList.toggle('hidden', open.length > 0 || done.length > 0);
-  $('rem-ics-all').classList.toggle('hidden', !open.some(x => x.r.dueDate));
+  const km = lastKnownKm(), all = sortedOpenReminders(km), open = all.filter(x => !isRun(x.r)), done = getReminders().filter(r => r.doneAt && !isRun(r)).sort((a, b) => new Date(b.doneAt) - new Date(a.doneAt));
+  const runs = getReminders().filter(r => isRun(r)).map(r => ({ r, s: remStatus(r, km) })).sort((a, b) => REM_RANK[a.s.level] - REM_RANK[b.s.level] || (a.s.daysLeft ?? 1e9) - (b.s.daysLeft ?? 1e9) || String(b.r.startDate || '').localeCompare(String(a.r.startDate || '')));
+  const lv = all.filter(x => x.s.level !== 'ok'), n = lv.length, over = lv.filter(x => x.s.level === 'over').length;
+  $('rem-summary').textContent = open.length + runs.length ? (n ? over + ' fällig · ' + (n - over) + ' bald' : 'Alles im grünen Bereich') + ' · ' + open.length + (open.length === 1 ? ' Fälligkeit' : ' Fälligkeiten') + ' · ' + runs.length + (runs.length === 1 ? ' Laufzeit' : ' Laufzeiten') : '';
+  segPaintKey('.rem-tab', 'rtab', remTab);
+  document.querySelectorAll('.rem-tab').forEach(b => { b.textContent = (b.dataset.rtab === 'run' ? 'Laufzeit ' + runs.length : 'Fälligkeiten ' + open.length); });
+  const isDue = remTab === 'due', empty = isDue ? !open.length && !done.length : !runs.length;
+  $('rem-empty').classList.toggle('hidden', !empty);
+  $('rem-empty-h').textContent = isDue ? 'Noch keine Fälligkeiten' : 'Noch keine Laufzeiten';
+  $('rem-empty-t').textContent = isDue ? 'Lege mit „+ Neu“ eine an.' : 'Mit „+ Neu“ → Laufzeit hältst du fest, seit wann etwas läuft – z. B. Keramikbeschichtung oder Reifenglanz.';
+  $('rem-list').classList.toggle('hidden', !isDue); $('rem-run-list').classList.toggle('hidden', isDue); $('rem-ics-note').classList.toggle('hidden', !isDue);
+  $('rem-ics-all').classList.toggle('hidden', !isDue || !open.some(x => x.r.dueDate));
+  $('rem-run-list').innerHTML = runs.map(({ r, s }) => {
+    const ago = daysBetween(dayStart(), parseYMD(r.startDate || todayYMD())), has = !!r.dueDate, lvl = REM_LEVEL[s.level];
+    const pct = has ? Math.min(100, Math.round((s.frac || 0) * 100)) : 0, col = s.level === 'over' ? 'text-red-600 dark:text-red-400' : s.level === 'soon' ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400';
+    const left = !has ? '<span class="text-xs text-slate-500 dark:text-slate-400">ohne Ablauf</span>' : `<span class="text-xs font-semibold ${col}">${s.daysLeft < 0 ? 'abgelaufen seit ' + agoText(-s.daysLeft).replace(/^vor /, '') : s.daysLeft === 0 ? 'läuft heute ab' : leftText(s.daysLeft)}</span>`;
+    return `<li data-id="${esc(r.id)}" class="rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4 space-y-2">
+      <div class="flex items-start justify-between gap-3"><div class="min-w-0"><p class="font-medium break-words">${esc(r.title)}</p><p class="text-xs text-left text-slate-500 dark:text-slate-400">${[r.category ? esc(r.category) : '', has ? 'hält ca. ' + esc(runLifeText(r)) : ''].filter(Boolean).join(' · ') || 'Laufzeit'}</p></div>
+        <div class="shrink-0 text-right"><p class="text-[15px] font-bold leading-tight">${agoText(ago)}</p><p class="text-[11px] text-slate-500 dark:text-slate-400">seit ${fmtYMD(r.startDate || todayYMD())}</p></div></div>
+      ${has ? `<div class="h-2.5 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><div class="h-full rounded-full ${lvl.bar}" style="width:${pct}%"></div></div>` : ''}
+      ${r.note ? `<p class="text-xs text-left text-slate-500 dark:text-slate-400 break-words">${esc(r.note)}</p>` : ''}
+      ${remLog(r).length > 1 ? remLogHtml(r) : ''}
+      <div class="flex items-center justify-between gap-2 pt-0.5"><span class="min-w-0 whitespace-nowrap">${left}</span><div class="flex shrink-0 gap-1.5"><button type="button" data-act="edit" class="whitespace-nowrap px-2.5 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 text-[13px] font-medium active:scale-95 transition">Bearbeiten</button><button type="button" data-act="renew" class="whitespace-nowrap px-2.5 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 text-[13px] font-semibold text-sky-700 dark:text-sky-300 active:scale-95 transition">↻ Erneuert</button></div></div></li>`;
+  }).join('');
   $('rem-list').innerHTML = open.map(({ r, s }) => {
     const lv = REM_LEVEL[s.level], pct = s.frac == null ? 0 : Math.min(100, Math.round(s.frac * 100));
     const chip = s.level === 'ok' ? '' : `<span class="shrink-0 px-2 py-0.5 rounded-lg text-xs font-medium ${lv.chip}">${s.level === 'soon' ? 'Bald' : ((s.daysLeft != null && s.daysLeft < 0) || (s.kmLeft != null && s.kmLeft < 0)) ? 'Überfällig' : 'Fällig'}</span>`;
@@ -3733,25 +3779,52 @@ function renderReminders() {
 }
 $('rem-done-toggle').addEventListener('click', () => { const l = $('rem-done-list'); l.classList.toggle('hidden'); $('rem-done-arrow').textContent = l.classList.contains('hidden') ? '▾' : '▴'; });
 const remById = (id) => getReminders().find(r => String(r.id) === String(id));
+/** Laufzeit erneuert: läuft ab heute neu (Haltbarkeit bleibt), Eintrag im Verlauf */
+function remRenew(r) {
+  if (!confirm('„' + r.title + '“ heute erneuert? Die Laufzeit beginnt dann neu.')) return;
+  const t = todayYMD(), log = remLog(r).map(e => { const o = { at: e.at }; if (e.km > 0) o.km = e.km; if (e.cost > 0) o.cost = e.cost; return o; });
+  if (!log.length && r.startDate) log.push({ at: parseYMD(r.startDate).toISOString() });   // bisheriger Beginn als erster Verlaufseintrag
+  log.push({ at: new Date().toISOString() });
+  const upd = { ...r, startDate: t, dueDate: runDue(t, r.lifeN, r.lifeUnit) || undefined, log: log.slice(-REM_LOG_MAX) };
+  commitReminders(getReminders().map(x => String(x.id) === String(r.id) ? cleanRem(upd) : x)); renderReminders();
+}
 function remListClick(e) {
   const b = e.target.closest('[data-act]'); if (!b) return;
   const li = b.closest('li[data-id]'), r = li && remById(li.dataset.id); if (!r) return;
   const act = b.dataset.act;
+  if (act === 'renew') { remRenew(r); return; }
   if (act === 'done') openDone(r); else if (act === 'edit') openRemDialog(r); else if (act === 'ics') downloadIcs([r]);
   else if (act === 'reopen') { commitReminders(getReminders().map(x => String(x.id) === String(r.id) ? cleanRem({ ...x, doneAt: undefined }) : x)); renderReminders(); }
   else if (act === 'del' && confirm('„' + r.title + '“ endgültig löschen?')) { commitReminders(getReminders().filter(x => String(x.id) !== String(r.id))); renderReminders(); }
 }
 $('rem-list').addEventListener('click', remListClick);
+$('rem-run-list').addEventListener('click', remListClick);
+$('rem-tabs').addEventListener('click', (e) => { const b = e.target.closest('[data-rtab]'); if (!b) return; remTab = b.dataset.rtab; save(KEY_REMTAB, remTab); renderReminders(); });
+segSwipe($('rem-tabs'), $('rem-tabs'));
 $('rem-done-list').addEventListener('click', remListClick);
 
 /* ---- Anlegen / Bearbeiten ---- */
 let remEditId = null;
 function remMsg(id, text) { const el = $(id); el.textContent = text; el.className = 'text-sm text-red-600 dark:text-red-400'; }
+let remKind = 'due';
+function setRemKind(k) {
+  remKind = k === 'run' ? 'run' : 'due'; const run = remKind === 'run';
+  segPaintKey('.rem-kind', 'rkind', remKind);
+  $('rem-f-due').classList.toggle('hidden', run); $('rem-f-run').classList.toggle('hidden', !run);
+  $('rem-title').placeholder = run ? 'z. B. Keramikbeschichtung' : 'z. B. Reifendruck prüfen';
+  $('rem-note-l').textContent = run ? 'Produkt / Notiz (optional)' : 'Notiz (optional)';
+  $('rem-hint').textContent = run ? 'Ohne „Hält ca.“ zählt die Laufzeit nur hoch („vor 7 Tagen“). Mit Haltbarkeit erinnert dich die App, wenn sie abläuft.' : 'Datum und km können zusammen gelten: Es zählt, was zuerst erreicht wird.';
+  $('rem-dialog-msg').className = 'hidden text-sm';
+}
+$('rem-kind').addEventListener('click', (e) => { const b = e.target.closest('[data-rkind]'); if (b) setRemKind(b.dataset.rkind); });
+$('rem-since-today').addEventListener('click', () => { $('rem-since').value = todayYMD(); });
 function openRemDialog(r = null) {
   remEditId = r ? r.id : null;
+  setRemKind(r ? (isRun(r) ? 'run' : 'due') : remTab);
+  $('rem-since').value = isRun(r) ? (r.startDate || todayYMD()) : todayYMD(); $('rem-life').value = isRun(r) && r.lifeN > 0 ? String(r.lifeN) : ''; $('rem-life-unit').value = isRun(r) && r.lifeUnit ? r.lifeUnit : 'w';
   $('rem-dialog-title').textContent = r ? 'Erinnerung bearbeiten' : 'Neue Erinnerung';
   $('rem-title').value = r?.title || ''; $('rem-cat').innerHTML = catOptions(r?.category || '');
-  $('rem-due').value = r?.dueDate || ''; $('rem-due-km').value = r?.dueKm ? String(r.dueKm) : '';
+  $('rem-due').value = r && !isRun(r) ? r.dueDate || '' : ''; $('rem-due-km').value = r?.dueKm ? String(r.dueKm) : '';
   const ru = r?.repeatMonths ? 'm' : r?.repeatDays ? (r.repeatUnit === 'w' || (r.repeatDays % 7 === 0 && r.repeatUnit !== 'd') ? 'w' : 'd') : 'm';
   $('rem-rep-unit').value = ru; $('rem-rep-m').value = r?.repeatMonths ? String(r.repeatMonths) : r?.repeatDays ? String(ru === 'w' ? r.repeatDays / 7 : r.repeatDays) : ''; $('rem-rep-km').value = r?.repeatKm ? String(r.repeatKm) : '';
   $('rem-note').value = r?.note || '';
@@ -3768,6 +3841,18 @@ $('rem-delete').addEventListener('click', () => {
 });
 $('rem-save').addEventListener('click', () => {
   const title = $('rem-title').value.trim().replace(/\s+/g, ' '), cat = $('rem-cat').value, note = $('rem-note').value.trim();
+  if (remKind === 'run') {                                              // Laufzeit: seit … (+ optional Haltbarkeit)
+    const since = $('rem-since').value, lifeN = optNum($('rem-life').value), lifeU = $('rem-life-unit').value;
+    if (!title) { remMsg('rem-dialog-msg', 'Bitte einen Titel eingeben.'); return; }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(since) || isNaN(parseYMD(since))) { remMsg('rem-dialog-msg', 'Bitte angeben, seit wann es läuft.'); return; }
+    if (since > todayYMD()) { remMsg('rem-dialog-msg', 'Das Datum liegt in der Zukunft – dafür bitte „Fälligkeit“ nutzen.'); return; }
+    if (Number.isNaN(lifeN) || (lifeN != null && (!Number.isInteger(lifeN) || lifeN < 1 || lifeN > 999))) { remMsg('rem-dialog-msg', 'Bitte die Haltbarkeit als ganze Zahl (1 bis 999) eingeben oder leer lassen.'); return; }
+    const list = getReminders(), old = remEditId != null ? list.find(x => String(x.id) === String(remEditId)) : null;
+    const r = { ...(old || { id: Date.now() }), kind: 'run', title, category: cat || undefined, note: note || undefined, startDate: since, lifeN: lifeN ?? undefined, lifeUnit: lifeN ? lifeU : undefined, dueDate: runDue(since, lifeN, lifeU) || undefined,
+      dueKm: undefined, startKm: undefined, repeatMonths: undefined, repeatDays: undefined, repeatUnit: undefined, repeatKm: undefined, doneAt: undefined };
+    commitReminders(old ? list.map(x => String(x.id) === String(old.id) ? cleanRem(r) : x) : list.concat(cleanRem(r)));
+    remTab = 'run'; save(KEY_REMTAB, remTab); closeRemDialog(); renderReminders(); return;
+  }
   let due = $('rem-due').value;
   const dueKm = optNum($('rem-due-km').value), repN = optNum($('rem-rep-m').value), repU = $('rem-rep-unit').value, repKm = optNum($('rem-rep-km').value), km = lastKnownKm();
   const repMax = repU === 'd' ? 3650 : repU === 'w' ? 520 : 240;
@@ -3783,7 +3868,7 @@ $('rem-save').addEventListener('click', () => {
   }
   if (!due && dKm == null) { remMsg('rem-dialog-msg', repKm && !repM && !repD ? 'Für die Wiederholung nach km fehlt ein bekannter km-Stand. Bitte „Fällig bei km“ eingeben.' : 'Bitte ein Datum oder einen km-Stand angeben, wann die Erinnerung fällig ist.'); return; }
   const list = getReminders(), old = remEditId != null ? list.find(x => String(x.id) === String(remEditId)) : null;
-  const r = { ...(old || { id: Date.now() }), title, category: cat || undefined, note: note || undefined, dueDate: due || undefined, dueKm: dKm ?? undefined, repeatMonths: repM ?? undefined, repeatDays: repD ?? undefined, repeatUnit: repD ? repU : undefined, repeatKm: repKm ?? undefined };
+  const r = { ...(old || { id: Date.now() }), kind: undefined, lifeN: undefined, lifeUnit: undefined, title, category: cat || undefined, note: note || undefined, dueDate: due || undefined, dueKm: dKm ?? undefined, repeatMonths: repM ?? undefined, repeatDays: repD ?? undefined, repeatUnit: repD ? repU : undefined, repeatKm: repKm ?? undefined };
   const today = new Date();
   if (!old) {                                                           // Beginn des Fortschritts: bei Wiederholung der Beginn des aktuellen Zeitraums, sonst heute
     const back = due && (repM || repD) ? remStep(parseYMD(due), tmp, -1) : null;
@@ -3791,8 +3876,9 @@ $('rem-save').addEventListener('click', () => {
   } else if (due && parseYMD(due) <= parseYMD(r.startDate || due)) r.startDate = repM || repD ? ymd(remStep(parseYMD(due), tmp, -1)) : ymd(addDays(parseYMD(due), -30));
   if (dKm != null) { const sk = km != null && km < dKm ? km : (repKm && dKm > repKm ? dKm - repKm : null); if (!old || old.startKm == null || old.startKm >= dKm) r.startKm = sk ?? undefined; }
   else r.startKm = undefined;
+  if (old && isRun(old)) r.startDate = ymd(today);                      // aus einer Laufzeit wurde eine Fälligkeit
   commitReminders(old ? list.map(x => String(x.id) === String(old.id) ? cleanRem(r) : x) : list.concat(cleanRem(r)));
-  closeRemDialog(); renderReminders();
+  remTab = 'due'; save(KEY_REMTAB, remTab); closeRemDialog(); renderReminders();
 });
 
 /* ---- Erledigt ---- */
@@ -3873,7 +3959,7 @@ function downloadIcs(list) {
   a.href = URL.createObjectURL(new Blob([buildIcs(withDate)], { type: 'text/calendar;charset=utf-8' })); a.download = (name || 'enyaq-erinnerung') + '.ics';
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
-$('rem-ics-all').addEventListener('click', () => downloadIcs(sortedOpenReminders().map(x => x.r)));
+$('rem-ics-all').addEventListener('click', () => downloadIcs(sortedOpenReminders().filter(x => !isRun(x.r)).map(x => x.r)));
 
 /** Cloud-Abgleich der Erinnerungen (wie bei den Kosten): beim ersten Abgleich werden lokale, in der Cloud fehlende Einträge hochgeladen und behalten. */
 window.onCloudReminders = (cloud, isFirst, uid) => {
@@ -4063,10 +4149,11 @@ $('hero-stats').addEventListener('click', () => {
 });
 function renderHeroReminder() {
   const el = $('hero-rem-sub'); if (!el) return;
-  const first = sortedOpenReminders()[0];
+  const first = sortedOpenReminders().filter(x => !isRun(x.r) || x.s.level !== 'ok')[0];
   if (!first) { el.textContent = getReminders().length ? 'Alles erledigt' : 'Noch keine Erinnerungen'; return; }
   const { r, s } = first; let when;
-  if (s.daysLeft != null) when = s.daysLeft < 0 ? 'seit ' + (-s.daysLeft) + (s.daysLeft === -1 ? ' Tag' : ' Tagen') + ' überfällig' : s.daysLeft === 0 ? 'heute fällig' : s.daysLeft === 1 ? 'morgen fällig' : 'in ' + s.daysLeft + ' Tagen';
+  if (isRun(r)) when = s.daysLeft < 0 ? 'abgelaufen' : s.daysLeft === 0 ? 'läuft heute ab' : 'läuft in ' + s.daysLeft + (s.daysLeft === 1 ? ' Tag' : ' Tagen') + ' ab';
+  else if (s.daysLeft != null) when = s.daysLeft < 0 ? 'seit ' + (-s.daysLeft) + (s.daysLeft === -1 ? ' Tag' : ' Tagen') + ' überfällig' : s.daysLeft === 0 ? 'heute fällig' : s.daysLeft === 1 ? 'morgen fällig' : 'in ' + s.daysLeft + ' Tagen';
   else if (s.kmLeft != null) when = s.kmLeft <= 0 ? 'jetzt fällig' : 'in ' + fmt(s.kmLeft, 0) + ' km';
   else when = 'bei ' + fmt(r.dueKm, 0) + ' km';
   el.textContent = 'Als Nächstes: ' + r.title + ' · ' + when;
@@ -4236,13 +4323,14 @@ function renderRemBanner() {
   if (!onDash || !cand) { hideBanner(); return; }
   const { r, s } = cand, others = list.filter(x => x.r.id !== r.id && x.s.level !== 'ok');
   const overdue = (s.daysLeft != null && s.daysLeft < 0) || (s.kmLeft != null && s.kmLeft < 0);
-  const label = overdue ? 'Überfällig' + (s.daysLeft != null && s.daysLeft < 0 ? ' · seit ' + (-s.daysLeft) + (s.daysLeft === -1 ? ' Tag' : ' Tagen') : '') : s.daysLeft === 0 ? 'Heute fällig' : 'Jetzt fällig';
+  const label = isRun(r) ? 'Abgelaufen' + (s.daysLeft < 0 ? ' · seit ' + (-s.daysLeft) + (s.daysLeft === -1 ? ' Tag' : ' Tagen') : '') : overdue ? 'Überfällig' + (s.daysLeft != null && s.daysLeft < 0 ? ' · seit ' + (-s.daysLeft) + (s.daysLeft === -1 ? ' Tag' : ' Tagen') : '') : s.daysLeft === 0 ? 'Heute fällig' : 'Jetzt fällig';
   const rep = r.repeatMonths > 0 ? 'Wiederholt sich ' + (RECUR_LABEL[r.repeatMonths] || 'alle ' + r.repeatMonths + ' Monate') : r.repeatDays > 0 ? 'Wiederholt sich ' + remEveryText(r) : r.repeatKm > 0 ? 'Wiederholt sich alle ' + fmt(r.repeatKm, 0) + ' km' : 'Einmalige Erinnerung';
   const more = others.length ? ' · ' + others.length + ' weitere ' + (others.length === 1 ? (others[0].s.level === 'over' ? 'fällig' : 'bald fällig') : 'fällig oder bald fällig') : '';
   const color = overdue ? '#ef4444' : '#f59e0b';
   el.dataset.id = r.id;
   $('rb-label').textContent = label; $('rb-label').style.color = overdue ? '#fca5a5' : '#fbbf24';
-  $('rb-title').textContent = r.title; $('rb-sub').textContent = rep + more;
+  $('rb-title').textContent = r.title; $('rb-sub').textContent = (isRun(r) ? 'Laufzeit seit ' + fmtYMD(r.startDate) + (r.lifeN ? ' · hält ca. ' + runLifeText(r) : '') : rep) + more;
+  const rbDone = document.querySelector('#rem-banner [data-bact="done"]'); if (rbDone) rbDone.textContent = isRun(r) ? '↻ Erneuert' : 'Erledigt';
   $('rb-accent').style.background = color; $('rb-icon').style.background = overdue ? 'rgba(239,68,68,.18)' : 'rgba(245,158,11,.18)'; $('rb-icon').style.color = overdue ? '#f87171' : '#fbbf24'; $('rb-bar').style.background = color;
   const key = r.id + '|' + label;
   if (key === bannerKey) return;                                          // gleicher Inhalt: Anzeige und Timer nicht neu starten
@@ -4255,7 +4343,7 @@ function bannerAct(act) {
   if (act === 'close') { bannerDismissed.add(String(id)); hideBanner(); }
   else if (act === 'later') { const o = getSnooze(); o[id] = ymd(addDays(new Date(), 1)); save(KEY_SNOOZE, o); hideBanner(); renderRemBanner(); }   // bis morgen; zeigt ggf. die nächste fällige
   else if (act === 'view') { bannerDismissed.add(String(id)); hideBanner(); showView('reminders'); }
-  else if (act === 'done') { clearTimeout(bannerTimer); openDone(r); }
+  else if (act === 'done') { clearTimeout(bannerTimer); if (isRun(r)) { remRenew(r); hideBanner(); renderRemBanner(); } else openDone(r); }
 }
 $('rem-banner').addEventListener('click', (e) => { const b = e.target.closest('[data-bact]'); if (b) bannerAct(b.dataset.bact); });
 $('rem-banner').addEventListener('pointerdown', () => { clearTimeout(bannerTimer); const bar = $('rb-bar'); bar.style.transition = 'none'; bar.style.width = '100%'; });   // Antippen: Banner bleibt offen
@@ -6020,8 +6108,10 @@ function akteHtml() {
   h += H2('Wartung und Service') + (svc.length ? tbl(['Datum', 'km-Stand', 'Bezeichnung', 'Kategorie', 'Betrag', 'Beleg'], svc.map(c => [D1(Date.parse(c.date)), c.odometerKm > 0 ? fmt(c.odometerKm, 0) : '–', esc(c.title || ''), esc(c.category || '–'), eur(costAmt(c)), c.files && c.files.length ? 'ja (' + c.files.length + ')' : '–']).concat([Object.assign(['Summe', '', '', '', eur(svc.reduce((a, c) => a + costAmt(c), 0)), ''], { bold: true })]), [1, 4]) : '<p style="font-size:12px;color:#475569;margin:0">Keine Einträge in Kategorien wie Service, Wartung, Reifen oder Reparatur gefunden.</p>');
   const cat = new Map(); cs.forEach(c => { const a = costAmt(c); if (a <= 0) return; const k = c.category || 'Ohne Kategorie', o = cat.get(k) || { n: 0, s: 0 }; o.n++; o.s += a; cat.set(k, o); });
   if (cat.size || laden) h += H2('Kosten nach Kategorie') + tbl(['Kategorie', 'Anzahl', 'Summe'], [['Laden (Strom)', fmt(n, 0), eur(laden)]].concat([...cat.entries()].sort((a, b) => b[1].s - a[1].s).map(([k, o]) => [esc(k), fmt(o.n, 0), eur(o.s)])), [1, 2]);
-  const rem = getReminders().slice().sort((a, b) => String(a.dueDate || '9999').localeCompare(String(b.dueDate || '9999')));
+  const runsP = getReminders().filter(r => r.kind === 'run').sort((a, b) => String(a.startDate || '').localeCompare(String(b.startDate || '')));
+  const rem = getReminders().filter(r => r.kind !== 'run').sort((a, b) => String(a.dueDate || '9999').localeCompare(String(b.dueDate || '9999')));
   if (rem.length) h += H2('Wartungsplan (Erinnerungen)') + tbl(['Titel', 'Fällig am', 'Fällig bei'], rem.map(r => [esc((r.title || '').replace(/^[\p{Extended_Pictographic}\uFE0F\u200D\s]+/u, '')), r.dueDate ? D1(Date.parse(r.dueDate + 'T12:00:00')) : '–', r.dueKm > 0 ? fmt(r.dueKm, 0) + ' km' : '–']));
+  if (runsP.length) h += H2('Pflege und Laufzeiten') + tbl(['Was', 'Seit', 'Hält ca.', 'Läuft bis'], runsP.map(r => [esc((r.title || '').replace(/^[\p{Extended_Pictographic}\uFE0F\u200D\s]+/u, '')) + (r.note ? '<br><span style="color:#64748b">' + esc(r.note) + '</span>' : ''), r.startDate ? D1(Date.parse(r.startDate + 'T12:00:00')) : '–', r.lifeN ? esc(runLifeText(r)) : '–', r.dueDate ? D1(Date.parse(r.dueDate + 'T12:00:00')) : '–']));
   const hist = []; getReminders().forEach(r => remLog(r).forEach(e => hist.push({ t: Date.parse(e.at), title: (r.title || '').replace(/^[\p{Extended_Pictographic}\uFE0F\u200D\s]+/u, ''), km: e.km, cost: e.cost })));
   hist.sort((a, b) => b.t - a.t);
   if (hist.length) h += H2('Wartungsnachweis (erledigt)') + tbl(['Datum', 'Arbeit', 'km-Stand', 'Kosten'], hist.map(x => [D1(x.t), esc(x.title), x.km > 0 ? fmt(x.km, 0) + ' km' : '–', x.cost > 0 ? eur(x.cost) : '–']), [2, 3]);
@@ -8206,7 +8296,7 @@ async function pushTripMonths(prev, next) {
 }
 const sig = (r) => [r.id, r.date, r.totalReading, r.consumedSinceLast, r.cost, r.odometerKm, r.socStart, r.socEnd, r.capacityKwh, r.chargeStart, r.chargeEnd, r.avgPowerKw, r.meterReset, r.place, r.pricePerKwh, r.provider, r.fee, r.battTemp].join('|');
 
-const remSig = (r) => [r.id, r.title, r.category, r.note, r.dueDate, r.dueKm, r.startDate, r.startKm, r.repeatMonths, r.repeatDays, r.repeatUnit, r.repeatKm, r.doneAt, r.lastDoneAt, r.lastDoneKm, r.guid].join('|');
+const remSig = (r) => [r.id, r.title, r.category, r.note, r.dueDate, r.dueKm, r.startDate, r.startKm, r.repeatMonths, r.repeatDays, r.repeatUnit, r.repeatKm, r.doneAt, r.lastDoneAt, r.lastDoneKm, r.guid, r.kind, r.lifeN, r.lifeUnit, Array.isArray(r.log) ? r.log.length : 0].join('|');
 const recSig = (t) => [t.id, t.title, t.amount, t.category, t.note, t.intervalMonths, t.startDate, t.nextIdx].join('|');
 const costSig = (c) => [c.id, c.date, c.title, c.amount, c.category, c.note, c.odometerKm, c.guid, c.recurId, JSON.stringify(c.files || '')].join('|');
 /** Schreibt nur die Unterschiede zwischen prev und next (neu/geändert -> set, entfernt -> delete). */
