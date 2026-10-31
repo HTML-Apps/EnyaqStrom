@@ -7138,7 +7138,7 @@ const AU_TOTAL = AUSST.groups.reduce((a, g) => a + g[2].length, 0), CC_TITLE = '
 let auOpen = new Set(), auAll = false;
 const auNorm = (t) => String(t).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 function renderAusst() {
-  $('au-sub').textContent = AUSST.model + ' · ' + AUSST.extras;
+  $('au-sub').textContent = 'Loft · ' + AUSST.extras;
   $('au-tiles').innerHTML = AUSST.tiles.map(([k, v, d]) => `<div class="min-w-0 rounded-2xl bg-slate-100 dark:bg-slate-800/70 px-3 py-2.5"><p class="text-[11px] text-slate-500 dark:text-slate-400">${k}</p><p class="mt-0.5 truncate text-[14px] font-bold">${esc(v)}</p><p class="truncate text-[11px] text-slate-500 dark:text-slate-400">${esc(d)}</p></div>`).join('');
   $('au-tech-sum').textContent = AUSST.techSum;
   $('au-tech').innerHTML = AUSST.tech.map(([name, ico, rows]) => `<div class="mt-3"><p class="mb-1 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500 dark:text-slate-400"><span class="text-sm">${ico}</span>${esc(name)}</p>`
