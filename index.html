@@ -5721,10 +5721,11 @@ $('frost-x').addEventListener('click', () => { const c = load(KEY_FROST, {}) || 
    Jede genaue Strecke zwischen zwei Ladungen (Akku-%, ≥ 20 km) ist ein Lernpunkt: Verbrauch aus dem Akku (ohne Ladeverluste, wie der Bordcomputer) gegen die mittlere Tagestemperatur
    und den Anteil nasser Tage (≥ 1 mm) am Wetter-Standort. Modell: kWh/100 km = Basis + Kälte × max(0, 18 °C − T) + Regen × Nass-Anteil.
    Bayes'sche Ridge-Regression: Startwerte aus Erfahrungswerten (Kälte +0,25 je Grad, Regen +1,0) gelten wie 3 Ladungen; mit jeder Ladung
-   übernehmen die eigenen Daten mehr (neuere Ladungen zählen stärker, Halbwertszeit 2 Jahre). Ergebnis 6 h zwischengespeichert, Vorhersage 1 h.
+   übernehmen die eigenen Daten mehr (neuere Ladungen zählen stärker, Halbwertszeit 90 Tage). Ergebnis 6 h zwischengespeichert, Vorhersage 1 h.
    ===================================================================== */
 const WXO_RES = 20;                                                                   // Reserve im Lade-Tipp (Laden 20–80 %)
-const KEY_WXO = 'enyaq.wxo2', WXO_T0 = 18, WXO_PRIOR = { a: 14.0, b: 0.22, c: 0.9 }, WXO_LAMBDA = [0.05, 3 * 25, 3 * 0.25];   // Prior-Gewichte ≈ 3 Ladungen mit typischer Streuung
+const WXO_HALF = 90;                                                                  // Halbwertszeit in Tagen: eine 90 Tage alte Ladung zählt halb so viel
+const KEY_WXO = 'enyaq.wxo3', WXO_T0 = 18, WXO_PRIOR = { a: 14.0, b: 0.22, c: 0.9 }, WXO_LAMBDA = [0.05, 3 * 25, 3 * 0.25];   // Prior-Gewichte ≈ 3 Ladungen mit typischer Streuung
 const wxoIcon = (w) => w == null ? '🌡️' : w === 0 ? '☀️' : w <= 2 ? '🌤️' : w === 3 ? '☁️' : w <= 48 ? '🌫️' : w <= 57 ? '🌦️' : w <= 67 ? '🌧️' : w <= 77 ? '❄️' : w <= 82 ? '🌦️' : w <= 86 ? '🌨️' : '⛈️';
 const wxoText = (w) => w == null ? '' : w === 0 ? 'sonnig' : w <= 2 ? 'heiter' : w === 3 ? 'bewölkt' : w <= 48 ? 'Nebel' : w <= 57 ? 'Niesel' : w <= 67 ? 'Regen' : w <= 77 ? 'Schnee' : w <= 82 ? 'Schauer' : w <= 86 ? 'Schneeschauer' : 'Gewitter';
 function wxoSolve(A, y) {                                                          // 3×3 Gauß
@@ -5743,7 +5744,7 @@ async function wxoModel(l) {
   if (iv.length) {
     const days = await wxTemps(l, iv.reduce((m, x) => x.a < m ? x.a : m, iv[0].a), iv.reduce((m, x) => x.b > m ? x.b : m, iv[0].b)), rain = (load(KEY_TEMPS, {}) || {}).rain || {};
     iv.forEach(x => { let st = 0, n = 0, wet = 0, nr = 0; for (let t = Date.parse(x.a + 'T12:00:00'), e = Date.parse(x.b + 'T12:00:00'); t <= e; t += 864e5) { const d = wxIso(new Date(t)), v = days[d], p = rain[d]; if (v != null) { st += v; n++; } if (p != null) { nr++; if (p >= 1) wet++; } }
-      if (n) pts.push({ T: st / n, r: nr ? wet / nr : 0, y: x.y, w: Math.pow(0.5, (Date.now() - x.t) / (730 * 864e5)) }); });
+      if (n) pts.push({ T: st / n, r: nr ? wet / nr : 0, y: x.y, w: Math.pow(0.5, (Date.now() - x.t) / (WXO_HALF * 864e5)) }); });
   }
   const P = WXO_PRIOR, L = WXO_LAMBDA, A = [[L[0], 0, 0], [0, L[1], 0], [0, 0, L[2]]], v = [L[0] * P.a, L[1] * P.b, L[2] * P.c];
   if (pts.length) { const my = pts.reduce((s, p) => s + p.y, 0) / pts.length, mx = pts.reduce((s, p) => s + Math.max(0, WXO_T0 - p.T), 0) / pts.length; v[0] = L[0] * (my - P.b * mx); }   // Basis-Startwert aus den eigenen Daten
@@ -5849,7 +5850,7 @@ function openWxoSheet() {
       <p>Kälte: <b>+${fmt(m.b, 2)}</b> je Grad unter ${WXO_T0} °C ${m.n >= 5 && m.spanT >= 6 ? '' : '<span class="text-slate-400">(noch nah am Startwert ' + fmt(P.b, 2) + ')</span>'}</p>
       <p>Regentag: <b>+${fmt(m.c, 1)}</b> ${m.wetN >= 4 ? '' : '<span class="text-slate-400">(noch nah am Startwert ' + fmt(P.c, 1) + ')</span>'}</p>
       ${m.sd ? `<p>Typische Abweichung: ±${fmt(m.sd, 1)} kWh/100 km</p>` : ''}
-      <p class="mt-1.5 text-slate-500 dark:text-slate-400">Gelernt aus ${m.n} genauen Ladungen (mit Akku-% und km-Stand, ≥ 20 km) und dem Wetter an deinem Standort. Jede neue Ladung verbessert die Werte, neuere zählen stärker. Verbrauch ohne Ladeverluste (aus dem Akku, vergleichbar mit der Anzeige im Auto). Reichweite: ${fmt(o.cap, 1)} kWh netto bei 100 % Akku.</p>
+      <p class="mt-1.5 text-slate-500 dark:text-slate-400">Gelernt aus ${m.n} genauen Ladungen (mit Akku-% und km-Stand, ≥ 20 km) und dem Wetter an deinem Standort. Jede neue Ladung verbessert die Werte; neuere zählen stärker (eine 90 Tage alte Ladung halb so viel). Verbrauch ohne Ladeverluste (aus dem Akku, vergleichbar mit der Anzeige im Auto). Reichweite: ${fmt(o.cap, 1)} kWh netto bei 100 % Akku.</p>
     </div>
     <button type="button" data-wxo="close" class="h-12 w-full rounded-2xl border border-slate-300 dark:border-slate-700 text-sm font-semibold">Schließen</button>`;
   $('wxo-sheet').classList.remove('hidden');
