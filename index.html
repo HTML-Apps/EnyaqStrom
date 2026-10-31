@@ -5928,17 +5928,17 @@ function wxoBoot() {
 }
 function wxoPartsHtml(q) {
   if (!q) return ''; const t = [[q.cold, '❄️'], [q.rain, '🌧️'], [q.hum, '💧']].filter(([v]) => v >= 0.05).map(([v, i]) => '<span class="whitespace-nowrap">' + i + ' +' + fmt(v, 1) + '</span>');
-  return t.length ? `<span class="block text-[10.5px] leading-tight text-slate-500 dark:text-slate-400">${t.join(' · ')}</span>` : '';
+  return t.length ? `<span class="block text-[11.5px] leading-tight text-slate-500 dark:text-slate-400">${t.join(' · ')}</span>` : '';
 }
 function openWxoSheet() {
   const o = wxoLast; if (!o) return; const { m, days } = o, P = WXO_PRIOR;
-  $('wxo-sheet-box').innerHTML = `<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div><p class="text-lg font-bold">Prognose 7 Tage</p>
-    <div class="flex justify-end gap-2 text-[10.5px] text-slate-500 dark:text-slate-400"><span>kWh/100 km</span><span class="w-[54px] text-right">Reichweite</span></div>
-    <div class="divide-y divide-slate-200 dark:divide-slate-800 !mt-1">${days.map((x, i) => `<div class="flex items-center gap-2 py-2"><span class="w-[70px] shrink-0 whitespace-nowrap text-[13px] font-semibold">${i === 0 ? 'Heute' : i === 1 ? 'Morgen' : wxDay(x.d).long.slice(0, 2) + ', ' + wxDay(x.d).dm}</span><span class="shrink-0 text-xl">${wxoIconHtml(x.w, 30)}</span>
-      <span class="w-[78px] shrink-0 whitespace-nowrap text-[12px] text-slate-500 dark:text-slate-400">${fmt(x.lo, 0).replace('-', '−')} bis ${fmt(x.hi, 0).replace('-', '−')} °C${x.p >= 1 ? '<br>' + fmt(x.p, 0) + ' mm' : ''}</span>
-      <span class="min-w-0 flex-1 text-right"><span class="block text-[14px] font-bold">${fmt(x.k, 1)}</span>${wxoPartsHtml(x.parts)}</span><span class="w-[54px] shrink-0 whitespace-nowrap text-right text-[13px]">${wxoFmtR(x.r)} km</span></div>`).join('')}</div>
-    <div class="rounded-2xl bg-slate-100 dark:bg-slate-800/60 p-3 text-[12.5px] leading-relaxed">
-      <p class="font-semibold">So rechnet die Prognose</p>
+  $('wxo-sheet-box').innerHTML = `<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div><p class="text-xl font-bold">Prognose 7 Tage</p>
+    <div class="flex justify-end gap-2 text-[11.5px] text-slate-500 dark:text-slate-400"><span>kWh/100 km</span><span class="w-[62px] text-right">Reichweite</span></div>
+    <div class="divide-y divide-slate-200 dark:divide-slate-800 !mt-1">${days.map((x, i) => `<div class="flex items-center gap-2 py-2.5"><span class="w-[54px] shrink-0 whitespace-nowrap leading-tight"><span class="block text-[15px] font-semibold">${i === 0 ? 'Heute' : i === 1 ? 'Morgen' : wxDay(x.d).wd + '.'}</span><span class="block text-[11.5px] text-slate-500 dark:text-slate-400">${wxDay(x.d).dm}</span></span><span class="shrink-0 text-2xl">${wxoIconHtml(x.w, 42)}</span>
+      <span class="w-[84px] shrink-0 whitespace-nowrap text-[13px] leading-snug text-slate-500 dark:text-slate-400">${fmt(x.lo, 0).replace('-', '−')} bis ${fmt(x.hi, 0).replace('-', '−')} °C${x.p >= 1 ? '<br>' + fmt(x.p, 0) + ' mm' : ''}</span>
+      <span class="min-w-0 flex-1 text-right"><span class="block text-[18px] font-bold leading-tight">${fmt(x.k, 1)}</span>${wxoPartsHtml(x.parts)}</span><span class="w-[62px] shrink-0 whitespace-nowrap text-right text-[15px]">${wxoFmtR(x.r)} km</span></div>`).join('')}</div>
+    <details class="group rounded-2xl bg-slate-100 dark:bg-slate-800/60 p-3 text-[12.5px] leading-relaxed">
+      <summary class="flex cursor-pointer list-none items-center justify-between font-semibold [&::-webkit-details-marker]:hidden">So rechnet die Prognose<span class="text-slate-400 transition-transform group-open:rotate-90">›</span></summary>
       <p class="mt-1">Grundverbrauch (ab ${WXO_T0} °C, trocken): <b>${fmt(m.a, 1)}</b> kWh/100 km${m.n ? '' : ' <span class="text-slate-400">(Startwert)</span>'}</p>
       <p>Kälte: <b>+${fmt(m.b, 2)}</b> je Grad unter ${WXO_T0} °C ${m.n >= 5 && m.spanT >= 6 ? '' : '<span class="text-slate-400">(noch nah am Startwert ' + fmt(P.b, 2) + ')</span>'}</p>
       <p>Kältezuschlag: <b>+${fmt(m.d, 2)}</b> je Grad unter ${WXO_T1} °C ${m.coldN >= 3 ? '' : '<span class="text-slate-400">(Startwert ' + fmt(P.d, 2) + ', lernt ab Ladungen unter ' + WXO_T1 + ' °C)</span>'}</p>
@@ -5947,7 +5947,7 @@ function openWxoSheet() {
       <p class="text-slate-500 dark:text-slate-400">❄️ Kälte · 🌧️ Regen · 💧 beschlagene Scheiben (Heizung + Klima)</p>
       ${m.sd ? `<p>Typische Abweichung: ±${fmt(m.sd, 1)} kWh/100 km</p>` : ''}
       <p class="mt-1.5 text-slate-500 dark:text-slate-400">Gelernt aus ${m.n} genauen Ladungen (mit Akku-% und km-Stand, ≥ 20 km) und dem Wetter an deinem Standort. Jede neue Ladung verbessert die Werte; neuere zählen stärker (eine 90 Tage alte Ladung halb so viel). Verbrauch ohne Ladeverluste (aus dem Akku, vergleichbar mit der Anzeige im Auto). Wetter: Open-Meteo${wxIconStyle() === 'meteo' ? ', Symbole: Meteocons von Bas Milius (MIT)' : ''}. Reichweite: ${fmt(o.cap, 1)} kWh netto bei 100 % Akku.</p>
-    </div>
+    </details>
     <button type="button" data-wxo="close" class="h-12 w-full rounded-2xl border border-slate-300 dark:border-slate-700 text-sm font-semibold">Schließen</button>`;
   $('wxo-sheet').classList.remove('hidden');
 }
