@@ -1275,9 +1275,9 @@
           <p class="block text-sm font-medium text-slate-700 dark:text-slate-300">Verbrauchs-Prognose auf Start</p>
           <div class="mt-1 grid grid-cols-2 gap-2">
             <div><label for="set-wxo-cut" class="text-xs text-slate-500 dark:text-slate-400">„Morgen“ hervorheben</label><select id="set-wxo-cut" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"><option value="6">ab 6 Uhr</option><option value="7">ab 7 Uhr</option><option value="8">ab 8 Uhr</option><option value="9">ab 9 Uhr</option><option value="10">ab 10 Uhr</option><option value="11">ab 11 Uhr</option><option value="12">ab 12 Uhr</option><option value="13">ab 13 Uhr</option><option value="14">ab 14 Uhr</option><option value="15">ab 15 Uhr</option><option value="16">ab 16 Uhr</option><option value="17">ab 17 Uhr</option><option value="18">ab 18 Uhr</option><option value="19">ab 19 Uhr</option><option value="20">ab 20 Uhr</option><option value="21">ab 21 Uhr</option><option value="22">ab 22 Uhr</option><option value="23">ab 23 Uhr</option><option value="24">nie (immer heute)</option></select></div>
-            <div><label for="set-dash-first" class="text-xs text-slate-500 dark:text-slate-400">Beim Öffnen zeigen</label><select id="set-dash-first" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"><option value="wx">Prognose</option><option value="meter">Zählerstand</option></select></div>
+            <div><label for="set-dash-first" class="text-xs text-slate-500 dark:text-slate-400">Beim Öffnen zeigen</label><select id="set-dash-first" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"><option value="wx">Prognose</option><option value="meter">Zählerstand</option><option value="dyn">Dynamisch</option></select></div>
           </div>
-          <p class="mt-1.5 text-xs text-left text-slate-500 dark:text-slate-400">Ab dieser Uhrzeit wird „Morgen“ umrandet und „Restakku – reicht bis …“ rechnet ab morgen. Wird mit deinem Konto synchronisiert.</p>
+          <p class="mt-1.5 text-xs text-left text-slate-500 dark:text-slate-400">Ab dieser Uhrzeit wird „Morgen“ umrandet und „Restakku – reicht bis …“ rechnet ab morgen. „Dynamisch“: unter 30 % Akku (Stand vom Auto) zuerst der Zählerstand, sonst die Prognose. Wird mit deinem Konto synchronisiert.</p>
         </div>
       </div>
     </div>
@@ -5853,7 +5853,14 @@ async function wxoSoc() {
   } catch (e) { return old; }
 }
 const wxoCut = () => { const v = Number(getSettings().wxoCut); return Number.isInteger(v) && v >= 0 && v <= 24 ? v : 18; };   // ab dieser Stunde gilt „Morgen“
-const dashFirst = () => getSettings().dashFirst === 'meter' ? 'meter' : 'wx';
+const dashFirst = () => { const v = getSettings().dashFirst; return v === 'meter' || v === 'dyn' ? v : 'wx'; };
+const DASH_DYN_SOC = 30;                                                                  // „Dynamisch“: unter diesem Akkustand zuerst der Zählerstand
+/** Welche Karte beim Öffnen vorne liegt: fest gewählt oder dynamisch nach dem zuletzt vom Auto gemeldeten Akkustand (bis 6 h alt) */
+function dashFirstSlide(soc) {
+  const f = dashFirst(); if (f !== 'dyn') return f;
+  if (soc == null) { const c = load(KEY_WXO + 'S', null); soc = c && Date.now() - c.t < 6 * 3600e3 ? c.soc : null; }
+  return soc != null && soc < DASH_DYN_SOC ? 'meter' : 'wx';
+}
 function setQuickSetting(k, v) { const st = load(KEY_SETTINGS, {}) || {}; if (v === undefined) delete st[k]; else st[k] = v; save(KEY_SETTINGS, st); try { pushPrefs(); } catch (e) { } }
 function fillWxoPrefs() {
   const cn = $('set-car-n'), cs = $('set-car-sec'); if (cn && document.activeElement !== cn) cn.value = String(carAutoN()); if (cs && document.activeElement !== cs) { const v = String(carAutoMs() / 1000); cs.value = [...cs.options].some(o => o.value === v) ? v : '30'; } const a = $('set-wxo-cut'), b = $('set-dash-first'); if (a && document.activeElement !== a) a.value = String(wxoCut()); if (b && document.activeElement !== b) b.value = dashFirst(); }
@@ -5893,6 +5900,7 @@ async function renderWxo() {
     tip.classList.remove('hidden');
   } else tip.classList.add('hidden');
   el.classList.remove('hidden');
+  if (dashFirst() === 'dyn' && !window.dSwUser) { const want = dashFirstSlide(soc) === 'wx' ? 0 : 1; if (dSw.idx !== want) setTimeout(() => dashSwipeTo(want), 50); }
   try { save(KEY_WXO + 'H', { day: todayYMD(), cut: hl, days: $('wxo-days').innerHTML, tip: tip.classList.contains('hidden') ? '' : tip.textContent }); } catch (e) { }   // für den sofortigen Aufbau beim nächsten Öffnen
 }
 /** Beim Laden: Karte sofort aus dem letzten Stand zeigen (oder als Platzhalter in gleicher Höhe), damit nichts springt; renderWxo füllt sie danach neu */
@@ -5938,10 +5946,12 @@ function dashSwipeSync() {
   $('dash-dots').querySelectorAll('[data-dslide]').forEach((b, k) => { const on = k === i; b.classList.toggle('w-4', on); b.classList.toggle('w-1.5', !on); ['bg-slate-400', 'dark:bg-slate-500'].forEach(c => b.classList.toggle(c, on)); ['bg-slate-300', 'dark:bg-slate-700'].forEach(c => b.classList.toggle(c, !on)); });
 }
 function dashSwipeTo(i, smooth = true) { const sl = dashSlides(); if (!sl[i]) return; dSw.tr.scrollTo({ left: sl[i].offsetLeft - dSw.tr.offsetLeft, behavior: smooth ? 'smooth' : 'auto' }); }
+['pointerdown', 'touchstart', 'wheel'].forEach(ev => dSw.tr.addEventListener(ev, () => { window.dSwUser = true; }, { passive: true }));   // selbst gewischt: nicht mehr automatisch umschalten
+$('dash-dots').addEventListener('pointerdown', () => { window.dSwUser = true; });
 let dSwT = null; dSw.tr.addEventListener('scroll', () => { clearTimeout(dSwT); dSwT = setTimeout(dashSwipeSync, 60); }, { passive: true });
 $('dash-dots').addEventListener('click', (e) => { const b = e.target.closest('[data-dslide]'); if (b) dashSwipeTo(Number(b.dataset.dslide)); });
 try { new ResizeObserver(() => dashSwipeSync()).observe($('wxo-card')); new ResizeObserver(() => dashSwipeSync()).observe($('meter-card')); } catch (e) { }
-let dSwVis = false; new MutationObserver(() => { const v = !$('wxo-card').classList.contains('hidden'); if (v !== dSwVis) { dSwVis = v; dashSwipeTo(v && dashFirst() === 'wx' ? 0 : dashSlides().length - 1, false); } dashSwipeSync(); }).observe($('wxo-card'), { attributes: true, attributeFilter: ['class'] });
+let dSwVis = false; new MutationObserver(() => { const v = !$('wxo-card').classList.contains('hidden'); if (v !== dSwVis) { dSwVis = v; dashSwipeTo(v && dashFirstSlide() === 'wx' ? 0 : dashSlides().length - 1, false); } dashSwipeSync(); }).observe($('wxo-card'), { attributes: true, attributeFilter: ['class'] });
 $('btn-live').addEventListener('click', () => setTimeout(() => dashSwipeTo(dashSlides().length - 1), 0));
 dashSwipeSync();
 $('wxo-more').addEventListener('click', openWxoSheet);
