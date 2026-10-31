@@ -179,7 +179,6 @@
       </div>
       <div id="car-dashes" class="hidden" aria-hidden="true"></div>
       <div id="hero-rem-wrap" class="mt-2 text-center">
-        <button id="hero-rem" type="button" class="inline-flex items-center gap-1.5 font-barlow font-bold text-[22px] uppercase tracking-[0.1em] text-white active:scale-95 transition">Erinnerungen prüfen<svg class="w-[18px] h-[18px]" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
         <p id="hero-rem-sub" class="mt-px px-2 truncate font-barlow font-bold text-[0.7rem] leading-4 tracking-[0.05em] text-white/80"></p>
       </div>
     </div>
@@ -4158,7 +4157,6 @@ function renderHeroReminder() {
   else when = 'bei ' + fmt(r.dueKm, 0) + ' km';
   el.textContent = 'Als Nächstes: ' + r.title + ' · ' + when;
 }
-$('hero-rem').addEventListener('click', () => showView('reminders'));
 const probeImg = (src) => new Promise(res => { const i = new Image(); i.onload = () => res(src); i.onerror = () => res(null); i.src = src; });
 const HERO_VER = '6';                                    // bei neuen Bildern hochzählen (umgeht den Browser- und Service-Worker-Cache)
 async function findHeroImg(n) { for (const e of ['png', 'webp', 'jpg', 'jpeg']) { const ok = await probeImg('Bilder/Enyaq' + n + '.' + e + '?v=' + HERO_VER); if (ok) return ok; } return null; }
