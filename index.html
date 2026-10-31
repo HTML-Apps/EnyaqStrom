@@ -5601,13 +5601,13 @@ async function renderFrost() {
 $('frost-x').addEventListener('click', () => { const c = load(KEY_FROST, {}) || {}; c.snooze = todayYMD(); save(KEY_FROST, c); $('frost-banner').classList.add('hidden'); });
 /* =====================================================================
    Verbrauchs-Prognose (Start): lernendes Modell aus den eigenen Ladungen + Open-Meteo-Vorhersage.
-   Jede genaue Strecke zwischen zwei Ladungen (Akku-%, ≥ 20 km) ist ein Lernpunkt: Verbrauch inkl. Ladeverluste gegen die mittlere Tagestemperatur
+   Jede genaue Strecke zwischen zwei Ladungen (Akku-%, ≥ 20 km) ist ein Lernpunkt: Verbrauch aus dem Akku (ohne Ladeverluste, wie der Bordcomputer) gegen die mittlere Tagestemperatur
    und den Anteil nasser Tage (≥ 1 mm) am Wetter-Standort. Modell: kWh/100 km = Basis + Kälte × max(0, 18 °C − T) + Regen × Nass-Anteil.
    Bayes'sche Ridge-Regression: Startwerte aus Erfahrungswerten (Kälte +0,25 je Grad, Regen +1,0) gelten wie 3 Ladungen; mit jeder Ladung
    übernehmen die eigenen Daten mehr (neuere Ladungen zählen stärker, Halbwertszeit 2 Jahre). Ergebnis 6 h zwischengespeichert, Vorhersage 1 h.
    ===================================================================== */
 const WXO_RES = 20;                                                                   // Reserve im Lade-Tipp (Laden 20–80 %)
-const KEY_WXO = 'enyaq.wxo', WXO_T0 = 18, WXO_PRIOR = { a: 15.5, b: 0.25, c: 1.0 }, WXO_LAMBDA = [0.05, 3 * 25, 3 * 0.25];   // Prior-Gewichte ≈ 3 Ladungen mit typischer Streuung
+const KEY_WXO = 'enyaq.wxo2', WXO_T0 = 18, WXO_PRIOR = { a: 14.0, b: 0.22, c: 0.9 }, WXO_LAMBDA = [0.05, 3 * 25, 3 * 0.25];   // Prior-Gewichte ≈ 3 Ladungen mit typischer Streuung
 const wxoIcon = (w) => w == null ? '🌡️' : w === 0 ? '☀️' : w <= 2 ? '🌤️' : w === 3 ? '☁️' : w <= 48 ? '🌫️' : w <= 57 ? '🌦️' : w <= 67 ? '🌧️' : w <= 77 ? '❄️' : w <= 82 ? '🌦️' : w <= 86 ? '🌨️' : '⛈️';
 const wxoText = (w) => w == null ? '' : w === 0 ? 'sonnig' : w <= 2 ? 'heiter' : w === 3 ? 'bewölkt' : w <= 48 ? 'Nebel' : w <= 57 ? 'Niesel' : w <= 67 ? 'Regen' : w <= 77 ? 'Schnee' : w <= 82 ? 'Schauer' : w <= 86 ? 'Schneeschauer' : 'Gewitter';
 function wxoSolve(A, y) {                                                          // 3×3 Gauß
@@ -5619,7 +5619,7 @@ function wxoSolve(A, y) {                                                       
 /** Lernpunkte aus den Ladungen (wie „Verbrauch je Außentemperatur“) + Wetter-Archiv → Modell { a, b, c, n, sd, src } */
 async function wxoModel(l) {
   const rs = getReadings(), iv = [];
-  rs.forEach((r, i) => { if (i < 1) return; const s = entryStats(rs, i), a = Date.parse(rs[i - 1].date), b = Date.parse(r.date); if (s.method !== 'soc' || s.rough || !(s.kwh100 > 3 && s.kwh100 < 60) || s.km < 20 || !Number.isFinite(a) || !Number.isFinite(b)) return; iv.push({ a: wxIso(new Date(a)), b: wxIso(new Date(b)), y: s.kwh100, t: b }); });
+  rs.forEach((r, i) => { if (i < 1) return; const s = entryStats(rs, i), a = Date.parse(rs[i - 1].date), b = Date.parse(r.date); const y = s.usedBat / s.km * 100; if (s.method !== 'soc' || s.rough || !(y > 3 && y < 60) || s.km < 20 || !Number.isFinite(a) || !Number.isFinite(b)) return; iv.push({ a: wxIso(new Date(a)), b: wxIso(new Date(b)), y, t: b }); });
   const sig = iv.length + ':' + (iv.length ? iv[iv.length - 1].b : '') + ':' + l.lat + ',' + l.lon, c = load(KEY_WXO, null);
   if (c && c.sig === sig && Date.now() - c.t < 6 * 3600e3) return c.m;
   let pts = [];
@@ -5667,7 +5667,7 @@ async function renderWxo() {
   try { [m, fc] = await Promise.all([wxoModel(l), wxoForecast(l)]); } catch (e) { if (tok === wxoTok) el.classList.add('hidden'); return; }
   if (tok !== wxoTok) return;
   const today = wxIso(new Date()), days = fc.filter(x => x.d >= today).slice(0, 7); if (days.length < 3) { el.classList.add('hidden'); return; }
-  const eff = (() => { try { return avgEff(getReadings()); } catch (e) { return BAT.eta; } })(), cap = batteryKwh(), rng = (k) => cap * eff / k * 100;
+  const eff = (() => { try { return avgEff(getReadings()); } catch (e) { return BAT.eta; } })(), cap = batteryKwh(), rng = (k) => cap / k * 100;
   days.forEach(x => { x.k = wxoPred(m, x.T, x.p >= 1); x.r = rng(x.k); });
   const best = rng(m.a), hl = new Date().getHours() >= 12 ? 1 : 0, lab = (i) => i === 0 ? 'Heute' : i === 1 ? 'Morgen' : wxDay(days[i].d).wd;
   wxoLast = { m, days, eff, cap };
@@ -5681,8 +5681,8 @@ async function renderWxo() {
   /* Lade-Tipp: ab dem typischen Ladeziel bis 20 % Rest (Laden zwischen 20 und 80 %), mit Ø km/Tag und dem Verbrauch des jeweiligen Tages */
   const hb = wxoHabits(), tip = $('wxo-tip');
   if (hb.kmDay > 3) {
-    let e = cap * eff * (hb.target - WXO_RES) / 100, i = hl, n = 0;
-    while (n < 30) { const x = days[Math.min(i, days.length - 1)], need = hb.kmDay * x.k / 100 * eff; if (e < need) break; e -= need; i++; n++; }
+    let e = cap * (hb.target - WXO_RES) / 100, i = hl, n = 0;
+    while (n < 30) { const x = days[Math.min(i, days.length - 1)], need = hb.kmDay * x.k / 100; if (e < need) break; e -= need; i++; n++; }
     const hub = `Ladehub ${WXO_RES}–${hb.target} %`, until = n <= 0 ? 'reicht keinen vollen Tag' : n === 1 ? 'reicht bis ' + (hl ? 'morgen' : 'heute Abend') : hl + n - 1 < days.length ? 'reicht bis ' + wxDay(days[hl + n - 1].d).wd + ' (' + n + ' Tage)' : 'reicht ca. ' + n + ' Tage';
     tip.innerHTML = `<span>🔌</span><span class="min-w-0 flex-1 truncate">${hub} ${until}</span>`;
     tip.classList.remove('hidden');
@@ -5693,7 +5693,7 @@ function openWxoSheet() {
   const o = wxoLast; if (!o) return; const { m, days } = o, P = WXO_PRIOR;
   $('wxo-sheet-box').innerHTML = `<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div><p class="text-lg font-bold">Prognose 7 Tage</p>
     <div class="divide-y divide-slate-200 dark:divide-slate-800">${days.map((x, i) => `<div class="flex items-center gap-3 py-2"><span class="w-16 text-[13px] font-semibold">${i === 0 ? 'Heute' : i === 1 ? 'Morgen' : wxDay(x.d).long.slice(0, 2) + ', ' + wxDay(x.d).dm}</span><span class="text-xl">${wxoIcon(x.w)}</span>
-      <span class="w-[74px] text-[12px] text-slate-500 dark:text-slate-400">${fmt(x.lo, 0).replace('-', '−')}…${fmt(x.hi, 0).replace('-', '−')} °C${x.p >= 1 ? '<br>' + fmt(x.p, 0) + ' mm' : ''}</span>
+      <span class="w-[74px] text-[12px] text-slate-500 dark:text-slate-400">${fmt(x.lo, 0).replace('-', '−')} – ${fmt(x.hi, 0).replace('-', '−')} °C${x.p >= 1 ? '<br>' + fmt(x.p, 0) + ' mm' : ''}</span>
       <span class="flex-1 text-right text-[14px] font-bold">${fmt(x.k, 1)} <span class="text-[10px] font-normal text-slate-500">kWh/100</span></span><span class="w-[58px] text-right text-[13px]">${wxoFmtR(x.r)} km</span></div>`).join('')}</div>
     <div class="rounded-2xl bg-slate-100 dark:bg-slate-800/60 p-3 text-[12.5px] leading-relaxed">
       <p class="font-semibold">So rechnet die Prognose</p>
@@ -5701,7 +5701,7 @@ function openWxoSheet() {
       <p>Kälte: <b>+${fmt(m.b, 2)}</b> je Grad unter ${WXO_T0} °C ${m.n >= 5 && m.spanT >= 6 ? '' : '<span class="text-slate-400">(noch nah am Startwert ' + fmt(P.b, 2) + ')</span>'}</p>
       <p>Regentag: <b>+${fmt(m.c, 1)}</b> ${m.wetN >= 4 ? '' : '<span class="text-slate-400">(noch nah am Startwert ' + fmt(P.c, 1) + ')</span>'}</p>
       ${m.sd ? `<p>Typische Abweichung: ±${fmt(m.sd, 1)} kWh/100 km</p>` : ''}
-      <p class="mt-1.5 text-slate-500 dark:text-slate-400">Gelernt aus ${m.n} genauen Ladungen (mit Akku-% und km-Stand, ≥ 20 km) und dem Wetter an deinem Standort. Jede neue Ladung verbessert die Werte, neuere zählen stärker. Reichweite: ${fmt(o.cap, 1)} kWh netto × ${Math.round(o.eff * 100)} % Ladewirkungsgrad, bei 100 % Akku.</p>
+      <p class="mt-1.5 text-slate-500 dark:text-slate-400">Gelernt aus ${m.n} genauen Ladungen (mit Akku-% und km-Stand, ≥ 20 km) und dem Wetter an deinem Standort. Jede neue Ladung verbessert die Werte, neuere zählen stärker. Verbrauch ohne Ladeverluste (aus dem Akku, vergleichbar mit der Anzeige im Auto). Reichweite: ${fmt(o.cap, 1)} kWh netto bei 100 % Akku.</p>
     </div>
     <button type="button" data-wxo="close" class="h-12 w-full rounded-2xl border border-slate-300 dark:border-slate-700 text-sm font-semibold">Schließen</button>`;
   $('wxo-sheet').classList.remove('hidden');
