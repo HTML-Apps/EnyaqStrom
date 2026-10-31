@@ -1275,6 +1275,7 @@
         </div>
         <div class="py-4 first:pt-4 last:pb-0">
           <p class="block text-sm font-medium text-slate-700 dark:text-slate-300">Verbrauchs-Prognose auf Start</p>
+          <div class="mt-1"><label for="set-wx-icons" class="text-xs text-slate-500 dark:text-slate-400">Wetter-Symbole</label><select id="set-wx-icons" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"><option value="meteo">Meteocons (animiert)</option><option value="emoji">Open-Meteo (Emoji)</option></select></div>
           <div class="mt-1 grid grid-cols-2 gap-2">
             <div><label for="set-wxo-cut" class="text-xs text-slate-500 dark:text-slate-400">„Morgen“ hervorheben</label><select id="set-wxo-cut" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"><option value="6">ab 6 Uhr</option><option value="7">ab 7 Uhr</option><option value="8">ab 8 Uhr</option><option value="9">ab 9 Uhr</option><option value="10">ab 10 Uhr</option><option value="11">ab 11 Uhr</option><option value="12">ab 12 Uhr</option><option value="13">ab 13 Uhr</option><option value="14">ab 14 Uhr</option><option value="15">ab 15 Uhr</option><option value="16">ab 16 Uhr</option><option value="17">ab 17 Uhr</option><option value="18">ab 18 Uhr</option><option value="19">ab 19 Uhr</option><option value="20">ab 20 Uhr</option><option value="21">ab 21 Uhr</option><option value="22">ab 22 Uhr</option><option value="23">ab 23 Uhr</option><option value="24">nie (immer heute)</option></select></div>
             <div><label for="set-dash-first" class="text-xs text-slate-500 dark:text-slate-400">Beim Öffnen zeigen</label><select id="set-dash-first" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"><option value="wx">Prognose</option><option value="meter">Zählerstand</option><option value="dyn">Dynamisch</option></select></div>
@@ -2481,7 +2482,7 @@ $('btn-save-settings').addEventListener('click', () => {
     if (+m[2] < 1990 || +m[2] * 12 + +m[1] > now.getFullYear() * 12 + now.getMonth() + 1) { alert('Das Baujahr ' + yr + ' kann nicht stimmen: Es muss zwischen 01/1990 und ' + String(now.getMonth() + 1).padStart(2, '0') + '/' + now.getFullYear() + ' liegen.'); $('set-year').focus(); return; }
   }
   const txt = (id, n) => $(id).value.trim().replace(/\s+/g, ' ').slice(0, n) || undefined;
-  if (save(KEY_SETTINGS, { title: $('set-title').value.trim() || DEFAULT_TITLE, brand: txt('set-brand', 30), model: txt('set-model', 40), plate: (txt('set-plate', 15) || '').toUpperCase() || undefined, year: yr || undefined, vin: vin || undefined, price, battery, power, remDays, remKm, purchase, wltp: wl, wltpNet: wln !== undefined ? Math.round(wln * 100) / 100 : undefined, purchaseKm: pk !== undefined ? Math.round(pk) : undefined, purchasePrice: pp !== undefined ? Math.round(pp * 100) / 100 : undefined, commuteKm: getSettings().commuteKm || undefined, ccEnd: getSettings().ccEnd || undefined, carN: getSettings().carN ?? undefined, carSec: getSettings().carSec ?? undefined, wxoCut: getSettings().wxoCut ?? undefined, dashFirst: getSettings().dashFirst || undefined, refLo: rlo, refHi: rhi, nextHu, nextService, certAcKwh: certAcKwh !== undefined ? Math.round(certAcKwh * 10) / 10 : undefined, certDcKwh: certDcKwh !== undefined ? Math.round(certDcKwh * 10) / 10 : undefined, certKm: certKm !== undefined ? Math.round(certKm) : undefined })) {   // commuteKm: im Steuerhelfer (Berichte → Fahrten) gepflegt
+  if (save(KEY_SETTINGS, { title: $('set-title').value.trim() || DEFAULT_TITLE, brand: txt('set-brand', 30), model: txt('set-model', 40), plate: (txt('set-plate', 15) || '').toUpperCase() || undefined, year: yr || undefined, vin: vin || undefined, price, battery, power, remDays, remKm, purchase, wltp: wl, wltpNet: wln !== undefined ? Math.round(wln * 100) / 100 : undefined, purchaseKm: pk !== undefined ? Math.round(pk) : undefined, purchasePrice: pp !== undefined ? Math.round(pp * 100) / 100 : undefined, commuteKm: getSettings().commuteKm || undefined, ccEnd: getSettings().ccEnd || undefined, wxIcons: getSettings().wxIcons || undefined, carN: getSettings().carN ?? undefined, carSec: getSettings().carSec ?? undefined, wxoCut: getSettings().wxoCut ?? undefined, dashFirst: getSettings().dashFirst || undefined, refLo: rlo, refHi: rhi, nextHu, nextService, certAcKwh: certAcKwh !== undefined ? Math.round(certAcKwh * 10) / 10 : undefined, certDcKwh: certDcKwh !== undefined ? Math.round(certDcKwh * 10) / 10 : undefined, certKm: certKm !== undefined ? Math.round(certKm) : undefined })) {   // commuteKm: im Steuerhelfer (Berichte → Fahrten) gepflegt
     renderReminderBadges(); renderHeroStats(); pushPrefs();
     $('settings-msg').classList.remove('hidden'); setTimeout(() => $('settings-msg').classList.add('hidden'), 2500);
   }
@@ -5786,6 +5787,11 @@ function wxoHumDays(j) {
   Object.keys(acc).forEach(d => { const o = acc[d]; out[d] = o.n >= 3 && o.rh / o.n >= 90 && o.t / o.n < 10 ? 1 : 0; }); return out;
 }
 const wxoIcon = (w) => w == null ? '🌡️' : w === 0 ? '☀️' : w <= 2 ? '🌤️' : w === 3 ? '☁️' : w <= 48 ? '🌫️' : w <= 57 ? '🌦️' : w <= 67 ? '🌧️' : w <= 77 ? '❄️' : w <= 82 ? '🌦️' : w <= 86 ? '🌨️' : '⛈️';
+/** Meteocons (Bas Milius, MIT-Lizenz, Bilder/wx/) je Wettercode von Open-Meteo; Tagesvarianten, da es Tageswerte sind */
+const WX_MC = (w) => w == null ? null : w === 0 ? 'clear-day' : w <= 2 ? 'partly-cloudy-day' : w === 3 ? 'overcast-day' : w <= 48 ? 'fog-day' : w <= 55 ? 'drizzle' : w <= 57 ? 'sleet' : w <= 65 ? 'rain' : w <= 67 ? 'sleet' : w <= 77 ? 'snow' : w <= 82 ? 'partly-cloudy-day-rain' : w <= 86 ? 'partly-cloudy-day-snow' : w === 95 ? 'thunderstorms-day-rain' : 'hail';
+const wxIconStyle = () => getSettings().wxIcons === 'emoji' ? 'emoji' : 'meteo';
+/** Wetter-Symbol als HTML: Meteocons (Standard) oder Emoji – Einstellung „Wetter-Symbole“ */
+function wxoIconHtml(w, px) { const n = WX_MC(w); return wxIconStyle() === 'meteo' && n ? `<img src="Bilder/wx/${n}.svg" alt="${wxoText(w)}" width="${px}" height="${px}" class="inline-block align-middle" style="width:${px}px;height:${px}px;margin:-${Math.round(px * 0.12)}px 0">` : wxoIcon(w); }
 const wxoText = (w) => w == null ? '' : w === 0 ? 'sonnig' : w <= 2 ? 'heiter' : w === 3 ? 'bewölkt' : w <= 48 ? 'Nebel' : w <= 57 ? 'Niesel' : w <= 67 ? 'Regen' : w <= 77 ? 'Schnee' : w <= 82 ? 'Schauer' : w <= 86 ? 'Schneeschauer' : 'Gewitter';
 function wxoSolve(A, y) {                                                          // n×n Gauß mit Pivot
   const n = y.length, M = A.map((r, i) => r.concat(y[i]));
@@ -5865,10 +5871,12 @@ function dashFirstSlide(soc) {
 }
 function setQuickSetting(k, v) { const st = load(KEY_SETTINGS, {}) || {}; if (v === undefined) delete st[k]; else st[k] = v; save(KEY_SETTINGS, st); try { pushPrefs(); } catch (e) { } }
 function fillWxoPrefs() {
+  const wi = $('set-wx-icons'); if (wi && document.activeElement !== wi) wi.value = wxIconStyle();
   const cn = $('set-car-n'), cs = $('set-car-sec'); if (cn && document.activeElement !== cn) cn.value = String(carAutoN()); if (cs && document.activeElement !== cs) { const v = String(carAutoMs() / 1000); cs.value = [...cs.options].some(o => o.value === v) ? v : '30'; } const a = $('set-wxo-cut'), b = $('set-dash-first'); if (a && document.activeElement !== a) a.value = String(wxoCut()); if (b && document.activeElement !== b) b.value = dashFirst(); }
 $('set-wxo-cut').addEventListener('change', (e) => { setQuickSetting('wxoCut', Number(e.target.value)); renderWxo(); });
 $('set-car-n').addEventListener('change', (e) => { setQuickSetting('carN', Number(e.target.value)); try { window.carReschedule && window.carReschedule(); } catch (er) { } });
 $('set-car-sec').addEventListener('change', (e) => { setQuickSetting('carSec', Number(e.target.value)); try { window.carReschedule && window.carReschedule(); } catch (er) { } });
+$('set-wx-icons').addEventListener('change', (e) => { setQuickSetting('wxIcons', e.target.value); try { renderWxo(); } catch (er) { } });
 $('set-dash-first').addEventListener('change', (e) => { setQuickSetting('dashFirst', e.target.value); });
 const wxoN = () => !isDesk() ? 3 : ($('wxo-card').clientWidth || document.querySelector('main').clientWidth) >= 760 ? 7 : 5;   // Tage in der Vorschau: Handy 3, PC je nach Breite 5 oder 7
 let wxoNLast = 0; window.addEventListener('resize', () => { clearTimeout(window.__wxoRs); window.__wxoRs = setTimeout(() => { if (wxoN() !== wxoNLast) try { renderWxo(); } catch (e) { } }, 250); });
@@ -5889,7 +5897,7 @@ async function renderWxo() {
   $('wxo-days').innerHTML = days.slice(0, wxoNLast).map((x, i) => { const on = i === hl;
     return `<div class="min-w-0 rounded-2xl px-1.5 py-2 text-center ${on ? 'bg-sky-50 dark:bg-sky-950/60 ring-[1.5px] ring-sky-400' : 'bg-slate-100 dark:bg-slate-800/60'}">
       <p class="text-center text-[11px] font-semibold ${on ? 'text-sky-700 dark:text-sky-300' : 'text-slate-500 dark:text-slate-400'}">${lab(i)}</p>
-      <p class="mt-0.5 text-center text-[22px] leading-none">${wxoIcon(x.w)}</p><p class="mt-0.5 text-center text-[13px] font-semibold">${fmt(x.T, 0).replace('-', '−')}°</p>
+      <p class="mt-0.5 text-center text-[22px] leading-none">${wxoIconHtml(x.w, 30)}</p><p class="mt-0.5 text-center text-[13px] font-semibold">${fmt(x.T, 0).replace('-', '−')}°</p>
       <p class="mt-1 text-center text-[17px] font-bold leading-tight">${fmt(x.k, 1)}</p><p class="text-center text-[9.5px] leading-tight text-slate-500 dark:text-slate-400">kWh/100 km</p>
       <div class="mx-1.5 mt-1.5 h-[5px] rounded-full bg-slate-200 dark:bg-slate-700"><div class="h-[5px] rounded-full bg-gradient-to-r from-emerald-500 to-sky-400" style="width:${Math.max(8, Math.min(100, x.r / best * 100)).toFixed(0)}%"></div></div>
       <p class="mt-0.5 text-center text-[12px]"><b>${wxoFmtR(x.r)}</b> <span class="text-slate-500 dark:text-slate-400">km</span></p></div>`; }).join('');
@@ -5906,14 +5914,14 @@ async function renderWxo() {
   } else tip.classList.add('hidden');
   el.classList.remove('hidden');
   if (dashFirst() === 'dyn' && !window.dSwUser) { const want = dashFirstSlide(soc) === 'wx' ? dashIdx('wxo-card') : dashIdx('meter-card'); if (dSw.idx !== want) setTimeout(() => dashSwipeTo(want), 50); }
-  try { save(KEY_WXO + 'H', { day: todayYMD(), n: wxoN(), cut: hl, days: $('wxo-days').innerHTML, tip: tip.classList.contains('hidden') ? '' : tip.textContent }); } catch (e) { }   // für den sofortigen Aufbau beim nächsten Öffnen
+  try { save(KEY_WXO + 'H', { day: todayYMD(), st: wxIconStyle(), n: wxoN(), cut: hl, days: $('wxo-days').innerHTML, tip: tip.classList.contains('hidden') ? '' : tip.textContent }); } catch (e) { }   // für den sofortigen Aufbau beim nächsten Öffnen
 }
 /** Beim Laden: Karte sofort aus dem letzten Stand zeigen (oder als Platzhalter in gleicher Höhe), damit nichts springt; renderWxo füllt sie danach neu */
 function wxoBoot() {
   if (!wxLoc() || liveHero) return;
   const c = load(KEY_WXO + 'H', null), sk = '<div class="h-[148px] rounded-2xl bg-slate-100 dark:bg-slate-800/60 animate-pulse"></div>';
   $('wxo-days').style.gridTemplateColumns = 'repeat(' + wxoN() + ', minmax(0, 1fr))';
-  $('wxo-days').innerHTML = c && c.day === todayYMD() && c.days && (c.n || 3) === wxoN() ? c.days : sk.repeat(wxoN());
+  $('wxo-days').innerHTML = c && c.day === todayYMD() && c.days && (c.n || 3) === wxoN() && (c.st || 'emoji') === wxIconStyle() ? c.days : sk.repeat(wxoN());
   const tip = $('wxo-tip'); tip.textContent = c && c.day === todayYMD() ? c.tip || '' : ''; tip.classList.toggle('hidden', !tip.textContent);
   if (!tip.textContent) { tip.textContent = ' '; tip.classList.remove('hidden'); }       // gleiche Höhe wie mit Text
   $('wxo-card').classList.remove('hidden');
@@ -5926,7 +5934,7 @@ function openWxoSheet() {
   const o = wxoLast; if (!o) return; const { m, days } = o, P = WXO_PRIOR;
   $('wxo-sheet-box').innerHTML = `<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div><p class="text-lg font-bold">Prognose 7 Tage</p>
     <div class="flex justify-end gap-2 text-[10.5px] text-slate-500 dark:text-slate-400"><span>kWh/100 km</span><span class="w-[54px] text-right">Reichweite</span></div>
-    <div class="divide-y divide-slate-200 dark:divide-slate-800 !mt-1">${days.map((x, i) => `<div class="flex items-center gap-2 py-2"><span class="w-[70px] shrink-0 whitespace-nowrap text-[13px] font-semibold">${i === 0 ? 'Heute' : i === 1 ? 'Morgen' : wxDay(x.d).long.slice(0, 2) + ', ' + wxDay(x.d).dm}</span><span class="shrink-0 text-xl">${wxoIcon(x.w)}</span>
+    <div class="divide-y divide-slate-200 dark:divide-slate-800 !mt-1">${days.map((x, i) => `<div class="flex items-center gap-2 py-2"><span class="w-[70px] shrink-0 whitespace-nowrap text-[13px] font-semibold">${i === 0 ? 'Heute' : i === 1 ? 'Morgen' : wxDay(x.d).long.slice(0, 2) + ', ' + wxDay(x.d).dm}</span><span class="shrink-0 text-xl">${wxoIconHtml(x.w, 30)}</span>
       <span class="w-[78px] shrink-0 whitespace-nowrap text-[12px] text-slate-500 dark:text-slate-400">${fmt(x.lo, 0).replace('-', '−')} bis ${fmt(x.hi, 0).replace('-', '−')} °C${x.p >= 1 ? '<br>' + fmt(x.p, 0) + ' mm' : ''}</span>
       <span class="min-w-0 flex-1 text-right"><span class="block text-[14px] font-bold">${fmt(x.k, 1)}</span>${wxoPartsHtml(x.parts)}</span><span class="w-[54px] shrink-0 whitespace-nowrap text-right text-[13px]">${wxoFmtR(x.r)} km</span></div>`).join('')}</div>
     <div class="rounded-2xl bg-slate-100 dark:bg-slate-800/60 p-3 text-[12.5px] leading-relaxed">
@@ -5938,7 +5946,7 @@ function openWxoSheet() {
       <p>Feuchter Morgen (5–9 Uhr ≥ 90 %, unter 10 °C): <b>+${fmt(m.e, 1)}</b> ${m.humN >= 4 ? '' : '<span class="text-slate-400">(noch nah am Startwert ' + fmt(P.e, 1) + ')</span>'}</p>
       <p class="text-slate-500 dark:text-slate-400">❄️ Kälte · 🌧️ Regen · 💧 beschlagene Scheiben (Heizung + Klima)</p>
       ${m.sd ? `<p>Typische Abweichung: ±${fmt(m.sd, 1)} kWh/100 km</p>` : ''}
-      <p class="mt-1.5 text-slate-500 dark:text-slate-400">Gelernt aus ${m.n} genauen Ladungen (mit Akku-% und km-Stand, ≥ 20 km) und dem Wetter an deinem Standort. Jede neue Ladung verbessert die Werte; neuere zählen stärker (eine 90 Tage alte Ladung halb so viel). Verbrauch ohne Ladeverluste (aus dem Akku, vergleichbar mit der Anzeige im Auto). Reichweite: ${fmt(o.cap, 1)} kWh netto bei 100 % Akku.</p>
+      <p class="mt-1.5 text-slate-500 dark:text-slate-400">Gelernt aus ${m.n} genauen Ladungen (mit Akku-% und km-Stand, ≥ 20 km) und dem Wetter an deinem Standort. Jede neue Ladung verbessert die Werte; neuere zählen stärker (eine 90 Tage alte Ladung halb so viel). Verbrauch ohne Ladeverluste (aus dem Akku, vergleichbar mit der Anzeige im Auto). Wetter: Open-Meteo${wxIconStyle() === 'meteo' ? ', Symbole: Meteocons von Bas Milius (MIT)' : ''}. Reichweite: ${fmt(o.cap, 1)} kWh netto bei 100 % Akku.</p>
     </div>
     <button type="button" data-wxo="close" class="h-12 w-full rounded-2xl border border-slate-300 dark:border-slate-700 text-sm font-semibold">Schließen</button>`;
   $('wxo-sheet').classList.remove('hidden');
@@ -6707,7 +6715,7 @@ try { renderWrapCard(); } catch (e) { }
    im Dokument enyaqStrom/<uid>/settings/prefs, gleiche Regel wie Anbieter und Kategorien. Die PIN bleibt nur auf dem Gerät.
    Erster Abgleich: Was die Cloud hat, gilt; fehlt dort etwas und ist lokal vorhanden, wird es hochgeladen. Danach gilt die Cloud (Änderung auf einem Gerät wirkt auf allen).
    ===================================================================== */
-const SYNC_SET_KEYS = ['title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAcKwh', 'certDcKwh', 'certKm', 'wltpNet', 'ccEnd', 'wxoCut', 'dashFirst', 'carN', 'carSec'];
+const SYNC_SET_KEYS = ['title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAcKwh', 'certDcKwh', 'certKm', 'wltpNet', 'ccEnd', 'wxoCut', 'dashFirst', 'carN', 'carSec', 'wxIcons'];
 /** Einstellungen für die Cloud: feste Reihenfolge, ohne leere Werte (Firestore verbietet undefined). null = nichts vorhanden. */
 function syncSet(src) {
   const o = {}; if (src && typeof src === 'object') SYNC_SET_KEYS.forEach(k => { const v = src[k]; if (v != null && v !== '' && !(typeof v === 'number' && !isFinite(v))) o[k] = v; });
