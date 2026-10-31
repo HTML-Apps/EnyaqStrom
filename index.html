@@ -194,6 +194,11 @@
       <button id="trips-banner-x" type="button" aria-label="Für diesen Monat ausblenden" class="w-9 h-9 shrink-0 rounded-xl text-lg active:scale-95 transition hover:bg-black/5 dark:hover:bg-white/10">×</button>
     </div>
 
+    <div id="wxo-card" class="hidden rounded-3xl bg-white dark:bg-[#141414]/80 dark:backdrop-blur-md dark:border dark:border-white/5 text-slate-900 dark:text-slate-100 shadow-sm p-4">
+      <div class="flex items-start justify-between gap-2"><div class="min-w-0"><p class="font-barlow text-xl font-bold uppercase tracking-[0.08em] leading-6">Verbrauchs-Prognose</p><p id="wxo-sub" class="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400"></p></div><button id="wxo-more" type="button" class="shrink-0 pt-0.5 text-xs font-semibold text-sky-700 dark:text-sky-300 active:opacity-70">7 Tage ›</button></div>
+      <div id="wxo-days" class="mt-3 grid grid-cols-3 gap-1.5"></div>
+      <p id="wxo-tip" class="mt-3 hidden flex gap-2 rounded-2xl bg-emerald-50 dark:bg-emerald-950/70 px-3 py-2 text-[12.5px] leading-snug text-emerald-900 dark:text-emerald-200"></p>
+    </div>
     <div class="rounded-3xl bg-white dark:bg-[#141414]/80 dark:backdrop-blur-md dark:border dark:border-white/5 text-slate-900 dark:text-slate-100 shadow-sm p-4">
       <div class="flex items-center justify-between h-7 mb-2">
         <p id="dash-title" class="text-sm text-slate-500 dark:text-slate-400">Aktueller Zählerstand</p>
@@ -1442,6 +1447,7 @@
 <!-- Wissen: Eintrag ansehen / bearbeiten -->
 <div id="cv-sheet" class="hidden fixed inset-0 z-50 bg-black/60 flex items-end justify-center"><div id="cv-sheet-box" class="w-full max-w-md max-h-[92vh] overflow-y-auto rounded-t-[28px] bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-4 pt-2.5 pb-5 space-y-3"></div></div>
 <input id="cv-file" type="file" accept="image/*,application/pdf" class="hidden">
+<div id="wxo-sheet" class="hidden fixed inset-0 z-50 bg-black/60 flex items-end justify-center"><div id="wxo-sheet-box" class="w-full max-w-md max-h-[92vh] overflow-y-auto rounded-t-[28px] bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-4 pt-2.5 pb-5 space-y-3"></div></div>
 <div id="au-sheet" class="hidden fixed inset-0 z-50 bg-black/60 flex items-end justify-center"><div id="au-sheet-box" class="w-full max-w-md max-h-[92vh] overflow-y-auto rounded-t-[28px] bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-4 pt-2.5 pb-5 space-y-3"></div></div>
 <div id="wish-sheet" class="hidden fixed inset-0 z-50 bg-black/60 flex items-end justify-center"><div id="wish-sheet-box" class="w-full max-w-md max-h-[92vh] overflow-y-auto rounded-t-[28px] bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-4 pt-2.5 pb-5 space-y-3"></div></div>
 <div id="tire-sheet" class="hidden fixed inset-0 z-50 bg-black/60 flex items-end justify-center"><div id="tire-sheet-box" class="w-full max-w-md max-h-[92vh] overflow-y-auto rounded-t-[28px] bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-4 pt-2.5 pb-5 space-y-3"></div></div>
@@ -2083,7 +2089,7 @@ function showView(name) {
     b.classList.toggle('text-slate-500', !active);
   });
   if (name === 'capture') { if (ENABLE_AI_SCAN) startCamera(); updateCaptureDefaults(); } else stopCamera();
-  if (name === 'dashboard') { renderDashboard(); try { renderBakBanner(); renderFrost(); } catch (e) { } }
+  if (name === 'dashboard') { renderDashboard(); try { renderBakBanner(); renderFrost(); renderWxo(); } catch (e) { } }
   if (name === 'report') renderReport(); else reportYM = null;           // beim Verlassen zurück auf den Standardmonat
   if (name === 'settings') { fillSettings(); try { renderBakInfo(); setSettingsSec(setSec); const nd = window.setNoDrawer; window.setNoDrawer = false; if (!nd) setTimeout(openSetDrawer, 60); } catch (e) { } } else { try { closeSetDrawer(); } catch (e) { } }
   if (name === 'costs') renderCostsView();
@@ -5586,6 +5592,118 @@ async function renderFrost() {
   el.classList.remove('hidden');
 }
 $('frost-x').addEventListener('click', () => { const c = load(KEY_FROST, {}) || {}; c.snooze = todayYMD(); save(KEY_FROST, c); $('frost-banner').classList.add('hidden'); });
+/* =====================================================================
+   Verbrauchs-Prognose (Start): lernendes Modell aus den eigenen Ladungen + Open-Meteo-Vorhersage.
+   Jede genaue Strecke zwischen zwei Ladungen (Akku-%, ≥ 20 km) ist ein Lernpunkt: Verbrauch inkl. Ladeverluste gegen die mittlere Tagestemperatur
+   und den Anteil nasser Tage (≥ 1 mm) am Wetter-Standort. Modell: kWh/100 km = Basis + Kälte × max(0, 18 °C − T) + Regen × Nass-Anteil.
+   Bayes'sche Ridge-Regression: Startwerte aus Erfahrungswerten (Kälte +0,25 je Grad, Regen +1,0) gelten wie 3 Ladungen; mit jeder Ladung
+   übernehmen die eigenen Daten mehr (neuere Ladungen zählen stärker, Halbwertszeit 2 Jahre). Ergebnis 6 h zwischengespeichert, Vorhersage 1 h.
+   ===================================================================== */
+const KEY_WXO = 'enyaq.wxo', WXO_T0 = 18, WXO_PRIOR = { a: 15.5, b: 0.25, c: 1.0 }, WXO_LAMBDA = [0.05, 3 * 25, 3 * 0.25];   // Prior-Gewichte ≈ 3 Ladungen mit typischer Streuung
+const wxoIcon = (w) => w == null ? '🌡️' : w === 0 ? '☀️' : w <= 2 ? '🌤️' : w === 3 ? '☁️' : w <= 48 ? '🌫️' : w <= 57 ? '🌦️' : w <= 67 ? '🌧️' : w <= 77 ? '❄️' : w <= 82 ? '🌦️' : w <= 86 ? '🌨️' : '⛈️';
+const wxoText = (w) => w == null ? '' : w === 0 ? 'sonnig' : w <= 2 ? 'heiter' : w === 3 ? 'bewölkt' : w <= 48 ? 'Nebel' : w <= 57 ? 'Niesel' : w <= 67 ? 'Regen' : w <= 77 ? 'Schnee' : w <= 82 ? 'Schauer' : w <= 86 ? 'Schneeschauer' : 'Gewitter';
+function wxoSolve(A, y) {                                                          // 3×3 Gauß
+  const M = A.map((r, i) => r.concat(y[i]));
+  for (let i = 0; i < 3; i++) { let p = i; for (let k = i + 1; k < 3; k++) if (Math.abs(M[k][i]) > Math.abs(M[p][i])) p = k; [M[i], M[p]] = [M[p], M[i]]; if (Math.abs(M[i][i]) < 1e-9) return null;
+    for (let k = 0; k < 3; k++) if (k !== i) { const f = M[k][i] / M[i][i]; for (let j = i; j < 4; j++) M[k][j] -= f * M[i][j]; } }
+  return M.map((r, i) => r[3] / r[i]);
+}
+/** Lernpunkte aus den Ladungen (wie „Verbrauch je Außentemperatur“) + Wetter-Archiv → Modell { a, b, c, n, sd, src } */
+async function wxoModel(l) {
+  const rs = getReadings(), iv = [];
+  rs.forEach((r, i) => { if (i < 1) return; const s = entryStats(rs, i), a = Date.parse(rs[i - 1].date), b = Date.parse(r.date); if (s.method !== 'soc' || s.rough || !(s.kwh100 > 3 && s.kwh100 < 60) || s.km < 20 || !Number.isFinite(a) || !Number.isFinite(b)) return; iv.push({ a: wxIso(new Date(a)), b: wxIso(new Date(b)), y: s.kwh100, t: b }); });
+  const sig = iv.length + ':' + (iv.length ? iv[iv.length - 1].b : '') + ':' + l.lat + ',' + l.lon, c = load(KEY_WXO, null);
+  if (c && c.sig === sig && Date.now() - c.t < 6 * 3600e3) return c.m;
+  let pts = [];
+  if (iv.length) {
+    const days = await wxTemps(l, iv.reduce((m, x) => x.a < m ? x.a : m, iv[0].a), iv.reduce((m, x) => x.b > m ? x.b : m, iv[0].b)), rain = (load(KEY_TEMPS, {}) || {}).rain || {};
+    iv.forEach(x => { let st = 0, n = 0, wet = 0, nr = 0; for (let t = Date.parse(x.a + 'T12:00:00'), e = Date.parse(x.b + 'T12:00:00'); t <= e; t += 864e5) { const d = wxIso(new Date(t)), v = days[d], p = rain[d]; if (v != null) { st += v; n++; } if (p != null) { nr++; if (p >= 1) wet++; } }
+      if (n) pts.push({ T: st / n, r: nr ? wet / nr : 0, y: x.y, w: Math.pow(0.5, (Date.now() - x.t) / (730 * 864e5)) }); });
+  }
+  const P = WXO_PRIOR, L = WXO_LAMBDA, A = [[L[0], 0, 0], [0, L[1], 0], [0, 0, L[2]]], v = [L[0] * P.a, L[1] * P.b, L[2] * P.c];
+  if (pts.length) { const my = pts.reduce((s, p) => s + p.y, 0) / pts.length, mx = pts.reduce((s, p) => s + Math.max(0, WXO_T0 - p.T), 0) / pts.length; v[0] = L[0] * (my - P.b * mx); }   // Basis-Startwert aus den eigenen Daten
+  pts.forEach(p => { const x = [1, Math.max(0, WXO_T0 - p.T), p.r]; for (let i = 0; i < 3; i++) { v[i] += p.w * x[i] * p.y; for (let j = 0; j < 3; j++) A[i][j] += p.w * x[i] * x[j]; } });
+  const beta = wxoSolve(A, v) || [P.a, P.b, P.c];
+  let [a, b, cc] = beta; b = Math.min(0.8, Math.max(0, b)); cc = Math.min(4, Math.max(0, cc));               // physikalisch sinnvoll halten
+  const res = pts.map(p => p.y - (a + b * Math.max(0, WXO_T0 - p.T) + cc * p.r)), sd = res.length > 3 ? Math.sqrt(res.reduce((s, x) => s + x * x, 0) / (res.length - 3)) : null;
+  const spanT = pts.length ? Math.max(...pts.map(p => p.T)) - Math.min(...pts.map(p => p.T)) : 0;
+  const m = { a, b, c: cc, n: pts.length, sd, spanT, wetN: pts.filter(p => p.r > 0.3).length };
+  save(KEY_WXO, { sig, t: Date.now(), m }); return m;
+}
+const wxoPred = (m, T, wet) => m.a + m.b * Math.max(0, WXO_T0 - T) + m.c * (wet ? 1 : 0);
+/** 7-Tage-Vorhersage: Tagesmittel, Niederschlag, Wettercode (1 h zwischengespeichert) */
+async function wxoForecast(l) {
+  const c = load(KEY_WXO + 'F', null), same = c && c.lat === l.lat && c.lon === l.lon && c.day === wxIso(new Date());
+  if (same && Date.now() - c.t < 3600e3) return c.days;
+  try {
+    const r = await fetch('https://api.open-meteo.com/v1/forecast?latitude=' + l.lat + '&longitude=' + l.lon + '&daily=temperature_2m_mean,temperature_2m_min,temperature_2m_max,precipitation_sum,weather_code&timezone=auto&forecast_days=8');
+    if (!r.ok) throw new Error(r.status);
+    const j = await r.json(), d = j.daily, days = d.time.map((t, i) => ({ d: t, T: d.temperature_2m_mean[i] ?? (d.temperature_2m_min[i] + d.temperature_2m_max[i]) / 2, lo: d.temperature_2m_min[i], hi: d.temperature_2m_max[i], p: d.precipitation_sum[i] ?? 0, w: d.weather_code[i] }));
+    save(KEY_WXO + 'F', { lat: l.lat, lon: l.lon, day: wxIso(new Date()), t: Date.now(), days }); return days;
+  } catch (e) { if (c && c.lat === l.lat) return c.days.filter(x => x.d >= wxIso(new Date())); throw e; }
+}
+/** Ø km pro Tag aus den letzten ~90 Tagen der km-Stände; typisches Ladeziel (Median der letzten 10 Akku-Ende-Werte) */
+function wxoHabits() {
+  const rs = getReadings().filter(r => r.odometerKm > 0 && Number.isFinite(Date.parse(r.date))).sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
+  let kmDay = null;
+  if (rs.length >= 2) { const last = rs[rs.length - 1], lim = Date.parse(last.date) - 90 * 864e5, first = rs.find(r => Date.parse(r.date) >= lim) || rs[0], d = (Date.parse(last.date) - Date.parse(first.date)) / 864e5; if (d >= 7 && last.odometerKm > first.odometerKm) kmDay = (last.odometerKm - first.odometerKm) / d; }
+  const ends = getReadings().filter(r => r.socEnd > 30).slice(-10).map(r => r.socEnd);
+  return { kmDay, target: ends.length ? Math.round(median(ends)) : 80 };
+}
+let wxoTok = 0, wxoLast = null;
+const wxoFmtR = (km) => fmt(Math.round(km / 5) * 5, 0);
+async function renderWxo() {
+  const el = $('wxo-card'), l = wxLoc(); if (!el) return;
+  if (!l || liveHero) { el.classList.add('hidden'); return; }
+  const tok = ++wxoTok; let m, fc;
+  try { [m, fc] = await Promise.all([wxoModel(l), wxoForecast(l)]); } catch (e) { if (tok === wxoTok) el.classList.add('hidden'); return; }
+  if (tok !== wxoTok) return;
+  const today = wxIso(new Date()), days = fc.filter(x => x.d >= today).slice(0, 7); if (days.length < 3) { el.classList.add('hidden'); return; }
+  const eff = (() => { try { return avgEff(getReadings()); } catch (e) { return BAT.eta; } })(), cap = batteryKwh(), rng = (k) => cap * eff / k * 100;
+  days.forEach(x => { x.k = wxoPred(m, x.T, x.p >= 1); x.r = rng(x.k); });
+  const best = rng(m.a), hl = new Date().getHours() >= 12 ? 1 : 0, lab = (i) => i === 0 ? 'Heute' : i === 1 ? 'Morgen' : wxDay(days[i].d).wd;
+  wxoLast = { m, days, eff, cap };
+  const conf = m.n >= 15 && m.spanT >= 10 ? 'gut gelernt' : m.n >= 5 ? 'lernt noch' : 'Startwerte';
+  $('wxo-sub').textContent = (l.label ? l.label.split(',')[0] + ' · ' : '') + (m.n ? m.n + ' Ladung' + (m.n === 1 ? '' : 'en') + ' · ' + conf : 'Startwerte – lernt mit jeder Ladung');
+  $('wxo-days').innerHTML = days.slice(0, 3).map((x, i) => { const on = i === hl;
+    return `<div class="min-w-0 rounded-2xl px-1.5 py-2.5 text-center ${on ? 'bg-sky-50 dark:bg-sky-950/60 ring-[1.5px] ring-sky-400' : 'bg-slate-100 dark:bg-slate-800/60'}">
+      <p class="text-[11px] font-semibold ${on ? 'text-sky-700 dark:text-sky-300' : 'text-slate-500 dark:text-slate-400'}">${lab(i)}</p>
+      <p class="mt-1 text-[24px] leading-none">${wxoIcon(x.w)}</p><p class="mt-1 text-[13px] font-semibold">${fmt(x.T, 0).replace('-', '−')}°</p>
+      <p class="mt-1.5 text-[17px] font-bold leading-tight">${fmt(x.k, 1)}</p><p class="text-[9.5px] text-slate-500 dark:text-slate-400">kWh/100 km</p>
+      <div class="mx-1.5 mt-2 h-[5px] rounded-full bg-slate-200 dark:bg-slate-700"><div class="h-[5px] rounded-full bg-gradient-to-r from-emerald-500 to-sky-400" style="width:${Math.max(8, Math.min(100, x.r / best * 100)).toFixed(0)}%"></div></div>
+      <p class="mt-1 text-[12px]"><b>${wxoFmtR(x.r)}</b> <span class="text-slate-500 dark:text-slate-400">km</span></p></div>`; }).join('');
+  /* Lade-Tipp: ab dem typischen Ladeziel bis 10 % Rest, mit Ø km/Tag und dem Verbrauch des jeweiligen Tages */
+  const hb = wxoHabits(), tip = $('wxo-tip');
+  if (hb.kmDay > 3) {
+    let e = cap * eff * (hb.target - 10) / 100, i = hl, n = 0;
+    while (n < 30) { const x = days[Math.min(i, days.length - 1)], need = hb.kmDay * x.k / 100 * eff; if (e < need) break; e -= need; i++; n++; }
+    const until = n <= 0 ? 'keinen vollen Tag' : n === 1 ? 'bis ' + (hl ? 'morgen Abend' : 'heute Abend') : hl + n - 1 < days.length ? 'bis ' + wxDay(days[hl + n - 1].d).long + ' (' + n + ' Tage)' : 'ca. ' + n + ' Tage weit';
+    tip.innerHTML = `<span>🔌</span><span class="min-w-0 flex-1">Mit ${hb.target} % kommst du ${until} – bei deinen Ø ${fmt(hb.kmDay, 0)} km/Tag, 10 % Reserve.</span>`;
+    tip.classList.remove('hidden');
+  } else tip.classList.add('hidden');
+  el.classList.remove('hidden');
+}
+function openWxoSheet() {
+  const o = wxoLast; if (!o) return; const { m, days } = o, P = WXO_PRIOR;
+  $('wxo-sheet-box').innerHTML = `<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div><p class="text-lg font-bold">Prognose 7 Tage</p>
+    <div class="divide-y divide-slate-200 dark:divide-slate-800">${days.map((x, i) => `<div class="flex items-center gap-3 py-2"><span class="w-16 text-[13px] font-semibold">${i === 0 ? 'Heute' : i === 1 ? 'Morgen' : wxDay(x.d).long.slice(0, 2) + ', ' + wxDay(x.d).dm}</span><span class="text-xl">${wxoIcon(x.w)}</span>
+      <span class="w-[74px] text-[12px] text-slate-500 dark:text-slate-400">${fmt(x.lo, 0).replace('-', '−')}…${fmt(x.hi, 0).replace('-', '−')} °C${x.p >= 1 ? '<br>' + fmt(x.p, 0) + ' mm' : ''}</span>
+      <span class="flex-1 text-right text-[14px] font-bold">${fmt(x.k, 1)} <span class="text-[10px] font-normal text-slate-500">kWh/100</span></span><span class="w-[58px] text-right text-[13px]">${wxoFmtR(x.r)} km</span></div>`).join('')}</div>
+    <div class="rounded-2xl bg-slate-100 dark:bg-slate-800/60 p-3 text-[12.5px] leading-relaxed">
+      <p class="font-semibold">So rechnet die Prognose</p>
+      <p class="mt-1">Grundverbrauch (ab ${WXO_T0} °C, trocken): <b>${fmt(m.a, 1)}</b> kWh/100 km${m.n ? '' : ' <span class="text-slate-400">(Startwert)</span>'}</p>
+      <p>Kälte: <b>+${fmt(m.b, 2)}</b> je Grad unter ${WXO_T0} °C ${m.n >= 5 && m.spanT >= 6 ? '' : '<span class="text-slate-400">(noch nah am Startwert ' + fmt(P.b, 2) + ')</span>'}</p>
+      <p>Regentag: <b>+${fmt(m.c, 1)}</b> ${m.wetN >= 4 ? '' : '<span class="text-slate-400">(noch nah am Startwert ' + fmt(P.c, 1) + ')</span>'}</p>
+      ${m.sd ? `<p>Typische Abweichung: ±${fmt(m.sd, 1)} kWh/100 km</p>` : ''}
+      <p class="mt-1.5 text-slate-500 dark:text-slate-400">Gelernt aus ${m.n} genauen Ladungen (mit Akku-% und km-Stand, ≥ 20 km) und dem Wetter an deinem Standort. Jede neue Ladung verbessert die Werte, neuere zählen stärker. Reichweite: ${fmt(o.cap, 1)} kWh netto × ${Math.round(o.eff * 100)} % Ladewirkungsgrad, bei 100 % Akku.</p>
+    </div>
+    <button type="button" data-wxo="close" class="h-12 w-full rounded-2xl border border-slate-300 dark:border-slate-700 text-sm font-semibold">Schließen</button>`;
+  $('wxo-sheet').classList.remove('hidden');
+}
+$('wxo-more').addEventListener('click', openWxoSheet);
+$('wxo-days').addEventListener('click', openWxoSheet);
+$('wxo-sheet').addEventListener('click', (e) => { if (e.target === $('wxo-sheet') || e.target.closest('[data-wxo="close"]')) $('wxo-sheet').classList.add('hidden'); });
+setTimeout(() => renderWxo(), 1700); setInterval(() => { if (!document.hidden && currentView === 'dashboard') renderWxo(); }, 30 * 60 * 1000);
 setTimeout(() => renderFrost(), 1500); setInterval(() => { if (!document.hidden && currentView === 'dashboard') renderFrost(); }, 15 * 60 * 1000);
 let wxTimer = null, wxTok = 0, wxChart = null;
 function wxKill() { if (wxChart) { wxChart.destroy(); wxChart = null; } }
@@ -6128,9 +6246,10 @@ let stTempChart = null, stTempTok = 0;
 async function wxTemps(l, fromIso, toIso) {
   const key = l.lat + ',' + l.lon; let c = load(KEY_TEMPS, null); if (!c || c.loc !== key) c = { loc: key, days: {} };
   const recent = wxIso(new Date(Date.now() - 3 * 864e5)), arch = wxIso(new Date(Date.now() - 7 * 864e5)); let need = false;
-  for (let t = Date.parse(fromIso + 'T12:00:00'), e = Date.parse(toIso + 'T12:00:00'); t <= e; t += 864e5) { const d = wxIso(new Date(t)); if (c.days[d] === undefined || d >= recent) { need = true; break; } }   // die letzten 3 Tage immer neu holen
+  c.rain = c.rain || {};
+  for (let t = Date.parse(fromIso + 'T12:00:00'), e = Date.parse(toIso + 'T12:00:00'); t <= e; t += 864e5) { const d = wxIso(new Date(t)); if (c.days[d] === undefined || c.rain[d] === undefined || d >= recent) { need = true; break; } }   // die letzten 3 Tage immer neu holen
   if (need) {
-    const q = '&latitude=' + l.lat + '&longitude=' + l.lon + '&daily=temperature_2m_mean&timezone=auto', put = (j) => j.daily.time.forEach((d, i) => { const v = j.daily.temperature_2m_mean[i]; if (v != null) c.days[d] = v; });
+    const q = '&latitude=' + l.lat + '&longitude=' + l.lon + '&daily=temperature_2m_mean,precipitation_sum&timezone=auto', put = (j) => j.daily.time.forEach((d, i) => { const v = j.daily.temperature_2m_mean[i], p = (j.daily.precipitation_sum || [])[i]; if (v != null) c.days[d] = v; if (p != null) c.rain[d] = p; });
     try {
       if (fromIso <= arch) { const r = await fetch('https://archive-api.open-meteo.com/v1/archive?start_date=' + fromIso + '&end_date=' + (toIso < arch ? toIso : arch) + q); if (r.ok) put(await r.json()); }
       if (toIso > arch) { const r = await fetch('https://api.open-meteo.com/v1/forecast?past_days=10&forecast_days=1' + q); if (r.ok) put(await r.json()); }
