@@ -132,6 +132,8 @@
   #care-body .rounded-2xl.text-xs, #tax-gap, #pv-hint, #bak-msg + p { text-align: justify; hyphens: auto; -webkit-hyphens: auto; hyphenate-limit-chars: 6 3 3; }
   main .rounded-3xl.p-4 { padding-left: .875rem; padding-right: .875rem; }
   #view-history { padding-bottom: 4rem; }   /* Platz für die schwebenden Bearbeiten-Knöpfe über der Leiste */   /* Karten innen etwas schmaler: mehr Platz auf schmalen Handys */
+  /* Schnellmenü: Kacheln wachsen mit der Bildschirmhöhe (7 Kachelreihen teilen sich den freien Platz), bei ≤ 704 px bleibt es bei py-2 – so scrollt das Menü nie */
+  #nav-tiles .grid > button { --navpy: clamp(8px, calc((100vh - 704px) / 14 + 8px), 16px); --navpy: clamp(8px, calc((100dvh - 704px) / 14 + 8px), 16px); padding-top: var(--navpy); padding-bottom: var(--navpy); }
   #dp-panes, #bat-panes { overflow-x: clip; overflow-clip-margin: 16px; }   /* hereingleitender Tab darf nicht über den Bildschirmrand ragen (Chrome vergrößert sonst die Seite) */
   @media (prefers-reduced-motion: reduce) { .dp-inL, .dp-inR { animation: none; } }
   @media (prefers-reduced-motion: reduce) { #bd-conf i, #bdg-conf i { animation: none; top: var(--y, 10%); } #bd-card, #bdg-card { animation: none; } }
