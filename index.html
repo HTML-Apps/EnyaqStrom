@@ -145,6 +145,23 @@
   #view-dashboard:not(.live-mode) #meter-card > .flex.flex-wrap { margin-top: .625rem; }
   #view-dashboard:not(.live-mode) #meter-card > .grid.grid-cols-2 { margin-top: .75rem; }
   #view-dashboard:not(.live-mode) #meter-card > .grid.grid-cols-2 > div { padding-top: .5rem; padding-bottom: .5rem; }
+  /* ===== PC / Querformat ab 1280 px: Schnellmenü fest links, App mittig wie am Handy, Erinnerungen fest rechts (am Handy unverändert) ===== */
+  #desk-rem { display: none; }
+  @media (min-width: 1280px) {
+    body { padding-left: 300px; padding-right: 372px; }
+    main { padding-bottom: 2rem !important; }
+    #bottom-nav, #btn-nav, #btn-bell, #nav-drawer-bg, #nav-drawer-panel [data-nav="close"] { display: none !important; }
+    #nav-drawer { right: auto; width: 300px; z-index: 40; pointer-events: auto !important; }
+    #nav-drawer-panel { width: 300px; max-width: none; transform: none !important; border-radius: 0; box-shadow: none; border-right: 1px solid rgb(30 41 59); transition: none; }
+    #nav-tiles .grid { grid-template-columns: 1fr 1fr; gap: 2px 4px; }
+    #nav-tiles .grid > button { flex-direction: row; justify-content: flex-start; gap: 9px; padding: 7px 9px !important; border-radius: 10px; background: transparent; font-size: 12.5px; font-weight: 500; text-align: left; }
+    #nav-tiles .grid > button:hover { background: rgb(30 41 59); }
+    #nav-tiles .grid > button > svg { width: 18px; height: 18px; flex-shrink: 0; }
+    #nav-tiles .grid > button.nav-on { background: rgb(30 41 59); font-weight: 700; }
+    #desk-rem { display: block; position: fixed; top: 0; right: 0; bottom: 0; width: 372px; overflow-y: auto; background: #05080f; border-left: 1px solid rgb(30 41 59); padding: 20px 16px 24px; z-index: 30; }
+    #desk-rem #view-reminders { margin: 0; }
+    #desk-rem #view-reminders h1 { font-size: 1.3rem; letter-spacing: .1em; overflow: visible; }
+  }
   .no-scrollbar { scrollbar-width: none; } .no-scrollbar::-webkit-scrollbar { display: none; }
   #dp-panes, #bat-panes { overflow-x: clip; overflow-clip-margin: 16px; }   /* hereingleitender Tab darf nicht über den Bildschirmrand ragen (Chrome vergrößert sonst die Seite) */
   @media (prefers-reduced-motion: reduce) { .dp-inL, .dp-inR { animation: none; } }
@@ -1602,7 +1619,8 @@
   <button id="fab-save" type="button" aria-label="Speichern" title="Speichern" class="hidden inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-emerald-600 text-white shadow-lg active:scale-95 transition"><svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button>
 </div>
 
-<nav class="fixed bottom-0 inset-x-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-t border-slate-200 dark:border-slate-800"
+<aside id="desk-rem" aria-label="Erinnerungen"></aside>
+<nav id="bottom-nav" class="fixed bottom-0 inset-x-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-t border-slate-200 dark:border-slate-800"
      style="padding-bottom: env(safe-area-inset-bottom)">
   <div class="max-w-xl mx-auto grid grid-cols-5">
     <button data-view="dashboard" class="nav-btn py-3 flex flex-col items-center text-xs gap-1">
@@ -2116,9 +2134,12 @@ const getSettings = () => ({ price: 0.35, pin: '', ...load(KEY_SETTINGS, {}) });
    Navigation
    ===================================================================== */
 let currentView = 'dashboard', histHeadVisible = true;
+function isDesk() { try { return matchMedia('(min-width: 1280px)').matches; } catch (e) { return false; } }
 function showView(name) {
+  if (name === 'reminders' && isDesk()) { renderReminders(); return; }      // PC: Erinnerungen stehen fest rechts
   currentView = name; if (name === 'history') histHeadVisible = true;     // frisch geöffnet: Kopfzeile steht oben im Bild
-  document.querySelectorAll('.view').forEach(v => v.classList.toggle('hidden', v.id !== 'view-' + name));
+  document.querySelectorAll('.view').forEach(v => { if (v.id === 'view-reminders' && v.parentElement && v.parentElement.id === 'desk-rem') return; v.classList.toggle('hidden', v.id !== 'view-' + name); });
+  if (isDesk()) try { deskNavMark(name); } catch (e) { }
   document.querySelectorAll('.nav-btn').forEach(b => {
     const active = b.dataset.view === name;
     b.classList.toggle('tab-active', active);
@@ -3618,6 +3639,7 @@ function commitReminders(next) {
   const prev = getReminders();
   if (!save(KEY_REMINDERS, next)) return false;
   renderReminderBadges();
+  if (isDesk()) try { renderReminders(); } catch (e) { }
   if (!window.cloud?.isSignedIn()) return Promise.resolve('local');
   return window.cloud.pushReminders(prev, next).then(() => 'cloud').catch(e => {
     console.error('Firestore-Schreibfehler (Erinnerungen)', e);
@@ -7352,6 +7374,7 @@ function openNavDrawer() {
   $('nav-drawer-bg').classList.replace('opacity-0', 'opacity-100'); $('nav-drawer-panel').classList.replace('-translate-x-full', 'translate-x-0');
 }
 function closeNavDrawer() {
+  if (isDesk()) { $('nav-q').value = ''; navSearch(); return; }        // PC: Menü bleibt offen
   $('nav-q').value = ''; navSearch(); try { $('nav-q').blur(); } catch (e) { }
   const d = $('nav-drawer'); d.classList.add('pointer-events-none'); d.setAttribute('aria-hidden', 'true'); $('btn-nav').setAttribute('aria-expanded', 'false');
   $('nav-drawer-bg').classList.replace('opacity-100', 'opacity-0'); $('nav-drawer-panel').classList.replace('translate-x-0', '-translate-x-full');
@@ -7403,6 +7426,23 @@ $('nav-q').addEventListener('keydown', (e) => { if (e.key === 'Enter') { const b
 $('btn-nav').addEventListener('click', openNavDrawer);
 $('nav-drawer-bg').addEventListener('click', closeNavDrawer);
 $('nav-drawer').addEventListener('click', (e) => { const b = e.target.closest('[data-nav]'); if (!b) return; closeNavDrawer(); const f = NAV_GO[b.dataset.nav]; if (f) f(); });
+/* PC (≥ 1280 px): Erinnerungen-Seite fest in die rechte Spalte, Schnellmenü dauerhaft offen; zurück, sobald das Fenster schmaler wird */
+const NAV_VIEW = { 'cap-home': 'capture', 'cap-bosch': 'capture', 'cap-away': 'capture', costs: 'costs', rep: 'report', hist: 'history', badges: 'badges', recs: 'recs', akkutemp: 'recs', kb: 'kb', providers: 'providers', tires: 'tires', wish: 'wish', settings: 'settings' };
+function deskNavMark(name) { document.querySelectorAll('#nav-tiles [data-nav]').forEach(b => b.classList.toggle('nav-on', NAV_VIEW[b.dataset.nav] === name && name !== 'capture')); }
+function applyDesk() {
+  const vr = $('view-reminders'), aside = $('desk-rem');
+  if (isDesk()) {
+    if (vr.parentElement !== aside) aside.appendChild(vr);
+    vr.classList.remove('hidden'); try { renderReminders(); } catch (e) { }
+    if (currentView === 'reminders') showView('dashboard');
+    try { openNavDrawer(); } catch (e) { }
+  } else if (vr.parentElement === aside) {
+    $('view-history').before(vr); vr.classList.toggle('hidden', currentView !== 'reminders');
+    try { closeNavDrawer(); } catch (e) { }
+  }
+}
+try { matchMedia('(min-width: 1280px)').addEventListener('change', applyDesk); } catch (e) { }
+applyDesk();
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && navOpen()) closeNavDrawer(); });
 (() => { let sx = 0, sy = 0, on = false;     // Start: vom linken Rand nach rechts wischen öffnet, nach links schließt
   document.addEventListener('touchstart', (e) => { const t = e.touches[0], open = navOpen(); on = e.touches.length === 1 && !lbOpen && (open || (currentView === 'dashboard' && t.clientX < 40)); sx = t.clientX; sy = t.clientY; }, { passive: true });
