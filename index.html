@@ -5669,7 +5669,7 @@ async function renderWxo() {
   const today = wxIso(new Date()), days = fc.filter(x => x.d >= today).slice(0, 7); if (days.length < 3) { el.classList.add('hidden'); return; }
   const eff = (() => { try { return avgEff(getReadings()); } catch (e) { return BAT.eta; } })(), cap = batteryKwh(), rng = (k) => cap / k * 100;
   days.forEach(x => { x.k = wxoPred(m, x.T, x.p >= 1); x.r = rng(x.k); });
-  const best = rng(m.a), hl = new Date().getHours() >= 12 ? 1 : 0, lab = (i) => i === 0 ? 'Heute' : i === 1 ? 'Morgen' : wxDay(days[i].d).wd;
+  const best = rng(m.a), hl = new Date().getHours() >= 12 ? 1 : 0, lab = (i) => i === 0 ? 'Heute' : i === 1 ? 'Morgen' : wxDay(days[i].d).wd + '.';
   wxoLast = { m, days, eff, cap };
   $('wxo-days').innerHTML = days.slice(0, 3).map((x, i) => { const on = i === hl;
     return `<div class="min-w-0 rounded-2xl px-1.5 py-2 text-center ${on ? 'bg-sky-50 dark:bg-sky-950/60 ring-[1.5px] ring-sky-400' : 'bg-slate-100 dark:bg-slate-800/60'}">
@@ -5683,7 +5683,7 @@ async function renderWxo() {
   if (hb.kmDay > 3) {
     let e = cap * (hb.target - WXO_RES) / 100, i = hl, n = 0;
     while (n < 30) { const x = days[Math.min(i, days.length - 1)], need = hb.kmDay * x.k / 100; if (e < need) break; e -= need; i++; n++; }
-    const hub = `Ladehub ${WXO_RES}–${hb.target} %`, until = n <= 0 ? 'reicht keinen vollen Tag' : n === 1 ? 'reicht bis ' + (hl ? 'morgen' : 'heute Abend') : hl + n - 1 < days.length ? 'reicht bis ' + wxDay(days[hl + n - 1].d).wd + ' (' + n + ' Tage)' : 'reicht ca. ' + n + ' Tage';
+    const hub = `Ladehub ${WXO_RES}–${hb.target} %`, until = n <= 0 ? 'reicht keinen vollen Tag' : n === 1 ? 'reicht bis ' + (hl ? 'morgen' : 'heute Abend') : hl + n - 1 < days.length ? 'reicht bis ' + wxDay(days[hl + n - 1].d).wd + '. (' + n + ' Tage)' : 'reicht ca. ' + n + ' Tage';
     tip.innerHTML = `<span>🔌</span><span class="min-w-0 flex-1 truncate">${hub} ${until}</span>`;
     tip.classList.remove('hidden');
   } else tip.classList.add('hidden');
