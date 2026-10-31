@@ -3732,7 +3732,7 @@ function renderReminders() {
   const lv = all.filter(x => x.s.level !== 'ok'), n = lv.length, over = lv.filter(x => x.s.level === 'over').length;
   $('rem-summary').textContent = open.length + runs.length ? (n ? over + ' fällig · ' + (n - over) + ' bald' : 'Alles im grünen Bereich') + ' · ' + open.length + (open.length === 1 ? ' Fälligkeit' : ' Fälligkeiten') + ' · ' + runs.length + (runs.length === 1 ? ' Laufzeit' : ' Laufzeiten') : '';
   segPaintKey('.rem-tab', 'rtab', remTab);
-  document.querySelectorAll('.rem-tab').forEach(b => { b.textContent = (b.dataset.rtab === 'run' ? 'Laufzeit ' + runs.length : 'Fälligkeiten ' + open.length); });
+  document.querySelectorAll('.rem-tab').forEach(b => { b.textContent = (b.dataset.rtab === 'run' ? 'Laufzeit (' + runs.length + ')' : 'Fälligkeiten (' + open.length + ')'); });
   const isDue = remTab === 'due', empty = isDue ? !open.length && !done.length : !runs.length;
   $('rem-empty').classList.toggle('hidden', !empty);
   $('rem-empty-h').textContent = isDue ? 'Noch keine Fälligkeiten' : 'Noch keine Laufzeiten';
@@ -3799,7 +3799,7 @@ function remListClick(e) {
 $('rem-list').addEventListener('click', remListClick);
 $('rem-run-list').addEventListener('click', remListClick);
 $('rem-tabs').addEventListener('click', (e) => { const b = e.target.closest('[data-rtab]'); if (!b) return; remTab = b.dataset.rtab; save(KEY_REMTAB, remTab); renderReminders(); });
-segSwipe($('rem-tabs'), $('rem-tabs'));
+segSwipe($('view-reminders'), $('rem-tabs'));                            // ganze Seite: seitlich wischen wechselt Fälligkeiten | Laufzeit
 $('rem-done-list').addEventListener('click', remListClick);
 
 /* ---- Anlegen / Bearbeiten ---- */
