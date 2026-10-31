@@ -5659,10 +5659,10 @@ function wxoHabits() {
   const ends = getReadings().filter(r => r.socEnd > 30).slice(-10).map(r => r.socEnd);
   return { kmDay, target: ends.length ? Math.round(median(ends)) : 80 };
 }
-/** Aktueller Akkustand vom Auto (10 Min. zwischengespeichert – die Škoda-API erlaubt 20 Abfragen pro Stunde); bei Fehlern der letzte Wert bis 6 h alt */
+/** Aktueller Akkustand vom Auto (1 h zwischengespeichert – die Škoda-API erlaubt 20 Abfragen pro Stunde); bei Fehlern der letzte Wert bis 6 h alt */
 async function wxoSoc() {
   const c = load(KEY_WXO + 'S', null);
-  if (c && Date.now() - c.t < 600e3) return c.soc;
+  if (c && Date.now() - c.t < 3600e3) return c.soc;
   const old = c && Date.now() - c.t < 6 * 3600e3 ? c.soc : null;
   if (!apiEnabled()) return old;
   try {
