@@ -3737,7 +3737,13 @@ function remStatus(r, km = lastKnownKm(), today = dayStart()) {
 }
 const REM_RANK = { over: 0, soon: 1, ok: 2 };
 const sortedOpenReminders = (km = lastKnownKm()) => getReminders().filter(r => !r.doneAt && (!isRun(r) || r.dueDate)).map(r => ({ r, s: remStatus(r, km) }))
-  .sort((a, b) => REM_RANK[a.s.level] - REM_RANK[b.s.level] || (a.s.daysLeft ?? 1e9) - (b.s.daysLeft ?? 1e9) || (a.s.kmLeft ?? 1e9) - (b.s.kmLeft ?? 1e9) || a.r.title.localeCompare(b.r.title, 'de'));
+  .sort((a, b) => remEta(a.s) - remEta(b.s) || a.r.title.localeCompare(b.r.title, 'de'));
+/** Chronologische Reihenfolge: Tage bis zur Fälligkeit; nur nach km fällige über den Ø km pro Tag in Tage umgerechnet (es zählt, was zuerst eintritt) */
+function remEta(s) {
+  let kd = 30; try { const h = wxoHabits(); if (h.kmDay > 3) kd = h.kmDay; } catch (e) { }
+  const t = [s.daysLeft, s.kmLeft != null ? s.kmLeft / kd : null].filter(v => v != null);
+  return t.length ? Math.min(...t) : 1e9;
+}
 
 /** Zähler an Glocke (Start-Seite) und am Start-Tab: Erinnerungen, die fällig, überfällig oder innerhalb der Vorwarnung sind. */
 function renderReminderBadges() {
@@ -3779,7 +3785,7 @@ const KEY_REMTAB = 'enyaq.remTab';
 let remTab = load(KEY_REMTAB, 'due') === 'run' ? 'run' : 'due';
 function renderReminders() {
   const km = lastKnownKm(), all = sortedOpenReminders(km), open = all.filter(x => !isRun(x.r)), done = getReminders().filter(r => r.doneAt && !isRun(r)).sort((a, b) => new Date(b.doneAt) - new Date(a.doneAt));
-  const runs = getReminders().filter(r => isRun(r)).map(r => ({ r, s: remStatus(r, km) })).sort((a, b) => REM_RANK[a.s.level] - REM_RANK[b.s.level] || (a.s.daysLeft ?? 1e9) - (b.s.daysLeft ?? 1e9) || String(b.r.startDate || '').localeCompare(String(a.r.startDate || '')));
+  const runs = getReminders().filter(r => isRun(r)).map(r => ({ r, s: remStatus(r, km) })).sort((a, b) => String(a.r.startDate || '9999').localeCompare(String(b.r.startDate || '9999')) || a.r.title.localeCompare(b.r.title, 'de'));   // am längsten laufend zuerst
   const lv = all.filter(x => x.s.level !== 'ok'), n = lv.length, over = lv.filter(x => x.s.level === 'over').length;
   $('rem-summary').textContent = open.length + runs.length ? (n ? over + ' fällig · ' + (n - over) + ' bald' : 'Alles im grünen Bereich') + ' · ' + open.length + (open.length === 1 ? ' Fälligkeit' : ' Fälligkeiten') + ' · ' + runs.length + (runs.length === 1 ? ' Laufzeit' : ' Laufzeiten') : '';
   segPaintKey('.rem-tab', 'rtab', remTab);
