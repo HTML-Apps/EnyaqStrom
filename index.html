@@ -384,7 +384,7 @@
       <span class="h-0.5 flex-1 rounded-full bg-gradient-to-r from-emerald-500/80 to-white/10" aria-hidden="true"></span>
     </div>
     <div id="trends" class="flex snap-x snap-mandatory gap-4 overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-roledescription="Karussell" aria-label="Trends der letzten 8 Monate"></div>
-    <div id="trends-dots" class="!mt-2 flex justify-center gap-2" aria-hidden="true"></div>
+    <div id="trends-dots" class="!mt-2 flex justify-center gap-2 cursor-pointer" aria-hidden="true"></div>
     <div id="hero-bg" aria-hidden="true" class="absolute -top-3 -inset-x-3 -z-10 h-[620px] pointer-events-none !mt-0" style="background:radial-gradient(ellipse 72% 190px at 50% 190px,rgba(80,150,255,.40),rgba(80,150,255,0) 70%),linear-gradient(180deg,#000 0,#000 28px,#030b24 70px,#061a52 160px,#0b2f8a 280px,#0a2466 370px,#050f2e 470px,#000 600px)"></div>
   </section>
 
@@ -2960,9 +2960,26 @@ function renderTrends() {
       </div>
       <p class="mt-3 text-[11px] text-slate-500 dark:text-slate-400">Letzte 8 Monate · heller Balken = ${MONTHS_LONG[n.getMonth()]} (Zwischenstand) · gestrichelt = Ø</p>`}
     </article>`; }).join('');
-  $('trends-dots').innerHTML = defs.map((_, i) => `<span class="block h-2 rounded-full transition-all ${i === trendIdx ? 'w-5 bg-emerald-500' : 'w-2 bg-slate-500/60'}"></span>`).join('');
+  $('trends-dots').innerHTML = defs.map((_, i) => `<span data-tdot="${i}" class="block h-2 rounded-full transition-all ${i === trendIdx ? 'w-5 bg-emerald-500' : 'w-2 bg-slate-500/60'}"></span>`).join('');
   if (trendIdx) box.scrollLeft = trendIdx * (box.firstElementChild.offsetWidth + 16);
 }
+/* Desktop: Karussells mit der Maus ziehen (Touch scrollt nativ). Beim Loslassen rastet es auf die nächste Karte in Zugrichtung ein. */
+function mouseSwipe(tr, gap) {
+  let sx = 0, sl = 0, on = false, moved = false;
+  tr.addEventListener('pointerdown', (e) => { if (e.pointerType !== 'mouse' || e.button !== 0) return; on = true; moved = false; sx = e.clientX; sl = tr.scrollLeft; });
+  addEventListener('pointermove', (e) => { if (!on) return; const dx = e.clientX - sx; if (!moved && Math.abs(dx) < 6) return; if (!moved) { moved = true; tr.style.scrollSnapType = 'none'; tr.style.cursor = 'grabbing'; document.body.style.userSelect = 'none'; } tr.scrollLeft = sl - dx; });
+  addEventListener('pointerup', (e) => {
+    if (!on) return; on = false; if (!moved) return;
+    const w = (tr.firstElementChild?.offsetWidth || tr.clientWidth) + gap, dx = e.clientX - sx, n = Math.max(1, Math.round(tr.scrollWidth / w)), i0 = Math.round(sl / w);
+    const i = Math.max(0, Math.min(n - 1, Math.abs(dx) > 40 ? i0 + (dx < 0 ? 1 : -1) : i0));
+    tr.style.cursor = ''; document.body.style.userSelect = '';
+    tr.scrollTo({ left: i * w, behavior: 'smooth' }); setTimeout(() => { tr.style.scrollSnapType = ''; }, 450);
+    const stop = (ev) => { ev.stopPropagation(); ev.preventDefault(); }; tr.addEventListener('click', stop, { capture: true, once: true }); setTimeout(() => tr.removeEventListener('click', stop, { capture: true }), 0);
+  });
+  tr.addEventListener('dragstart', (e) => e.preventDefault());
+}
+mouseSwipe($('trends'), 16);
+$('trends-dots').addEventListener('click', (e) => { const d = e.target.closest('[data-tdot]'); if (!d) return; const box = $('trends'); box.scrollTo({ left: Number(d.dataset.tdot) * (box.firstElementChild.offsetWidth + 16), behavior: 'smooth' }); });
 $('trends').addEventListener('scroll', () => {
   const box = $('trends'), w = box.firstElementChild ? box.firstElementChild.offsetWidth + 16 : 1, i = Math.round(box.scrollLeft / w);
   if (i !== trendIdx) { trendIdx = i; [...$('trends-dots').children].forEach((d, k) => d.className = 'block h-2 rounded-full transition-all ' + (k === i ? 'w-5 bg-emerald-500' : 'w-2 bg-slate-500/60')); }
@@ -6078,6 +6095,7 @@ $('dash-dots').addEventListener('click', (e) => { const b = e.target.closest('[d
 try { new ResizeObserver(() => dashSwipeSync()).observe($('btm-card')); new ResizeObserver(() => dashSwipeSync()).observe($('wxo-card')); new ResizeObserver(() => dashSwipeSync()).observe($('meter-card')); } catch (e) { }
 let dSwVis = false; new MutationObserver(() => { const v = !$('wxo-card').classList.contains('hidden'); if (v !== dSwVis) { dSwVis = v; dashSwipeTo(dashDefaultIdx(), false); } dashSwipeSync(); }).observe($('wxo-card'), { attributes: true, attributeFilter: ['class'] });
 $('btn-live').addEventListener('click', () => setTimeout(() => dashSwipeTo(dashSlides().length - 1), 0));
+mouseSwipe(dSw.tr, 12);
 dashSwipeSync();
 $('wxo-more').addEventListener('click', openWxoSheet);
 $('wxo-days').addEventListener('click', openWxoSheet);
