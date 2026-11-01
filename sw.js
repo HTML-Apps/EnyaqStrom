@@ -5,7 +5,7 @@
  * - Die KI-Abfrage (/api/…) wird NIE gecacht und läuft immer übers Netz.
  * Bei größeren Änderungen am Cache-Konzept CACHE_VERSION erhöhen. */
 
-const CACHE_VERSION = 'v188';
+const CACHE_VERSION = 'v189';
 const CACHE_NAME = 'enyaq-' + CACHE_VERSION;
 
 // Dateien, die beim Installieren vorab geladen werden
@@ -72,5 +72,23 @@ self.addEventListener('fetch', (event) => {
       return res;
     }).catch(() => cached);
     return cached || network;
+  })());
+});
+
+/* ---- Push-Benachrichtigungen (Eis-Warnung am Vorabend, Testnachricht) ---- */
+self.addEventListener('push', (event) => {
+  let d = {}; try { d = event.data ? event.data.json() : {}; } catch (e) { d = { title: 'EnyaqStrom', body: event.data ? event.data.text() : '' }; }
+  event.waitUntil(self.registration.showNotification(d.title || 'EnyaqStrom', {
+    body: d.body || '', tag: d.tag || 'enyaq', renotify: true, icon: '/Bilder/car-v4-192.png', badge: '/Bilder/badge-96.png',
+    data: { url: d.url || '/' }, actions: [{ action: 'open', title: 'Details' }, { action: 'close', title: 'OK' }]
+  }));
+});
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close(); if (event.action === 'close') return;
+  const url = (event.notification.data && event.notification.data.url) || '/';
+  event.waitUntil((async () => {
+    const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const c of all) { if (new URL(c.url).origin === self.location.origin) { await c.focus(); return; } }
+    await self.clients.openWindow(url);
   })());
 });

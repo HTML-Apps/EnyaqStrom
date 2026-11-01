@@ -1342,6 +1342,8 @@
             <div><label for="set-ice-we" class="text-xs text-slate-500 dark:text-slate-400">Wochenende</label><select id="set-ice-we" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"><option value="0">nein</option><option value="1">ja</option></select></div>
           </div>
           <p id="set-ice-info" class="mt-1.5 text-xs text-left text-slate-500 dark:text-slate-400"></p>
+          <label class="mt-3 flex items-center justify-between gap-3"><span><span class="block text-sm font-medium text-slate-700 dark:text-slate-300">Abends benachrichtigen</span><span class="block text-xs text-left text-slate-500 dark:text-slate-400">Push-Nachricht auf dieses Gerät gegen 18 Uhr, auch bei geschlossener App – nur wenn die Scheibe vereisen dürfte.</span></span><input id="set-ice-push" type="checkbox" class="h-5 w-5 shrink-0 accent-emerald-600"></label>
+          <div class="mt-2 flex items-center gap-2"><button id="ice-test" type="button" class="shrink-0 rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm font-semibold active:scale-95 transition">Testnachricht senden</button><span id="ice-push-msg" class="min-w-0 text-xs text-left text-slate-500 dark:text-slate-400"></span></div>
         </div>
       </div>
     </div>
@@ -6113,6 +6115,7 @@ function dashFirstSlide(soc) {
 }
 function setQuickSetting(k, v) { const st = load(KEY_SETTINGS, {}) || {}; if (v === undefined) delete st[k]; else st[k] = v; save(KEY_SETTINGS, st); try { pushPrefs(); } catch (e) { } }
 function fillWxoPrefs() {
+  Promise.resolve().then(() => fillIcePush()).catch(() => { });                    // erst nach dem Laden des Skripts (Konstanten weiter unten)
   try { const st = iceSet(), f = (id, v) => { const e = $(id); if (e && document.activeElement !== e) e.value = v; }; f('set-ice-dep', st.dep); f('set-ice-park', st.park); f('set-ice-min', st.min === 2 ? 'high' : 'mid'); f('set-ice-we', st.we ? '1' : '0');
     $('set-ice-info').textContent = 'Ab 16 Uhr am Vortag auf der Startseite, wenn die Scheibe am Ort „Zuhause“ vereisen dürfte (Temperatur, Taupunkt, Bewölkung, Wind). Morgens fragt die App kurz nach, ob es gestimmt hat.' + (Math.abs(st.k - 1) >= 0.02 ? ' Gelernt: dein Stellplatz kühlt ' + fmt(Math.abs(st.k - 1) * 100, 0) + ' % ' + (st.k > 1 ? 'stärker' : 'schwächer') + ' aus als üblich.' : ''); } catch (e) { }
   const gm = $('set-gt-mirror'); if (gm) gm.checked = !!getSettings().gtMirror;
@@ -7728,7 +7731,7 @@ const NAV_IDX = [
   ['wrap', 'Rückblick', 'Start', 'jahr wrapped'], ['reminders', 'Erinnerungen', 'Erinnerungen', 'wartung termine fällig'], ['kb', 'Wissen', 'Wissen', 'notizen links tipps'], ['wish', 'Wunschliste', 'Wunschliste', 'zubehör kaufen wunsch matten kofferraum links shop'], ['tires', 'Reifen', 'Reifen', 'profiltiefe profil reifenprofil mm sommer winter allwetter messen'], ['providers', 'Ladekarten', 'Ladeanbieter', 'anbieter tarife preise'],
   ['bak-now', 'Jetzt in Google Drive sichern', 'Einstellungen › Sicherung & Belege', 'backup drive'], ['backup', 'Sicherung & Belege', 'Einstellungen', 'export import drive'],
   ['car', 'Fahrzeug & Kauf', 'Einstellungen', 'kennzeichen fin kaufpreis kauftag'], ['set-laden', 'Laden & Akku', 'Einstellungen', 'strompreis kapazität wltp referenz temperatur'], ['set-rem', 'Nächste HU / Service', 'Einstellungen › Erinnerungen', 'vorwarnung fälligkeit tüv'],
-  ['set-wetter', 'Eis-Warnung (Scheibe vereist)', 'Einstellungen › Wetter', 'eis frost scheibe vereist kratzen raureif vorklimatisieren abfahrt stellplatz carport garage'], ['set-fahrten', 'Fahrtenbuch-Einstellungen', 'Einstellungen', 'orte etiketten regeln import'], ['set-listen', 'Anbieter & Kategorien', 'Einstellungen', 'etiketten liste'], ['set-wetter', 'Wetter', 'Einstellungen', 'standort frost'],
+  ['set-wetter', 'Eis-Warnung (Scheibe vereist)', 'Einstellungen › Wetter', 'eis frost scheibe vereist kratzen raureif vorklimatisieren abfahrt stellplatz carport garage benachrichtigung push nachricht'], ['set-fahrten', 'Fahrtenbuch-Einstellungen', 'Einstellungen', 'orte etiketten regeln import'], ['set-listen', 'Anbieter & Kategorien', 'Einstellungen', 'etiketten liste'], ['set-wetter', 'Wetter', 'Einstellungen', 'standort frost'],
   ['account', 'Konto & Cloud', 'Einstellungen', 'anmelden google škoda api'], ['set-gefahr', 'Alle Daten löschen', 'Einstellungen', 'zurücksetzen reset']];
 const navNorm = (t) => String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 function navSearch() {
@@ -9365,6 +9368,46 @@ function rtShow() {
   if (RT.tab === 'plan') rtRun();
 }
 
+/* ---- Push-Benachrichtigung der Eis-Warnung: Gerät anmelden (Push-Adresse in enyaqStrom/<uid>/settings/push), Testnachricht über /api/ice-push ---- */
+const VAPID_PUBLIC = 'BHJg47_9-WGwpnQQkZCKyGtmbned4D9fOyJ-EsYRKqD6dizXoA60UIYNjR1_vL-y0yxFN8PAuYsjQhKLEHcC128';
+const devId = () => { let id = load('enyaq.devId', null); if (!id) { id = 'd' + labId(); save('enyaq.devId', id); } return id; };
+const pushOk = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+const pushMsg = (t, bad) => { const el = $('ice-push-msg'); if (el) { el.textContent = t || ''; el.classList.toggle('text-red-600', !!bad); el.classList.toggle('dark:text-red-400', !!bad); } };
+const b64u = (s) => { const p = '='.repeat((4 - s.length % 4) % 4), b = atob((s + p).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(b, c => c.charCodeAt(0)); };
+async function pushState() { if (!pushOk()) return null; try { const reg = await navigator.serviceWorker.ready; return await reg.pushManager.getSubscription(); } catch (e) { return null; } }
+async function fillIcePush() {
+  const cb = $('set-ice-push'); if (!cb) return; if (!pushOk()) { cb.checked = false; cb.disabled = true; pushMsg('Dieser Browser unterstützt keine Push-Nachrichten.'); return; }
+  const sub = await pushState(); cb.checked = !!sub && Notification.permission === 'granted' && load('enyaq.icePush', false);
+  if (!$('ice-push-msg').textContent) pushMsg(Notification.permission === 'denied' ? 'Benachrichtigungen sind für diese App blockiert – in den Android-Einstellungen erlauben.' : '');
+}
+async function icePushOn() {
+  if (!window.cloud?.isSignedIn()) throw new Error('Bitte zuerst bei Google anmelden.');
+  const perm = await Notification.requestPermission(); if (perm !== 'granted') throw new Error('Benachrichtigungen nicht erlaubt.');
+  const reg = await navigator.serviceWorker.ready; let sub = await reg.pushManager.getSubscription();
+  if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64u(VAPID_PUBLIC) });
+  await window.cloud.setPush(devId(), { sub: JSON.stringify(sub.toJSON()), at: new Date().toISOString(), ua: (navigator.userAgentData && navigator.userAgentData.platform) || (/(Android|iPhone|Windows|Mac)/.exec(navigator.userAgent) || [''])[0] });
+  save('enyaq.icePush', true);
+}
+async function icePushOff() { save('enyaq.icePush', false); try { await window.cloud.setPush(devId(), null); } catch (e) { } try { const s = await pushState(); if (s) await s.unsubscribe(); } catch (e) { } }
+$('set-ice-push').addEventListener('change', async (e) => {
+  const cb = e.target; cb.disabled = true;
+  try { if (cb.checked) { pushMsg('Wird eingerichtet …'); await icePushOn(); pushMsg('✓ Dieses Gerät bekommt die Eis-Warnung abends.'); } else { await icePushOff(); pushMsg('Aus für dieses Gerät.'); } }
+  catch (er) { cb.checked = false; save('enyaq.icePush', false); pushMsg((er && er.message) || 'Einrichten fehlgeschlagen.', true); }
+  cb.disabled = false;
+});
+$('ice-test').addEventListener('click', async () => {
+  const b = $('ice-test'); b.disabled = true; pushMsg('Sende …');
+  try {
+    if (!load('enyaq.icePush', false) || !(await pushState())) { await icePushOn(); $('set-ice-push').checked = true; }
+    const r = await fetch('/api/ice-push', { method: 'POST', headers: { ...(await authHeaders()), 'Content-Type': 'application/json' }, body: JSON.stringify({ test: true }) }), j = await r.json().catch(() => ({}));
+    if (r.status === 503 && j.error === 'not_configured') pushMsg('Server noch nicht eingerichtet – in Vercel fehlen: ' + (j.need || []).join(', ') + '.', true);
+    else if (r.status === 404) pushMsg('Kein Gerät angemeldet – Schalter oben einschalten.', true);
+    else if (!r.ok) pushMsg('Fehler: ' + (j.error || r.status), true);
+    else pushMsg(j.ok ? '✓ Gesendet an ' + j.ok + ' Gerät' + (j.ok > 1 ? 'e' : '') + (j.gone ? ' (' + j.gone + ' abgemeldet)' : '') + ' – kommt gleich an.' : 'Nicht zugestellt – Gerät bitte neu anmelden (Schalter aus und an).', !j.ok);
+  } catch (er) { pushMsg((er && er.message) || 'Senden fehlgeschlagen.', true); }
+  b.disabled = false;
+});
+
 if (window.__noStorage) {                                                       // Hinweis: Browser-Speicher gesperrt
   const d = document.createElement('div'); d.setAttribute('role', 'alert');
   d.className = 'fixed inset-x-3 top-3 z-[70] rounded-2xl bg-amber-500 text-slate-950 px-4 py-3 text-sm shadow-xl text-left';
@@ -9394,7 +9437,8 @@ const catDoc = () => doc(db, 'enyaqStrom', user.uid, 'settings', 'categories'); 
 const prefDoc = () => doc(db, 'enyaqStrom', user.uid, 'settings', 'prefs');         // WLTP-Wert + Wetter-Standort
 const provDoc = () => doc(db, 'enyaqStrom', user.uid, 'settings', 'providers');     // eigenes Dokument für die Anbieter-Liste
 const tripCol = () => collection(db, 'enyaqStrom', user.uid, 'tripMonths');          // Fahrtenbuch: ein Dokument je Monat { list, updatedAt }
-const placesDoc = () => doc(db, 'enyaqStrom', user.uid, 'settings', 'places');      // benannte Orte des Fahrtenbuchs
+const placesDoc = () => doc(db, 'enyaqStrom', user.uid, 'settings', 'places');
+const pushDoc = () => doc(db, 'enyaqStrom', user.uid, 'settings', 'push');           // Push-Adressen je Gerät { devices: { <id>: { sub, at, ua } | null } }      // benannte Orte des Fahrtenbuchs
 /** Schreibt nur Monate, deren Fahrten sich geändert haben; leer gewordene Monate werden gelöscht. Liefert die Zahl der geschriebenen Monate. */
 async function pushTripMonths(prev, next) {
   if (!user) return 0;
@@ -9444,6 +9488,7 @@ window.cloud = {
   setPrefs: (o) => user ? setDoc(prefDoc(), { ...o, updatedAt: new Date().toISOString() }) : Promise.resolve(),
   pushTrips: (prev, next) => pushTripMonths(prev, next),
   setTripPrefs: (o) => user ? setDoc(placesDoc(), { ...o, updatedAt: new Date().toISOString() }) : Promise.resolve(),
+  setPush: (id, v) => user ? setDoc(pushDoc(), { devices: { [id]: v }, updatedAt: new Date().toISOString() }, { merge: true }) : Promise.reject(new Error('Bitte zuerst bei Google anmelden.')),
   setProviders: (list) => user ? setDoc(provDoc(), { list, updatedAt: new Date().toISOString() }) : Promise.resolve(),
   token: () => user ? user.getIdToken() : Promise.resolve(null),       // Anmelde-Token für die Vercel-Funktionen
   login: () => signInWithPopup(auth, new GoogleAuthProvider()),

@@ -1,0 +1,5 @@
+{
+  "crons": [
+    { "path": "/api/ice-push", "schedule": "0 17 * * *" }
+  ]
+}
