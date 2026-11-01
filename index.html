@@ -8923,15 +8923,15 @@ function rtSvg(r) {
   let y0 = Math.min(...r.h), y1 = Math.max(...r.h); const pad = Math.max(15, (y1 - y0) * 0.2); y0 -= pad; y1 += pad;
   const Yh = (v) => B + (1 - (v - y0) / (y1 - y0 || 1)) * (H - 2 * B), Ys = (v) => B + (1 - (Math.max(-5, Math.min(100, v)) - 0) / 100) * (H - 2 * B);
   const ln = r.h.map((v, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Yh(v).toFixed(1)).join(' '), sl = r.soc.map((v, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Ys(v).toFixed(1)).join(' ');
-  const res = Ys(WXO_RES), last = r.soc[r.soc.length - 1], tx = r.turn ? X(r.turn.i) : null, st = r.stop;
+  const res = Ys(WXO_RES), last = r.soc[r.soc.length - 1], tx = r.turn ? X(r.turn.i) : null, SS = r.stops || [];
   return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="mt-2 w-full" style="height:${H}px" aria-hidden="true"><defs><linearGradient id="rtg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#64748b" stop-opacity=".5"/><stop offset="1" stop-color="#64748b" stop-opacity=".05"/></linearGradient></defs>`
     + `<path d="${ln} L${W} ${H} L0 ${H} Z" fill="url(#rtg)"/><path d="${ln}" fill="none" stroke="#94a3b8" stroke-width="1.6" vector-effect="non-scaling-stroke"/>`
     + `<line x1="0" x2="${W}" y1="${res.toFixed(1)}" y2="${res.toFixed(1)}" stroke="#f87171" stroke-dasharray="3 4" stroke-width="1" vector-effect="non-scaling-stroke"/>`
     + (tx != null ? `<line x1="${tx.toFixed(1)}" x2="${tx.toFixed(1)}" y1="0" y2="${H}" stroke="#f472b6" stroke-dasharray="2 3" stroke-width="1" vector-effect="non-scaling-stroke"/>` : '')
     + `<path d="${sl}" fill="none" stroke="#34d399" stroke-width="2.4" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`
-    + (st ? `<line x1="${X(st.j).toFixed(1)}" x2="${X(st.j).toFixed(1)}" y1="${Ys(st.sArr).toFixed(1)}" y2="${Ys(st.tgt).toFixed(1)}" stroke="#fbbf24" stroke-width="2.4" stroke-dasharray="2 3" vector-effect="non-scaling-stroke"/>` : '')
+    + SS.map(st => `<line x1="${X(st.j).toFixed(1)}" x2="${X(st.j).toFixed(1)}" y1="${Ys(st.sArr).toFixed(1)}" y2="${Ys(st.tgt).toFixed(1)}" stroke="#fbbf24" stroke-width="2.4" stroke-dasharray="2 3" vector-effect="non-scaling-stroke"/>`).join('')
     + `<circle cx="${X(n - 1) - 3}" cy="${Ys(last).toFixed(1)}" r="3.5" fill="${last < WXO_RES ? '#f87171' : '#34d399'}"/></svg>`
-    + `<div class="flex justify-between text-[10px] text-slate-500 dark:text-slate-400"><span>${Math.round(r.h[0])} m</span>${r.turn ? `<span class="text-pink-400">◆ Ziel ${Math.round(r.turn.soc)} %</span>` : ''}${st ? `<span class="text-amber-500">⚡ ${Math.round(st.sArr)} → ${st.tgt} %</span>` : ''}<span class="text-red-400">${WXO_RES} % Reserve</span><span>${Math.round(r.h[n - 1])} m</span></div>`;
+    + `<div class="flex justify-between text-[10px] text-slate-500 dark:text-slate-400"><span>${Math.round(r.h[0])} m</span>${r.turn ? `<span class="text-pink-400">◆ Ziel ${Math.round(r.turn.soc)} %</span>` : ''}${SS.length === 1 ? `<span class="text-amber-500">⚡ ${Math.round(SS[0].sArr)} → ${SS[0].tgt} %</span>` : SS.length ? `<span class="text-amber-500">⚡ ${SS.length} Stopps</span>` : ''}<span class="text-red-400">${WXO_RES} % Reserve</span><span>${Math.round(r.h[n - 1])} m</span></div>`;
 }
 function rtRenderRes() {
   const el = $('rt-res'), ab = $('rt-abrp'); if (!el) return; const r = RT.res;
@@ -8942,10 +8942,10 @@ function rtRenderRes() {
   const eta = new Date(RT.o.dep + r.tEnd * 1000), dur = Math.round(r.dur / 60), lo = r.socA < WXO_RES - 0.5 && !(RT.ch && RT.ch.busy), tw = r.turn;
   const chip = (i, sg, v, t) => `<span class="inline-flex items-center gap-1 whitespace-nowrap rounded-[10px] bg-slate-100 dark:bg-slate-800 px-2 py-1 text-[12px]" title="${t}"><span aria-hidden="true">${i}</span>${(sg ? (v >= 0 ? '+' : '−') : '') + fmt(Math.abs(v), 1)}</span>`;
   el.innerHTML = `<div class="rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
-    <div class="flex items-end justify-between gap-3"><div class="min-w-0"><p class="text-[11px] uppercase tracking-[0.06em] text-slate-500 dark:text-slate-400">Verbrauch</p><p class="font-barlow text-[40px] font-bold leading-none text-emerald-500 dark:text-emerald-400">${fmt(r.kwh, 1)}<span class="text-lg"> kWh</span></p><p class="mt-0.5 text-xs text-left text-slate-500 dark:text-slate-400">${fmt(r.k100, 1)} kWh/100 km · ${fmt(r.km, 0)} km · ${Math.floor(dur / 60)} h ${pad2(dur % 60)}${r.stop ? ' inkl. Laden' : ''}</p></div>
+    <div class="flex items-end justify-between gap-3"><div class="min-w-0"><p class="text-[11px] uppercase tracking-[0.06em] text-slate-500 dark:text-slate-400">Verbrauch</p><p class="font-barlow text-[40px] font-bold leading-none text-emerald-500 dark:text-emerald-400">${fmt(r.kwh, 1)}<span class="text-lg"> kWh</span></p><p class="mt-0.5 text-xs text-left text-slate-500 dark:text-slate-400">${fmt(r.k100, 1)} kWh/100 km · ${fmt(r.km, 0)} km · ${Math.floor(dur / 60)} h ${pad2(dur % 60)}${r.stops && r.stops.length ? ' inkl. Laden' : ''}</p></div>
       <div class="shrink-0 text-right"><p class="text-[11px] uppercase tracking-[0.06em] text-slate-500 dark:text-slate-400">${tw ? 'Zurück' : 'Ankunft'}</p><p class="font-barlow text-[40px] font-bold leading-none ${lo ? 'text-red-500' : ''}">${Math.round(r.socA)}<span class="text-lg"> %</span></p><p class="mt-0.5 text-xs text-slate-500 dark:text-slate-400">~ ${hhmm(eta.getTime())} Uhr</p></div></div>
     ${tw ? `<p class="mt-2 rounded-xl bg-slate-100 dark:bg-slate-800 px-3 py-2 text-xs text-left"><span class="text-pink-500">◆</span> Am Ziel ~ ${hhmm(RT.o.dep + tw.t * 1000)} Uhr mit <b>${Math.round(tw.soc)} %</b> · ${fmt(tw.km, 0)} km je Richtung · ohne Laden am Ziel</p>` : ''}
-    ${lo ? `<p class="mt-2 rounded-xl bg-red-500/10 px-3 py-2 text-xs text-red-600 dark:text-red-300 text-left">${(r.stop ? 'Auch mit Ladestopp knapp' : r.socA < 0 ? 'Reicht nicht ohne Laden' : (tw ? 'Rückkehr' : 'Ankunft') + ' unter ' + WXO_RES + ' %') + (r.stop ? ' – länger laden oder voller starten.' : ' – Ladestopp siehe unten oder voller starten.')}</p>` : ''}
+    ${lo ? `<p class="mt-2 rounded-xl bg-red-500/10 px-3 py-2 text-xs text-red-600 dark:text-red-300 text-left">${(r.stops && r.stops.length ? 'Auch mit Ladestopps knapp' : r.socA < 0 ? 'Reicht nicht ohne Laden' : (tw ? 'Rückkehr' : 'Ankunft') + ' unter ' + WXO_RES + ' %') + (r.stops && r.stops.length ? ' – länger laden oder voller starten.' : ' – Ladestopp siehe unten oder voller starten.')}</p>` : ''}
     ${rtSvg(r)}
     <div class="mt-1 flex justify-between gap-2 text-[11px] text-slate-500 dark:text-slate-400"><span><span class="text-emerald-500">━</span> Akku</span><span>Höhe · ↑ ${r.up} m ↓ ${r.dn} m</span></div>
     <div class="mt-2.5 flex flex-wrap gap-1.5">${chip('🛣️', false, r.E.base, 'Rollen, Luft, Anfahren, Nebenverbraucher – flach, windstill, trocken')}${chip('⛰️', true, r.E.slope, 'Steigungen minus Rekuperation bergab')}${chip('💨', true, r.E.wind, (r.hw > 0.2 ? 'Gegenwind' : r.hw < -0.2 ? 'Rückenwind' : 'Wind') + ' im Schnitt ' + fmt(Math.abs(r.hw) * 3.6, 0) + ' km/h')}${chip('🔥', true, r.E.heat, 'Heizung/Klima und kalter Akku, ' + fmt(r.tMin, 0) + ' bis ' + fmt(r.tMax, 0) + ' °C')}${Math.abs(r.E.rain) >= 0.05 ? chip('🌧️', true, r.E.rain, 'Nässe auf ' + fmt(r.rainKm, 0) + ' km') : ''}</div>
@@ -8958,8 +8958,13 @@ const RT_ARC = 'https://services-eu1.arcgis.com/TJm8oSvOdJUQvQT5/arcgis/rest/ser
 const RT_CH = { cache: {}, sort: 'fast', mine: false };
 const rtOpName = (s) => String(s || '').replace(/\s+(GmbH|AG|SE|KG|mbH|e\.\s?V\.|Co\.|&|und|GmbH\s*&\s*Co\.?\s*KG)\b.*$/i, '').replace(/\s{2,}/g, ' ').trim();
 async function rtArcBox(x0, y0, x1, y1, where) {
-  const u = RT_ARC + '?where=' + encodeURIComponent(where) + '&geometry=' + [x0, y0, x1, y1].map(v => v.toFixed(4)).join(',') + '&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=*&returnGeometry=true&outSR=4326&resultRecordCount=2000&f=json';
-  const r = await fetch(u); if (!r.ok) throw new Error('Ladesäulenregister nicht erreichbar (' + r.status + ')'); const j = await r.json(); if (j.error) throw new Error(j.error.message || 'Abfrage fehlgeschlagen'); return j.features || [];
+  const out = [];
+  for (let page = 0; page < 5; page++) {
+    const u = RT_ARC + '?where=' + encodeURIComponent(where) + '&geometry=' + [x0, y0, x1, y1].map(v => v.toFixed(4)).join(',') + '&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=*&returnGeometry=true&outSR=4326&resultRecordCount=2000&resultOffset=' + page * 2000 + '&f=json';
+    const r = await fetch(u); if (!r.ok) throw new Error('Ladesäulenregister nicht erreichbar (' + r.status + ')'); const j = await r.json(); if (j.error) throw new Error(j.error.message || 'Abfrage fehlgeschlagen');
+    out.push(...(j.features || [])); if (!j.exceededTransferLimit || !(j.features || []).length) break;
+  }
+  return out;
 }
 async function rtChargers(r) {
   const key = r.pts.length + ':' + r.pts[0].lat.toFixed(3) + ',' + r.pts[0].lon.toFixed(3) + ':' + r.pts[r.pts.length - 1].lat.toFixed(3) + ',' + r.pts[r.pts.length - 1].lon.toFixed(3) + ':' + Math.round(r.km);
@@ -8986,84 +8991,124 @@ function rtSegDist(p, a, b) {                                                   
   const ky = 111320, kx = 111320 * Math.cos(p.lat * Math.PI / 180), ax = (a.lon - p.lon) * kx, ay = (a.lat - p.lat) * ky, bx = (b.lon - p.lon) * kx, by = (b.lat - p.lat) * ky, dx = bx - ax, dy = by - ay, L = dx * dx + dy * dy;
   const f = L > 0 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / L)) : 0; return { m: Math.hypot(ax + f * dx, ay + f * dy), f };
 }
-function rtChargeMin(a, b, kwCap) {
+/* Ladezeit-Tabelle je Säulenleistung: M[p] = Minuten von 0 bis p %, aus der neuesten DC-Ladekurve (auf deren gemessene Dauer geeicht), begrenzt durch die Säule */
+const RT_CT = {};
+function rtCT(kwCap) {
   const cs = getLab().curves.slice().sort((x, y) => String(y.date).localeCompare(String(x.date))), c = cs.find(x => x.kwh > 0 && x.s1 > x.s0), cap = batteryKwh();
-  if (!c) { let m = 0; for (let p = a; p < b; p += 0.5) m += cap / 100 * 0.5 / Math.min(kwCap, p < 50 ? 95 : p < 80 ? 70 : 30) * 60; return m; }
-  const per = c.kwh / (c.s1 - c.s0); let raw = 0, capd = 0; for (let p = a; p < b; p += 0.5) { const w = cvPow(c, p + 0.25); raw += per * 0.5 / w * 60; capd += per * 0.5 / Math.min(w, kwCap) * 60; }
-  return cvMinutes(c, a, b) * (raw > 0 ? capd / raw : 1);
+  const key = Math.round(Math.min(kwCap, 400)) + '|' + (c ? c.id + c.min + c.kwh : 'x') + '|' + cap; if (RT_CT[key]) return RT_CT[key];
+  let per, pw, k = 1;
+  if (c) { per = c.kwh / (c.s1 - c.s0); pw = (p) => cvPow(c, p); let raw = 0; for (let p = c.s0; p < c.s1; p++) raw += per / pw(p + 0.5) * 60; k = c.min > 0 && raw > 0 ? c.min / raw : 1; }
+  else { per = cap / 100; pw = (p) => p < 50 ? 95 : p < 80 ? 70 : 30; }
+  const M = [0]; for (let p = 0; p < 100; p++) { const w = Math.min(pw(p + 0.5), kwCap); M.push(M[p] + per / Math.max(3, w) * 60 * (c && p >= c.s0 && p < c.s1 ? k : c ? Math.max(1, k) : 1)); }
+  return (RT_CT[key] = M);
 }
+const rtChargeMin = (a, b, kwCap) => { const M = rtCT(kwCap), f = (x) => { x = Math.max(0, Math.min(100, x)); const i = Math.floor(x); return i >= 100 ? M[100] : M[i] + (M[i + 1] - M[i]) * (x - i); }; return Math.max(0, f(b) - f(a)); };
 function rtCardFor(op) {
   const cards = getProviders(), o = op.toLowerCase(), own = cards.find(n => { const w = n.toLowerCase().split(/[\s\-–·]+/)[0]; return w.length >= 3 && (o.includes(w) || w.includes(o.split(' ')[0])); });
   const pr = (n) => { try { const p = pvPrices(n); return p.dc || p.hist || null; } catch (e) { return null; } };
   if (own && pr(own)) return { name: own, eur: pr(own), own: true };
   let best = null; cards.forEach(n => { const v = pr(n); if (v && (!best || v < best.eur)) best = { name: n, eur: v, own: false }; }); return best;
 }
-function rtCands(r, sites) {
-  const cap = batteryKwh(), last = r.pts.length - 1, ranges = r.turn ? [[1, r.turn.i, 'Hinweg'], [r.turn.i + 1, last - 1, 'Rückweg']] : [[1, last - 1, '']], out = [];
+/* Lage der Lader an der Route (bei Hin & zurück je Weg einmal), nach Position sortiert */
+function rtPos(r, sites) {
+  const last = r.pts.length - 1, ranges = r.turn ? [[1, r.turn.i, 'Hinweg'], [r.turn.i + 1, last - 1, 'Rückweg']] : [[1, last - 1, '']], out = [];
   sites.forEach(s => ranges.forEach(([i0, i1, leg]) => {
-    let j = -1, dm = 1e9; for (let i = i0; i <= i1; i++) { const d = rtSegDist(s, r.pts[i - 1], r.pts[i]); if (d.m < dm) { dm = d.m; j = d.f > 0.5 ? i : i - 1; } } if (j < 1 || dm > 3000) return;
-    const off = dm / 1000, sArr = r.soc[j], need = (r.cumK[last] - r.cumK[j]) / cap * 100, target = Math.ceil(Math.max(sArr + 5, need + WXO_RES + 2));
-    if (sArr < 6) return; const ok = target <= 90, tgt = Math.min(90, target), min = rtChargeMin(Math.round(sArr), tgt, s.kw), det = off < 0.4 ? 0 : off * 2 / 40 * 60 + 2;
-    const card = rtCardFor(s.op), kwh = (tgt - sArr) / 100 * cap / 0.93;
-    out.push({ ...s, cid: s.id + '|' + leg, leg, j, off, km: r.dkm[j], sArr, tgt, ok, min, det, tot: min + det, card, eur: card ? kwh * card.eur : null, at: RT.o.dep + r.tt[j] * 1000 });
+    let j = -1, dm = 1e9; for (let i = i0; i <= i1; i++) { const d = rtSegDist(s, r.pts[i - 1], r.pts[i]); if (d.m < dm) { dm = d.m; j = d.f > 0.5 ? i : i - 1; } } if (j < 1 || j >= last || dm > 3000) return;
+    const off = dm / 1000; out.push({ ...s, cid: s.id + '|' + leg, leg, j, off, det: off < 0.4 ? 0 : off * 2 / 40 * 60 + 2, card: rtCardFor(s.op) });
   }));
-  return out.filter(c => c.ok);
+  return out.sort((a, b) => a.j - b.j);
 }
-const rtRisk = (c) => c.tot + (c.n <= 1 ? 8 : c.n === 2 ? 3 : 0);                      // wenige Ladepunkte: Wartezeit-Risiko (nur fürs Sortieren)
-function rtSortCands(list, by) { return list.slice().sort((a, b) => by === 'cheap' ? ((a.eur ?? 1e9) - (b.eur ?? 1e9)) || rtRisk(a) - rtRisk(b) : rtRisk(a) - rtRisk(b) || (a.eur ?? 1e9) - (b.eur ?? 1e9)); }
-function rtApplyStop(base, c) {
-  if (!c) return base; const d = c.tgt - c.sArr, soc = base.soc.map((v, i) => i > c.j ? v + d : v);
-  return { ...base, soc, socA: base.socA + d, turn: base.turn ? { ...base.turn, soc: base.turn.i > c.j ? base.turn.soc + d : base.turn.soc } : null, stop: c, tEnd: base.tEnd + c.tot * 60, dur: base.dur + c.tot * 60 };
+const RT_MINARR = 7, RT_TGT = [50, 60, 70, 80];
+const rtPen = (c) => (c.n <= 1 ? 8 : c.n === 2 ? 3 : 0) + 3;                       // Wartezeit-Risiko bei wenigen Ladepunkten + 3 min je Stopp (Anfahren, Anstecken)
+/* Ladeplan per dynamischer Programmierung: Zustände = (Lader, Ladeziel), Kosten = Ladezeit + Umweg + Zuschläge (schnell) bzw. Euro (günstig).
+   start: { j, soc } – Abfahrt nach festen Stopps; first: erzwungener erster Lader. Liefert die Stopps oder null. */
+function rtPlan(r, pos, start, by = 'fast', first = null) {
+  const cap = batteryKwh(), last = r.pts.length - 1, need = (j) => (r.cumK[last] - r.cumK[j]) / cap * 100, arr = (s, j0, c) => s - (r.cumK[c.j] - r.cumK[j0]) / cap * 100 - c.off * 2 * 0.2 / cap * 100;
+  const w = (c, sArr, T) => { const min = rtChargeMin(sArr, T, c.kw), eur = c.card ? (T - sArr) / 100 * cap / 0.93 * c.card.eur : null; return { min, eur, cost: by === 'cheap' ? (eur ?? 99) + (min + c.det) * 0.02 : min + c.det + rtPen(c) }; };
+  const st0 = { j: start.j, soc: start.soc, cost: 0, prev: null, c: null }; let best = null;
+  if (start.soc - need(start.j) >= WXO_RES && !first) return [];
+  const nodes = (first ? [first] : pos.filter(c => c.j > start.j)), states = new Map(); nodes.forEach(c => states.set(c.cid, []));
+  const relax = (S) => {
+    if (S.c && S.soc - need(S.j) >= WXO_RES) { if (!best || S.cost < best.cost) best = S; return; }
+    for (const c of (first && !S.c ? [first] : pos)) { if (c.j <= S.j) continue; const sA = arr(S.soc, S.j, c); if (sA < RT_MINARR) break;
+      const fin = Math.ceil(need(c.j) + WXO_RES + 1), opts = (fin <= 90 ? [fin] : []).concat(RT_TGT.filter(t => t < fin)).filter(t => t >= sA + 5);
+      for (const T of opts) { const x = w(c, sA, T), N = { j: c.j, soc: T, cost: S.cost + x.cost, prev: S, c, sArr: sA, min: x.min, eur: x.eur };
+        let l = states.get(c.cid); if (!l) states.set(c.cid, l = []); const o = l.find(q => q.soc === T); if (o && o.cost <= N.cost) continue; if (o) Object.assign(o, N); else l.push(N); } } };
+  relax(st0); for (const c of (first ? [first] : []).concat(pos)) { const l = states.get(c.cid) || []; for (const S of l.slice()) relax(S); if (first && c === first) { states.delete(first.cid); } }
+  if (!best) return null; const out = []; for (let S = best; S && S.c; S = S.prev) out.unshift({ ...S.c, sArr: S.sArr, tgt: S.soc, min: S.min, eur: S.eur, tot: S.min + S.c.det });
+  return out;
+}
+function rtApplyStops(base, stops) {
+  if (!stops || !stops.length) return base; const soc = base.soc.slice(); let add = 0, k = 0, tadd = 0;
+  for (let i = 0; i < soc.length; i++) { while (k < stops.length && i > stops[k].j) { add += stops[k].tgt - stops[k].sArr; k++; } soc[i] += add; }
+  stops.forEach(s => { s.at = RT.o.dep + (base.tt[s.j] + tadd) * 1000; tadd += s.tot * 60; });
+  const tot = stops.reduce((a, s) => a + s.tot, 0), d = stops.reduce((a, s) => a + s.tgt - s.sArr, 0);
+  return { ...base, soc, socA: base.socA + d, turn: base.turn ? { ...base.turn, soc: soc[base.turn.i] } : null, stops, tEnd: base.tEnd + tot * 60, dur: base.dur + tot * 60 };
 }
 async function rtFindStops(n) {
   const b = RT.base; if (!b || Math.min(...b.soc.slice(1)) >= WXO_RES - 0.5) { RT.ch = null; return; }
-  RT.ch = { busy: true, list: [] }; rtRenderRes();
-  try { const sites = await rtChargers(b); if (n !== RT.n) return; const list = rtCands(b, sites);
-    RT.ch = { list, none: !list.length, sites: sites.length }; const best = rtSortCands(list, 'fast')[0]; RT.stopSel = best ? best.cid : null; RT.res = rtApplyStop(b, best); }
+  RT.ch = { busy: true }; rtRenderRes();
+  try { const sites = await rtChargers(b); if (n !== RT.n) return; const pos = rtPos(b, sites), stops = rtPlan(b, pos, { j: 0, soc: RT.o.soc });
+    RT.ch = { pos, none: !stops || !stops.length, sites: sites.length }; RT.res = rtApplyStops(b, stops); }
   catch (e) { if (n !== RT.n) return; RT.ch = { err: (e && e.message) || 'Ladesäulen nicht geladen' }; }
   rtRenderRes();
 }
 function rtStopCard() {
-  const ch = RT.ch; if (!ch) return ''; const box = 'rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4 border border-amber-400/40';
-  const head = (r) => `<div class="flex items-baseline justify-between gap-2"><p class="text-[11px] font-semibold uppercase tracking-[0.06em] text-amber-600 dark:text-amber-400">⚡ Ladestopp-Vorschlag</p>${r || ''}</div>`;
-  if (ch.busy) return `<div class="${box}">${head()}<p class="mt-1.5 text-sm text-slate-500 dark:text-slate-400 text-left">Suche Schnelllader an der Route …</p></div>`;
-  if (ch.err) return `<div class="${box}">${head()}<p class="mt-1.5 text-sm text-red-600 dark:text-red-400 text-left">${esc(ch.err)}</p><button type="button" data-rt="stops" class="mt-1 text-xs font-semibold text-sky-600 dark:text-sky-300">Erneut versuchen ›</button></div>`;
-  if (ch.none) return `<div class="${box}">${head()}<p class="mt-1.5 text-sm text-slate-600 dark:text-slate-300 text-left">${ch.sites ? 'Mit einem Stopp nicht zu schaffen – voller starten oder zweimal laden.' : 'Keine Schnelllader (ab 50 kW, CCS) nahe der Route gefunden.'}</p></div>`;
-  const c = RT.res && RT.res.stop; if (!c) return '';
+  const ch = RT.ch; if (!ch) return ''; const box = 'rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4 border border-amber-400/40', r = RT.res, S = (r && r.stops) || [];
+  const head = (t, rr) => `<div class="flex items-baseline justify-between gap-2"><p class="text-[11px] font-semibold uppercase tracking-[0.06em] text-amber-600 dark:text-amber-400">⚡ ${t}</p>${rr || ''}</div>`;
+  const foot = '<p class="mt-2 text-[10px] text-slate-500 dark:text-slate-400 text-left">Daten: Ladesäulenregister der Bundesnetzagentur (CC BY 4.0)</p>';
+  if (ch.busy) return `<div class="${box}">${head('Ladestopp-Vorschlag')}<p class="mt-1.5 text-sm text-slate-500 dark:text-slate-400 text-left">Suche Schnelllader an der Route …</p></div>`;
+  if (ch.err) return `<div class="${box}">${head('Ladestopp-Vorschlag')}<p class="mt-1.5 text-sm text-red-600 dark:text-red-400 text-left">${esc(ch.err)}</p><button type="button" data-rt="stops" class="mt-1 text-xs font-semibold text-sky-600 dark:text-sky-300">Erneut versuchen ›</button></div>`;
+  if (!S.length) return `<div class="${box}">${head('Ladestopp-Vorschlag')}<p class="mt-1.5 text-sm text-slate-600 dark:text-slate-300 text-left">${ch.sites ? 'Mit den Ladern an der Route nicht zu schaffen – die Abstände zwischen den Schnellladern sind zu groß. Voller starten?' : 'Keine Schnelllader (ab 50 kW, CCS) nahe der Route gefunden.'}</p>${foot}</div>`;
   const tile = (l, v, s) => `<div class="min-w-0 flex-1 rounded-xl bg-slate-100 dark:bg-slate-800 px-2.5 py-1.5"><p class="text-[10px] uppercase tracking-[0.06em] text-slate-500 dark:text-slate-400">${l}</p><p class="text-[15px] font-bold whitespace-nowrap">${v}</p>${s ? `<p class="truncate text-[10px] text-slate-500 dark:text-slate-400">${s}</p>` : ''}</div>`;
-  return `<div class="${box}">${head(`<span class="text-[11px] text-slate-500 dark:text-slate-400 whitespace-nowrap">${c.leg ? c.leg + ' · ' : ''}km ${fmt(c.km, 0)} von ${fmt(RT.res.km, 0)}</span>`)}
-    <div class="mt-2 flex items-center gap-2.5"><span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-100 dark:bg-amber-950 text-xl" aria-hidden="true">⚡</span><div class="min-w-0"><p class="truncate text-[15px] font-bold">${esc(c.op)}</p><p class="truncate text-xs text-slate-500 dark:text-slate-400">${esc(c.place || '')}${c.place ? ' · ' : ''}${c.n}× ${fmt(c.kw, 0)} kW · ${c.off < 0.4 ? 'direkt an der Route' : '+' + Math.round(c.det) + ' min Umweg'}</p></div></div>
+  const sub = (c) => `${esc(c.place || '')}${c.place ? ' · ' : ''}${c.n}× ${fmt(c.kw, 0)} kW · ${c.off < 0.4 ? 'direkt an der Route' : '+' + Math.round(c.det) + ' min Umweg'}`;
+  if (S.length === 1) { const c = S[0];
+    return `<div class="${box}">${head('Ladestopp-Vorschlag', `<span class="text-[11px] text-slate-500 dark:text-slate-400 whitespace-nowrap">${c.leg ? c.leg + ' · ' : ''}km ${fmt(r.dkm[c.j], 0)} von ${fmt(r.km, 0)}</span>`)}
+    <div class="mt-2 flex items-center gap-2.5"><span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-100 dark:bg-amber-950 text-xl" aria-hidden="true">⚡</span><div class="min-w-0"><p class="truncate text-[15px] font-bold">${esc(c.op)}</p><p class="truncate text-xs text-slate-500 dark:text-slate-400">${sub(c)}</p></div></div>
     <div class="mt-2.5 flex gap-1.5">${tile('Laden', Math.round(c.sArr) + ' → ' + c.tgt + ' %', '~ ' + hhmm(c.at) + ' Uhr')}${tile('Dauer', Math.round(c.min) + ' min', 'Ladekurve')}${tile('Kosten', c.eur != null ? '≈ ' + fmt(c.eur, 2) + ' €' : '–', c.card ? esc(c.card.name) : 'Preis in Ladekarten')}</div>
-    <div class="mt-2.5 flex items-center justify-between gap-2 text-[13px]"><span class="text-slate-500 dark:text-slate-400">${RT.ch.list.length > 1 ? RT.ch.list.length - 1 + ' weitere passende Lader' : 'Keine weiteren Lader'}</span>${RT.ch.list.length > 1 ? '<button type="button" data-rt="alt" class="font-semibold text-sky-600 dark:text-sky-300">Alternativen ›</button>' : ''}</div>
-    <p class="mt-1.5 text-[10px] text-slate-500 dark:text-slate-400 text-left">Daten: Ladesäulenregister der Bundesnetzagentur (CC BY 4.0)</p></div>`;
+    <div class="mt-2.5 flex items-center justify-end text-[13px]"><button type="button" data-rtalt="0" class="font-semibold text-sky-600 dark:text-sky-300">Alternativen ›</button></div>${foot}</div>`; }
+  const tm = S.reduce((a, c) => a + c.tot, 0), eu = S.every(c => c.eur != null) ? S.reduce((a, c) => a + c.eur, 0) : null;
+  return `<div class="${box}">${head('Ladeplan · ' + S.length + ' Stopps', `<span class="text-[11px] text-slate-500 dark:text-slate-400 whitespace-nowrap">${Math.round(tm)} min${eu != null ? ' · ≈ ' + fmt(eu, 2) + ' €' : ''}</span>`)}
+    ${S.map((c, i) => `<div class="mt-2.5 flex items-start gap-2.5 ${i ? 'border-t border-slate-100 dark:border-slate-800 pt-2.5' : ''}"><span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-950 text-sm font-bold text-amber-700 dark:text-amber-300">${i + 1}</span>
+      <div class="min-w-0 flex-1"><div class="flex items-baseline justify-between gap-2"><p class="truncate text-[14px] font-bold">${esc(c.op)}</p><span class="shrink-0 text-[11px] text-slate-500 dark:text-slate-400">${c.leg ? c.leg + ' · ' : ''}km ${fmt(r.dkm[c.j], 0)} · ${hhmm(c.at)}</span></div><p class="truncate text-[11px] text-slate-500 dark:text-slate-400">${sub(c)}</p>
+      <div class="mt-1 flex items-center justify-between gap-2 text-[12.5px]"><span class="whitespace-nowrap"><b>${Math.round(c.sArr)} → ${c.tgt} %</b> · ${Math.round(c.min)} min${c.eur != null ? ' · ≈ ' + fmt(c.eur, 2) + ' €' : ''}</span><button type="button" data-rtalt="${i}" class="shrink-0 font-semibold text-sky-600 dark:text-sky-300">Ändern ›</button></div></div></div>`).join('')}${foot}</div>`;
+}
+/* Alternativen für Stopp k: frühere Stopps bleiben, für jeden möglichen Lader wird der Rest neu geplant */
+function rtAltList(k) {
+  const b = RT.base, S = RT.res.stops || [], pre = S.slice(0, k), st = pre.length ? { j: pre[pre.length - 1].j, soc: pre[pre.length - 1].tgt } : { j: 0, soc: RT.o.soc }, cap = batteryKwh(), out = [];
+  for (const c of RT.ch.pos) { if (c.j <= st.j) continue; const sA = st.soc - (b.cumK[c.j] - b.cumK[st.j]) / cap * 100; if (sA < RT_MINARR) break;
+    const rest = rtPlan(b, RT.ch.pos, st, RT_CH.sort, c); if (!rest || !rest.length) continue; const plan = pre.concat(rest);
+    out.push({ c: rest[0], plan, tot: plan.reduce((a, x) => a + x.tot, 0), eur: plan.every(x => x.eur != null) ? plan.reduce((a, x) => a + x.eur, 0) : null }); if (out.length >= 40) break; }
+  return out.sort((a, b2) => RT_CH.sort === 'cheap' ? ((a.eur ?? 1e9) - (b2.eur ?? 1e9)) || a.tot - b2.tot : (a.tot + rtPen(a.c)) - (b2.tot + rtPen(b2.c)) || (a.eur ?? 1e9) - (b2.eur ?? 1e9));
 }
 function rtAltSheet() {
-  const ch = RT.ch; if (!ch || !ch.list) return; const box = $('au-sheet-box');
-  let list = rtSortCands(ch.list, RT_CH.sort); if (RT_CH.mine) list = list.filter(c => c.card && c.card.own);
-  const chip = (k, l, on) => `<button type="button" data-rta="${k}" class="whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold ${on ? 'bg-emerald-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'}">${l}</button>`;
+  const ch = RT.ch; if (!ch || !ch.pos) return; const box = $('au-sheet-box'), k = RT.altK || 0, multi = (RT.res.stops || []).length > 1;
+  let list = rtAltList(k); if (RT_CH.mine) list = list.filter(x => x.c.card && x.c.card.own); RT.altList = list;
+  const chip = (key, l, on) => `<button type="button" data-rta="${key}" class="whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold ${on ? 'bg-emerald-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'}">${l}</button>`;
   const pill = (t, warn) => `<span class="whitespace-nowrap rounded-lg px-1.5 py-0.5 text-[11px] ${warn ? 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300' : 'bg-slate-100 dark:bg-slate-800'}">${t}</span>`;
-  const row = (c) => { const on = c.cid === RT.altSel;
-    return `<button type="button" data-rtc="${esc(c.cid)}" class="flex w-full items-center gap-3 border-t border-slate-100 dark:border-slate-800 py-2.5 text-left first:border-t-0"><span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${on ? 'border-emerald-500' : 'border-slate-400 dark:border-slate-600'}">${on ? '<span class="h-2 w-2 rounded-full bg-emerald-500"></span>' : ''}</span>
+  const row = (x, i) => { const c = x.c, on = c.cid === RT.altSel, more = x.plan.length - k - 1;
+    return `<button type="button" data-rtc="${i}" class="flex w-full items-center gap-3 border-t border-slate-100 dark:border-slate-800 py-2.5 text-left first:border-t-0"><span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${on ? 'border-emerald-500' : 'border-slate-400 dark:border-slate-600'}">${on ? '<span class="h-2 w-2 rounded-full bg-emerald-500"></span>' : ''}</span>
       <span class="min-w-0 flex-1"><span class="flex items-baseline justify-between gap-2"><b class="truncate text-[14px]">${esc(c.op)}${c.place ? ' <span class="font-normal text-slate-500 dark:text-slate-400">· ' + esc(c.place.split(',')[0]) + '</span>' : ''}</b><b class="shrink-0 text-[13px]">${c.eur != null ? fmt(c.eur, 2) + ' €' : '–'}</b></span>
-      <span class="block text-[11px] text-slate-500 dark:text-slate-400">${c.leg ? c.leg + ' · ' : ''}km ${fmt(c.km, 0)} · Ankunft mit ${Math.round(c.sArr)} % · bis ${c.tgt} %</span>
-      <span class="mt-1 flex flex-wrap gap-1">${pill(c.n + '× ' + fmt(c.kw, 0) + ' kW')}${pill(Math.round(c.min) + ' min')}${pill(c.off < 0.4 ? 'an der Route' : '+' + Math.round(c.det) + ' min Umweg')}${c.card && !c.card.own ? pill('Preis: ' + esc(c.card.name), true) : ''}${!c.card ? pill('kein Preis', true) : ''}${c.n <= 2 ? pill('nur ' + c.n + ' Ladepunkt' + (c.n > 1 ? 'e' : ''), true) : ''}</span></span></button>`; };
+      <span class="block text-[11px] text-slate-500 dark:text-slate-400">${c.leg ? c.leg + ' · ' : ''}km ${fmt(RT.base.dkm[c.j], 0)} · Ankunft mit ${Math.round(c.sArr)} % · bis ${c.tgt} %</span>
+      <span class="mt-1 flex flex-wrap gap-1">${pill(c.n + '× ' + fmt(c.kw, 0) + ' kW')}${pill(Math.round(c.min) + ' min')}${pill(c.off < 0.4 ? 'an der Route' : '+' + Math.round(c.det) + ' min Umweg')}${more > 0 ? pill('danach ' + more + ' weitere' + (more > 1 ? ' Stopps' : 'r Stopp') + ' · gesamt ' + Math.round(x.tot) + ' min') : multi ? pill('kein weiterer Stopp nötig') : ''}${c.card && !c.card.own ? pill('Preis: ' + esc(c.card.name), true) : ''}${!c.card ? pill('kein Preis', true) : ''}${c.n <= 2 ? pill('nur ' + c.n + ' Ladepunkt' + (c.n > 1 ? 'e' : ''), true) : ''}</span></span></button>`; };
   box.innerHTML = `<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div>
-    <div class="flex items-start justify-between gap-2"><div><p class="text-lg font-bold">Wo laden?</p><p class="text-xs text-slate-500 dark:text-slate-400 text-left">ab 50 kW · CCS · bis 3 km neben der Route · Zeit = Laden + Umweg</p></div><button type="button" data-rta="close" aria-label="Schließen" class="px-1 text-xl text-slate-400">✕</button></div>
+    <div class="flex items-start justify-between gap-2"><div><p class="text-lg font-bold">${multi ? 'Wo laden? · Stopp ' + (k + 1) : 'Wo laden?'}</p><p class="text-xs text-slate-500 dark:text-slate-400 text-left">ab 50 kW · CCS · bis 3 km neben der Route${multi ? ' · spätere Stopps werden neu geplant' : ''}</p></div><button type="button" data-rta="close" aria-label="Schließen" class="px-1 text-xl text-slate-400">✕</button></div>
     <div class="flex gap-1.5 overflow-x-auto">${chip('fast', 'Schnellste Ankunft', RT_CH.sort === 'fast')}${chip('cheap', 'Günstigste', RT_CH.sort === 'cheap')}${chip('mine', 'Meine Karten', RT_CH.mine)}</div>
-    <div class="max-h-[52vh] overflow-y-auto">${list.length ? list.slice(0, 30).map(row).join('') : '<p class="py-3 text-sm text-slate-500 dark:text-slate-400 text-left">Kein Lader eines deiner Ladekarten-Anbieter an der Route.</p>'}</div>
+    <div class="max-h-[52vh] overflow-y-auto">${list.length ? list.map(row).join('') : '<p class="py-3 text-sm text-slate-500 dark:text-slate-400 text-left">Kein passender Lader.</p>'}</div>
     <p class="text-[10px] text-slate-500 dark:text-slate-400 text-left">Daten: Ladesäulenregister der Bundesnetzagentur (CC BY 4.0) · Preise aus deinen Ladekarten · Ladezeit aus deiner DC-Ladekurve</p>
     <button type="button" data-rta="take" class="h-12 w-full rounded-2xl bg-emerald-600 text-sm font-semibold text-white active:scale-95 transition">Diesen Stopp übernehmen</button>`;
   box.dataset.rtid = ''; $('au-sheet').classList.remove('hidden');
 }
 $('au-sheet').addEventListener('click', (e) => {
   const c = e.target.closest('[data-rtc]'), a = e.target.closest('[data-rta]'); if (!c && !a) return;
-  if (c) { RT.altSel = c.dataset.rtc; rtAltSheet(); return; }
+  if (c) { const x = RT.altList[Number(c.dataset.rtc)]; if (x) { RT.altSel = x.c.cid; RT.altPlan = x.plan; } rtAltSheetMark(); return; }
   const k = a.dataset.rta;
   if (k === 'close') { $('au-sheet').classList.add('hidden'); return; }
   if (k === 'fast' || k === 'cheap') { RT_CH.sort = k; rtAltSheet(); return; }
   if (k === 'mine') { RT_CH.mine = !RT_CH.mine; rtAltSheet(); return; }
-  if (k === 'take') { const cand = RT.ch.list.find(x => x.cid === RT.altSel); if (cand) { RT.stopSel = cand.cid; RT.res = rtApplyStop(RT.base, cand); rtRenderRes(); } $('au-sheet').classList.add('hidden'); }
+  if (k === 'take') { if (RT.altPlan) { RT.res = rtApplyStops(RT.base, RT.altPlan.map(s => ({ ...s }))); rtRenderRes(); } $('au-sheet').classList.add('hidden'); }
 });
+function rtAltSheetMark() { document.querySelectorAll('#au-sheet-box [data-rtc]').forEach(b => { const x = RT.altList[Number(b.dataset.rtc)], on = x && x.c.cid === RT.altSel, dot = b.firstElementChild; dot.className = 'flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ' + (on ? 'border-emerald-500' : 'border-slate-400 dark:border-slate-600'); dot.innerHTML = on ? '<span class="h-2 w-2 rounded-full bg-emerald-500"></span>' : ''; }); }
 function rtParams() {
   const dv = $('rt-dep').value, dep = dv ? new Date(dv).getTime() : Date.now(), soc = Math.max(1, Math.min(100, Number($('rt-soc').value) || 80));
   return { dep: isNaN(dep) ? Date.now() : dep, soc, pers: Number($('rt-pers').value) || 1, tempo: Number($('rt-tempo').value) || 0, vab: Number($('rt-vab').value) || 120, round: RT.round, stay: Number($('rt-stay').value) || 3 };
@@ -9074,7 +9119,7 @@ async function rtRun() {
   RT.busy = true; RT.err = ''; rtRenderRes(); const o = rtParams();
   try { const pairs = o.round ? [[RT.a, RT.b], [RT.b, RT.a]] : [[RT.a, RT.b]], legs = [];
     for (const [x, y] of pairs) { const route = await rtRoute(x, y); let wx = null; try { wx = await rtWeather(route, o.dep); } catch (e) { } legs.push({ route, wx }); }
-    if (n !== RT.n) return; RT.o = o; RT.res = RT.base = rtCalc(legs, o); RT.ch = null; RT.stopSel = null; }
+    if (n !== RT.n) return; RT.o = o; RT.res = RT.base = rtCalc(legs, o); RT.ch = null; }
   catch (e) { if (n !== RT.n) return; RT.res = null; RT.err = 'Prognose nicht möglich: ' + ((e && e.message) || 'kein Internet?'); }
   RT.busy = false; rtRenderRes(); if (RT.res) rtFindStops(n);
   try { save(KEY_RT, { a: RT.a, b: RT.b, pers: o.pers, tempo: o.tempo, vab: o.vab, round: !!o.round, stay: o.stay }); } catch (e) { }
@@ -9106,13 +9151,13 @@ $('rt-swap').addEventListener('click', () => { [RT.a, RT.b] = [RT.b, RT.a]; $('r
 function rtRoundUi() { const b = $('rt-rt'), on = !!RT.round; b.setAttribute('aria-pressed', String(on)); ['bg-pink-100', 'text-pink-700', 'dark:bg-pink-950', 'dark:text-pink-300'].forEach(c => b.classList.toggle(c, on)); ['bg-slate-100', 'dark:bg-slate-800'].forEach(c => b.classList.toggle(c, !on)); $('rt-stay-w').classList.toggle('hidden', !on); $('rt-stay-w').classList.toggle('flex', on); }
 $('rt-rt').addEventListener('click', () => { RT.round = !RT.round; rtRoundUi(); rtRun(); });
 $('rt-soc').addEventListener('change', rtRun);
-$('rt-res').addEventListener('click', (e) => { if (e.target.closest('[data-rt="retry"]')) rtRun(); if (e.target.closest('[data-rt="stops"]')) rtFindStops(RT.n); if (e.target.closest('[data-rt="alt"]')) { RT.altSel = RT.stopSel; rtAltSheet(); } });
+$('rt-res').addEventListener('click', (e) => { if (e.target.closest('[data-rt="retry"]')) rtRun(); if (e.target.closest('[data-rt="stops"]')) rtFindStops(RT.n); const al = e.target.closest('[data-rtalt]'); if (al) { RT.altK = Number(al.dataset.rtalt); const cur = (RT.res.stops || [])[RT.altK]; RT.altSel = cur ? cur.cid : null; RT.altPlan = RT.res.stops; rtAltSheet(); } });
 $('rt-save').addEventListener('click', () => {
   const r = RT.res, o = RT.o; if (!r) return; const cap = batteryKwh(), k = deDec($('rt-abrp-k').value), s = deDec($('rt-abrp-s').value), msg = $('rt-save-msg');
   if (k !== undefined && !(k > 3 && k < 60)) { msg.textContent = 'ABRP-Verbrauch bitte in kWh/100 km (z. B. 19,1).'; msg.className = 'mt-1.5 text-xs text-left text-red-600 dark:text-red-400'; return; }
   if (s !== undefined && !(s >= -20 && s < o.soc)) { msg.textContent = 'ABRP-Ankunft bitte in % und kleiner als der Start-Akku.'; msg.className = 'mt-1.5 text-xs text-left text-red-600 dark:text-red-400'; return; }
   const en = { id: labId(), dep: new Date(o.dep).toISOString(), a: { label: RT.a.label, lat: RT.a.lat, lon: RT.a.lon }, b: { label: RT.b.label, lat: RT.b.lat, lon: RT.b.lon }, km: Math.round(r.km * 10) / 10,
-    k100: Math.round(r.k100 * 100) / 100, raw100: Math.round(r.raw100 * 100) / 100, kwh: Math.round(r.kwh * 10) / 10, soc0: o.soc, socA: Math.round(r.socA), k: r.k, pers: o.pers, tempo: o.tempo, vab: o.vab, tAvg: Math.round(r.tAvg * 10) / 10 }; if (o.round) { en.round = true; en.stay = o.stay; } if (r.stop) en.stop = { op: r.stop.op, km: Math.round(r.stop.km), from: Math.round(r.stop.sArr), to: r.stop.tgt };
+    k100: Math.round(r.k100 * 100) / 100, raw100: Math.round(r.raw100 * 100) / 100, kwh: Math.round(r.kwh * 10) / 10, soc0: o.soc, socA: Math.round(r.socA), k: r.k, pers: o.pers, tempo: o.tempo, vab: o.vab, tAvg: Math.round(r.tAvg * 10) / 10 }; if (o.round) { en.round = true; en.stay = o.stay; } if (r.stops && r.stops.length) en.stop = r.stops.map(x => ({ op: x.op, km: Math.round(r.dkm[x.j]), from: Math.round(x.sArr), to: x.tgt }));
   if (k !== undefined) en.abrp = k; else if (s !== undefined) { en.abrpSoc = s; en.abrp = Math.round((o.soc - s) / 100 * cap / r.km * 100 * 100) / 100; }
   const lab = getLab(); lab.fc = (lab.fc || []).concat(en); setLab(lab); $('rt-abrp-k').value = ''; $('rt-abrp-s').value = '';
   msg.textContent = '✓ Gemerkt – nach der Fahrt unter „Abgleich“ den echten Verbrauch eintragen.'; msg.className = 'mt-1.5 text-xs text-left text-emerald-600 dark:text-emerald-400'; rtTabs();
