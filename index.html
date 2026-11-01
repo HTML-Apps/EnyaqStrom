@@ -6971,6 +6971,7 @@ const tripVisible = (t) => (t.km || 0) >= 1;                                    
 function commitTrips(next) {
   const prev = getTrips(); next.sort((a, b) => (a.s < b.s ? -1 : a.s > b.s ? 1 : 0));
   if (!save(KEY_TRIPS, next)) return false;
+  try { setTimeout(ltFillKm, 0); } catch (e) { }                                  // Langzeit-Ablesungen per Sprache: km-Stand jetzt genau aus den Fahrten
   if (!window.cloud?.isSignedIn()) return Promise.resolve('local');
   return window.cloud.pushTrips(prev, next).then(n => 'cloud:' + n).catch(e => { console.error('Firestore-Schreibfehler (Fahrten)', e); window.onCloudStatus?.({ error: 'Fahrten: ' + (e.code === 'permission-denied' ? 'Keine Berechtigung für enyaqStrom/<uid>/tripMonths (Firestore-Regel ergänzen)' : e.code || e.message) }); return 'error:' + (e.code || e.message); });
 }
@@ -7330,7 +7331,7 @@ window.onCloudTrips = (months, first, uid) => {                    // months = {
     if (missing.length) { next = cloud.concat(missing); window.cloud.pushTrips(cloud, next).catch(() => { }); }
   }
   next.sort((a, b) => (a.s < b.s ? -1 : a.s > b.s ? 1 : 0));
-  if (JSON.stringify(next) !== JSON.stringify(local)) { save(KEY_TRIPS, next); refreshViews(); }
+  if (JSON.stringify(next) !== JSON.stringify(local)) { save(KEY_TRIPS, next); refreshViews(); try { ltFillKm(); } catch (e) { } }
 };
 window.onCloudPlaces = (d, first, uid) => {                       // d = { list (Orte), labels, rules, defLabel } oder null
   if (first) checkCacheUid(uid);
@@ -7978,7 +7979,7 @@ function ltCard(list) {
   const cur = es[es.length - 1], prev = es[es.length - 2], dl = prev ? cur.k100 - prev.k100 : null, first = es[0];
   const dChip = dl == null ? '' : `<span class="ml-auto shrink-0 rounded-lg px-2 py-0.5 text-xs font-semibold ${dl > 0.05 ? 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300' : dl < -0.05 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}">${dl > 0 ? '+' : dl < 0 ? '−' : '±'}${fmt(Math.abs(dl), 1)} seit ${labD(prev.date).slice(0, 6)}</span>`;
   const rows = es.slice().reverse().map((e, i, a) => { const p = a[i + 1], d = p ? e.k100 - p.k100 : null;
-    return `<button type="button" data-lt="${esc(e.id)}" class="grid w-full grid-cols-[1.2fr_1fr_0.8fr_0.6fr] items-baseline gap-1.5 border-t border-slate-100 dark:border-slate-800 py-2.5 text-left text-[13px] active:bg-slate-50 dark:active:bg-slate-800/50"><span>${labD(e.date)}</span><span class="text-xs text-slate-500 dark:text-slate-400">${e.km ? fmt(e.km, 0) + ' km' : '–'}</span><b class="text-right tabular-nums">${fmt(e.k100, 1)}</b><span class="text-right text-[11px] ${d == null ? 'text-slate-400' : d > 0.05 ? 'text-amber-600 dark:text-amber-400' : d < -0.05 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500'}">${d == null ? 'Start' : (d > 0 ? '+' : d < 0 ? '−' : '±') + fmt(Math.abs(d), 1)}</span></button>`; }).join('');
+    return `<button type="button" data-lt="${esc(e.id)}" class="grid w-full grid-cols-[1.2fr_1fr_0.8fr_0.6fr] items-baseline gap-1.5 border-t border-slate-100 dark:border-slate-800 py-2.5 text-left text-[13px] active:bg-slate-50 dark:active:bg-slate-800/50"><span>${labD(e.date)}</span><span class="text-xs text-slate-500 dark:text-slate-400" title="${e.kmEst ? 'geschätzt – wird genau, sobald das Fahrtenbuch für diesen Tag importiert ist' : ''}">${e.km ? (e.kmEst ? '≈ ' : '') + fmt(e.km, 0) + ' km' : e.kmEst ? 'folgt' : '–'}</span><b class="text-right tabular-nums">${fmt(e.k100, 1)}</b><span class="text-right text-[11px] ${d == null ? 'text-slate-400' : d > 0.05 ? 'text-amber-600 dark:text-amber-400' : d < -0.05 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500'}">${d == null ? 'Start' : (d > 0 ? '+' : d < 0 ? '−' : '±') + fmt(Math.abs(d), 1)}</span></button>`; }).join('');
   return `<div class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 space-y-2">
     <div class="flex items-baseline justify-between gap-2"><p class="text-sm text-slate-500 dark:text-slate-400 text-left">Langzeitverbrauch seit Kauf</p><span class="text-xs text-slate-500">${labD(cur.date)}</span></div>
     <div class="flex items-baseline gap-2"><span class="font-barlow text-[44px] font-bold leading-none text-emerald-600 dark:text-emerald-400">${fmt(cur.k100, 1)}</span><span class="text-sm text-slate-500 dark:text-slate-400">kWh/100 km</span>${dChip}</div>
@@ -8129,13 +8130,29 @@ function gtParseLt(title) {
   else { const w = /([a-zäöüß]+)(?:\s+(?:komma|punkt)\s+([a-zäöüß]+|\d))?/g; let x; while ((x = w.exec(s))) { const a = gtWordNum(x[1]); if (a == null) continue; const b = x[2] == null ? 0 : /\d/.test(x[2]) ? Number(x[2]) : gtWordNum(x[2]); v = a + (b != null && b < 10 ? b / 10 : 0); break; } }
   return v != null && v > 5 && v < 50 ? Math.round(v * 10) / 10 : null;
 }
-/** km-Stand an einem Tag: heute vom Auto (falls verbunden), sonst zwischen zwei Ladungen interpoliert */
+/** Genauer km-Stand zu einem Zeitpunkt aus dem Fahrtenbuch (MyŠkoda): während einer Fahrt zwischen Start- und Ziel-km interpoliert,
+    zwischen zwei Fahrten (Auto stand) der Ziel-km der vorherigen Fahrt. Nur wenn Fahrten vor UND nach dem Zeitpunkt vorliegen – sonst null. */
+function tripKmAt(iso) {
+  const t = Date.parse(iso), ts = getTrips().filter(x => Number.isFinite(x.o1) && x.s && x.e); if (!Number.isFinite(t) || !ts.length) return null;
+  const S = (x) => Date.parse(x.s), E = (x) => Date.parse(x.e);
+  const inT = ts.find(x => S(x) <= t && t <= E(x));
+  if (inT) { const o0 = Number.isFinite(inT.o0) ? inT.o0 : inT.o1 - (inT.km || 0); return Math.round(o0 + (inT.o1 - o0) * (t - S(inT)) / Math.max(1, E(inT) - S(inT))); }
+  let before = null, after = null; ts.forEach(x => { if (E(x) < t && (!before || E(x) > E(before))) before = x; if (S(x) > t && (!after || S(x) < S(after))) after = x; });
+  return before && after ? before.o1 : null;
+}
+/** km-Stand zu einem Zeitpunkt: { km, est } – Fahrtenbuch (genau) → heute vom Auto → zwischen zwei Ladungen interpoliert (geschätzt) */
 async function gtKmAt(iso) {
-  const day = wxIso(new Date(iso));
-  if (day === wxIso(new Date()) && apiEnabled()) { try { return (await fetchCarKm()).km; } catch (e) { } }
+  const tk = tripKmAt(iso); if (tk > 0) return { km: tk, est: false };
+  if (wxIso(new Date(iso)) === wxIso(new Date()) && apiEnabled()) { try { return { km: (await fetchCarKm()).km, est: false }; } catch (e) { } }
   const rs = getReadings().filter(r => r.odometerKm > 0).map(r => ({ t: Date.parse(r.date), km: r.odometerKm })).filter(x => Number.isFinite(x.t)).sort((a, b) => a.t - b.t), t = Date.parse(iso);
-  const i = rs.findIndex(x => x.t >= t); if (i <= 0) return null; const a = rs[i - 1], b = rs[i];
-  return Math.round(a.km + (b.km - a.km) * (t - a.t) / Math.max(1, b.t - a.t));
+  const i = rs.findIndex(x => x.t >= t); if (i <= 0) return { km: null, est: true }; const a = rs[i - 1], b = rs[i];
+  return { km: Math.round(a.km + (b.km - a.km) * (t - a.t) / Math.max(1, b.t - a.t)), est: true };
+}
+/** Nachträglich: Langzeit-Ablesungen per Sprachbefehl ohne (genauen) km-Stand bekommen ihn aus dem Fahrtenbuch, sobald es importiert ist */
+function ltFillKm() {
+  const lab = getLab(); if (!Array.isArray(lab.lt)) return 0; let n = 0;
+  lab.lt = lab.lt.map(e => { if (!e.at || !(e.kmEst || !(e.km > 0))) return e; const km = tripKmAt(e.at); if (!(km > 0)) return e; n++; const o = { ...e, km }; delete o.kmEst; return o; });
+  if (n) setLab(lab); return n;
 }
 /** Außentemperatur zu einem Zeitpunkt der letzten Tage (stündlich, Open-Meteo) */
 async function gtOutAt(iso) {
@@ -8172,7 +8189,7 @@ async function gtImport(silent) {
         if (L.title === GT_LIST) continue;                                            // gespiegelte Fälligkeiten nicht einlesen
         const lv = gtParseLt(t.title), v = lv == null ? gtParse(t.title) : null; if (lv == null && !v) continue; const src = 'gt:' + t.id;
         if (lv != null) {                                                             // Langzeitverbrauch (Bordcomputer „Seit Kauf“)
-          if (!have.has(src)) { const at = t.updated || new Date().toISOString(), km = await gtKmAt(at), e = { id: labId(), date: wxIso(new Date(at)), k100: lv, src, note: 'per Sprachbefehl' }; if (km > 0) e.km = km; lab.lt.push(e); have.add(src); nl++; }
+          if (!have.has(src)) { const at = t.updated || new Date().toISOString(), k = await gtKmAt(at), e = { id: labId(), date: wxIso(new Date(at)), at, k100: lv, src, note: 'per Sprachbefehl' }; if (k.km > 0) e.km = k.km; if (k.est || !(k.km > 0)) e.kmEst = true; lab.lt.push(e); have.add(src); nl++; }
         } else if (!have.has(src)) {
           const at = t.updated || new Date().toISOString(), en = { id: labId(), at, t: v.t, src }; if (v.ctx) en.ctx = v.ctx;
           const out = await gtOutAt(at); if (Number.isFinite(out)) en.out = out;
@@ -8247,7 +8264,7 @@ async function gtMirror(silent) {
 let gtMirSkip = false;
 $('set-gt-mirror').addEventListener('change', (e) => { setQuickSetting('gtMirror', e.target.checked || undefined); if (e.target.checked) gtMirror(false); else $('gt-sync-msg').textContent = 'Aus – bestehende Aufgaben bleiben in Google Tasks, bis du die Liste dort löschst.'; });
 $('gt-sync').addEventListener('click', () => { if (!gtMirrorOn()) { $('set-gt-mirror').checked = true; setQuickSetting('gtMirror', true); } gtMirror(false); });
-setTimeout(() => { gtImport(true); gtMirror(true); }, 3000); document.addEventListener('visibilitychange', () => { if (!document.hidden) { gtImport(true); gtMirror(true); } });
+setTimeout(() => { gtImport(true); gtMirror(true); try { ltFillKm(); } catch (e) { } }, 3000); document.addEventListener('visibilitychange', () => { if (!document.hidden) { gtImport(true); gtMirror(true); } });
 renderBtm();
 if (wxLoc() && !$('wxo-card').classList.contains('hidden')) { /* Prognose sichtbar: Beobachter setzt die Startkarte */ } else dashSwipeTo(dashDefaultIdx(), false);
 dashSwipeSync();
