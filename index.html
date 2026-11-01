@@ -8125,8 +8125,20 @@ async function gtImport(silent) {
   if (silent && !window.cloud.driveReady()) return;
   gtBusy = true; if (!silent) { btmMsg = 'Google Tasks wird gelesen …'; renderBtm(); }
   try {
-    const tok = await window.cloud.driveToken(), H = { Authorization: 'Bearer ' + tok }, api = 'https://tasks.googleapis.com/tasks/v1';
-    const lr = await fetch(api + '/users/@me/lists?maxResults=20', { headers: H }); if (!lr.ok) throw new Error(lr.status === 403 ? 'Kein Zugriff auf Google Tasks (Berechtigung bzw. Tasks API im Google-Projekt aktivieren)' : 'Google Tasks ' + lr.status);
+    const api = 'https://tasks.googleapis.com/tasks/v1';
+    let tok = await window.cloud.driveToken(), H = { Authorization: 'Bearer ' + tok }, lr = await fetch(api + '/users/@me/lists?maxResults=20', { headers: H });
+    const why = async (r) => { try { const j = await r.json(), e = j.error || {}, d = (e.details || []).find(x => x.reason) || {}, er = (e.errors || [])[0] || {}; return { reason: d.reason || er.reason || e.status || '', msg: e.message || '' }; } catch (x) { return { reason: '', msg: '' }; } };
+    if (lr.status === 401 || lr.status === 403) {
+      let w = await why(lr);
+      /* Zugriffstoken stammt noch aus der Zeit vor der Tasks-Berechtigung (nur Drive): neu anfordern – öffnet einmal das Google-Fenster */
+      if (lr.status === 401 || /insufficient|SCOPE/i.test(w.reason + ' ' + w.msg)) {
+        if (silent) throw new Error('Tasks-Berechtigung fehlt');
+        window.cloud.driveForget(); tok = await window.cloud.driveToken(true); H = { Authorization: 'Bearer ' + tok };
+        lr = await fetch(api + '/users/@me/lists?maxResults=20', { headers: H }); if (!lr.ok) w = await why(lr);
+      }
+      if (!lr.ok) throw new Error(/SERVICE_DISABLED|accessNotConfigured|has not been used|disabled/i.test(w.reason + ' ' + w.msg) ? 'Die Google Tasks API ist im Google-Projekt noch nicht aktiviert (Cloud Console → APIs & Dienste → Bibliothek → Google Tasks API).'
+        : /insufficient|SCOPE/i.test(w.reason + ' ' + w.msg) ? 'Die Tasks-Berechtigung wurde nicht erteilt – im Google-Fenster bitte den Haken bei Google Tasks setzen.' : 'Kein Zugriff (' + (w.reason || lr.status) + ')' + (w.msg ? ': ' + w.msg.slice(0, 120) : ''));
+    } else if (!lr.ok) throw new Error('Google Tasks ' + lr.status);
     const lists = (await lr.json()).items || [], lab = getLab(); lab.bt = lab.bt || []; const have = new Set(lab.bt.map(e => e.src).filter(Boolean)); let n = 0, skip = 0;
     for (const L of lists) {
       const tr = await fetch(api + '/lists/' + encodeURIComponent(L.id) + '/tasks?showCompleted=false&maxResults=100', { headers: H }); if (!tr.ok) continue;
@@ -8143,7 +8155,9 @@ async function gtImport(silent) {
     if (n) { lab.bt.sort((a, b) => Date.parse(a.at) - Date.parse(b.at)); setLab(lab); btmVal = null; }
     btmMsg = n ? '✓ ' + n + (n === 1 ? ' Wert' : ' Werte') + ' aus Google Tasks übernommen' : silent ? '' : 'Keine neuen „Akku …“-Aufgaben in Google Tasks.';
     renderBtm(); if (n && currentView === 'recs') renderRecs();
-  } catch (e) { if (!silent) { btmMsg = 'Google Tasks: ' + (e.message || e); renderBtm(); } }
+  } catch (e) { if (!silent) { btmMsg = '⚠️ Google Tasks: kein Zugriff'; renderBtm();
+      $('au-sheet-box').innerHTML = '<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div><p class="text-lg font-bold">Google Tasks</p><p class="text-sm text-left">' + esc(e.message || String(e)) + '</p><button type="button" data-cc="close" class="h-12 w-full rounded-2xl border border-slate-300 dark:border-slate-700 text-sm font-semibold">Schließen</button>';
+      $('au-sheet').classList.remove('hidden'); } }
   finally { gtBusy = false; }
 }
 setTimeout(() => gtImport(true), 3000); document.addEventListener('visibilitychange', () => { if (!document.hidden) gtImport(true); });
