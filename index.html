@@ -5906,7 +5906,7 @@ function renderVehSlide() {
     <div class="relative mt-2 h-3 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800"><div class="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400 ${charging ? 'animate-pulse' : ''}" style="width:${Math.max(2, Math.min(100, soc))}%"></div>${tgt ? `<div class="absolute inset-y-0 border-l-2 border-slate-900/70 dark:border-white/80" style="left:${tgt}%"></div>` : ''}</div>
     <div class="min-h-2 flex-1"></div>
     <div class="grid grid-cols-2 gap-1.5">${[
-      locked != null ? tile('Verriegelt', locked ? '🔒 zu' : '🔓 offen', locked ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400') : tile('Ladestatus', d.chargeState === 'READY_FOR_CHARGING' ? 'bereit' : charging ? 'lädt' : 'kein Laden'),
+      locked != null ? tile('Verriegelt', locked ? '🔒 geschlossen' : '🔓 geöffnet', locked ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400') : tile('Ladestatus', d.chargeState === 'READY_FOR_CHARGING' ? 'bereit' : charging ? 'lädt' : 'kein Laden'),
       charging ? tile('Lädt', (d.chargePowerKw > 0 ? fmt(d.chargePowerKw, 1) + ' kW' : '') + (d.minutesToFull > 0 ? ' · voll ' + hhmm(at.getTime() + d.minutesToFull * 60000) : ''), 'text-sky-600 dark:text-sky-300') : tile('Ladekabel', plugged ? 'verbunden' : 'nicht verbunden'),
       tile('Ladeziel', tgt ? tgt + ' %' + (d.careMode === 'ACTIVATED' ? ' · Schonung' : '') : '–'),
       tile('km-Stand', d.odometerKm != null ? fmt(Math.round(d.odometerKm), 0) + ' km' : '–')].join('')}</div>`;
@@ -5924,7 +5924,7 @@ function renderVehCard() {
   const ico = (path) => `<svg class="h-4 w-4 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true">${path}</svg>`;
   const I = { lock: ico('<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>'), plug: ico('<path d="M9 2v6M15 2v6M7 8h10v4a5 5 0 0 1-10 0V8zM12 17v5"/>'), tgt: ico('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>'), odo: ico('<path d="M4 18a8 8 0 1 1 16 0"/><path d="M12 18l4-5"/>'), bolt: ico('<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>') };
   const rows = [
-    locked != null ? row(I.lock, 'Verriegelt', locked ? 'zu' : 'offen', locked ? 'text-emerald-400' : 'text-amber-400') : '',
+    locked != null ? row(I.lock, 'Verriegelt', locked ? 'geschlossen' : 'geöffnet', locked ? 'text-emerald-400' : 'text-amber-400') : '',
     charging ? row(I.bolt, 'Lädt', (d.chargePowerKw > 0 ? fmt(d.chargePowerKw, 1) + ' kW' : '') + (d.minutesToFull > 0 ? ' · voll ' + hhmm(Date.parse(d.capturedAt || new Date(c.t).toISOString()) + d.minutesToFull * 60000) : ''), 'text-sky-300')
       : row(I.plug, 'Ladekabel', plugged ? 'verbunden' : 'nicht verbunden', plugged ? 'text-sky-300' : 'text-slate-400'),
     tgt ? row(I.tgt, 'Ladeziel', tgt + ' %' + (d.careMode === 'ACTIVATED' ? ' · Akkuschonung' : '')) : '',
