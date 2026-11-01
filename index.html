@@ -8943,7 +8943,7 @@ function rtRenderRes() {
   const chip = (i, sg, v, t) => `<span class="inline-flex items-center gap-1 whitespace-nowrap rounded-[10px] bg-slate-100 dark:bg-slate-800 px-2 py-1 text-[12px]" title="${t}"><span aria-hidden="true">${i}</span>${(sg ? (v >= 0 ? '+' : '−') : '') + fmt(Math.abs(v), 1)}</span>`;
   el.innerHTML = `<div class="rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
     <div class="flex items-end justify-between gap-3"><div class="min-w-0"><p class="text-[11px] uppercase tracking-[0.06em] text-slate-500 dark:text-slate-400">Verbrauch</p><p class="font-barlow text-[40px] font-bold leading-none text-emerald-500 dark:text-emerald-400">${fmt(r.kwh, 1)}<span class="text-lg"> kWh</span></p><p class="mt-0.5 text-xs text-left text-slate-500 dark:text-slate-400">${fmt(r.k100, 1)} kWh/100 km · ${fmt(r.km, 0)} km · ${Math.floor(dur / 60)} h ${pad2(dur % 60)}${r.stops && r.stops.length ? ' inkl. Laden' : ''}</p></div>
-      <div class="shrink-0 text-right"><p class="text-[11px] uppercase tracking-[0.06em] text-slate-500 dark:text-slate-400">${tw ? 'Zurück' : 'Ankunft'}</p><p class="font-barlow text-[40px] font-bold leading-none ${lo ? 'text-red-500' : ''}">${Math.round(r.socA)}<span class="text-lg"> %</span></p><p class="mt-0.5 text-xs text-slate-500 dark:text-slate-400">~ ${hhmm(eta.getTime())} Uhr</p></div></div>
+      <div class="shrink-0 text-right"><p class="text-[11px] uppercase tracking-[0.06em] text-slate-500 dark:text-slate-400">${tw ? 'Zurück' : 'Ankunft'}</p><p class="font-barlow text-[40px] font-bold leading-none ${lo ? 'text-red-500' : ''}">${r.socA < 0 ? '0' : Math.round(r.socA)}<span class="text-lg"> %</span></p><p class="mt-0.5 text-xs text-slate-500 dark:text-slate-400">~ ${hhmm(eta.getTime())} Uhr</p></div></div>
     ${tw ? `<p class="mt-2 rounded-xl bg-slate-100 dark:bg-slate-800 px-3 py-2 text-xs text-left"><span class="text-pink-500">◆</span> Am Ziel ~ ${hhmm(RT.o.dep + tw.t * 1000)} Uhr mit <b>${Math.round(tw.soc)} %</b> · ${fmt(tw.km, 0)} km je Richtung · ohne Laden am Ziel</p>` : ''}
     ${lo ? `<p class="mt-2 rounded-xl bg-red-500/10 px-3 py-2 text-xs text-red-600 dark:text-red-300 text-left">${(r.stops && r.stops.length ? 'Auch mit Ladestopps knapp' : r.socA < 0 ? 'Reicht nicht ohne Laden' : (tw ? 'Rückkehr' : 'Ankunft') + ' unter ' + WXO_RES + ' %') + (r.stops && r.stops.length ? ' – länger laden oder voller starten.' : ' – Ladestopp siehe unten oder voller starten.')}</p>` : ''}
     ${rtSvg(r)}
@@ -8991,16 +8991,17 @@ function rtSegDist(p, a, b) {                                                   
   const ky = 111320, kx = 111320 * Math.cos(p.lat * Math.PI / 180), ax = (a.lon - p.lon) * kx, ay = (a.lat - p.lat) * ky, bx = (b.lon - p.lon) * kx, by = (b.lat - p.lat) * ky, dx = bx - ax, dy = by - ay, L = dx * dx + dy * dy;
   const f = L > 0 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / L)) : 0; return { m: Math.hypot(ax + f * dx, ay + f * dy), f };
 }
-/* Ladezeit-Tabelle je Säulenleistung: M[p] = Minuten von 0 bis p %, aus der neuesten DC-Ladekurve (auf deren gemessene Dauer geeicht), begrenzt durch die Säule */
-const RT_CT = {};
+/* Ladezeit-Tabelle je Säulenleistung: M[p] = Minuten von 0 bis p %, aus der neuesten DC-Ladekurve (auf deren gemessene Dauer geeicht), begrenzt durch die Säule.
+   Kurve wird einmal je Planung gewählt (rtCurveInit), damit die Tabelle nicht für jeden Rechenschritt neu entsteht. */
+let RT_CT = {}, RT_CV = null;
+function rtCurveInit() { const cs = getLab().curves.slice().sort((x, y) => String(y.date).localeCompare(String(x.date))); RT_CV = cs.find(x => x.kwh > 0 && x.s1 > x.s0) || null; RT_CT = {}; }
 function rtCT(kwCap) {
-  const cs = getLab().curves.slice().sort((x, y) => String(y.date).localeCompare(String(x.date))), c = cs.find(x => x.kwh > 0 && x.s1 > x.s0), cap = batteryKwh();
-  const key = Math.round(Math.min(kwCap, 400)) + '|' + (c ? c.id + c.min + c.kwh : 'x') + '|' + cap; if (RT_CT[key]) return RT_CT[key];
-  let per, pw, k = 1;
+  const kc = kwCap >= 150 ? 150 : kwCap >= 100 ? 100 : kwCap >= 75 ? 75 : 50; if (RT_CT[kc]) return RT_CT[kc];
+  const c = RT_CV, cap = batteryKwh(); let per, pw, k = 1;
   if (c) { per = c.kwh / (c.s1 - c.s0); pw = (p) => cvPow(c, p); let raw = 0; for (let p = c.s0; p < c.s1; p++) raw += per / pw(p + 0.5) * 60; k = c.min > 0 && raw > 0 ? c.min / raw : 1; }
   else { per = cap / 100; pw = (p) => p < 50 ? 95 : p < 80 ? 70 : 30; }
-  const M = [0]; for (let p = 0; p < 100; p++) { const w = Math.min(pw(p + 0.5), kwCap); M.push(M[p] + per / Math.max(3, w) * 60 * (c && p >= c.s0 && p < c.s1 ? k : c ? Math.max(1, k) : 1)); }
-  return (RT_CT[key] = M);
+  const M = [0]; for (let p = 0; p < 100; p++) { const w = Math.min(pw(p + 0.5), kc); M.push(M[p] + per / Math.max(3, w) * 60 * (c ? Math.max(c && p >= c.s0 && p < c.s1 ? k : 1, k) : 1)); }
+  return (RT_CT[kc] = M);
 }
 const rtChargeMin = (a, b, kwCap) => { const M = rtCT(kwCap), f = (x) => { x = Math.max(0, Math.min(100, x)); const i = Math.floor(x); return i >= 100 ? M[100] : M[i] + (M[i + 1] - M[i]) * (x - i); }; return Math.max(0, f(b) - f(a)); };
 function rtCardFor(op) {
@@ -9009,34 +9010,43 @@ function rtCardFor(op) {
   if (own && pr(own)) return { name: own, eur: pr(own), own: true };
   let best = null; cards.forEach(n => { const v = pr(n); if (v && (!best || v < best.eur)) best = { name: n, eur: v, own: false }; }); return best;
 }
-/* Lage der Lader an der Route (bei Hin & zurück je Weg einmal), nach Position sortiert */
+/* Lage der Lader an der Route (bei Hin & zurück je Weg einmal), nach Position sortiert. Je 4 km Strecke bleiben die 3 besten Lader (Leistung × Ladepunkte, wenig Umweg) –
+   in Städten stehen sonst hunderte Säulen im Korridor, die für die Planung nichts bringen. */
 function rtPos(r, sites) {
   const last = r.pts.length - 1, ranges = r.turn ? [[1, r.turn.i, 'Hinweg'], [r.turn.i + 1, last - 1, 'Rückweg']] : [[1, last - 1, '']], out = [];
-  sites.forEach(s => ranges.forEach(([i0, i1, leg]) => {
-    let j = -1, dm = 1e9; for (let i = i0; i <= i1; i++) { const d = rtSegDist(s, r.pts[i - 1], r.pts[i]); if (d.m < dm) { dm = d.m; j = d.f > 0.5 ? i : i - 1; } } if (j < 1 || j >= last || dm > 3000) return;
-    const off = dm / 1000; out.push({ ...s, cid: s.id + '|' + leg, leg, j, off, det: off < 0.4 ? 0 : off * 2 / 40 * 60 + 2, card: rtCardFor(s.op) });
-  }));
-  return out.sort((a, b) => a.j - b.j);
+  const lat0 = Math.min(...r.pts.map(p => p.lat)) - 0.04, lat1 = Math.max(...r.pts.map(p => p.lat)) + 0.04;
+  sites.forEach(s => { if (s.lat < lat0 || s.lat > lat1) return; ranges.forEach(([i0, i1, leg]) => {
+    let j = -1, dm = 1e9; for (let i = i0; i <= i1; i++) { const p = r.pts[i]; if (Math.abs(p.lat - s.lat) > 0.06 && Math.abs(r.pts[i - 1].lat - s.lat) > 0.06) continue; const d = rtSegDist(s, r.pts[i - 1], p); if (d.m < dm) { dm = d.m; j = d.f > 0.5 ? i : i - 1; } }
+    if (j < 1 || j >= last || dm > 3000) return; const off = dm / 1000; out.push({ ...s, cid: s.id + '|' + leg, leg, j, off, det: off < 0.4 ? 0 : off * 2 / 40 * 60 + 2 });
+  }); });
+  const score = (c) => Math.min(c.kw, 150) * Math.min(c.n, 4) - c.det * 40, buckets = new Map();
+  out.forEach(c => { const k = c.leg + Math.floor(r.dkm[c.j] / 4); if (!buckets.has(k)) buckets.set(k, []); buckets.get(k).push(c); });
+  const keep = []; buckets.forEach(l => keep.push(...l.sort((a, b) => score(b) - score(a)).slice(0, 3)));
+  keep.forEach(c => { c.card = rtCardFor(c.op); });
+  return keep.sort((a, b) => a.j - b.j);
 }
 const RT_MINARR = 7, RT_TGT = [50, 60, 70, 80];
 const rtPen = (c) => (c.n <= 1 ? 8 : c.n === 2 ? 3 : 0) + 3;                       // Wartezeit-Risiko bei wenigen Ladepunkten + 3 min je Stopp (Anfahren, Anstecken)
-/* Ladeplan per dynamischer Programmierung: Zustände = (Lader, Ladeziel), Kosten = Ladezeit + Umweg + Zuschläge (schnell) bzw. Euro (günstig).
-   start: { j, soc } – Abfahrt nach festen Stopps; first: erzwungener erster Lader. Liefert die Stopps oder null. */
-function rtPlan(r, pos, start, by = 'fast', first = null) {
-  const cap = batteryKwh(), last = r.pts.length - 1, need = (j) => (r.cumK[last] - r.cumK[j]) / cap * 100, arr = (s, j0, c) => s - (r.cumK[c.j] - r.cumK[j0]) / cap * 100 - c.off * 2 * 0.2 / cap * 100;
-  const w = (c, sArr, T) => { const min = rtChargeMin(sArr, T, c.kw), eur = c.card ? (T - sArr) / 100 * cap / 0.93 * c.card.eur : null; return { min, eur, cost: by === 'cheap' ? (eur ?? 99) + (min + c.det) * 0.02 : min + c.det + rtPen(c) }; };
-  const st0 = { j: start.j, soc: start.soc, cost: 0, prev: null, c: null }; let best = null;
-  if (start.soc - need(start.j) >= WXO_RES && !first) return [];
-  const nodes = (first ? [first] : pos.filter(c => c.j > start.j)), states = new Map(); nodes.forEach(c => states.set(c.cid, []));
-  const relax = (S) => {
-    if (S.c && S.soc - need(S.j) >= WXO_RES) { if (!best || S.cost < best.cost) best = S; return; }
-    for (const c of (first && !S.c ? [first] : pos)) { if (c.j <= S.j) continue; const sA = arr(S.soc, S.j, c); if (sA < RT_MINARR) break;
-      const fin = Math.ceil(need(c.j) + WXO_RES + 1), opts = (fin <= 90 ? [fin] : []).concat(RT_TGT.filter(t => t < fin)).filter(t => t >= sA + 5);
-      for (const T of opts) { const x = w(c, sA, T), N = { j: c.j, soc: T, cost: S.cost + x.cost, prev: S, c, sArr: sA, min: x.min, eur: x.eur };
-        let l = states.get(c.cid); if (!l) states.set(c.cid, l = []); const o = l.find(q => q.soc === T); if (o && o.cost <= N.cost) continue; if (o) Object.assign(o, N); else l.push(N); } } };
-  relax(st0); for (const c of (first ? [first] : []).concat(pos)) { const l = states.get(c.cid) || []; for (const S of l.slice()) relax(S); if (first && c === first) { states.delete(first.cid); } }
-  if (!best) return null; const out = []; for (let S = best; S && S.c; S = S.prev) out.unshift({ ...S.c, sArr: S.sArr, tgt: S.soc, min: S.min, eur: S.eur, tot: S.min + S.c.det });
-  return out;
+/* Ladeplan rückwärts (dynamische Programmierung): F[k][o] = geringste Kosten bis zum Ziel, wenn man Lader k mit Ladeziel o verlässt.
+   Kosten = Ladezeit + Umweg + Zuschläge (schnell) bzw. Euro (günstig). Einmal gerechnet, liefert die Tabelle den Plan und jede Alternative sofort. */
+function rtDP(r, pos, by) {
+  const cap = batteryKwh(), last = r.pts.length - 1, need = (j) => (r.cumK[last] - r.cumK[j]) / cap * 100, n = pos.length;
+  const opts = pos.map(c => { const fin = Math.ceil(need(c.j) + WXO_RES + 1); return (fin <= 90 ? [fin] : []).concat(RT_TGT.filter(t => t < fin)); });
+  const w = (c, sA, T) => { const min = rtChargeMin(sA, T, c.kw), eur = c.card ? (T - sA) / 100 * cap / 0.93 * c.card.eur : null; return { min, eur, cost: by === 'cheap' ? (eur ?? 99) + (min + c.det) * 0.02 : min + c.det + rtPen(c) }; };
+  const arr = (s, j0, c) => s - (r.cumK[c.j] - r.cumK[j0]) / cap * 100 - c.off * 2 * 0.2 / cap * 100;
+  const F = pos.map(() => []), NX = pos.map(() => []);
+  const bestFrom = (soc, j0, k0, out) => { let best = Infinity, arg = null;
+    for (let m = k0; m < n; m++) { const c = pos[m]; if (c.j <= j0) continue; const sA = arr(soc, j0, c); if (sA < RT_MINARR) break;
+      opts[m].forEach((T, oi) => { if (T < sA + 5 || F[m][oi] === Infinity) return; const x = w(c, sA, T), v = x.cost + F[m][oi]; if (out) out.push({ m, oi, sA, x, v }); if (v < best) { best = v; arg = { m, oi, sA, x }; } }); }
+    return { best, arg }; };
+  for (let k = n - 1; k >= 0; k--) opts[k].forEach((T, oi) => { if (T - need(pos[k].j) >= WXO_RES) { F[k][oi] = 0; NX[k][oi] = null; return; } const b = bestFrom(T, pos[k].j, k + 1); F[k][oi] = b.best; NX[k][oi] = b.arg; });
+  const chain = (a) => { const out = []; while (a) { const c = pos[a.m], T = opts[a.m][a.oi]; out.push({ ...c, sArr: a.sA, tgt: T, min: a.x.min, eur: a.x.eur, tot: a.x.min + c.det }); a = NX[a.m][a.oi]; } return out; };
+  const idx = new Map(pos.map((c, i) => [c.cid, i]));
+  return {
+    plan(soc, j0) { if (soc - need(j0) >= WXO_RES) return []; const b = bestFrom(soc, j0, 0); return b.arg ? chain(b.arg) : null; },
+    alts(soc, j0) { const all = []; bestFrom(soc, j0, 0, all); const per = new Map(); all.forEach(a => { const o = per.get(a.m); if (!o || a.v < o.v) per.set(a.m, a); }); return [...per.values()].map(a => ({ v: a.v, plan: chain(a) })); },
+    idx
+  };
 }
 function rtApplyStops(base, stops) {
   if (!stops || !stops.length) return base; const soc = base.soc.slice(); let add = 0, k = 0, tadd = 0;
@@ -9048,8 +9058,9 @@ function rtApplyStops(base, stops) {
 async function rtFindStops(n) {
   const b = RT.base; if (!b || Math.min(...b.soc.slice(1)) >= WXO_RES - 0.5) { RT.ch = null; return; }
   RT.ch = { busy: true }; rtRenderRes();
-  try { const sites = await rtChargers(b); if (n !== RT.n) return; const pos = rtPos(b, sites), stops = rtPlan(b, pos, { j: 0, soc: RT.o.soc });
-    RT.ch = { pos, none: !stops || !stops.length, sites: sites.length }; RT.res = rtApplyStops(b, stops); }
+  try { const sites = await rtChargers(b); if (n !== RT.n) return; await new Promise(res => setTimeout(res, 0)); rtCurveInit();
+    const pos = rtPos(b, sites), dp = { fast: rtDP(b, pos, 'fast') }, stops = dp.fast.plan(RT.o.soc, 0);
+    RT.ch = { pos, dp, none: !stops || !stops.length, sites: sites.length }; RT.res = rtApplyStops(b, stops); }
   catch (e) { if (n !== RT.n) return; RT.ch = { err: (e && e.message) || 'Ladesäulen nicht geladen' }; }
   rtRenderRes();
 }
@@ -9075,11 +9086,10 @@ function rtStopCard() {
 }
 /* Alternativen für Stopp k: frühere Stopps bleiben, für jeden möglichen Lader wird der Rest neu geplant */
 function rtAltList(k) {
-  const b = RT.base, S = RT.res.stops || [], pre = S.slice(0, k), st = pre.length ? { j: pre[pre.length - 1].j, soc: pre[pre.length - 1].tgt } : { j: 0, soc: RT.o.soc }, cap = batteryKwh(), out = [];
-  for (const c of RT.ch.pos) { if (c.j <= st.j) continue; const sA = st.soc - (b.cumK[c.j] - b.cumK[st.j]) / cap * 100; if (sA < RT_MINARR) break;
-    const rest = rtPlan(b, RT.ch.pos, st, RT_CH.sort, c); if (!rest || !rest.length) continue; const plan = pre.concat(rest);
-    out.push({ c: rest[0], plan, tot: plan.reduce((a, x) => a + x.tot, 0), eur: plan.every(x => x.eur != null) ? plan.reduce((a, x) => a + x.eur, 0) : null }); if (out.length >= 40) break; }
-  return out.sort((a, b2) => RT_CH.sort === 'cheap' ? ((a.eur ?? 1e9) - (b2.eur ?? 1e9)) || a.tot - b2.tot : (a.tot + rtPen(a.c)) - (b2.tot + rtPen(b2.c)) || (a.eur ?? 1e9) - (b2.eur ?? 1e9));
+  const b = RT.base, S = RT.res.stops || [], pre = S.slice(0, k), st = pre.length ? { j: pre[pre.length - 1].j, soc: pre[pre.length - 1].tgt } : { j: 0, soc: RT.o.soc };
+  const by = RT_CH.sort, dp = RT.ch.dp[by] || (RT.ch.dp[by] = rtDP(b, RT.ch.pos, by));
+  const out = dp.alts(st.soc, st.j).map(a => { const plan = pre.concat(a.plan); return { c: a.plan[0], plan, tot: plan.reduce((x, y) => x + y.tot, 0), eur: plan.every(x => x.eur != null) ? plan.reduce((x, y) => x + y.eur, 0) : null }; });
+  return out.sort((a, b2) => by === 'cheap' ? ((a.eur ?? 1e9) - (b2.eur ?? 1e9)) || a.tot - b2.tot : (a.tot + a.plan.reduce((x, y) => x + rtPen(y), 0)) - (b2.tot + b2.plan.reduce((x, y) => x + rtPen(y), 0)) || (a.eur ?? 1e9) - (b2.eur ?? 1e9)).slice(0, 40);
 }
 function rtAltSheet() {
   const ch = RT.ch; if (!ch || !ch.pos) return; const box = $('au-sheet-box'), k = RT.altK || 0, multi = (RT.res.stops || []).length > 1;
