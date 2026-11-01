@@ -8849,7 +8849,7 @@ const rtFmtP = (v) => (v >= 0.05 ? '+' : v <= -0.05 ? '−' : '±') + fmt(Math.a
 const rtDev = (p, r) => (p - r) / r * 100;
 function rtFactor(skipId, override) {
   const list = getLab().fc.map(x => override && x.id === override.id ? override : x).filter(x => x.id !== skipId && x.real > 0 && x.raw100 > 0);
-  let s = 2, w0 = 2; list.forEach(x => { const age = Math.max(0, (Date.now() - Date.parse(x.dep)) / 864e5), w = Math.pow(0.5, age / 180); s += w * Math.min(1.4, Math.max(0.7, x.real / x.raw100)); w0 += w; });
+  let s = 2, w0 = 2; list.forEach(x => { const age = Math.max(0, (Date.now() - Date.parse(x.dep)) / 864e5), w = Math.pow(0.5, age / 180) * Math.max(0.2, Math.min(1, (x.km || 0) / 100)); s += w * Math.min(1.4, Math.max(0.7, x.real / x.raw100)); w0 += w; });
   return Math.round(s / w0 * 1000) / 1000;
 }
 async function rtRoute(a, b) {
@@ -8878,22 +8878,30 @@ async function rtWeather(route, dep) {
   const n = Math.max(2, Math.min(8, Math.round(route.km / 30) + 1)), idx = [...new Set(Array.from({ length: n }, (_, i) => Math.round(i * (route.segs.length - 1) / (n - 1))))];
   const key = idx.map(i => route.segs[i].lat.toFixed(2) + ',' + route.segs[i].lon.toFixed(2)).join(';'), c = RT.wx[key];
   let data = c && Date.now() - c.t < 30 * 60e3 ? c.d : null;
-  if (!data) { const r = await fetch('https://api.open-meteo.com/v1/forecast?latitude=' + idx.map(i => route.segs[i].lat.toFixed(3)).join(',') + '&longitude=' + idx.map(i => route.segs[i].lon.toFixed(3)).join(',') + '&hourly=temperature_2m,precipitation,wind_speed_10m,wind_direction_10m&wind_speed_unit=ms&timezone=auto&past_days=1&forecast_days=16');
+  if (!data) { const r = await fetch('https://api.open-meteo.com/v1/forecast?latitude=' + idx.map(i => route.segs[i].lat.toFixed(3)).join(',') + '&longitude=' + idx.map(i => route.segs[i].lon.toFixed(3)).join(',') + '&hourly=temperature_2m,precipitation,wind_speed_10m,wind_direction_10m,relative_humidity_2m,dew_point_2m&wind_speed_unit=ms&timezone=auto&past_days=1&forecast_days=16');
     if (!r.ok) throw new Error('Wetter nicht verfügbar'); const j = await r.json(); data = Array.isArray(j) ? j : [j]; RT.wx[key] = { t: Date.now(), d: data }; }
   return { pts: idx.map((si, k) => ({ d: route.segs[si].d, h: data[k] && data[k].hourly })) };
 }
 function rtWxAt(wx, d, ms) {
   if (!wx) return null; let best = wx.pts[0]; wx.pts.forEach(p => { if (Math.abs(p.d - d) < Math.abs(best.d - d)) best = p; }); const h = best.h; if (!h || !h.time) return null;
   const t = new Date(ms), k = t.getFullYear() + '-' + pad2(t.getMonth() + 1) + '-' + pad2(t.getDate()) + 'T' + pad2(t.getHours()) + ':00', i = h.time.indexOf(k); if (i < 0) return null;
-  return { T: Number(h.temperature_2m[i]), rain: Number(h.precipitation[i]) || 0, ws: Number(h.wind_speed_10m[i]) || 0, wd: Number(h.wind_direction_10m[i]) || 0 };
+  return { T: Number(h.temperature_2m[i]), rain: Number(h.precipitation[i]) || 0, ws: Number(h.wind_speed_10m[i]) || 0, wd: Number(h.wind_direction_10m[i]) || 0, rh: h.relative_humidity_2m ? Number(h.relative_humidity_2m[i]) : NaN, td: h.dew_point_2m ? Number(h.dew_point_2m[i]) : NaN };
 }
-/* Mitfahrer-Zuschlag („Freundin-Zuschlag“): ab 2 Personen pauschal +7 % – sie friert im Winter und will es im Sommer noch kühler.
+/* Mitfahrer-Zuschlag („Freundin-Zuschlag“): ab 2 Personen pauschal +12 % – sie friert im Winter (24 °C + Sitzheizung) und will es im Sommer noch kühler.
    In der App nicht eigens ausgewiesen, steckt im Chip Heizung/Klima. */
-const FREUNDIN_ZUSCHLAG = 0.07;
+const FREUNDIN_ZUSCHLAG = 0.12;
+/* Freisicht (beschlagene Scheiben nach dem Parken): bei hoher Luftfeuchte bzw. Taupunkt nahe der Außentemperatur und unter 14 °C läuft zu Beginn jeder
+   Etappe einige Minuten Gebläse + Klimakompressor + Heizung. Grob 0,25–0,6 kWh, mit Mitfahrern mehr (Atemfeuchte). */
+function rtFog(w, pers) {
+  if (!w || !(w.T < 14)) return 0; const sp = Number.isFinite(w.td) ? w.T - w.td : null, rh = Number.isFinite(w.rh) ? w.rh : null;
+  const lvl = (rh != null && rh >= 92) || (sp != null && sp <= 1.5) ? 1 : (rh != null && rh >= 85) || (sp != null && sp <= 3) ? 0.6 : 0; if (!lvl) return 0;
+  return lvl * Math.min(0.6, 0.25 + 0.03 * Math.max(0, 12 - w.T)) * (pers >= 2 ? 1.25 : 1);
+}
+const RT_STANDBY = 0.05;                                                          // kW Ruhestrom beim Parken am Ziel (Hin & zurück; zählt im Akkustand mit)
 function rtCalc(legs, o) {
   const m = RT_P.m + RT_P.mp * (o.pers - 1), g = 9.81, cap = batteryKwh(), f = 1 + o.tempo / 100, J = 3.6e6;
   const bat = (x) => x > 0 ? x / RT_P.eta : x * RT_P.rec;
-  let t = 0, E = { base: 0, slope: 0, wind: 0, rain: 0, heat: 0 }, cum = [0], Ts = [], rainKm = 0, hwSum = 0, noWx = false, h = [], turn = null, durDrive = 0, d0 = 0, pts = [], dkm = [], tt = [], dk = 0;
+  let t = 0, E = { base: 0, slope: 0, wind: 0, rain: 0, heat: 0 }, cum = [0], Ts = [], rainKm = 0, hwSum = 0, noWx = false, h = [], turn = null, durDrive = 0, d0 = 0, pts = [], dkm = [], tt = [], dk = 0, fogE = [];
   legs.forEach((lg, li) => {
     const route = lg.route, wx = lg.wx;
     if (li) { t += o.stay * 3600; turn = { i: cum.length - 1, t: durDrive }; }
@@ -8906,7 +8914,7 @@ function rtCalc(legs, o) {
       const stops = v < 11 ? 2 : v < 17 ? 1 : v < 22 ? 0.3 : 0.03, acc = stops * s.len / 1000 * 0.5 * m * v * v * (1 / RT_P.eta - RT_P.rec);
       const e0 = bat(F0 * s.len), e1 = bat(F0 * s.len + Fs), e2 = bat(Fw * s.len + Fs), e3 = bat(Fr * s.len + Fs);
       const pH = w.T < 18 ? 0.09 * (18 - w.T) : w.T > 24 ? 0.08 * (w.T - 24) : 0, cold = Math.max(0, e3) * 0.004 * Math.max(0, 15 - w.T);
-      const eb = (e0 + acc) / J + RT_P.aux * dt / 3600, es = (e1 - e0) / J, ew = (e2 - e1) / J, er = (e3 - e2) / J, eh = pH * dt / 3600 + cold / J + (i === 0 ? 0.5 * Math.max(0, 15 - w.T) / 15 : 0);
+      const eb = (e0 + acc) / J + RT_P.aux * dt / 3600, es = (e1 - e0) / J, ew = (e2 - e1) / J, er = (e3 - e2) / J, eh = pH * dt / 3600 + cold / J + (i === 0 ? 0.5 * Math.max(0, 15 - w.T) / 15 + (fogE[li] = rtFog(ww, o.pers)) + (li ? RT_STANDBY * o.stay : 0) : 0);
       E.base += eb; E.slope += es; E.wind += ew; E.rain += er; E.heat += eh; cum.push(cum[cum.length - 1] + eb + es + ew + er + eh);
       t += dt; durDrive += dt; dk += s.len / 1000; pts.push(route.pts[i + 1]); dkm.push(dk); tt.push(t); Ts.push(w.T); if (w.rain >= 0.3) rainKm += s.len / 1000; hwSum += hw * s.len;
     });
@@ -8916,7 +8924,7 @@ function rtCalc(legs, o) {
   const k = rtFactor(), raw = cum[cum.length - 1], kwh = raw * k, km = d0, socAt = (c) => o.soc - c * k / cap * 100;
   let up = 0, dn = 0; for (let i = 1; i < h.length; i++) { const d = h[i] - h[i - 1]; if (d > 0) up += d; else dn -= d; }
   return { km, dur: durDrive, tEnd: t, raw, k, kwh, k100: kwh / km * 100, raw100: raw / km * 100, E: Object.fromEntries(Object.entries(E).map(([a, v]) => [a, v * k])), soc: cum.map(socAt),
-    pts, dkm, tt, cumK: cum.map(c => c * k), socA: socAt(raw), turn: turn ? { i: turn.i, soc: socAt(cum[turn.i]), t: turn.t, km: legs[0].route.km } : null, up: Math.round(up), dn: Math.round(dn), tMin: Math.min(...Ts), tMax: Math.max(...Ts), tAvg: Ts.reduce((a, x) => a + x, 0) / Ts.length, rainKm, hw: hwSum / (km * 1000), noWx, noH: legs.some(l => l.route.noH), h };
+    pts, dkm, tt, cumK: cum.map(c => c * k), fog: fogE.reduce((a, x) => a + (x || 0), 0) * k * (o.pers >= 2 ? 1 + FREUNDIN_ZUSCHLAG : 1), socA: socAt(raw), turn: turn ? { i: turn.i, soc: socAt(cum[turn.i]), t: turn.t, km: legs[0].route.km } : null, up: Math.round(up), dn: Math.round(dn), tMin: Math.min(...Ts), tMax: Math.max(...Ts), tAvg: Ts.reduce((a, x) => a + x, 0) / Ts.length, rainKm, hw: hwSum / (km * 1000), noWx, noH: legs.some(l => l.route.noH), h };
 }
 function rtSvg(r) {
   const W = 312, H = 104, B = 4, n = r.h.length, X = (i) => i / (n - 1) * W;
@@ -8948,8 +8956,8 @@ function rtRenderRes() {
     ${lo ? `<p class="mt-2 rounded-xl bg-red-500/10 px-3 py-2 text-xs text-red-600 dark:text-red-300 text-left">${(r.stops && r.stops.length ? 'Auch mit Ladestopps knapp' : r.socA < 0 ? 'Reicht nicht ohne Laden' : (tw ? 'Rückkehr' : 'Ankunft') + ' unter ' + WXO_RES + ' %') + (r.stops && r.stops.length ? ' – länger laden oder voller starten.' : ' – Ladestopp siehe unten oder voller starten.')}</p>` : ''}
     ${rtSvg(r)}
     <div class="mt-1 flex justify-between gap-2 text-[11px] text-slate-500 dark:text-slate-400"><span><span class="text-emerald-500">━</span> Akku</span><span>Höhe · ↑ ${r.up} m ↓ ${r.dn} m</span></div>
-    <div class="mt-2.5 flex flex-wrap gap-1.5">${chip('🛣️', false, r.E.base, 'Rollen, Luft, Anfahren, Nebenverbraucher – flach, windstill, trocken')}${chip('⛰️', true, r.E.slope, 'Steigungen minus Rekuperation bergab')}${chip('💨', true, r.E.wind, (r.hw > 0.2 ? 'Gegenwind' : r.hw < -0.2 ? 'Rückenwind' : 'Wind') + ' im Schnitt ' + fmt(Math.abs(r.hw) * 3.6, 0) + ' km/h')}${chip('🔥', true, r.E.heat, 'Heizung/Klima und kalter Akku, ' + fmt(r.tMin, 0) + ' bis ' + fmt(r.tMax, 0) + ' °C')}${Math.abs(r.E.rain) >= 0.05 ? chip('🌧️', true, r.E.rain, 'Nässe auf ' + fmt(r.rainKm, 0) + ' km') : ''}</div>
-    <p class="mt-2 text-[11px] text-slate-500 dark:text-slate-400 text-left">${fmt(r.tAvg, 0)} °C · ${r.hw > 0.2 ? 'Gegenwind' : r.hw < -0.2 ? 'Rückenwind' : 'kaum Wind'}${r.rainKm >= 1 ? ' · Regen' : ''} · persönlicher Faktor ${fmt(r.k, 2)}${r.noWx ? ' · ⚠️ teils ohne Wettervorhersage (10 °C angenommen)' : ''}${r.noH ? ' · ⚠️ ohne Höhenprofil' : ''}</p></div>`;
+    <div class="mt-2.5 flex flex-wrap gap-1.5">${chip('🛣️', false, r.E.base, 'Rollen, Luft, Anfahren, Nebenverbraucher – flach, windstill, trocken')}${chip('⛰️', true, r.E.slope, 'Steigungen minus Rekuperation bergab')}${chip('💨', true, r.E.wind, (r.hw > 0.2 ? 'Gegenwind' : r.hw < -0.2 ? 'Rückenwind' : 'Wind') + ' im Schnitt ' + fmt(Math.abs(r.hw) * 3.6, 0) + ' km/h')}${chip('🔥', true, r.E.heat, (r.fog > 0.05 ? 'Heizung/Klima, Freisicht (≈ ' + fmt(r.fog, 1) + ' kWh) und kalter Akku, ' : 'Heizung/Klima und kalter Akku, ') + fmt(r.tMin, 0) + ' bis ' + fmt(r.tMax, 0) + ' °C')}${Math.abs(r.E.rain) >= 0.05 ? chip('🌧️', true, r.E.rain, 'Nässe auf ' + fmt(r.rainKm, 0) + ' km') : ''}</div>
+    <p class="mt-2 text-[11px] text-slate-500 dark:text-slate-400 text-left">${fmt(r.tAvg, 0)} °C · ${r.hw > 0.2 ? 'Gegenwind' : r.hw < -0.2 ? 'Rückenwind' : 'kaum Wind'}${r.rainKm >= 1 ? ' · Regen' : ''}${r.fog > 0.05 ? ' · Freisicht nötig (feucht)' : ''} · persönlicher Faktor ${fmt(r.k, 2)}${r.noWx ? ' · ⚠️ teils ohne Wettervorhersage (10 °C angenommen)' : ''}${r.noH ? ' · ⚠️ ohne Höhenprofil' : ''}</p></div>`;
   el.innerHTML += rtStopCard() ? '<div class="mt-3">' + rtStopCard() + '</div>' : '';
 }
 /* ---- Ladestopp: Schnelllader an der Route aus dem Ladesäulenregister der Bundesnetzagentur (ArcGIS-Dienst, CC BY 4.0), Ladezeit aus der eigenen
