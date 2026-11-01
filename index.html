@@ -645,6 +645,8 @@
           <label class="flex items-center gap-1 rounded-xl bg-slate-100 dark:bg-slate-800 px-2 py-1"><span aria-hidden="true">🔋</span><input id="rt-soc" type="text" inputmode="numeric" aria-label="Akku bei Abfahrt in Prozent" class="w-8 bg-transparent text-right focus:outline-none">%</label>
           <label class="flex items-center gap-1 rounded-xl bg-slate-100 dark:bg-slate-800 px-2 py-1"><span aria-hidden="true">👤</span><select id="rt-pers" aria-label="Personen" class="bg-transparent focus:outline-none"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option></select></label>
           <label class="flex items-center gap-1 rounded-xl bg-slate-100 dark:bg-slate-800 px-2 py-1"><span aria-hidden="true">⏱</span><select id="rt-tempo" aria-label="Tempo gegenüber Routenplaner und Autobahn-Einstellung" class="bg-transparent focus:outline-none"><option value="-10">−10 %</option><option value="-5">−5 %</option><option value="0" selected>±0 %</option><option value="5">+5 %</option><option value="10">+10 %</option></select></label>
+          <button id="rt-rt" type="button" aria-pressed="false" class="flex items-center gap-1 rounded-xl bg-slate-100 dark:bg-slate-800 px-2 py-1 font-medium">↺ Hin &amp; zurück</button>
+          <label id="rt-stay-w" class="hidden items-center gap-1 rounded-xl bg-slate-100 dark:bg-slate-800 px-2 py-1"><span class="text-slate-500 dark:text-slate-400">zurück nach</span><select id="rt-stay" aria-label="Aufenthalt am Ziel" class="bg-transparent focus:outline-none"><option value="0.5">30 min</option><option value="1">1 h</option><option value="2">2 h</option><option value="3" selected>3 h</option><option value="4">4 h</option><option value="6">6 h</option><option value="8">8 h</option><option value="10">10 h</option></select></label>
           <label class="flex items-center gap-1 rounded-xl bg-slate-100 dark:bg-slate-800 px-2 py-1"><span aria-hidden="true">🛣️</span><select id="rt-vab" aria-label="Tempo auf der Autobahn" class="bg-transparent focus:outline-none"><option value="100">AB 100</option><option value="110">AB 110</option><option value="120" selected>AB 120</option><option value="130">AB 130</option><option value="140">AB 140</option></select></label>
         </div>
       </div>
@@ -1463,7 +1465,7 @@
       <button type="button" data-nav="wish" class="relative flex min-w-0 flex-col items-center gap-1 rounded-2xl bg-slate-100 dark:bg-slate-800 px-0.5 py-2 text-[10.5px] font-semibold leading-tight tracking-tight active:scale-95 transition"><svg class="h-[22px] w-[22px] text-violet-600 dark:text-violet-300" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.3-9.2C1.4 8.4 3.5 4.5 7.3 4.5c2 0 3.4 1.1 4.7 2.7 1.3-1.6 2.7-2.7 4.7-2.7 3.8 0 5.9 3.9 4.6 7.3C19.5 16.4 12 21 12 21z"/></svg><span class="max-w-full truncate">Wunschliste</span></button>
       <button type="button" data-nav="backup" class="relative flex min-w-0 flex-col items-center gap-1 rounded-2xl bg-slate-100 dark:bg-slate-800 px-0.5 py-2 text-[10.5px] font-semibold leading-tight tracking-tight active:scale-95 transition"><svg class="h-[22px] w-[22px] text-violet-600 dark:text-violet-300" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9"/><path d="M12 7v5h5"/></svg><span class="max-w-full truncate">Sicherung</span></button>
       <button type="button" data-nav="car" class="relative flex min-w-0 flex-col items-center gap-1 rounded-2xl bg-slate-100 dark:bg-slate-800 px-0.5 py-2 text-[10.5px] font-semibold leading-tight tracking-tight active:scale-95 transition"><svg class="h-[22px] w-[22px] text-violet-600 dark:text-violet-300" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 17h14M6 17v2M18 17v2M4 13l2-5h12l2 5v4H4z"/><circle cx="8" cy="14" r="1"/><circle cx="16" cy="14" r="1"/></svg><span class="max-w-full truncate">Fahrzeug</span></button>
-      <button type="button" data-nav="route" class="relative flex min-w-0 flex-col items-center gap-1 rounded-2xl bg-slate-100 dark:bg-slate-800 px-0.5 py-2 text-[10.5px] font-semibold leading-tight tracking-tight active:scale-95 transition"><svg class="h-[22px] w-[22px] text-violet-600 dark:text-violet-300" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 19l5-8 4 5 3-4 6 7z"/><path d="M15 9V3l4 2-4 2"/></svg><span class="max-w-full truncate">Strecke</span></button>
+      <button type="button" data-nav="route" class="relative flex min-w-0 flex-col items-center gap-1 rounded-2xl bg-slate-100 dark:bg-slate-800 px-0.5 py-2 text-[10.5px] font-semibold leading-tight tracking-tight active:scale-95 transition"><svg class="h-[22px] w-[22px] text-violet-600 dark:text-violet-300" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 19l5-8 4 5 3-4 6 7z"/><path d="M15 9V3l4 2-4 2"/></svg><span class="max-w-full truncate">Routenplaner</span></button>
       <button type="button" data-nav="settings" class="relative flex min-w-0 flex-col items-center gap-1 rounded-2xl bg-slate-100 dark:bg-slate-800 px-0.5 py-2 text-[10.5px] font-semibold leading-tight tracking-tight active:scale-95 transition"><svg class="h-[22px] w-[22px] text-violet-600 dark:text-violet-300" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></svg><span class="max-w-full truncate">Einstellungen</span></button>
     </div>
     </div>
@@ -7629,7 +7631,7 @@ const NAV_GO = {
 /* Suche im Schnellmenü: Titel, Ort in der App und Stichwörter; alle Suchwörter müssen vorkommen (Groß/klein und Umlaute egal) */
 const NAV_IDX = [
   ['cap-home', 'Laden Zuhause erfassen', 'Laden', 'wallbox zähler foto heim'], ['cap-bosch', 'Laden Bosch erfassen', 'Laden', 'arbeit werk lichtblick'], ['cap-away', 'Laden unterwegs erfassen', 'Laden', 'schnelllader dc ladesäule'],
-  ['route', 'Strecken-Prognose', 'Fahrzeug', 'route strecke verbrauch prognose abrp höhenprofil wind wetter reichweite ankunft akku planen'], ['costs', 'Kosten erfassen', 'Kosten', 'ausgabe beleg rechnung versicherung'], ['rep', 'Bericht Laden', 'Berichte › Laden', 'monat kwh'], ['rep-kosten', 'Bericht Kosten', 'Berichte › Kosten', 'tco ausgaben'],
+  ['route', 'Routenplaner', 'Fahrzeug › Strecken-Prognose', 'route strecke hin und zurück rundfahrt verbrauch prognose abrp höhenprofil wind wetter reichweite ankunft akku planen'], ['costs', 'Kosten erfassen', 'Kosten', 'ausgabe beleg rechnung versicherung'], ['rep', 'Bericht Laden', 'Berichte › Laden', 'monat kwh'], ['rep-kosten', 'Bericht Kosten', 'Berichte › Kosten', 'tco ausgaben'],
   ['eff', 'Verbräuche & Effizienz', 'Start', 'verbrauch kwh/100 km ladekosten pro km strompreis'], ['trends', 'Trends', 'Start', 'laufleistung stromkosten gesamtkosten monate'], ['recs', 'Rekorde', 'Rekorde', 'verbrauch bestwert strecke tempomat messreihe reichweite langzeitverbrauch seit kauf bordcomputer akku temperatur °c notieren'],
   ['akkutemp', 'Akku-Temperatur notieren', 'Rekorde › Akku °C', 'akku temperatur °c grad notieren batterie'], ['curve', 'DC-Ladekurve', 'Berichte › Akku', 'schnellladen ladeleistung kw ladezeit rechner sommer winter'],
   ['akku', 'Akku', 'Berichte › Akku', 'kapazität pflege temperatur soh netto rebalancing'], ['stat', 'Statistik', 'Berichte › Daten', 'fahrzeugdaten verbrauch laufleistung'], ['badges', 'Abzeichen', 'Abzeichen', 'badges erfolge'],
@@ -8885,38 +8887,49 @@ function rtWxAt(wx, d, ms) {
   const t = new Date(ms), k = t.getFullYear() + '-' + pad2(t.getMonth() + 1) + '-' + pad2(t.getDate()) + 'T' + pad2(t.getHours()) + ':00', i = h.time.indexOf(k); if (i < 0) return null;
   return { T: Number(h.temperature_2m[i]), rain: Number(h.precipitation[i]) || 0, ws: Number(h.wind_speed_10m[i]) || 0, wd: Number(h.wind_direction_10m[i]) || 0 };
 }
-function rtCalc(route, wx, o) {
+/* Mitfahrer-Zuschlag („Freundin-Zuschlag“): ab 2 Personen pauschal +7 % – sie friert im Winter und will es im Sommer noch kühler.
+   In der App nicht eigens ausgewiesen, steckt im Chip Heizung/Klima. */
+const FREUNDIN_ZUSCHLAG = 0.07;
+function rtCalc(legs, o) {
   const m = RT_P.m + RT_P.mp * (o.pers - 1), g = 9.81, cap = batteryKwh(), f = 1 + o.tempo / 100, J = 3.6e6;
   const bat = (x) => x > 0 ? x / RT_P.eta : x * RT_P.rec;
-  let t = 0, E = { base: 0, slope: 0, wind: 0, rain: 0, heat: 0 }, cum = [0], Ts = [], rainKm = 0, hwSum = 0, noWx = !wx;
-  route.segs.forEach((s, i) => {
-    const v = (s.mw ? o.vab / 3.6 : s.v) * f, dt = s.len / v, w = rtWxAt(wx, s.d, o.dep + t * 1000) || { T: 10, rain: 0, ws: 0, wd: 0 }; if (!rtWxAt(wx, s.d, o.dep + t * 1000)) noWx = true;
-    const rho = 1.293 * 273.15 / (273.15 + w.T), hw = w.ws * 0.7 * Math.cos((w.wd - s.brg) * Math.PI / 180), dh = route.h[i + 1] - route.h[i], Fs = m * g * dh;
-    const aero = (u) => 0.5 * rho * RT_P.cw * RT_P.A * u * Math.abs(u), wet = w.rain >= 0.3 ? 1.2 : 1;
-    const F0 = RT_P.crr * m * g + aero(v), Fw = RT_P.crr * m * g + aero(v + hw), Fr = RT_P.crr * wet * m * g + aero(v + hw);
-    const stops = v < 11 ? 2 : v < 17 ? 1 : v < 22 ? 0.3 : 0.03, acc = stops * s.len / 1000 * 0.5 * m * v * v * (1 / RT_P.eta - RT_P.rec);
-    const e0 = bat(F0 * s.len), e1 = bat(F0 * s.len + Fs), e2 = bat(Fw * s.len + Fs), e3 = bat(Fr * s.len + Fs);
-    const pH = w.T < 18 ? 0.09 * (18 - w.T) : w.T > 24 ? 0.08 * (w.T - 24) : 0, cold = Math.max(0, e3) * 0.004 * Math.max(0, 15 - w.T);
-    const eb = (e0 + acc) / J + RT_P.aux * dt / 3600, es = (e1 - e0) / J, ew = (e2 - e1) / J, er = (e3 - e2) / J, eh = pH * dt / 3600 + cold / J + (i === 0 ? 0.5 * Math.max(0, 15 - w.T) / 15 : 0);
-    E.base += eb; E.slope += es; E.wind += ew; E.rain += er; E.heat += eh; cum.push(cum[cum.length - 1] + eb + es + ew + er + eh);
-    t += dt; Ts.push(w.T); if (w.rain >= 0.3) rainKm += s.len / 1000; hwSum += hw * s.len;
+  let t = 0, E = { base: 0, slope: 0, wind: 0, rain: 0, heat: 0 }, cum = [0], Ts = [], rainKm = 0, hwSum = 0, noWx = false, h = [], turn = null, durDrive = 0, d0 = 0;
+  legs.forEach((lg, li) => {
+    const route = lg.route, wx = lg.wx;
+    if (li) { t += o.stay * 3600; turn = { i: cum.length - 1, t: durDrive }; }
+    h = h.length ? h.concat(route.h.slice(1)) : route.h.slice();
+    route.segs.forEach((s, i) => {
+      const v = (s.mw ? o.vab / 3.6 : s.v) * f, dt = s.len / v, ww = rtWxAt(wx, s.d, o.dep + t * 1000), w = ww || { T: 10, rain: 0, ws: 0, wd: 0 }; if (!ww) noWx = true;
+      const rho = 1.293 * 273.15 / (273.15 + w.T), hw = w.ws * 0.7 * Math.cos((w.wd - s.brg) * Math.PI / 180), dh = route.h[i + 1] - route.h[i], Fs = m * g * dh;
+      const aero = (u) => 0.5 * rho * RT_P.cw * RT_P.A * u * Math.abs(u), wet = w.rain >= 0.3 ? 1.2 : 1;
+      const F0 = RT_P.crr * m * g + aero(v), Fw = RT_P.crr * m * g + aero(v + hw), Fr = RT_P.crr * wet * m * g + aero(v + hw);
+      const stops = v < 11 ? 2 : v < 17 ? 1 : v < 22 ? 0.3 : 0.03, acc = stops * s.len / 1000 * 0.5 * m * v * v * (1 / RT_P.eta - RT_P.rec);
+      const e0 = bat(F0 * s.len), e1 = bat(F0 * s.len + Fs), e2 = bat(Fw * s.len + Fs), e3 = bat(Fr * s.len + Fs);
+      const pH = w.T < 18 ? 0.09 * (18 - w.T) : w.T > 24 ? 0.08 * (w.T - 24) : 0, cold = Math.max(0, e3) * 0.004 * Math.max(0, 15 - w.T);
+      const eb = (e0 + acc) / J + RT_P.aux * dt / 3600, es = (e1 - e0) / J, ew = (e2 - e1) / J, er = (e3 - e2) / J, eh = pH * dt / 3600 + cold / J + (i === 0 ? 0.5 * Math.max(0, 15 - w.T) / 15 : 0);
+      E.base += eb; E.slope += es; E.wind += ew; E.rain += er; E.heat += eh; cum.push(cum[cum.length - 1] + eb + es + ew + er + eh);
+      t += dt; durDrive += dt; Ts.push(w.T); if (w.rain >= 0.3) rainKm += s.len / 1000; hwSum += hw * s.len;
+    });
+    d0 += route.km;
   });
-  const k = rtFactor(), raw = cum[cum.length - 1], kwh = raw * k, km = route.km;
-  let up = 0, dn = 0; for (let i = 1; i < route.h.length; i++) { const d = route.h[i] - route.h[i - 1]; if (d > 0) up += d; else dn -= d; }
-  return { km, dur: t, raw, k, kwh, k100: kwh / km * 100, raw100: raw / km * 100, E: Object.fromEntries(Object.entries(E).map(([a, v]) => [a, v * k])), soc: cum.map(c => o.soc - c * k / cap * 100),
-    socA: o.soc - kwh / cap * 100, up: Math.round(up), dn: Math.round(dn), tMin: Math.min(...Ts), tMax: Math.max(...Ts), tAvg: Ts.reduce((a, x) => a + x, 0) / Ts.length, rainKm, hw: hwSum / (km * 1000), noWx, noH: route.noH, h: route.h };
+  if (o.pers >= 2) { E.heat += cum[cum.length - 1] * FREUNDIN_ZUSCHLAG; cum = cum.map(c => c * (1 + FREUNDIN_ZUSCHLAG)); }
+  const k = rtFactor(), raw = cum[cum.length - 1], kwh = raw * k, km = d0, socAt = (c) => o.soc - c * k / cap * 100;
+  let up = 0, dn = 0; for (let i = 1; i < h.length; i++) { const d = h[i] - h[i - 1]; if (d > 0) up += d; else dn -= d; }
+  return { km, dur: durDrive, tEnd: t, raw, k, kwh, k100: kwh / km * 100, raw100: raw / km * 100, E: Object.fromEntries(Object.entries(E).map(([a, v]) => [a, v * k])), soc: cum.map(socAt),
+    socA: socAt(raw), turn: turn ? { i: turn.i, soc: socAt(cum[turn.i]), t: turn.t, km: legs[0].route.km } : null, up: Math.round(up), dn: Math.round(dn), tMin: Math.min(...Ts), tMax: Math.max(...Ts), tAvg: Ts.reduce((a, x) => a + x, 0) / Ts.length, rainKm, hw: hwSum / (km * 1000), noWx, noH: legs.some(l => l.route.noH), h };
 }
 function rtSvg(r) {
   const W = 312, H = 104, B = 4, n = r.h.length, X = (i) => i / (n - 1) * W;
   let y0 = Math.min(...r.h), y1 = Math.max(...r.h); const pad = Math.max(15, (y1 - y0) * 0.2); y0 -= pad; y1 += pad;
   const Yh = (v) => B + (1 - (v - y0) / (y1 - y0 || 1)) * (H - 2 * B), Ys = (v) => B + (1 - (Math.max(-5, Math.min(100, v)) - 0) / 100) * (H - 2 * B);
   const ln = r.h.map((v, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Yh(v).toFixed(1)).join(' '), sl = r.soc.map((v, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Ys(v).toFixed(1)).join(' ');
-  const res = Ys(WXO_RES), last = r.soc[r.soc.length - 1];
+  const res = Ys(WXO_RES), last = r.soc[r.soc.length - 1], tx = r.turn ? X(r.turn.i) : null;
   return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="mt-2 w-full" style="height:${H}px" aria-hidden="true"><defs><linearGradient id="rtg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#64748b" stop-opacity=".5"/><stop offset="1" stop-color="#64748b" stop-opacity=".05"/></linearGradient></defs>`
     + `<path d="${ln} L${W} ${H} L0 ${H} Z" fill="url(#rtg)"/><path d="${ln}" fill="none" stroke="#94a3b8" stroke-width="1.6" vector-effect="non-scaling-stroke"/>`
     + `<line x1="0" x2="${W}" y1="${res.toFixed(1)}" y2="${res.toFixed(1)}" stroke="#f87171" stroke-dasharray="3 4" stroke-width="1" vector-effect="non-scaling-stroke"/>`
+    + (tx != null ? `<line x1="${tx.toFixed(1)}" x2="${tx.toFixed(1)}" y1="0" y2="${H}" stroke="#f472b6" stroke-dasharray="2 3" stroke-width="1" vector-effect="non-scaling-stroke"/>` : '')
     + `<path d="${sl}" fill="none" stroke="#34d399" stroke-width="2.4" stroke-linecap="round" vector-effect="non-scaling-stroke"/><circle cx="${X(n - 1) - 3}" cy="${Ys(last).toFixed(1)}" r="3.5" fill="${last < WXO_RES ? '#f87171' : '#34d399'}"/></svg>`
-    + `<div class="flex justify-between text-[10px] text-slate-500 dark:text-slate-400"><span>${Math.round(r.h[0])} m</span><span class="text-red-400">${WXO_RES} % Reserve</span><span>${Math.round(r.h[n - 1])} m</span></div>`;
+    + `<div class="flex justify-between text-[10px] text-slate-500 dark:text-slate-400"><span>${Math.round(r.h[0])} m</span>${r.turn ? `<span class="text-pink-400">◆ Ziel ${Math.round(r.turn.soc)} %</span>` : ''}<span class="text-red-400">${WXO_RES} % Reserve</span><span>${Math.round(r.h[n - 1])} m</span></div>`;
 }
 function rtRenderRes() {
   const el = $('rt-res'), ab = $('rt-abrp'); if (!el) return; const r = RT.res;
@@ -8924,12 +8937,13 @@ function rtRenderRes() {
   if (RT.busy) { el.innerHTML = '<div class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 text-sm text-slate-500 dark:text-slate-400 text-left">Route, Höhen und Wetter werden geladen …</div>'; return; }
   if (RT.err) { el.innerHTML = `<div class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 text-sm text-red-600 dark:text-red-400 text-left">${esc(RT.err)}<button type="button" data-rt="retry" class="mt-1 block text-xs font-semibold text-sky-600 dark:text-sky-300">Erneut versuchen ›</button></div>`; return; }
   if (!r) { el.innerHTML = '<p class="px-1 text-xs text-slate-500 dark:text-slate-400 text-left">Start und Ziel eingeben – die App rechnet mit Route, Höhenprofil, Wetter und Wind zur Abfahrtszeit, kalibriert mit deinen eingetragenen Fahrten.</p>'; return; }
-  const eta = new Date(RT.o.dep + r.dur * 1000), dur = Math.round(r.dur / 60), lo = r.socA < WXO_RES;
+  const eta = new Date(RT.o.dep + r.tEnd * 1000), dur = Math.round(r.dur / 60), lo = r.socA < WXO_RES, tw = r.turn;
   const chip = (i, sg, v, t) => `<span class="inline-flex items-center gap-1 whitespace-nowrap rounded-[10px] bg-slate-100 dark:bg-slate-800 px-2 py-1 text-[12px]" title="${t}"><span aria-hidden="true">${i}</span>${(sg ? (v >= 0 ? '+' : '−') : '') + fmt(Math.abs(v), 1)}</span>`;
   el.innerHTML = `<div class="rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
     <div class="flex items-end justify-between gap-3"><div class="min-w-0"><p class="text-[11px] uppercase tracking-[0.06em] text-slate-500 dark:text-slate-400">Verbrauch</p><p class="font-barlow text-[40px] font-bold leading-none text-emerald-500 dark:text-emerald-400">${fmt(r.kwh, 1)}<span class="text-lg"> kWh</span></p><p class="mt-0.5 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">${fmt(r.k100, 1)} kWh/100 km · ${fmt(r.km, 0)} km · ${Math.floor(dur / 60)} h ${pad2(dur % 60)}</p></div>
-      <div class="shrink-0 text-right"><p class="text-[11px] uppercase tracking-[0.06em] text-slate-500 dark:text-slate-400">Ankunft</p><p class="font-barlow text-[40px] font-bold leading-none ${lo ? 'text-red-500' : ''}">${Math.round(r.socA)}<span class="text-lg"> %</span></p><p class="mt-0.5 text-xs text-slate-500 dark:text-slate-400">~ ${hhmm(eta.getTime())} Uhr</p></div></div>
-    ${lo ? `<p class="mt-2 rounded-xl bg-red-500/10 px-3 py-2 text-xs text-red-600 dark:text-red-300 text-left">${r.socA < 0 ? 'Reicht nicht – unterwegs laden.' : 'Ankunft unter ' + WXO_RES + ' % – Ladestopp einplanen oder voller starten.'}</p>` : ''}
+      <div class="shrink-0 text-right"><p class="text-[11px] uppercase tracking-[0.06em] text-slate-500 dark:text-slate-400">${tw ? 'Zurück' : 'Ankunft'}</p><p class="font-barlow text-[40px] font-bold leading-none ${lo ? 'text-red-500' : ''}">${Math.round(r.socA)}<span class="text-lg"> %</span></p><p class="mt-0.5 text-xs text-slate-500 dark:text-slate-400">~ ${hhmm(eta.getTime())} Uhr</p></div></div>
+    ${tw ? `<p class="mt-2 rounded-xl bg-slate-100 dark:bg-slate-800 px-3 py-2 text-xs text-left"><span class="text-pink-500">◆</span> Am Ziel ~ ${hhmm(RT.o.dep + tw.t * 1000)} Uhr mit <b>${Math.round(tw.soc)} %</b> · ${fmt(tw.km, 0)} km je Richtung · ohne Laden am Ziel</p>` : ''}
+    ${lo ? `<p class="mt-2 rounded-xl bg-red-500/10 px-3 py-2 text-xs text-red-600 dark:text-red-300 text-left">${r.socA < 0 ? 'Reicht nicht – unterwegs laden.' : (tw ? 'Rückkehr' : 'Ankunft') + ' unter ' + WXO_RES + ' % – Ladestopp einplanen oder voller starten.'}</p>` : ''}
     ${rtSvg(r)}
     <div class="mt-1 flex justify-between gap-2 text-[11px] text-slate-500 dark:text-slate-400"><span><span class="text-emerald-500">━</span> Akku</span><span>Höhe · ↑ ${r.up} m ↓ ${r.dn} m</span></div>
     <div class="mt-2.5 flex flex-wrap gap-1.5">${chip('🛣️', false, r.E.base, 'Rollen, Luft, Anfahren, Nebenverbraucher – flach, windstill, trocken')}${chip('⛰️', true, r.E.slope, 'Steigungen minus Rekuperation bergab')}${chip('💨', true, r.E.wind, (r.hw > 0.2 ? 'Gegenwind' : r.hw < -0.2 ? 'Rückenwind' : 'Wind') + ' im Schnitt ' + fmt(Math.abs(r.hw) * 3.6, 0) + ' km/h')}${chip('🔥', true, r.E.heat, 'Heizung/Klima und kalter Akku, ' + fmt(r.tMin, 0) + ' bis ' + fmt(r.tMax, 0) + ' °C')}${Math.abs(r.E.rain) >= 0.05 ? chip('🌧️', true, r.E.rain, 'Nässe auf ' + fmt(r.rainKm, 0) + ' km') : ''}</div>
@@ -8937,17 +8951,18 @@ function rtRenderRes() {
 }
 function rtParams() {
   const dv = $('rt-dep').value, dep = dv ? new Date(dv).getTime() : Date.now(), soc = Math.max(1, Math.min(100, Number($('rt-soc').value) || 80));
-  return { dep: isNaN(dep) ? Date.now() : dep, soc, pers: Number($('rt-pers').value) || 1, tempo: Number($('rt-tempo').value) || 0, vab: Number($('rt-vab').value) || 120 };
+  return { dep: isNaN(dep) ? Date.now() : dep, soc, pers: Number($('rt-pers').value) || 1, tempo: Number($('rt-tempo').value) || 0, vab: Number($('rt-vab').value) || 120, round: RT.round, stay: Number($('rt-stay').value) || 3 };
 }
 async function rtRun() {
   const n = ++RT.n; $('rt-save-msg').classList.add('hidden');
   if (!RT.a || !RT.b) { RT.res = null; RT.err = ''; RT.busy = false; rtRenderRes(); return; }
   RT.busy = true; RT.err = ''; rtRenderRes(); const o = rtParams();
-  try { const route = await rtRoute(RT.a, RT.b); let wx = null; try { wx = await rtWeather(route, o.dep); } catch (e) { }
-    if (n !== RT.n) return; RT.o = o; RT.res = rtCalc(route, wx, o); }
+  try { const pairs = o.round ? [[RT.a, RT.b], [RT.b, RT.a]] : [[RT.a, RT.b]], legs = [];
+    for (const [x, y] of pairs) { const route = await rtRoute(x, y); let wx = null; try { wx = await rtWeather(route, o.dep); } catch (e) { } legs.push({ route, wx }); }
+    if (n !== RT.n) return; RT.o = o; RT.res = rtCalc(legs, o); }
   catch (e) { if (n !== RT.n) return; RT.res = null; RT.err = 'Prognose nicht möglich: ' + ((e && e.message) || 'kein Internet?'); }
   RT.busy = false; rtRenderRes();
-  try { save(KEY_RT, { a: RT.a, b: RT.b, pers: o.pers, tempo: o.tempo, vab: o.vab }); } catch (e) { }
+  try { save(KEY_RT, { a: RT.a, b: RT.b, pers: o.pers, tempo: o.tempo, vab: o.vab, round: !!o.round, stay: o.stay }); } catch (e) { }
 }
 function rtSugHide(w) { const el = $('rt-sug-' + w); el.innerHTML = ''; el.classList.add('hidden'); }
 function rtSugShow(w, list, more) {
@@ -8972,7 +8987,9 @@ function rtPick(w, p) { RT[w] = p; $('rt-' + w).value = p.label; rtSugHide(w); R
   $('rt-sug-' + w).addEventListener('click', (e) => { const b = e.target.closest('[data-rtsug]'); if (!b) return; const [ww, i] = b.dataset.rtsug.split(':'); const p = RT.sug[ww] && RT.sug[ww][Number(i)]; if (p) rtPick(ww, p); });
 });
 $('rt-swap').addEventListener('click', () => { [RT.a, RT.b] = [RT.b, RT.a]; $('rt-a').value = RT.a ? RT.a.label : ''; $('rt-b').value = RT.b ? RT.b.label : ''; rtRun(); });
-['rt-dep', 'rt-pers', 'rt-tempo', 'rt-vab'].forEach(id => $(id).addEventListener('change', rtRun));
+['rt-dep', 'rt-pers', 'rt-tempo', 'rt-vab', 'rt-stay'].forEach(id => $(id).addEventListener('change', rtRun));
+function rtRoundUi() { const b = $('rt-rt'), on = !!RT.round; b.setAttribute('aria-pressed', String(on)); ['bg-pink-100', 'text-pink-700', 'dark:bg-pink-950', 'dark:text-pink-300'].forEach(c => b.classList.toggle(c, on)); ['bg-slate-100', 'dark:bg-slate-800'].forEach(c => b.classList.toggle(c, !on)); $('rt-stay-w').classList.toggle('hidden', !on); $('rt-stay-w').classList.toggle('flex', on); }
+$('rt-rt').addEventListener('click', () => { RT.round = !RT.round; rtRoundUi(); rtRun(); });
 $('rt-soc').addEventListener('change', rtRun);
 $('rt-res').addEventListener('click', (e) => { if (e.target.closest('[data-rt="retry"]')) rtRun(); });
 $('rt-save').addEventListener('click', () => {
@@ -8980,7 +8997,7 @@ $('rt-save').addEventListener('click', () => {
   if (k !== undefined && !(k > 3 && k < 60)) { msg.textContent = 'ABRP-Verbrauch bitte in kWh/100 km (z. B. 19,1).'; msg.className = 'mt-1.5 text-xs text-left text-red-600 dark:text-red-400'; return; }
   if (s !== undefined && !(s >= -20 && s < o.soc)) { msg.textContent = 'ABRP-Ankunft bitte in % und kleiner als der Start-Akku.'; msg.className = 'mt-1.5 text-xs text-left text-red-600 dark:text-red-400'; return; }
   const en = { id: labId(), dep: new Date(o.dep).toISOString(), a: { label: RT.a.label, lat: RT.a.lat, lon: RT.a.lon }, b: { label: RT.b.label, lat: RT.b.lat, lon: RT.b.lon }, km: Math.round(r.km * 10) / 10,
-    k100: Math.round(r.k100 * 100) / 100, raw100: Math.round(r.raw100 * 100) / 100, kwh: Math.round(r.kwh * 10) / 10, soc0: o.soc, socA: Math.round(r.socA), k: r.k, pers: o.pers, tempo: o.tempo, vab: o.vab, tAvg: Math.round(r.tAvg * 10) / 10 };
+    k100: Math.round(r.k100 * 100) / 100, raw100: Math.round(r.raw100 * 100) / 100, kwh: Math.round(r.kwh * 10) / 10, soc0: o.soc, socA: Math.round(r.socA), k: r.k, pers: o.pers, tempo: o.tempo, vab: o.vab, tAvg: Math.round(r.tAvg * 10) / 10 }; if (o.round) { en.round = true; en.stay = o.stay; }
   if (k !== undefined) en.abrp = k; else if (s !== undefined) { en.abrpSoc = s; en.abrp = Math.round((o.soc - s) / 100 * cap / r.km * 100 * 100) / 100; }
   const lab = getLab(); lab.fc = (lab.fc || []).concat(en); setLab(lab); $('rt-abrp-k').value = ''; $('rt-abrp-s').value = '';
   msg.textContent = '✓ Gemerkt – nach der Fahrt unter „Abgleich“ den echten Verbrauch eintragen.'; msg.className = 'mt-1.5 text-xs text-left text-emerald-600 dark:text-emerald-400'; rtTabs();
@@ -9008,7 +9025,7 @@ function rtRenderCmp() {
     : '<p class="mt-2 text-sm text-slate-600 dark:text-slate-300 text-left">Noch kein Realwert eingetragen.</p>'}
     <p class="mt-2.5 border-t border-slate-100 dark:border-slate-800 pt-2 text-[11px] text-slate-500 dark:text-slate-400 text-left">📈 Persönlicher Faktor der App: <b class="text-slate-700 dark:text-slate-200">${fmt(k, 2)}</b> · lernt aus jedem eingetragenen Realwert</p></div>`;
   const pill = 'flex-1 whitespace-nowrap rounded-lg bg-slate-100 dark:bg-slate-800 px-1.5 py-1';
-  const row = (x) => { const d = new Date(x.dep), dl = d.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' }), tt = esc(x.a.label + ' → ' + x.b.label);
+  const row = (x) => { const d = new Date(x.dep), dl = d.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' }), tt = esc(x.a.label + (x.round ? ' ⇄ ' : ' → ') + x.b.label);
     if (!(x.real > 0)) return `<button type="button" data-rtrow="${esc(x.id)}" class="flex w-full items-center justify-between gap-2 border-t border-slate-100 dark:border-slate-800 py-2.5 text-left first:border-t-0"><span class="min-w-0"><span class="block truncate text-[13px]">${tt}</span><span class="block text-[11px] text-slate-500 dark:text-slate-400">${dl} · App ${fmt(x.k100, 1)}${x.abrp ? ' · ABRP ' + fmt(x.abrp, 1) : ''}</span></span><span class="shrink-0 rounded-lg bg-amber-100 dark:bg-amber-950 px-2 py-1 text-[12px] font-semibold text-amber-700 dark:text-amber-300">✍️ Real eintragen</span></button>`;
     const a = Math.abs(x.k100 - x.real), b = x.abrp ? Math.abs(x.abrp - x.real) : null, dot = b == null ? 'bg-slate-400 dark:bg-slate-600' : a < b ? 'bg-emerald-500' : b < a ? 'bg-violet-500' : 'bg-slate-400';
     return `<button type="button" data-rtrow="${esc(x.id)}" class="block w-full border-t border-slate-100 dark:border-slate-800 py-2.5 text-left first:border-t-0"><span class="flex items-center justify-between gap-2"><span class="min-w-0"><span class="block truncate text-[13px]">${tt}</span><span class="block text-[11px] text-slate-500 dark:text-slate-400">${dl} · ${fmt(x.km, 0)} km</span></span><span class="h-2.5 w-2.5 shrink-0 rounded-full ${dot}"></span></span>
@@ -9021,10 +9038,10 @@ function rtSheet(id) {
   const inp = (fid, val, unit, ph, cls = '') => `<label class="flex min-w-0 flex-1 items-center rounded-xl bg-slate-100 dark:bg-slate-800 px-3 py-2.5 ${cls}"><input id="${fid}" type="text" inputmode="decimal" autocomplete="off" value="${val == null ? '' : String(val).replace('.', ',')}" placeholder="${ph}" class="w-full min-w-0 bg-transparent text-base focus:outline-none"><span class="shrink-0 text-[11px] text-slate-500 dark:text-slate-400">${unit}</span></label>`;
   const tile = (l, c, v, extra = '') => `<div class="flex-1 rounded-2xl bg-slate-100 dark:bg-slate-800 px-3 py-2 ${extra}"><p class="text-[10.5px] font-semibold uppercase tracking-[0.06em] ${c}">${l}</p><p class="font-barlow text-[26px] font-bold leading-none" data-rtv="${l}">${v}</p></div>`;
   box.innerHTML = `<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div>
-    <div class="flex items-start justify-between gap-2"><div class="min-w-0"><p class="text-lg font-bold">Wie war die Fahrt?</p><p class="truncate text-xs text-slate-500 dark:text-slate-400">${esc(x.a.label)} → ${esc(x.b.label)} · ${d.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' })} · ${fmt(x.km, 0)} km</p></div><button type="button" data-rts="close" aria-label="Schließen" class="px-1 text-xl text-slate-400">✕</button></div>
+    <div class="flex items-start justify-between gap-2"><div class="min-w-0"><p class="text-lg font-bold">Wie war die Fahrt?</p><p class="truncate text-xs text-slate-500 dark:text-slate-400">${esc(x.a.label)} ${x.round ? '⇄' : '→'} ${esc(x.b.label)} · ${d.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' })} · ${fmt(x.km, 0)} km</p></div><button type="button" data-rts="close" aria-label="Schließen" class="px-1 text-xl text-slate-400">✕</button></div>
     <div class="flex gap-2">${tile('App', 'text-emerald-600 dark:text-emerald-400', fmt(x.k100, 1))}${tile('ABRP', 'text-violet-600 dark:text-violet-400', x.abrp ? fmt(x.abrp, 1) : '–')}${tile('Real', 'text-amber-600 dark:text-amber-400', x.real ? fmt(x.real, 1) : '–', 'ring-2 ring-amber-400')}</div>
-    <div><p class="text-sm font-semibold">Echter Verbrauch</p><p class="text-xs text-slate-500 dark:text-slate-400 text-left">Bordcomputer → „Seit Start“, nach Ankunft ablesen – oder den Akkustand bei Ankunft</p>
-      <div class="mt-1.5 flex gap-2">${inp('rts-real', x.real, 'kWh/100 km', 'z. B. 18,9', 'ring-2 ring-emerald-500')}${inp('rts-soc', x.realSoc, '% Ankunft', '–')}</div></div>
+    <div><p class="text-sm font-semibold">Echter Verbrauch</p><p class="text-xs text-slate-500 dark:text-slate-400 text-left">${x.round ? 'Hin- und Rückfahrt zusammen – am einfachsten den Akkustand bei Rückkehr eintragen („Seit Start“ setzt sich beim Parken zurück)' : 'Bordcomputer → „Seit Start“, nach Ankunft ablesen – oder den Akkustand bei Ankunft'}</p>
+      <div class="mt-1.5 flex gap-2">${inp('rts-real', x.real, 'kWh/100 km', 'z. B. 18,9', 'ring-2 ring-emerald-500')}${inp('rts-soc', x.realSoc, x.round ? '% zurück' : '% Ankunft', '–')}</div></div>
     <div><p class="text-sm font-semibold">ABRP-Prognose</p><div class="mt-1.5 flex gap-2">${inp('rts-abrp', x.abrp, 'kWh/100 km', 'optional')}</div></div>
     <div id="rts-prev" class="rounded-2xl bg-slate-100 dark:bg-slate-800 px-3 py-2.5 text-[13px] text-left"></div>
     <p id="rts-msg" class="hidden text-xs text-left text-red-600 dark:text-red-400"></p>
@@ -9065,7 +9082,7 @@ function rtShow() {
   if (!RT.a && !RT.b) { const l = load(KEY_RT, null) || {}, home = getTPlaces().find(p => p.kind === 'home' && Number.isFinite(p.lat));
     RT.a = l.a || (home ? { lat: home.lat, lon: home.lon, label: home.name } : null); RT.b = l.b || null;
     $('rt-a').value = RT.a ? RT.a.label : ''; $('rt-b').value = RT.b ? RT.b.label : '';
-    if (l.pers) $('rt-pers').value = String(l.pers); if (l.tempo != null) $('rt-tempo').value = String(l.tempo); if (l.vab) $('rt-vab').value = String(l.vab); }
+    if (l.pers) $('rt-pers').value = String(l.pers); RT.round = !!l.round; if (l.stay) $('rt-stay').value = String(l.stay); rtRoundUi(); if (l.tempo != null) $('rt-tempo').value = String(l.tempo); if (l.vab) $('rt-vab').value = String(l.vab); }
   const now = new Date(); now.setMinutes(Math.ceil(now.getMinutes() / 15) * 15, 0, 0);
   if (!$('rt-dep').value || new Date($('rt-dep').value).getTime() < Date.now() - 3600e3) $('rt-dep').value = now.getFullYear() + '-' + pad2(now.getMonth() + 1) + '-' + pad2(now.getDate()) + 'T' + pad2(now.getHours()) + ':' + pad2(now.getMinutes());
   if (!$('rt-soc').value) { $('rt-soc').value = '80'; wxoSoc().then(s => { if (s != null && $('rt-soc').value === '80') { $('rt-soc').value = String(Math.round(s)); if (RT.res || RT.busy) rtRun(); } }).catch(() => { }); }
