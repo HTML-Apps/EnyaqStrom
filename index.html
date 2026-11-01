@@ -1333,6 +1333,16 @@
           </div>
           <p class="mt-1.5 text-xs text-left text-slate-500 dark:text-slate-400">Ab dieser Uhrzeit wird „Morgen“ umrandet und „Restakku – reicht bis …“ rechnet ab morgen. „Dynamisch“: unter 30 % Akku (Stand vom Auto) zuerst der Zählerstand, sonst die Prognose. Wird mit deinem Konto synchronisiert.</p>
         </div>
+        <div class="py-4 first:pt-4 last:pb-0">
+          <p class="block text-sm font-medium text-slate-700 dark:text-slate-300">Eis-Warnung</p>
+          <div class="mt-1 grid grid-cols-2 gap-2">
+            <div><label for="set-ice-dep" class="text-xs text-slate-500 dark:text-slate-400">Abfahrt morgens</label><input id="set-ice-dep" type="time" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
+            <div><label for="set-ice-park" class="text-xs text-slate-500 dark:text-slate-400">Stellplatz</label><select id="set-ice-park" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"><option value="open">offen</option><option value="carport">Carport</option><option value="garage">Garage (aus)</option></select></div>
+            <div><label for="set-ice-min" class="text-xs text-slate-500 dark:text-slate-400">Hinweis ab</label><select id="set-ice-min" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"><option value="mid">möglich</option><option value="high">wahrscheinlich</option></select></div>
+            <div><label for="set-ice-we" class="text-xs text-slate-500 dark:text-slate-400">Wochenende</label><select id="set-ice-we" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"><option value="0">nein</option><option value="1">ja</option></select></div>
+          </div>
+          <p id="set-ice-info" class="mt-1.5 text-xs text-left text-slate-500 dark:text-slate-400"></p>
+        </div>
       </div>
     </div>
     <div class="rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
@@ -2579,7 +2589,7 @@ $('btn-save-settings').addEventListener('click', () => {
     if (+m[2] < 1990 || +m[2] * 12 + +m[1] > now.getFullYear() * 12 + now.getMonth() + 1) { alert('Das Baujahr ' + yr + ' kann nicht stimmen: Es muss zwischen 01/1990 und ' + String(now.getMonth() + 1).padStart(2, '0') + '/' + now.getFullYear() + ' liegen.'); $('set-year').focus(); return; }
   }
   const txt = (id, n) => $(id).value.trim().replace(/\s+/g, ' ').slice(0, n) || undefined;
-  if (save(KEY_SETTINGS, { title: $('set-title').value.trim() || DEFAULT_TITLE, brand: txt('set-brand', 30), model: txt('set-model', 40), plate: (txt('set-plate', 15) || '').toUpperCase() || undefined, year: yr || undefined, vin: vin || undefined, price, battery, power, remDays, remKm, purchase, wltp: wl, wltpNet: wln !== undefined ? Math.round(wln * 100) / 100 : undefined, purchaseKm: pk !== undefined ? Math.round(pk) : undefined, purchasePrice: pp !== undefined ? Math.round(pp * 100) / 100 : undefined, commuteKm: getSettings().commuteKm || undefined, ccEnd: getSettings().ccEnd || undefined, gtMirror: getSettings().gtMirror || undefined, gtList: getSettings().gtList || undefined, rtLast: getSettings().rtLast || undefined, nRep: getSettings().nRep || undefined, nTrips: getSettings().nTrips || undefined, nBakYm: getSettings().nBakYm || undefined, nBakAt: getSettings().nBakAt || undefined, nBakSnz: getSettings().nBakSnz || undefined, wxIcons: getSettings().wxIcons || undefined, carN: getSettings().carN ?? undefined, carSec: getSettings().carSec ?? undefined, wxoCut: getSettings().wxoCut ?? undefined, dashFirst: getSettings().dashFirst || undefined, refLo: rlo, refHi: rhi, nextHu, nextService, certAcKwh: certAcKwh !== undefined ? Math.round(certAcKwh * 10) / 10 : undefined, certDcKwh: certDcKwh !== undefined ? Math.round(certDcKwh * 10) / 10 : undefined, certKm: certKm !== undefined ? Math.round(certKm) : undefined })) {   // commuteKm: im Steuerhelfer (Berichte → Fahrten) gepflegt
+  if (save(KEY_SETTINGS, { title: $('set-title').value.trim() || DEFAULT_TITLE, brand: txt('set-brand', 30), model: txt('set-model', 40), plate: (txt('set-plate', 15) || '').toUpperCase() || undefined, year: yr || undefined, vin: vin || undefined, price, battery, power, remDays, remKm, purchase, wltp: wl, wltpNet: wln !== undefined ? Math.round(wln * 100) / 100 : undefined, purchaseKm: pk !== undefined ? Math.round(pk) : undefined, purchasePrice: pp !== undefined ? Math.round(pp * 100) / 100 : undefined, commuteKm: getSettings().commuteKm || undefined, ccEnd: getSettings().ccEnd || undefined, gtMirror: getSettings().gtMirror || undefined, gtList: getSettings().gtList || undefined, rtLast: getSettings().rtLast || undefined, iceDep: getSettings().iceDep || undefined, iceWe: getSettings().iceWe || undefined, icePark: getSettings().icePark || undefined, iceMin: getSettings().iceMin || undefined, iceK: getSettings().iceK || undefined, nRep: getSettings().nRep || undefined, nTrips: getSettings().nTrips || undefined, nBakYm: getSettings().nBakYm || undefined, nBakAt: getSettings().nBakAt || undefined, nBakSnz: getSettings().nBakSnz || undefined, wxIcons: getSettings().wxIcons || undefined, carN: getSettings().carN ?? undefined, carSec: getSettings().carSec ?? undefined, wxoCut: getSettings().wxoCut ?? undefined, dashFirst: getSettings().dashFirst || undefined, refLo: rlo, refHi: rhi, nextHu, nextService, certAcKwh: certAcKwh !== undefined ? Math.round(certAcKwh * 10) / 10 : undefined, certDcKwh: certDcKwh !== undefined ? Math.round(certDcKwh * 10) / 10 : undefined, certKm: certKm !== undefined ? Math.round(certKm) : undefined })) {   // commuteKm: im Steuerhelfer (Berichte → Fahrten) gepflegt
     renderReminderBadges(); renderHeroStats(); pushPrefs();
     $('settings-msg').classList.remove('hidden'); setTimeout(() => $('settings-msg').classList.add('hidden'), 2500);
   }
@@ -5873,18 +5883,75 @@ async function frostMin() {
 }
 async function renderFrost() {
   const el = $('frost-banner'); if (!el) return;
-  const h = new Date().getHours(), snooze = (load(KEY_FROST, {}) || {}).snooze;
-  if (h < 16 || snooze === todayYMD() || liveHero) { el.classList.add('hidden'); return; }
-  let min = null; try { min = await frostMin(); } catch (e) { }
-  if (min == null || min >= 0) { el.classList.add('hidden'); return; }
-  const loss = Math.min(35, Math.round(10 + Math.max(0, -min) * 1.5)), rs = getReadings();
-  let k100 = null; try { const t = rs.length ? consumptionTotals(rs, rs.map((_, i) => i)) : null; k100 = t && t.km ? t.kwh100 : null; } catch (e) { }
-  const full = k100 ? batteryKwh() / (k100 * BAT.eta) * 100 : null;
-  $('frost-h').textContent = 'Morgen früh ' + fmt(min, 0).replace('-', '−') + ' °C';
-  $('frost-t').textContent = 'Reichweite ca. ' + loss + ' % geringer' + (full ? ' (volle Ladung ≈ ' + fmt(Math.round(full * (1 - loss / 100) / 5) * 5, 0) + ' statt ' + fmt(Math.round(full / 5) * 5, 0) + ' km)' : '') + '. Heute Abend anstecken: Vorklimatisieren aus dem Netz schont den Akku.';
+  const now = new Date(), h = now.getHours(), fc = load(KEY_FROST, {}) || {}, ask = fc.ask, st = iceSet();
+  if (liveHero) { el.classList.add('hidden'); return; }
+  /* Morgens: kurz nachfragen, ob die Prognose von gestern gestimmt hat (lernt, wie stark die Scheibe am Stellplatz auskühlt) */
+  if (h >= 5 && h < 12 && ask && ask.day === todayYMD() && !ask.done) {
+    $('frost-h').textContent = 'War die Scheibe heute früh vereist?';
+    $('frost-t').innerHTML = `<span class="block">Prognose gestern: ${ICE_LVL[ask.lvl]}${Number.isFinite(ask.tg) ? ' (Scheibe ≈ ' + fmt(Math.round(ask.tg) || 0, 0).replace('-', '−') + ' °C)' : ''}. Deine Antwort macht die Warnung genauer.</span><span class="mt-1.5 flex gap-2"><button type="button" data-ice="1" class="rounded-lg bg-sky-600 px-3 py-1 text-xs font-semibold text-white">Ja, vereist</button><button type="button" data-ice="0" class="rounded-lg bg-black/10 dark:bg-white/10 px-3 py-1 text-xs font-semibold">Nein, frei</button></span>`;
+    el.classList.remove('hidden'); return;
+  }
+  if (h < 16 || fc.snooze === todayYMD()) { el.classList.add('hidden'); return; }
+  let min = null, ice = null; try { [min, ice] = await Promise.all([frostMin().catch(() => null), iceRisk().catch(() => null)]); } catch (e) { }
+  if (ice) { const c = load(KEY_FROST, {}) || {}; if (!c.ask || c.ask.day !== ice.day || !c.ask.done) { c.ask = ice.lvl >= 1 || ice.minTg <= 2 ? { day: ice.day, lvl: ice.lvl, tg: Math.round(ice.minTg * 10) / 10 } : null; save(KEY_FROST, c); } }
+  const iceOn = ice && ice.lvl >= st.min, frost = min != null && min < 0;
+  if (!iceOn && !frost) { el.classList.add('hidden'); return; }
+  const tt = (v) => fmt(Math.round(v) || 0, 0).replace('-', '−') + ' °C', dep = st.dep, [hh, mm] = dep.split(':').map(Number), pre = new Date(2000, 0, 1, hh, mm - 15);
+  let w1 = null; try { w1 = wxoLast && wxoLast.days && wxoLast.days[1] && wxoLast.days[1].d === wxIso(new Date(Date.now() + 864e5)) ? wxoLast.days[1] : null; } catch (e) { }
+  let rng = '';
+  if (w1) rng = 'Morgen ≈ ' + fmt(w1.k, 1) + ' kWh/100 km · volle Ladung ≈ ' + wxoFmtR(w1.r) + ' km.';
+  else if (frost) { const loss = Math.min(35, Math.round(10 + Math.max(0, -min) * 1.5)), rs = getReadings(); let k100 = null; try { const t = rs.length ? consumptionTotals(rs, rs.map((_, i) => i)) : null; k100 = t && t.km ? t.kwh100 : null; } catch (e) { }
+    const full = k100 ? batteryKwh() / (k100 * BAT.eta) * 100 : null; rng = 'Reichweite ca. ' + loss + ' % geringer' + (full ? ' (volle Ladung ≈ ' + fmt(Math.round(full * (1 - loss / 100) / 5) * 5, 0) + ' statt ' + fmt(Math.round(full / 5) * 5, 0) + ' km)' : '') + '.'; }
+  const plug = (min != null && min < 3) || (ice && ice.T < 3) ? ' Heute Abend anstecken: Vorklimatisieren aus dem Netz schont den Akku.' : '';
+  if (iceOn) {
+    $('frost-h').textContent = 'Morgen früh: Scheibe vereist ' + (ice.lvl >= 2 ? 'wahrscheinlich' : 'möglich');
+    const sky = ice.cc < 25 ? 'klar' : ice.cc < 60 ? 'teils bewölkt' : 'bewölkt', wind = ice.ws < 1.5 ? 'windstill' : ice.ws < 4 ? 'wenig Wind' : 'windig';
+    $('frost-t').innerHTML = `<span class="block">${tt(ice.T)} um ${dep} Uhr, ${sky}, ${wind} · Scheibe ≈ ${tt(ice.minTg)}${ice.glaze ? ' · Nässe am Abend, danach Frost: Eisschicht' : ''}</span>`
+      + `<span class="block mt-0.5"><b>Tipp:</b> Vorklimatisierung auf ${pad2(pre.getHours())}:${pad2(pre.getMinutes())} stellen (Abfahrt ${dep})${ice.lvl >= 2 ? ' – oder Scheibenabdeckung drauf bzw. 10 min früher los' : ''}.${esc(plug)}</span>${rng ? `<span class="block mt-0.5">${rng}</span>` : ''}`;
+  } else {
+    $('frost-h').textContent = 'Morgen früh ' + tt(min);
+    $('frost-t').textContent = rng + (plug || ' Heute Abend anstecken: Vorklimatisieren aus dem Netz schont den Akku.');
+  }
   el.classList.remove('hidden');
 }
-$('frost-x').addEventListener('click', () => { const c = load(KEY_FROST, {}) || {}; c.snooze = todayYMD(); save(KEY_FROST, c); $('frost-banner').classList.add('hidden'); });
+$('frost-x').addEventListener('click', () => { const c = load(KEY_FROST, {}) || {}; if (c.ask && c.ask.day === todayYMD() && new Date().getHours() < 12) c.ask.done = true; else c.snooze = todayYMD(); save(KEY_FROST, c); $('frost-banner').classList.add('hidden'); });
+$('frost-banner').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-ice]'); if (!b) return; const c = load(KEY_FROST, {}) || {}, a = c.ask; if (!a) return;
+  const yes = b.dataset.ice === '1', st = iceSet(); let k = st.k;
+  if (yes && a.lvl === 0) k *= 1.12; else if (yes && a.lvl === 1) k *= 1.05; else if (!yes && a.lvl === 2) k *= 0.9; else if (!yes && a.lvl === 1) k *= 0.95;
+  k = Math.round(Math.max(0.5, Math.min(1.8, k)) * 100) / 100; if (k !== st.k) setQuickSetting('iceK', k);
+  a.done = true; a.ans = yes; save(KEY_FROST, c); localStorage.removeItem(KEY_ICE);
+  $('frost-h').textContent = 'Danke!'; $('frost-t').textContent = k !== st.k ? 'Die Eis-Warnung ist jetzt ' + (k > st.k ? 'etwas empfindlicher' : 'etwas zurückhaltender') + '.' : 'Passt – die Warnung bleibt, wie sie ist.';
+  setTimeout(() => $('frost-banner').classList.add('hidden'), 2500);
+});
+/* =====================================================================
+   Eis-Warnung (Vortag): Scheibe vereist, wenn das Glas unter 0 °C und unter den Taupunkt fällt. In klaren, windstillen Nächten strahlt die Scheibe ab und ist
+   2–5 °C kälter als die Luft (Raureif schon bei +2 °C möglich). Glas ≈ Luft − 4 °C × (1 − Bewölkung) × Windfaktor × Stellplatz × gelernter Faktor.
+   Nässe am Abend mit Frost danach → Eisschicht. Stunden von 18 Uhr bis zur Abfahrt am Ort „Zuhause“ (sonst Wetter-Standort). Stufen: 0 gering, 1 möglich, 2 wahrscheinlich.
+   ===================================================================== */
+const KEY_ICE = 'enyaq.ice', ICE_LVL = ['gering', 'möglich', 'wahrscheinlich'];
+const iceSet = () => { const s = getSettings(); return { dep: /^\d{1,2}:\d{2}$/.test(s.iceDep || '') ? s.iceDep.padStart(5, '0') : '06:30', we: !!s.iceWe, park: ['open', 'carport', 'garage'].includes(s.icePark) ? s.icePark : 'open', min: s.iceMin === 'high' ? 2 : 1, k: Number(s.iceK) > 0 ? Number(s.iceK) : 1 }; };
+const iceLoc = () => { const hm = getTPlaces().find(p => p.kind === 'home' && Number.isFinite(p.lat)); return hm ? { lat: hm.lat, lon: hm.lon } : wxLoc(); };
+async function iceRisk() {
+  const st = iceSet(); if (st.park === 'garage') return null; const l = iceLoc(); if (!l) return null;
+  const tm = new Date(Date.now() + 864e5), day = wxIso(tm), wd = tm.getDay(); if (!st.we && (wd === 0 || wd === 6)) return null;
+  const sig = [l.lat.toFixed(3), l.lon.toFixed(3), day, st.dep, st.park, st.k].join('|'), c = load(KEY_ICE, null);
+  if (c && c.sig === sig && Date.now() - c.t < 3600e3) return c.res;
+  const r = await fetch('https://api.open-meteo.com/v1/forecast?latitude=' + l.lat + '&longitude=' + l.lon + '&hourly=temperature_2m,dew_point_2m,cloud_cover,wind_speed_10m,precipitation&wind_speed_unit=ms&timezone=auto&forecast_days=3');
+  if (!r.ok) return c && c.res && c.res.day === day ? c.res : null; const H = (await r.json()).hourly; if (!H || !H.time) return null;
+  const today = wxIso(new Date()), [dh] = st.dep.split(':').map(Number), pf = st.park === 'carport' ? 0.35 : 1, rows = [];
+  H.time.forEach((t, i) => { const d = t.slice(0, 10), hr = +t.slice(11, 13); if (!((d === today && hr >= 18) || (d === day && hr <= dh))) return;
+    const T = Number(H.temperature_2m[i]), Td = Number(H.dew_point_2m[i]), cc = Number(H.cloud_cover[i]) || 0, ws = Number(H.wind_speed_10m[i]) || 0, p = Number(H.precipitation[i]) || 0;
+    if (!Number.isFinite(T)) return; const wf = ws < 1.5 ? 1 : ws < 3 ? 0.75 : ws < 5 ? 0.45 : 0.2, Tg = T - 4 * (1 - cc / 100) * wf * pf * st.k;
+    rows.push({ d, hr, T, Td: Number.isFinite(Td) ? Td : T - 3, cc, ws, p, Tg }); });
+  if (!rows.length) return null;
+  const late = rows.filter(x => x.d === day && x.hr >= dh - 6), frostH = late.filter(x => x.Tg <= 0 && x.Tg <= x.Td + 0.5).length;
+  const minTg = Math.min(...late.map(x => x.Tg)), gap = Math.min(...late.map(x => x.Tg - x.Td));
+  let glaze = false; rows.forEach((x, i) => { if (x.p >= 0.2 && rows.slice(i + 1).some(y => y.Tg <= -0.5)) glaze = true; });
+  const lvl = glaze && minTg <= 0 || (frostH >= 3 && minTg <= -1) ? 2 : frostH >= 1 || (minTg <= 0.5 && gap <= 1.5) ? 1 : 0, last = rows[rows.length - 1];
+  const res = { day, lvl, T: last.T, minT: Math.min(...late.map(x => x.T)), minTg, cc: late.reduce((a, x) => a + x.cc, 0) / late.length, ws: late.reduce((a, x) => a + x.ws, 0) / late.length, glaze, frostH };
+  save(KEY_ICE, { sig, t: Date.now(), res }); return res;
+}
 /* =====================================================================
    Verbrauchs-Prognose (Start): lernendes Modell aus den eigenen Ladungen + Open-Meteo-Vorhersage.
    Jede genaue Strecke zwischen zwei Ladungen (Akku-%, ≥ 20 km) ist ein Lernpunkt: Verbrauch aus dem Akku (ohne Ladeverluste, wie der Bordcomputer) gegen die mittlere Tagestemperatur
@@ -6039,6 +6106,8 @@ function dashFirstSlide(soc) {
 }
 function setQuickSetting(k, v) { const st = load(KEY_SETTINGS, {}) || {}; if (v === undefined) delete st[k]; else st[k] = v; save(KEY_SETTINGS, st); try { pushPrefs(); } catch (e) { } }
 function fillWxoPrefs() {
+  try { const st = iceSet(), f = (id, v) => { const e = $(id); if (e && document.activeElement !== e) e.value = v; }; f('set-ice-dep', st.dep); f('set-ice-park', st.park); f('set-ice-min', st.min === 2 ? 'high' : 'mid'); f('set-ice-we', st.we ? '1' : '0');
+    $('set-ice-info').textContent = 'Ab 16 Uhr am Vortag auf der Startseite, wenn die Scheibe am Ort „Zuhause“ vereisen dürfte (Temperatur, Taupunkt, Bewölkung, Wind). Morgens fragt die App kurz nach, ob es gestimmt hat.' + (Math.abs(st.k - 1) >= 0.02 ? ' Gelernt: dein Stellplatz kühlt ' + fmt(Math.abs(st.k - 1) * 100, 0) + ' % ' + (st.k > 1 ? 'stärker' : 'schwächer') + ' aus als üblich.' : ''); } catch (e) { }
   const gm = $('set-gt-mirror'); if (gm) gm.checked = !!getSettings().gtMirror;
   const wi = $('set-wx-icons'); if (wi && document.activeElement !== wi) wi.value = wxIconStyle();
   const cn = $('set-car-n'), cs = $('set-car-sec'); if (cn && document.activeElement !== cn) cn.value = String(carAutoN()); if (cs && document.activeElement !== cs) { const v = String(carAutoMs() / 1000); cs.value = [...cs.options].some(o => o.value === v) ? v : '30'; } const a = $('set-wxo-cut'), b = $('set-dash-first'); if (a && document.activeElement !== a) a.value = String(wxoCut()); if (b && document.activeElement !== b) b.value = dashFirst(); }
@@ -6047,6 +6116,8 @@ $('set-car-n').addEventListener('change', (e) => { setQuickSetting('carN', Numbe
 $('set-car-sec').addEventListener('change', (e) => { setQuickSetting('carSec', Number(e.target.value)); try { window.carReschedule && window.carReschedule(); } catch (er) { } });
 $('set-wx-icons').addEventListener('change', (e) => { setQuickSetting('wxIcons', e.target.value); try { renderWxo(); } catch (er) { } });
 $('set-dash-first').addEventListener('change', (e) => { setQuickSetting('dashFirst', e.target.value); });
+[['set-ice-dep', 'iceDep', v => /^\d{2}:\d{2}$/.test(v) ? v : undefined], ['set-ice-park', 'icePark', v => v], ['set-ice-min', 'iceMin', v => v], ['set-ice-we', 'iceWe', v => v === '1' || undefined]].forEach(([id, key, f]) =>
+  $(id).addEventListener('change', (e) => { setQuickSetting(key, f(e.target.value)); localStorage.removeItem(KEY_ICE); const c = load(KEY_FROST, {}) || {}; delete c.snooze; save(KEY_FROST, c); try { fillWxoPrefs(); renderFrost(); } catch (er) { } }));
 const wxoN = () => !isDesk() ? 3 : ($('wxo-card').clientWidth || document.querySelector('main').clientWidth) >= 760 ? 7 : 5;   // Tage in der Vorschau: Handy 3, PC je nach Breite 5 oder 7
 let wxoNLast = 0; window.addEventListener('resize', () => { clearTimeout(window.__wxoRs); window.__wxoRs = setTimeout(() => { if (wxoN() !== wxoNLast) try { renderWxo(); } catch (e) { } }, 250); });
 let wxoTok = 0, wxoLast = null;
@@ -6885,7 +6956,7 @@ try { renderWrapCard(); } catch (e) { }
    im Dokument enyaqStrom/<uid>/settings/prefs, gleiche Regel wie Anbieter und Kategorien. Die PIN bleibt nur auf dem Gerät.
    Erster Abgleich: Was die Cloud hat, gilt; fehlt dort etwas und ist lokal vorhanden, wird es hochgeladen. Danach gilt die Cloud (Änderung auf einem Gerät wirkt auf allen).
    ===================================================================== */
-const SYNC_SET_KEYS = ['title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAcKwh', 'certDcKwh', 'certKm', 'wltpNet', 'ccEnd', 'wxoCut', 'dashFirst', 'carN', 'carSec', 'wxIcons', 'nRep', 'nTrips', 'nBakYm', 'nBakAt', 'nBakSnz', 'gtMirror', 'gtList', 'rtLast'];
+const SYNC_SET_KEYS = ['title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAcKwh', 'certDcKwh', 'certKm', 'wltpNet', 'ccEnd', 'wxoCut', 'dashFirst', 'carN', 'carSec', 'wxIcons', 'nRep', 'nTrips', 'nBakYm', 'nBakAt', 'nBakSnz', 'gtMirror', 'gtList', 'rtLast', 'iceDep', 'iceWe', 'icePark', 'iceMin', 'iceK'];
 /** Einstellungen für die Cloud: feste Reihenfolge, ohne leere Werte (Firestore verbietet undefined). null = nichts vorhanden. */
 function syncSet(src) {
   const o = {}; if (src && typeof src === 'object') SYNC_SET_KEYS.forEach(k => { const v = src[k]; if (v != null && v !== '' && !(typeof v === 'number' && !isFinite(v))) o[k] = v; });
@@ -7528,7 +7599,7 @@ const SET_SECS = [
   { k: 'erinnerungen', e: '🔔', t: 'Erinnerungen', h: ['Erinnerungen'], save: true },
   { k: 'fahrten', e: '🧭', t: 'Fahrtenbuch', h: ['Fahrtenbuch'] },
   { k: 'listen', e: '🏷️', t: 'Anbieter & Kategorien', h: ['Listen'] },
-  { k: 'wetter', e: '⛅', t: 'Wetter', h: ['Wetter'] },
+  { k: 'wetter', e: '⛅', t: 'Wetter', h: ['Wetter', 'Eis-Warnung'] },
   { k: 'daten', e: '☁️', t: 'Sicherung & Belege', h: ['Belege', 'Datensicherung'] },
   { k: 'sprache', e: '🎙️', t: 'Sprachsteuerung', h: ['So funktioniert’s', 'Akku-Temperatur', 'Langzeitverbrauch'] },
   { k: 'konto', e: '👤', t: 'Konto & Cloud', h: ['Cloud-Sync'], hidden: true },
@@ -7644,7 +7715,7 @@ const NAV_IDX = [
   ['wrap', 'Rückblick', 'Start', 'jahr wrapped'], ['reminders', 'Erinnerungen', 'Erinnerungen', 'wartung termine fällig'], ['kb', 'Wissen', 'Wissen', 'notizen links tipps'], ['wish', 'Wunschliste', 'Wunschliste', 'zubehör kaufen wunsch matten kofferraum links shop'], ['tires', 'Reifen', 'Reifen', 'profiltiefe profil reifenprofil mm sommer winter allwetter messen'], ['providers', 'Ladekarten', 'Ladeanbieter', 'anbieter tarife preise'],
   ['bak-now', 'Jetzt in Google Drive sichern', 'Einstellungen › Sicherung & Belege', 'backup drive'], ['backup', 'Sicherung & Belege', 'Einstellungen', 'export import drive'],
   ['car', 'Fahrzeug & Kauf', 'Einstellungen', 'kennzeichen fin kaufpreis kauftag'], ['set-laden', 'Laden & Akku', 'Einstellungen', 'strompreis kapazität wltp referenz temperatur'], ['set-rem', 'Nächste HU / Service', 'Einstellungen › Erinnerungen', 'vorwarnung fälligkeit tüv'],
-  ['set-fahrten', 'Fahrtenbuch-Einstellungen', 'Einstellungen', 'orte etiketten regeln import'], ['set-listen', 'Anbieter & Kategorien', 'Einstellungen', 'etiketten liste'], ['set-wetter', 'Wetter', 'Einstellungen', 'standort frost'],
+  ['set-wetter', 'Eis-Warnung (Scheibe vereist)', 'Einstellungen › Wetter', 'eis frost scheibe vereist kratzen raureif vorklimatisieren abfahrt stellplatz carport garage'], ['set-fahrten', 'Fahrtenbuch-Einstellungen', 'Einstellungen', 'orte etiketten regeln import'], ['set-listen', 'Anbieter & Kategorien', 'Einstellungen', 'etiketten liste'], ['set-wetter', 'Wetter', 'Einstellungen', 'standort frost'],
   ['account', 'Konto & Cloud', 'Einstellungen', 'anmelden google škoda api'], ['set-gefahr', 'Alle Daten löschen', 'Einstellungen', 'zurücksetzen reset']];
 const navNorm = (t) => String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 function navSearch() {
