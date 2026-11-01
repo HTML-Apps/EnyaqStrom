@@ -63,7 +63,8 @@ const deg = (v) => String(Math.round(v) || 0).replace('-', '−') + ' °C';
 function message(r, st) {
   const sky = r.cc < 25 ? 'klar' : r.cc < 60 ? 'teils bewölkt' : 'bewölkt', wind = r.ws < 1.5 ? 'windstill' : r.ws < 4 ? 'wenig Wind' : 'windig';
   const [h, m] = st.dep.split(':').map(Number), pre = new Date(Date.UTC(2000, 0, 1, h, m - 15)), pp = String(pre.getUTCHours()).padStart(2, '0') + ':' + String(pre.getUTCMinutes()).padStart(2, '0');
-  return { title: 'Morgen früh: Scheibe vereist ' + LVL[r.lvl], body: `${deg(r.T)} um ${st.dep}, ${sky}, ${wind} · Scheibe ≈ ${deg(r.minTg)}${r.glaze ? ' · Eisschicht nach Nässe' : ''}. Vorklimatisierung auf ${pp} stellen.` };
+  return { title: (r.lvl >= 2 ? '🧊 ' : '❄️ ') + 'Morgen früh: Scheibe vereist ' + LVL[r.lvl],
+    body: `${deg(r.T)} um ${st.dep} · ${sky}, ${wind}\nScheibe ≈ ${deg(r.minTg)}${r.glaze ? ' · Eisschicht nach Nässe' : ''}\n👉 Vorklimatisierung auf ${pp} stellen${r.lvl >= 2 ? ' oder 10 min früher los' : ''}` };
 }
 async function riskFor(uid) {
   const [prefs, places] = await Promise.all([fsGet(`enyaqStrom/${uid}/settings/prefs`), fsGet(`enyaqStrom/${uid}/settings/places`)]);
@@ -89,8 +90,10 @@ export default async function handler(req, res) {
     if (req.method === 'POST') {                                               // Testnachricht an die eigenen Geräte
       const user = await verifyUser(req); if (!user) return res.status(401).json({ error: 'unauthorized' });
       const list = await devices(user.uid); if (!list.length) return res.status(404).json({ error: 'no_device' });
-      let payload = { title: 'Testnachricht', body: 'Benachrichtigungen funktionieren. Die Eis-Warnung kommt abends, wenn die Scheibe morgen vereisen dürfte.', tag: 'ice-test', url: '/' };
-      try { const { st, r } = await riskFor(user.uid); if (r && r.lvl >= 1) payload = { ...message(r, st), title: 'Test · ' + message(r, st).title, tag: 'ice-test', url: '/' }; } catch (e) { }
+      // Test = genau so, wie die echte Warnung aussieht: bei Eis-Risiko mit den echten Werten für morgen, sonst mit einem typischen Beispiel
+      let st = iceSet(null), r = null; try { const x = await riskFor(user.uid); st = x.st; r = x.r; } catch (e) { }
+      if (!r || r.lvl < 1) r = { lvl: 2, T: -1, minTg: -4.4, cc: 5, ws: 0.6, glaze: false };
+      const payload = { ...message(r, st), tag: 'ice-test', url: '/' };
       return res.status(200).json({ ...(await send(list, payload)), devices: list.length });
     }
     const secret = process.env.CRON_SECRET, auth = req.headers.authorization || '', ua = String(req.headers['user-agent'] || '');

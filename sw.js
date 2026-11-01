@@ -5,7 +5,7 @@
  * - Die KI-Abfrage (/api/…) wird NIE gecacht und läuft immer übers Netz.
  * Bei größeren Änderungen am Cache-Konzept CACHE_VERSION erhöhen. */
 
-const CACHE_VERSION = 'v190';
+const CACHE_VERSION = 'v191';
 const CACHE_NAME = 'enyaq-' + CACHE_VERSION;
 
 // Dateien, die beim Installieren vorab geladen werden
@@ -79,7 +79,7 @@ self.addEventListener('fetch', (event) => {
 self.addEventListener('push', (event) => {
   let d = {}; try { d = event.data ? event.data.json() : {}; } catch (e) { d = { title: 'EnyaqStrom', body: event.data ? event.data.text() : '' }; }
   event.waitUntil(self.registration.showNotification(d.title || 'EnyaqStrom', {
-    body: d.body || '', tag: d.tag || 'enyaq', renotify: true, icon: '/Bilder/car-v4-192.png', badge: '/Bilder/badge-96.png',
+    body: d.body || '', tag: d.tag || 'enyaq', renotify: true, badge: '/Bilder/badge-96.png',                 // ohne großes App-Symbol rechts
     data: { url: d.url || '/' }, actions: [{ action: 'open', title: 'Details' }, { action: 'close', title: 'OK' }]
   }));
 });
