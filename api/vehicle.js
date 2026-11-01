@@ -24,8 +24,8 @@ export default async function handler(req, res) {
   if (req.query && req.query.raw) {
     try {
       const base = 'https://public.api.connect.skoda-auto.cz/api/v1/vehicles/' + encodeURIComponent(acc.vin) + '?include=';
-      let r = await fetch(base + 'charging,odometer,air-conditioning', { headers: { 'X-API-Key': acc.key, Accept: 'application/json' } }), inc = 'charging,odometer,air-conditioning';
-      if (!r.ok && r.status === 400) { r = await fetch(base + 'charging,odometer', { headers: { 'X-API-Key': acc.key, Accept: 'application/json' } }); inc = 'charging,odometer'; }
+      let r, inc;
+      for (inc of ['charging,odometer,status,air-conditioning', 'charging,odometer,status', 'charging,odometer']) { r = await fetch(base + inc, { headers: { 'X-API-Key': acc.key, Accept: 'application/json' } }); if (r.status !== 400) break; }
       const text = await r.text(); let data = null; try { data = JSON.parse(text); } catch (e) { }
       const strip = (o) => { if (o && typeof o === 'object') for (const k of Object.keys(o)) { if (/^vin$/i.test(k) || /licen[cs]ePlate/i.test(k)) o[k] = '…'; else strip(o[k]); } return o; };
       return res.status(200).json({ status: r.status, include: inc, data: data ? strip(data) : text.slice(0, 2000) });
@@ -36,16 +36,31 @@ export default async function handler(req, res) {
   if (hit && Date.now() - hit.at < 60_000) return res.status(200).json(hit.body);
 
   try {
-    const url = 'https://public.api.connect.skoda-auto.cz/api/v1/vehicles/' + encodeURIComponent(acc.vin) + '?include=charging,odometer';
-    const r = await fetch(url, { headers: { 'X-API-Key': acc.key, Accept: 'application/json' } });
+    /* mit Fahrzeugstatus (Türen/Schloss); unterstützt das Auto ihn nicht (400), nur Laden + km-Stand */
+    const base = 'https://public.api.connect.skoda-auto.cz/api/v1/vehicles/' + encodeURIComponent(acc.vin) + '?include=', H = { 'X-API-Key': acc.key, Accept: 'application/json' };
+    let r = await fetch(base + 'charging,odometer,status', { headers: H });
+    if (r.status === 400) r = await fetch(base + 'charging,odometer', { headers: H });
     if (!r.ok) {
       const msg = { 401: 'Škoda-API-Schlüssel abgelaufen oder ungültig', 403: 'Schlüssel gilt nicht für dieses Fahrzeug', 429: 'Abfrage-Limit erreicht, bitte später erneut versuchen' }[r.status] || ('Škoda-API Fehler ' + r.status);
       return res.status(502).json({ error: msg });
     }
     const data = await r.json();
-    const v = data.vehicle || {}, ch = v.charging || {};
+    const v = data.vehicle || {}, ch = v.charging || {}, st = v.status || {};
     const body = {                                          // fehlende Felder bleiben null (= unbekannt)
       soc: ch.status?.battery?.stateOfChargeInPercent ?? null,
+      rangeKm: ch.status?.battery?.remainingCruisingRangeInMeters != null ? Math.round(ch.status.battery.remainingCruisingRangeInMeters / 1000) : null,
+      chargeState: ch.status?.state ?? null,
+      plug: ch.status?.plugConnectionState ?? null,
+      plugLock: ch.status?.plugLockState ?? null,
+      minutesToFull: ch.status?.remainingTimeToFullyChargedInMinutes ?? null,
+      fullAt: ch.status?.fullyChargedAt ?? null,
+      careMode: ch.settings?.chargingCareMode ?? null,
+      atSavedLocation: ch.isVehicleInSavedLocation ?? null,
+      doorsLocked: st.overall?.doorsLocked ?? null,
+      locked: st.overall?.locked ?? null,
+      doors: st.overall?.doors ?? null,
+      windows: st.overall?.windows ?? null,
+      lights: st.overall?.lights ?? null,
       targetSoc: ch.settings?.targetStateOfChargeInPercent ?? null,
       chargePowerKw: ch.status?.chargePowerInKw ?? null,
       odometerKm: v.odometer?.mileageInKm ?? null,

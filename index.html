@@ -154,6 +154,8 @@
     main.max-w-xl { max-width: 1100px; padding-left: 24px; padding-right: 24px; }
     #nav-home { display: flex; }
     #hero-bg { left: -24px; right: -24px; }
+    #hero-car.has-veh #car-scroll, #hero-car.has-veh #car-live { right: 290px; }
+    #veh-card.on { display: block; position: absolute; right: 12px; top: 50%; transform: translateY(-50%); width: 268px; z-index: 5; }
     #nav-home:hover, #nav-home.nav-on { background: rgb(30 41 59); }
     main { padding-bottom: 2rem !important; }
     #bottom-nav, #btn-nav, #btn-bell, #nav-drawer-bg, #nav-drawer-panel [data-nav="close"] { display: none !important; }
@@ -202,7 +204,8 @@
         <span aria-hidden="true" class="select-none text-[30px] font-light leading-none text-slate-400">|</span>
         <span class="hs-cell block"><span class="block text-[21px] leading-tight font-semibold tabular-nums text-white"><span id="hs-kwh">–</span> <span class="text-[13px] font-medium text-white/70">kWh</span></span><span id="hs-kwh-l" class="mt-0.5 block truncate px-1 text-xs text-white/60">&nbsp;</span></span>
       </button>
-      <div class="relative -mx-3 mt-3 h-[clamp(230px,64vw,340px)]">
+      <div id="hero-car" class="relative -mx-3 mt-3 h-[clamp(230px,64vw,340px)]">
+        <div id="veh-card" class="hidden" aria-label="Fahrzeugstatus"></div>
         <div id="car-scroll" class="absolute inset-0 overflow-hidden select-none touch-pan-y focus:outline-none transition-opacity duration-500" tabindex="0" role="group" aria-roledescription="Karussell" aria-label="Bilder vom Enyaq, nach links oder rechts wischen zum Wechseln"></div>
         <div id="car-live" class="absolute inset-0 flex items-end justify-center opacity-0 pointer-events-none transition-opacity duration-500" aria-hidden="true"><img src="/Bilder/Enyaq_live.webp" alt="Enyaq lädt" width="1074" height="584" decoding="async" draggable="false" class="max-h-full w-full object-contain object-bottom select-none"></div>
       </div>
@@ -5877,15 +5880,40 @@ function wxoHabits() {
 /** Aktueller Akkustand vom Auto (1 h zwischengespeichert – die Škoda-API erlaubt 20 Abfragen pro Stunde); bei Fehlern der letzte Wert bis 6 h alt */
 async function wxoSoc() {
   const c = load(KEY_WXO + 'S', null);
-  if (c && Date.now() - c.t < 3600e3) return c.soc;
+  if (c && c.d && Date.now() - c.t < 3600e3) return c.soc;                     // ältere Zwischenstände ohne Fahrzeugdaten einmal neu holen
   const old = c && Date.now() - c.t < 6 * 3600e3 ? c.soc : null;
   if (!apiEnabled()) return old;
   try {
     const res = await fetch('/api/vehicle', { headers: await authHeaders() }), d = await res.json().catch(() => ({}));
     if (!res.ok || d.soc == null) return old;
     if (d.odometerKm != null) carKmCache = { t: Date.now(), km: Math.round(d.odometerKm), at: d.capturedAt || null };
-    save(KEY_WXO + 'S', { t: Date.now(), soc: d.soc }); return d.soc;
+    save(KEY_WXO + 'S', { t: Date.now(), soc: d.soc, d }); try { renderVehCard(); } catch (e) { } return d.soc;
   } catch (e) { return old; }
+}
+/* PC: Fahrzeugstatus rechts neben dem Auto (Glas-Karte) – aus der stündlichen Abfrage beim Auto (gleicher Zwischenspeicher wie der Restakku) */
+function renderVehCard() {
+  const el = $('veh-card'), wrap = $('hero-car'); if (!el) return;
+  const c = load(KEY_WXO + 'S', null), d = c && c.d, on = isDesk() && apiEnabled() && d && d.soc != null && !liveHero;
+  el.classList.toggle('on', !!on); wrap.classList.toggle('has-veh', !!on); if (!on) return;
+  const soc = Math.round(d.soc), tgt = Number(d.targetSoc) || null, cs = d.chargeState || '', charging = cs === 'CHARGING' || d.chargePowerKw > 0;
+  const plugged = d.plug === 'CONNECTED', lk = d.doorsLocked || d.locked, locked = lk === 'YES' ? true : lk === 'NO' ? false : null;
+  const at = d.capturedAt ? new Date(d.capturedAt) : new Date(c.t), atTxt = at.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }) + ' · ' + hhmm(at.getTime());
+  const ok = locked !== false && !/OPEN/.test(d.doors || '') && !/OPEN/.test(d.windows || '') && !/^ON$/.test(d.lights || '');
+  const row = (i, a, b, col) => `<div class="flex items-center justify-between gap-2 border-t border-white/10 py-1.5 text-[12.5px]"><span class="flex items-center gap-2 text-slate-200">${i}${a}</span><span class="font-semibold ${col || 'text-slate-200'}">${b}</span></div>`;
+  const ico = (path) => `<svg class="h-4 w-4 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true">${path}</svg>`;
+  const I = { lock: ico('<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>'), plug: ico('<path d="M9 2v6M15 2v6M7 8h10v4a5 5 0 0 1-10 0V8zM12 17v5"/>'), tgt: ico('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>'), odo: ico('<path d="M4 18a8 8 0 1 1 16 0"/><path d="M12 18l4-5"/>'), bolt: ico('<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>') };
+  const rows = [
+    locked != null ? row(I.lock, 'Verriegelt', locked ? 'zu' : 'offen', locked ? 'text-emerald-400' : 'text-amber-400') : '',
+    charging ? row(I.bolt, 'Lädt', (d.chargePowerKw > 0 ? fmt(d.chargePowerKw, 1) + ' kW' : '') + (d.minutesToFull > 0 ? ' · voll ' + hhmm(Date.parse(d.capturedAt || new Date(c.t).toISOString()) + d.minutesToFull * 60000) : ''), 'text-sky-300')
+      : row(I.plug, 'Ladekabel', plugged ? 'verbunden' : 'nicht verbunden', plugged ? 'text-sky-300' : 'text-slate-400'),
+    tgt ? row(I.tgt, 'Ladeziel', tgt + ' %' + (d.careMode === 'ACTIVATED' ? ' · Akkuschonung' : '')) : '',
+    d.odometerKm != null ? row(I.odo, 'km-Stand', fmt(Math.round(d.odometerKm), 0) + ' km') : ''
+  ].join('');
+  el.innerHTML = `<div class="rounded-[20px] border border-white/10 bg-slate-900/55 px-4 py-3.5 text-white backdrop-blur-md">
+    <div class="flex items-center justify-between"><span class="font-barlow text-[15px] font-bold uppercase tracking-[0.08em]">Fahrzeugstatus</span><span class="text-[11px] ${ok ? 'text-emerald-400' : 'text-amber-400'}">● ${ok ? 'Alles OK' : 'Bitte prüfen'}</span></div>
+    <div class="mt-2 flex items-baseline gap-2"><span class="font-barlow text-[40px] font-bold leading-none">${soc} %</span>${d.rangeKm != null ? `<span class="text-[15px] font-semibold">${fmt(d.rangeKm, 0)} km</span>` : ''}</div>
+    <div class="relative mb-2.5 mt-2 h-3.5 overflow-hidden rounded-full bg-slate-800"><div class="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400 ${charging ? 'animate-pulse' : ''}" style="width:${Math.max(2, Math.min(100, soc))}%"></div>${tgt ? `<div class="absolute -inset-y-0.5 border-l-2 border-white/80" style="left:${tgt}%"></div>` : ''}</div>
+    ${rows}<p class="mt-1.5 text-[10.5px] text-slate-400">Stand vom Auto: ${atTxt}</p></div>`;
 }
 const wxoCut = () => { const v = Number(getSettings().wxoCut); return Number.isInteger(v) && v >= 0 && v <= 24 ? v : 18; };   // ab dieser Stunde gilt „Morgen“
 const dashFirst = () => { const v = getSettings().dashFirst; return v === 'meter' || v === 'dyn' ? v : 'wx'; };
@@ -7523,12 +7551,14 @@ function applyDesk() {
     if (vr.parentElement !== aside) aside.appendChild(vr);
     vr.classList.remove('hidden'); try { renderReminders(); } catch (e) { }
     try { renderWxo(); } catch (e) { }
+    try { renderVehCard(); } catch (e) { }
     if (currentView === 'reminders') showView('dashboard');
     try { openNavDrawer(); } catch (e) { }
   } else if (vr.parentElement === aside) {
     $('view-history').before(vr); vr.classList.toggle('hidden', currentView !== 'reminders');
     try { closeNavDrawer(); } catch (e) { }
     try { renderWxo(); } catch (e) { }
+    try { renderVehCard(); } catch (e) { }
   }
 }
 try { matchMedia('(min-width: 1280px)').addEventListener('change', applyDesk); } catch (e) { }
