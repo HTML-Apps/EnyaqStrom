@@ -1168,6 +1168,10 @@
           <p class="mt-1.5 text-xs text-slate-500 dark:text-slate-400">Ab dann zählt die Erinnerung am Start-Tab und an der Glocke.</p>
         </div>
         <div class="py-4 first:pt-4 last:pb-0">
+          <label class="flex items-center justify-between gap-3"><span><span class="block text-sm font-medium text-slate-700 dark:text-slate-300">In Google Tasks spiegeln</span><span class="block text-xs text-slate-500 dark:text-slate-400">Fälligkeiten als Aufgaben mit Datum in der Liste „EnyaqStrom“ – mit Benachrichtigung am Handy. Dort abgehakt = hier erledigt.</span></span><input id="set-gt-mirror" type="checkbox" class="h-5 w-5 shrink-0 accent-emerald-600"></label>
+          <div class="mt-2 flex items-center gap-2"><button id="gt-sync" type="button" class="shrink-0 rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm font-semibold active:scale-95 transition">Jetzt abgleichen</button><span id="gt-sync-msg" class="min-w-0 text-xs text-left text-slate-500 dark:text-slate-400"></span></div>
+        </div>
+        <div class="py-4 first:pt-4 last:pb-0">
           <p class="block text-sm font-medium text-slate-700 dark:text-slate-300">Nächste Fälligkeiten (Checkheft)</p>
           <div class="grid grid-cols-2 gap-2 mt-2">
           <div><label for="set-next-hu" class="text-sm font-medium text-slate-700 dark:text-slate-300">Nächste HU</label><input id="set-next-hu" type="month" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
@@ -2500,7 +2504,7 @@ $('btn-save-settings').addEventListener('click', () => {
     if (+m[2] < 1990 || +m[2] * 12 + +m[1] > now.getFullYear() * 12 + now.getMonth() + 1) { alert('Das Baujahr ' + yr + ' kann nicht stimmen: Es muss zwischen 01/1990 und ' + String(now.getMonth() + 1).padStart(2, '0') + '/' + now.getFullYear() + ' liegen.'); $('set-year').focus(); return; }
   }
   const txt = (id, n) => $(id).value.trim().replace(/\s+/g, ' ').slice(0, n) || undefined;
-  if (save(KEY_SETTINGS, { title: $('set-title').value.trim() || DEFAULT_TITLE, brand: txt('set-brand', 30), model: txt('set-model', 40), plate: (txt('set-plate', 15) || '').toUpperCase() || undefined, year: yr || undefined, vin: vin || undefined, price, battery, power, remDays, remKm, purchase, wltp: wl, wltpNet: wln !== undefined ? Math.round(wln * 100) / 100 : undefined, purchaseKm: pk !== undefined ? Math.round(pk) : undefined, purchasePrice: pp !== undefined ? Math.round(pp * 100) / 100 : undefined, commuteKm: getSettings().commuteKm || undefined, ccEnd: getSettings().ccEnd || undefined, nRep: getSettings().nRep || undefined, nTrips: getSettings().nTrips || undefined, nBakYm: getSettings().nBakYm || undefined, nBakAt: getSettings().nBakAt || undefined, nBakSnz: getSettings().nBakSnz || undefined, wxIcons: getSettings().wxIcons || undefined, carN: getSettings().carN ?? undefined, carSec: getSettings().carSec ?? undefined, wxoCut: getSettings().wxoCut ?? undefined, dashFirst: getSettings().dashFirst || undefined, refLo: rlo, refHi: rhi, nextHu, nextService, certAcKwh: certAcKwh !== undefined ? Math.round(certAcKwh * 10) / 10 : undefined, certDcKwh: certDcKwh !== undefined ? Math.round(certDcKwh * 10) / 10 : undefined, certKm: certKm !== undefined ? Math.round(certKm) : undefined })) {   // commuteKm: im Steuerhelfer (Berichte → Fahrten) gepflegt
+  if (save(KEY_SETTINGS, { title: $('set-title').value.trim() || DEFAULT_TITLE, brand: txt('set-brand', 30), model: txt('set-model', 40), plate: (txt('set-plate', 15) || '').toUpperCase() || undefined, year: yr || undefined, vin: vin || undefined, price, battery, power, remDays, remKm, purchase, wltp: wl, wltpNet: wln !== undefined ? Math.round(wln * 100) / 100 : undefined, purchaseKm: pk !== undefined ? Math.round(pk) : undefined, purchasePrice: pp !== undefined ? Math.round(pp * 100) / 100 : undefined, commuteKm: getSettings().commuteKm || undefined, ccEnd: getSettings().ccEnd || undefined, gtMirror: getSettings().gtMirror || undefined, gtList: getSettings().gtList || undefined, nRep: getSettings().nRep || undefined, nTrips: getSettings().nTrips || undefined, nBakYm: getSettings().nBakYm || undefined, nBakAt: getSettings().nBakAt || undefined, nBakSnz: getSettings().nBakSnz || undefined, wxIcons: getSettings().wxIcons || undefined, carN: getSettings().carN ?? undefined, carSec: getSettings().carSec ?? undefined, wxoCut: getSettings().wxoCut ?? undefined, dashFirst: getSettings().dashFirst || undefined, refLo: rlo, refHi: rhi, nextHu, nextService, certAcKwh: certAcKwh !== undefined ? Math.round(certAcKwh * 10) / 10 : undefined, certDcKwh: certDcKwh !== undefined ? Math.round(certDcKwh * 10) / 10 : undefined, certKm: certKm !== undefined ? Math.round(certKm) : undefined })) {   // commuteKm: im Steuerhelfer (Berichte → Fahrten) gepflegt
     renderReminderBadges(); renderHeroStats(); pushPrefs();
     $('settings-msg').classList.remove('hidden'); setTimeout(() => $('settings-msg').classList.add('hidden'), 2500);
   }
@@ -3676,6 +3680,7 @@ function commitReminders(next) {
   if (!save(KEY_REMINDERS, next)) return false;
   renderReminderBadges();
   if (isDesk()) try { renderReminders(); } catch (e) { }
+  try { if (!gtMirSkip) gtMirrorSoon(); } catch (e) { }
   if (!window.cloud?.isSignedIn()) return Promise.resolve('local');
   return window.cloud.pushReminders(prev, next).then(() => 'cloud').catch(e => {
     console.error('Firestore-Schreibfehler (Erinnerungen)', e);
@@ -5893,6 +5898,7 @@ function dashFirstSlide(soc) {
 }
 function setQuickSetting(k, v) { const st = load(KEY_SETTINGS, {}) || {}; if (v === undefined) delete st[k]; else st[k] = v; save(KEY_SETTINGS, st); try { pushPrefs(); } catch (e) { } }
 function fillWxoPrefs() {
+  const gm = $('set-gt-mirror'); if (gm) gm.checked = !!getSettings().gtMirror;
   const wi = $('set-wx-icons'); if (wi && document.activeElement !== wi) wi.value = wxIconStyle();
   const cn = $('set-car-n'), cs = $('set-car-sec'); if (cn && document.activeElement !== cn) cn.value = String(carAutoN()); if (cs && document.activeElement !== cs) { const v = String(carAutoMs() / 1000); cs.value = [...cs.options].some(o => o.value === v) ? v : '30'; } const a = $('set-wxo-cut'), b = $('set-dash-first'); if (a && document.activeElement !== a) a.value = String(wxoCut()); if (b && document.activeElement !== b) b.value = dashFirst(); }
 $('set-wxo-cut').addEventListener('change', (e) => { setQuickSetting('wxoCut', Number(e.target.value)); renderWxo(); });
@@ -6737,7 +6743,7 @@ try { renderWrapCard(); } catch (e) { }
    im Dokument enyaqStrom/<uid>/settings/prefs, gleiche Regel wie Anbieter und Kategorien. Die PIN bleibt nur auf dem Gerät.
    Erster Abgleich: Was die Cloud hat, gilt; fehlt dort etwas und ist lokal vorhanden, wird es hochgeladen. Danach gilt die Cloud (Änderung auf einem Gerät wirkt auf allen).
    ===================================================================== */
-const SYNC_SET_KEYS = ['title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAcKwh', 'certDcKwh', 'certKm', 'wltpNet', 'ccEnd', 'wxoCut', 'dashFirst', 'carN', 'carSec', 'wxIcons', 'nRep', 'nTrips', 'nBakYm', 'nBakAt', 'nBakSnz'];
+const SYNC_SET_KEYS = ['title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAcKwh', 'certDcKwh', 'certKm', 'wltpNet', 'ccEnd', 'wxoCut', 'dashFirst', 'carN', 'carSec', 'wxIcons', 'nRep', 'nTrips', 'nBakYm', 'nBakAt', 'nBakSnz', 'gtMirror', 'gtList'];
 /** Einstellungen für die Cloud: feste Reihenfolge, ohne leere Werte (Firestore verbietet undefined). null = nichts vorhanden. */
 function syncSet(src) {
   const o = {}; if (src && typeof src === 'object') SYNC_SET_KEYS.forEach(k => { const v = src[k]; if (v != null && v !== '' && !(typeof v === 'number' && !isFinite(v))) o[k] = v; });
@@ -8114,6 +8120,23 @@ function gtParse(title) {
   const ctx = /nach\s*(der\s*)?fahrt|gefahren/.test(s) ? 'fahrt' : /geparkt|parken|im stand/.test(s) ? 'geparkt' : /vor\s*(dem\s*)?laden|laden/.test(s) ? 'laden' : null;
   return { t: Math.round(v * 10) / 10, ctx };
 }
+/** „Langzeit 13,1“, „Langzeit dreizehn Komma eins“ → kWh/100 km oder null */
+function gtParseLt(title) {
+  const s0 = String(title || '').trim().toLowerCase(); if (!/lang\s*zeit/.test(s0)) return null;
+  const s = s0.replace(/lang\s*zeit(verbrauch)?/g, ' ').replace(/kilowattstunden|kwh|pro|\/|100|km|kilometer/g, ' ');
+  let v = null; const m = /(\d{1,2})(?:\s*[.,]\s*(\d))?(?![\d])/.exec(s);
+  if (m) v = Number(m[1] + (m[2] ? '.' + m[2] : ''));
+  else { const w = /([a-zäöüß]+)(?:\s+(?:komma|punkt)\s+([a-zäöüß]+|\d))?/g; let x; while ((x = w.exec(s))) { const a = gtWordNum(x[1]); if (a == null) continue; const b = x[2] == null ? 0 : /\d/.test(x[2]) ? Number(x[2]) : gtWordNum(x[2]); v = a + (b != null && b < 10 ? b / 10 : 0); break; } }
+  return v != null && v > 5 && v < 50 ? Math.round(v * 10) / 10 : null;
+}
+/** km-Stand an einem Tag: heute vom Auto (falls verbunden), sonst zwischen zwei Ladungen interpoliert */
+async function gtKmAt(iso) {
+  const day = wxIso(new Date(iso));
+  if (day === wxIso(new Date()) && apiEnabled()) { try { return (await fetchCarKm()).km; } catch (e) { } }
+  const rs = getReadings().filter(r => r.odometerKm > 0).map(r => ({ t: Date.parse(r.date), km: r.odometerKm })).filter(x => Number.isFinite(x.t)).sort((a, b) => a.t - b.t), t = Date.parse(iso);
+  const i = rs.findIndex(x => x.t >= t); if (i <= 0) return null; const a = rs[i - 1], b = rs[i];
+  return Math.round(a.km + (b.km - a.km) * (t - a.t) / Math.max(1, b.t - a.t));
+}
 /** Außentemperatur zu einem Zeitpunkt der letzten Tage (stündlich, Open-Meteo) */
 async function gtOutAt(iso) {
   const l = wxLoc(); if (!l) return null;
@@ -8142,12 +8165,15 @@ async function gtImport(silent) {
       if (!lr.ok) throw new Error(/SERVICE_DISABLED|accessNotConfigured|has not been used|disabled/i.test(w.reason + ' ' + w.msg) ? 'Die Google Tasks API ist im Google-Projekt noch nicht aktiviert (Cloud Console → APIs & Dienste → Bibliothek → Google Tasks API).'
         : /insufficient|SCOPE/i.test(w.reason + ' ' + w.msg) ? 'Die Tasks-Berechtigung wurde nicht erteilt – im Google-Fenster bitte den Haken bei Google Tasks setzen.' : 'Kein Zugriff (' + (w.reason || lr.status) + ')' + (w.msg ? ': ' + w.msg.slice(0, 120) : ''));
     } else if (!lr.ok) throw new Error('Google Tasks ' + lr.status);
-    const lists = (await lr.json()).items || [], lab = getLab(); lab.bt = lab.bt || []; const have = new Set(lab.bt.map(e => e.src).filter(Boolean)); let n = 0, skip = 0;
+    const lists = (await lr.json()).items || [], lab = getLab(); lab.bt = lab.bt || []; lab.lt = lab.lt || []; const have = new Set(lab.bt.concat(lab.lt).map(e => e.src).filter(Boolean)); let n = 0, nl = 0, skip = 0;
     for (const L of lists) {
       const tr = await fetch(api + '/lists/' + encodeURIComponent(L.id) + '/tasks?showCompleted=false&maxResults=100', { headers: H }); if (!tr.ok) continue;
       for (const t of ((await tr.json()).items || [])) {
-        const v = gtParse(t.title); if (!v) continue; const src = 'gt:' + t.id;
-        if (!have.has(src)) {
+        if (L.title === GT_LIST) continue;                                            // gespiegelte Fälligkeiten nicht einlesen
+        const lv = gtParseLt(t.title), v = lv == null ? gtParse(t.title) : null; if (lv == null && !v) continue; const src = 'gt:' + t.id;
+        if (lv != null) {                                                             // Langzeitverbrauch (Bordcomputer „Seit Kauf“)
+          if (!have.has(src)) { const at = t.updated || new Date().toISOString(), km = await gtKmAt(at), e = { id: labId(), date: wxIso(new Date(at)), k100: lv, src, note: 'per Sprachbefehl' }; if (km > 0) e.km = km; lab.lt.push(e); have.add(src); nl++; }
+        } else if (!have.has(src)) {
           const at = t.updated || new Date().toISOString(), en = { id: labId(), at, t: v.t, src }; if (v.ctx) en.ctx = v.ctx;
           const out = await gtOutAt(at); if (Number.isFinite(out)) en.out = out;
           lab.bt.push(en); have.add(src); n++;
@@ -8155,15 +8181,73 @@ async function gtImport(silent) {
         await fetch(api + '/lists/' + encodeURIComponent(L.id) + '/tasks/' + encodeURIComponent(t.id), { method: 'PATCH', headers: { ...H, 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'completed' }) }).catch(() => { });
       }
     }
-    if (n) { lab.bt.sort((a, b) => Date.parse(a.at) - Date.parse(b.at)); setLab(lab); btmVal = null; }
-    btmMsg = n ? '✓ ' + n + (n === 1 ? ' Wert' : ' Werte') + ' aus Google Tasks übernommen' : silent ? '' : 'Keine neuen „Akku …“-Aufgaben in Google Tasks.';
+    if (n || nl) { lab.bt.sort((a, b) => Date.parse(a.at) - Date.parse(b.at)); setLab(lab); if (n) btmVal = null; }
+    btmMsg = n || nl ? '✓ ' + [n ? n + ' Akku' : '', nl ? nl + ' Langzeit' : ''].filter(Boolean).join(' + ') + ' aus Google Tasks' : silent ? '' : 'Keine neuen „Akku …“- oder „Langzeit …“-Aufgaben.';
     renderBtm(); if (n && currentView === 'recs') renderRecs();
   } catch (e) { if (!silent) { btmMsg = '⚠️ Google Tasks: kein Zugriff'; renderBtm();
       $('au-sheet-box').innerHTML = '<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div><p class="text-lg font-bold">Google Tasks</p><p class="text-sm text-left">' + esc(e.message || String(e)) + '</p><button type="button" data-cc="close" class="h-12 w-full rounded-2xl border border-slate-300 dark:border-slate-700 text-sm font-semibold">Schließen</button>';
       $('au-sheet').classList.remove('hidden'); } }
   finally { gtBusy = false; }
 }
-setTimeout(() => gtImport(true), 3000); document.addEventListener('visibilitychange', () => { if (!document.hidden) gtImport(true); });
+/* =====================================================================
+   Fälligkeiten → Google Tasks (Liste „EnyaqStrom“): jede offene Fälligkeit als Aufgabe (mit Datum, sonst ohne), Titel/Notiz/Datum werden
+   bei Änderungen nachgezogen; erledigt/gelöscht → Aufgabe entfernt. In Google Tasks abgehakt → hier „Erledigt“ (Wiederholung setzt neu an).
+   Verknüpfung über r.gtId (am Datensatz, also auf allen Geräten gleich), r.gtSig = zuletzt übertragener Stand. Laufzeiten werden nicht gespiegelt.
+   ===================================================================== */
+const GT_LIST = 'EnyaqStrom';
+const gtMirrorOn = () => !!getSettings().gtMirror;
+function gtTaskOf(r) {
+  const km = r.dueKm > 0 ? 'Fällig bei ' + fmt(r.dueKm, 0) + ' km' : '', rep = isRepeating(r) ? remRepeatText(r) : '';
+  const notes = [km, rep, r.note || '', 'Aus EnyaqStrom – hier abhaken = in der App erledigt.'].filter(Boolean).join('\n');
+  const t = { title: r.title, notes }; if (r.dueDate) t.due = r.dueDate + 'T00:00:00.000Z'; return t;
+}
+const gtSigOf = (t) => [t.title, t.notes, t.due || ''].join('|');
+let gtMirBusy = false, gtMirT = null;
+const gtMirrorSoon = () => { if (!gtMirrorOn()) return; clearTimeout(gtMirT); gtMirT = setTimeout(() => gtMirror(true), 1500); };
+async function gtMirror(silent) {
+  const msg = (t) => { const el = $('gt-sync-msg'); if (el) el.textContent = t; };
+  if (gtMirBusy || !gtMirrorOn()) return; if (!window.cloud?.isSignedIn()) { if (!silent) msg('Bitte zuerst bei Google anmelden.'); return; }
+  if (silent && !window.cloud.driveReady()) return;
+  gtMirBusy = true; if (!silent) msg('Gleiche mit Google Tasks ab …');
+  try {
+    const tok = await window.cloud.driveToken(), H = { Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' }, api = 'https://tasks.googleapis.com/tasks/v1';
+    const J = async (r) => { if (!r.ok) throw new Error('Google Tasks ' + r.status); return r.status === 204 ? {} : r.json(); };
+    /* Liste finden oder anlegen (ID geräteübergreifend in den Einstellungen) */
+    let lid = getSettings().gtList;
+    const lists = (await J(await fetch(api + '/users/@me/lists?maxResults=100', { headers: H }))).items || [];
+    if (!lid || !lists.some(l => l.id === lid)) { const f = lists.find(l => l.title === GT_LIST); lid = f ? f.id : (await J(await fetch(api + '/users/@me/lists', { method: 'POST', headers: H, body: JSON.stringify({ title: GT_LIST }) }))).id; nagSet({ gtList: lid }); }
+    const L = api + '/lists/' + encodeURIComponent(lid) + '/tasks';
+    const tasks = (await J(await fetch(L + '?showCompleted=true&showHidden=true&maxResults=100', { headers: H }))).items || [], byId = new Map(tasks.map(t => [t.id, t]));
+    let list = getReminders(), changed = false, nNew = 0, nUpd = 0, nDel = 0, nDone = 0;
+    const put = (r, upd) => { list = list.map(x => String(x.id) === String(r.id) ? cleanRem({ ...x, ...upd }) : x); changed = true; };
+    /* 1. In Google Tasks abgehakt → hier erledigt (wie „Erledigt“ ohne Kosten) */
+    for (const r of list.filter(r => !isRun(r) && !r.doneAt && r.gtId)) {
+      const t = byId.get(r.gtId); if (!t || t.status !== 'completed') continue;
+      const at = t.completed ? new Date(t.completed) : new Date(), km = lastKnownKm(), log = remLog(r).map(e => { const o = { at: e.at }; if (e.km > 0) o.km = e.km; if (e.cost > 0) o.cost = e.cost; return o; }).concat(km > 0 ? { at: at.toISOString(), km: Math.round(km) } : { at: at.toISOString() }).slice(-REM_LOG_MAX);
+      const upd = { lastDoneAt: at.toISOString(), lastDoneKm: km ?? undefined, log };
+      if (isRepeating(r)) { upd.startDate = ymd(at); upd.startKm = km ?? undefined; if (hasRepTime(r)) upd.dueDate = ymd(remStep(at, r)); if (r.repeatKm > 0 && km != null) upd.dueKm = km + r.repeatKm; upd.gtSig = undefined; }   // neue Fälligkeit → Aufgabe wird wieder geöffnet
+      else { upd.doneAt = at.toISOString(); }
+      put(r, upd); nDone++;
+    }
+    /* 2. Offene Fälligkeiten anlegen bzw. aktualisieren */
+    for (const r of list.filter(r => !isRun(r) && !r.doneAt)) {
+      const want = gtTaskOf(r), sig = gtSigOf(want), t = r.gtId ? byId.get(r.gtId) : null;
+      if (!t) { const c = await J(await fetch(L, { method: 'POST', headers: H, body: JSON.stringify(want) })); put(r, { gtId: c.id, gtSig: sig }); nNew++; }
+      else if (r.gtSig !== sig || t.status === 'completed') { await J(await fetch(L + '/' + encodeURIComponent(t.id), { method: 'PATCH', headers: H, body: JSON.stringify({ ...want, status: 'needsAction', completed: null }) })); put(r, { gtSig: sig }); nUpd++; }
+    }
+    /* 3. Aufgaben ohne offene Fälligkeit (erledigt, gelöscht, zur Laufzeit geworden) entfernen */
+    const keep = new Set(list.filter(r => !isRun(r) && !r.doneAt && r.gtId).map(r => r.gtId));
+    for (const t of tasks) if (!keep.has(t.id) && /Aus EnyaqStrom/.test(t.notes || '')) { await fetch(L + '/' + encodeURIComponent(t.id), { method: 'DELETE', headers: H }).catch(() => { }); nDel++; }
+    list.filter(r => (isRun(r) || r.doneAt) && r.gtId).forEach(r => put(r, { gtId: undefined, gtSig: undefined }));
+    if (changed) { gtMirSkip = true; commitReminders(list); gtMirSkip = false; try { renderReminders(); } catch (e) { } }
+    msg('✓ Abgeglichen ' + hhmm(Date.now()) + (nNew + nUpd + nDel + nDone ? ' · ' + [nNew ? nNew + ' neu' : '', nUpd ? nUpd + ' geändert' : '', nDone ? nDone + ' in Tasks erledigt' : '', nDel ? nDel + ' entfernt' : ''].filter(Boolean).join(', ') : ' · alles aktuell'));
+  } catch (e) { msg('Fehler: ' + (e.message || e)); }
+  finally { gtMirBusy = false; }
+}
+let gtMirSkip = false;
+$('set-gt-mirror').addEventListener('change', (e) => { setQuickSetting('gtMirror', e.target.checked || undefined); if (e.target.checked) gtMirror(false); else $('gt-sync-msg').textContent = 'Aus – bestehende Aufgaben bleiben in Google Tasks, bis du die Liste dort löschst.'; });
+$('gt-sync').addEventListener('click', () => { if (!gtMirrorOn()) { $('set-gt-mirror').checked = true; setQuickSetting('gtMirror', true); } gtMirror(false); });
+setTimeout(() => { gtImport(true); gtMirror(true); }, 3000); document.addEventListener('visibilitychange', () => { if (!document.hidden) { gtImport(true); gtMirror(true); } });
 renderBtm();
 if (wxLoc() && !$('wxo-card').classList.contains('hidden')) { /* Prognose sichtbar: Beobachter setzt die Startkarte */ } else dashSwipeTo(dashDefaultIdx(), false);
 dashSwipeSync();
@@ -8592,7 +8676,7 @@ async function pushTripMonths(prev, next) {
 }
 const sig = (r) => [r.id, r.date, r.totalReading, r.consumedSinceLast, r.cost, r.odometerKm, r.socStart, r.socEnd, r.capacityKwh, r.chargeStart, r.chargeEnd, r.avgPowerKw, r.meterReset, r.place, r.pricePerKwh, r.provider, r.fee, r.battTemp].join('|');
 
-const remSig = (r) => [r.id, r.title, r.category, r.note, r.dueDate, r.dueKm, r.startDate, r.startKm, r.repeatMonths, r.repeatDays, r.repeatUnit, r.repeatKm, r.doneAt, r.lastDoneAt, r.lastDoneKm, r.guid, r.kind, r.lifeN, r.lifeUnit, Array.isArray(r.log) ? r.log.length : 0].join('|');
+const remSig = (r) => [r.gtId, r.gtSig, r.id, r.title, r.category, r.note, r.dueDate, r.dueKm, r.startDate, r.startKm, r.repeatMonths, r.repeatDays, r.repeatUnit, r.repeatKm, r.doneAt, r.lastDoneAt, r.lastDoneKm, r.guid, r.kind, r.lifeN, r.lifeUnit, Array.isArray(r.log) ? r.log.length : 0].join('|');
 const recSig = (t) => [t.id, t.title, t.amount, t.category, t.note, t.intervalMonths, t.startDate, t.nextIdx].join('|');
 const costSig = (c) => [c.id, c.date, c.title, c.amount, c.category, c.note, c.odometerKm, c.guid, c.recurId, JSON.stringify(c.files || '')].join('|');
 /** Schreibt nur die Unterschiede zwischen prev und next (neu/geändert -> set, entfernt -> delete). */
