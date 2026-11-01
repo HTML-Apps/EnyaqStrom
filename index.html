@@ -4289,7 +4289,7 @@ function renderHeroReminder() {
   el.textContent = 'Als Nächstes: ' + r.title + ' · ' + when;
 }
 const probeImg = (src) => new Promise(res => { const i = new Image(); i.onload = () => res(src); i.onerror = () => res(null); i.src = src; });
-const HERO_VER = '6';                                    // bei neuen Bildern hochzählen (umgeht den Browser- und Service-Worker-Cache)
+const HERO_VER = '7';                                    // bei neuen Bildern hochzählen (umgeht den Browser- und Service-Worker-Cache)
 async function findHeroImg(n) { for (const e of ['png', 'webp', 'jpg', 'jpeg']) { const ok = await probeImg('Bilder/Enyaq' + n + '.' + e + '?v=' + HERO_VER); if (ok) return ok; } return null; }
 /** Bereitet ein Karussell-Bild auf: (1) opaker weißer Rand wird transparent gemacht (nicht wirklich freigestellte Bilder), (2) transparenter Rand wird weggeschnitten,
     damit das Auto den Bildbereich ausfüllt. Liefert { src, aspect, extra }: Seitenverhältnis des zugeschnittenen Bilds und den Anteil der Bildhöhe unterhalb der Aufstandslinie
