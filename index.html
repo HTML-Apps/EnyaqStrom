@@ -8062,16 +8062,16 @@ $('rec-list').addEventListener('click', async (e) => {
   if (a === 'undo' && btLastSaved) { const lab = getLab(), id = btLastSaved.id; lab.bt = (lab.bt || []).filter(x => x.id !== id); btLastSaved = null; setLab(lab); }
 });
 /* Start: kleine Akku-Temperatur-Karte (links der Verbrauchs-Prognose im Wisch-Bereich). Speichert in dieselbe Liste wie Rekorde → Akku °C (lab.bt). */
-let btmVal = null, btmCtx = null, btmSaved = null;
+let btmVal = null, btmCtx = null, btmSaved = null, btmMsg = '';
 function renderBtm() {
   const el = $('btm-card'); if (!el) return;
   const all = (getLab().bt || []).filter(e => Number.isFinite(e.t) && e.at).sort((a, b) => Date.parse(a.at) - Date.parse(b.at)), last = all[all.length - 1];
   if (btmVal == null) btmVal = last ? Math.round(last.t) : 15;
   const now = new Date(), stepB = 'flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-800 text-2xl font-semibold active:scale-90 transition select-none';
   const pill = (on) => on ? 'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300 border-transparent' : 'border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300';
-  const info = btmSaved ? `<span class="text-emerald-600 dark:text-emerald-400">✓ ${fmt(btmSaved.t, 0)} °C um ${hhmm(Date.parse(btmSaved.at))} gespeichert</span>`
+  const info = btmMsg ? btmMsg : btmSaved ? `<span class="text-emerald-600 dark:text-emerald-400">✓ ${fmt(btmSaved.t, 0)} °C um ${hhmm(Date.parse(btmSaved.at))} gespeichert</span>`
     : [btOut.v != null ? 'Außen ' + fmt(btOut.v, 0) + ' °C' : '', last ? 'zuletzt ' + fmt(last.t, 0) + ' °C · ' + new Date(last.at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }) : 'noch kein Wert'].filter(Boolean).join(' · ');
-  el.innerHTML = `<div class="flex items-baseline justify-between gap-2"><p class="font-barlow text-xl font-bold uppercase tracking-[0.08em] leading-6">Akku-Temperatur</p><button type="button" data-btm="open" class="shrink-0 text-xs font-semibold text-sky-700 dark:text-sky-300">Verlauf ›</button></div>
+  el.innerHTML = `<div class="flex items-baseline justify-between gap-2"><p class="font-barlow text-xl font-bold uppercase tracking-[0.08em] leading-6">Akku-Temperatur</p><span class="flex shrink-0 gap-3"><button type="button" data-btm="tasks" class="text-xs font-semibold text-sky-700 dark:text-sky-300">📥 Tasks</button><button type="button" data-btm="open" class="text-xs font-semibold text-sky-700 dark:text-sky-300">Verlauf ›</button></span></div>
     <div class="mt-2 flex items-center gap-2.5"><button type="button" data-btm="-1" aria-label="1 Grad weniger" class="${stepB}">−</button><span class="flex-1 text-center font-barlow text-[50px] font-bold leading-none text-orange-500 dark:text-orange-400 tabular-nums"><span id="btm-val">${btmVal}</span> <span class="text-[24px]">°C</span></span><button type="button" data-btm="1" aria-label="1 Grad mehr" class="${stepB}">+</button></div>
     <div class="mt-2.5 flex gap-1.5">${BT_CTX.map(([k, l]) => `<button type="button" data-btmctx="${k}" aria-pressed="${btmCtx === k}" class="flex-1 rounded-full border py-1.5 text-xs font-semibold ${pill(btmCtx === k)}">${l}</button>`).join('')}</div>
     <div class="min-h-2 flex-1"></div>
@@ -8081,8 +8081,9 @@ function renderBtm() {
 $('btm-card').addEventListener('click', async (e) => {
   const c = e.target.closest('[data-btmctx]'); if (c) { btmCtx = btmCtx === c.dataset.btmctx ? null : c.dataset.btmctx; renderBtm(); return; }
   const b = e.target.closest('[data-btm]'); if (!b) return; const a = b.dataset.btm;
-  if (a === '1' || a === '-1') { btmVal = Math.max(-30, Math.min(70, btmVal + Number(a))); $('btm-val').textContent = btmVal; if (btmSaved) { btmSaved = null; renderBtm(); } return; }
+  if (a === '1' || a === '-1') { btmVal = Math.max(-30, Math.min(70, btmVal + Number(a))); $('btm-val').textContent = btmVal; if (btmSaved || btmMsg) { btmSaved = null; btmMsg = ''; renderBtm(); } return; }
   if (a === 'open') { NAV_GO.akkutemp ? NAV_GO.akkutemp() : showView('recs'); return; }
+  if (a === 'tasks') { gtImport(false); return; }
   if (a === 'save') {
     b.disabled = true; const out = await btOutside(), lab = getLab(), en = { id: labId(), at: new Date().toISOString(), t: btmVal };
     if (Number.isFinite(out)) en.out = Math.round(out * 10) / 10; if (btmCtx) en.ctx = btmCtx;
@@ -8090,6 +8091,62 @@ $('btm-card').addEventListener('click', async (e) => {
   }
   if (a === 'undo' && btmSaved) { const lab = getLab(), id = btmSaved.id; lab.bt = (lab.bt || []).filter(x => x.id !== id); btmSaved = null; setLab(lab); renderBtm(); }
 });
+/* =====================================================================
+   Akku-Temperatur per Sprachbefehl: Gemini/Android Auto legt eine Aufgabe in Google Tasks an („Akku 12 Grad“, „Akkutemperatur minus 3 nach Fahrt“).
+   Die App liest offene Aufgaben, die mit „Akku“ beginnen, übernimmt Wert + Zeitpunkt (Aufgabe angelegt) in lab.bt – wie Akku °C –, ergänzt die
+   Außentemperatur dieser Stunde und hakt die Aufgabe ab. Berechtigung: Google Tasks (zusammen mit Drive, ein Google-Fenster).
+   Automatisch beim Öffnen von Start, solange der Google-Zugriff noch gültig ist; sonst per Tipp auf „📥 Tasks“.
+   ===================================================================== */
+const GT_NUM = { null: 0, eins: 1, ein: 1, zwei: 2, drei: 3, vier: 4, fünf: 5, sechs: 6, sieben: 7, acht: 8, neun: 9, zehn: 10, elf: 11, zwölf: 12, dreizehn: 13, vierzehn: 14, fünfzehn: 15, sechzehn: 16, siebzehn: 17, achtzehn: 18, neunzehn: 19, zwanzig: 20, dreißig: 30, vierzig: 40, fünfzig: 50 };
+function gtWordNum(t) {                                                             // „einundzwanzig“ → 21
+  t = t.toLowerCase(); if (GT_NUM[t] != null) return GT_NUM[t];
+  const m = /^(\w+?)und(zwanzig|dreißig|vierzig|fünfzig)$/.exec(t); return m && GT_NUM[m[1]] != null ? GT_NUM[m[1]] + GT_NUM[m[2]] : null;
+}
+/** „Akku 12 Grad“, „Akkutemperatur: -3,5 °C nach Fahrt“, „Akku minus drei geparkt“ → { t, ctx } oder null */
+function gtParse(title) {
+  const s0 = String(title || '').trim().toLowerCase().replace(/−/g, '-'); if (!/^akku/.test(s0)) return null;
+  let s = s0.replace(/^akku\s*-?\s*(temperatur|temp\.?)?\s*[:=]?\s*/, '');
+  let neg = false; if (/^(minus|-)\s*/.test(s)) { neg = true; s = s.replace(/^(minus|-)\s*/, ''); }
+  let v = null; const n = /^(\d{1,2}(?:[.,]\d)?)(?![\d.,])/.exec(s);
+  if (n) { v = Number(n[1].replace(',', '.')); s = s.slice(n[0].length); } else { const w = /^([a-zäöüß]+)/.exec(s); if (w) { v = gtWordNum(w[1]); s = s.slice(w[0].length); } }
+  if (v == null || !Number.isFinite(v)) return null; if (neg) v = -v; if (v < -30 || v > 70) return null;
+  const ctx = /nach (der )?fahrt|gefahren/.test(s) ? 'fahrt' : /geparkt|parken|stand/.test(s) ? 'geparkt' : /vor (dem )?laden|laden/.test(s) ? 'laden' : null;
+  return { t: Math.round(v * 10) / 10, ctx };
+}
+/** Außentemperatur zu einem Zeitpunkt der letzten Tage (stündlich, Open-Meteo) */
+async function gtOutAt(iso) {
+  const l = wxLoc(); if (!l) return null;
+  try { const r = await fetch('https://api.open-meteo.com/v1/forecast?latitude=' + l.lat + '&longitude=' + l.lon + '&hourly=temperature_2m&past_days=7&forecast_days=1&timezone=auto'); const j = await r.json();
+    const d = new Date(iso), k = wxIso(d) + 'T' + String(d.getHours()).padStart(2, '0') + ':00', i = j.hourly.time.indexOf(k); return i >= 0 && j.hourly.temperature_2m[i] != null ? Math.round(j.hourly.temperature_2m[i] * 10) / 10 : null; } catch (e) { return null; }
+}
+let gtBusy = false;
+async function gtImport(silent) {
+  if (gtBusy) return; if (!window.cloud?.isSignedIn()) { if (!silent) { btmMsg = 'Für Google Tasks bitte anmelden.'; renderBtm(); } return; }
+  if (silent && !window.cloud.driveReady()) return;
+  gtBusy = true; if (!silent) { btmMsg = 'Google Tasks wird gelesen …'; renderBtm(); }
+  try {
+    const tok = await window.cloud.driveToken(), H = { Authorization: 'Bearer ' + tok }, api = 'https://tasks.googleapis.com/tasks/v1';
+    const lr = await fetch(api + '/users/@me/lists?maxResults=20', { headers: H }); if (!lr.ok) throw new Error(lr.status === 403 ? 'Kein Zugriff auf Google Tasks (Berechtigung bzw. Tasks API im Google-Projekt aktivieren)' : 'Google Tasks ' + lr.status);
+    const lists = (await lr.json()).items || [], lab = getLab(); lab.bt = lab.bt || []; const have = new Set(lab.bt.map(e => e.src).filter(Boolean)); let n = 0, skip = 0;
+    for (const L of lists) {
+      const tr = await fetch(api + '/lists/' + encodeURIComponent(L.id) + '/tasks?showCompleted=false&maxResults=100', { headers: H }); if (!tr.ok) continue;
+      for (const t of ((await tr.json()).items || [])) {
+        const v = gtParse(t.title); if (!v) continue; const src = 'gt:' + t.id;
+        if (!have.has(src)) {
+          const at = t.updated || new Date().toISOString(), en = { id: labId(), at, t: v.t, src }; if (v.ctx) en.ctx = v.ctx;
+          const out = await gtOutAt(at); if (Number.isFinite(out)) en.out = out;
+          lab.bt.push(en); have.add(src); n++;
+        } else skip++;
+        await fetch(api + '/lists/' + encodeURIComponent(L.id) + '/tasks/' + encodeURIComponent(t.id), { method: 'PATCH', headers: { ...H, 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'completed' }) }).catch(() => { });
+      }
+    }
+    if (n) { lab.bt.sort((a, b) => Date.parse(a.at) - Date.parse(b.at)); setLab(lab); btmVal = null; }
+    btmMsg = n ? '✓ ' + n + (n === 1 ? ' Wert' : ' Werte') + ' aus Google Tasks übernommen' : silent ? '' : 'Keine neuen „Akku …“-Aufgaben in Google Tasks.';
+    renderBtm(); if (n && currentView === 'recs') renderRecs();
+  } catch (e) { if (!silent) { btmMsg = 'Google Tasks: ' + (e.message || e); renderBtm(); } }
+  finally { gtBusy = false; }
+}
+setTimeout(() => gtImport(true), 3000); document.addEventListener('visibilitychange', () => { if (!document.hidden) gtImport(true); });
 renderBtm();
 if (wxLoc() && !$('wxo-card').classList.contains('hidden')) { /* Prognose sichtbar: Beobachter setzt die Startkarte */ } else dashSwipeTo(dashDefaultIdx(), false);
 dashSwipeSync();
@@ -8545,7 +8602,7 @@ window.cloud = {
   driveToken: async (force) => {                                               // Zugriffstoken für Google Drive (Berechtigung drive.file = nur Dateien, die diese App selbst anlegt); öffnet bei Bedarf kurz das Google-Fenster, also nur nach einem Tipp aufrufen
     if (!user) throw new Error('Bitte zuerst bei Google anmelden.');
     if (!force && driveTok && Date.now() < driveExp) return driveTok;
-    const pr = new GoogleAuthProvider(); pr.addScope('https://www.googleapis.com/auth/drive.file'); if (user.email) pr.setCustomParameters({ login_hint: user.email });
+    const pr = new GoogleAuthProvider(); pr.addScope('https://www.googleapis.com/auth/drive.file'); pr.addScope('https://www.googleapis.com/auth/tasks'); if (user.email) pr.setCustomParameters({ login_hint: user.email });
     const res = await reauthenticateWithPopup(user, pr), cred = GoogleAuthProvider.credentialFromResult(res);
     if (!cred || !cred.accessToken) throw new Error('Google hat kein Drive-Token geliefert.');
     driveTok = cred.accessToken; driveExp = Date.now() + 50 * 60 * 1000; return driveTok;
