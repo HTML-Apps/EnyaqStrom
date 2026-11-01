@@ -92,7 +92,7 @@ export default async function handler(req, res) {
       // Test = genau so, wie die echte Warnung aussieht: bei Eis-Risiko mit den echten Werten für morgen, sonst mit einem typischen Beispiel
       let st = iceSet(null), r = null; try { const x = await riskFor(user.uid); st = x.st; r = x.r; } catch (e) { }
       if (!r || r.lvl < 1) r = { lvl: 2, T: -1, minTg: -4.4, cc: 5, ws: 0.6, glaze: false };
-      const payload = { ...message(r, st), tag: 'ice-test', url: '/', icon: '/Bilder/ice-icon.png' };
+      const payload = { ...message(r, st), tag: 'ice-test', url: '/', icon: '/Bilder/ice-icon.png?v=2' };
       return res.status(200).json({ ...(await send(list, payload)), devices: list.length });
     }
     const secret = process.env.CRON_SECRET, auth = req.headers.authorization || '', ua = String(req.headers['user-agent'] || '');
@@ -101,7 +101,7 @@ export default async function handler(req, res) {
     for (const uid of await fsUids()) {
       try { const list = await devices(uid); if (!list.length) continue; const { st, r, why } = await riskFor(uid);
         if (!r || r.lvl < st.min) { out.push({ uid: uid.slice(0, 6), lvl: r ? r.lvl : null, why: why || 'kein Eis' }); continue; }
-        out.push({ uid: uid.slice(0, 6), lvl: r.lvl, ...(await send(list, { ...message(r, st), tag: 'ice-' + r.day, url: '/', icon: '/Bilder/ice-icon.png' })) });
+        out.push({ uid: uid.slice(0, 6), lvl: r.lvl, ...(await send(list, { ...message(r, st), tag: 'ice-' + r.day, url: '/', icon: '/Bilder/ice-icon.png?v=2' })) });
       } catch (e) { out.push({ uid: uid.slice(0, 6), error: String(e.message || e).slice(0, 120) }); }
     }
     return res.status(200).json({ at: new Date().toISOString(), users: out });
