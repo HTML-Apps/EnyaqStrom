@@ -239,6 +239,7 @@
       <div id="wxo-days" class="mt-2 grid grid-cols-3 gap-1.5"></div>
       <p id="wxo-tip" class="mt-2 hidden truncate text-center text-[13px] leading-5 text-slate-600 dark:text-slate-300"></p>
     </div>
+    <div id="veh-slide" class="hidden flex-col w-full shrink-0 snap-center snap-always rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4"></div>
     <div id="meter-card" class="w-full shrink-0 snap-center snap-always rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
       <div class="flex items-center justify-between h-7 mb-2">
         <p id="dash-title" class="text-sm text-slate-500 dark:text-slate-400">Aktueller Zählerstand</p>
@@ -5891,7 +5892,27 @@ async function wxoSoc() {
   } catch (e) { return old; }
 }
 /* PC: Fahrzeugstatus rechts neben dem Auto (Glas-Karte) – aus der stündlichen Abfrage beim Auto (gleicher Zwischenspeicher wie der Restakku) */
+/* Handy: Fahrzeugstatus als eigene Karte im Wisch-Bereich (zwischen Prognose und Zählerstand); am PC steht er neben dem Auto */
+function renderVehSlide() {
+  const el = $('veh-slide'); if (!el) return;
+  const c = load(KEY_WXO + 'S', null), d = c && c.d, on = !isDesk() && apiEnabled() && d && d.soc != null;
+  el.classList.toggle('hidden', !on); el.classList.toggle('flex', !!on); setTimeout(() => { try { dashSwipeSync(); } catch (e) { } }, 0); if (!on) return;
+  const soc = Math.round(d.soc), tgt = Number(d.targetSoc) || null, charging = d.chargeState === 'CHARGING' || d.chargePowerKw > 0, plugged = d.plug === 'CONNECTED';
+  const lk = d.doorsLocked || d.locked, locked = lk === 'YES' ? true : lk === 'NO' ? false : null, ok = locked !== false && !/OPEN/.test(d.doors || '') && !/OPEN/.test(d.windows || '');
+  const at = d.capturedAt ? new Date(d.capturedAt) : new Date(c.t);
+  const tile = (a, b, col) => `<div class="min-w-0 rounded-xl bg-slate-100 dark:bg-slate-800/70 px-2.5 py-1.5"><p class="text-[10.5px] text-left text-slate-500 dark:text-slate-400">${a}</p><p class="truncate text-[13px] font-semibold ${col || ''}">${b}</p></div>`;
+  el.innerHTML = `<div class="flex items-center justify-between gap-2"><p class="font-barlow text-xl font-bold uppercase tracking-[0.08em] leading-6">Fahrzeugstatus</p><span class="text-[11px] ${ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}">● ${ok ? 'Alles OK' : 'Bitte prüfen'}</span></div>
+    <div class="mt-1.5 flex items-baseline gap-2"><span class="font-barlow text-[36px] font-bold leading-none">${soc} %</span>${d.rangeKm != null ? `<span class="text-[15px] font-semibold">${fmt(d.rangeKm, 0)} km</span>` : ''}<span class="ml-auto text-[10.5px] text-slate-500 dark:text-slate-400">${at.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })} · ${hhmm(at.getTime())}</span></div>
+    <div class="relative mt-2 h-3 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800"><div class="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400 ${charging ? 'animate-pulse' : ''}" style="width:${Math.max(2, Math.min(100, soc))}%"></div>${tgt ? `<div class="absolute inset-y-0 border-l-2 border-slate-900/70 dark:border-white/80" style="left:${tgt}%"></div>` : ''}</div>
+    <div class="min-h-2 flex-1"></div>
+    <div class="grid grid-cols-2 gap-1.5">${[
+      locked != null ? tile('Verriegelt', locked ? '🔒 zu' : '🔓 offen', locked ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400') : tile('Ladestatus', d.chargeState === 'READY_FOR_CHARGING' ? 'bereit' : charging ? 'lädt' : 'kein Laden'),
+      charging ? tile('Lädt', (d.chargePowerKw > 0 ? fmt(d.chargePowerKw, 1) + ' kW' : '') + (d.minutesToFull > 0 ? ' · voll ' + hhmm(at.getTime() + d.minutesToFull * 60000) : ''), 'text-sky-600 dark:text-sky-300') : tile('Ladekabel', plugged ? 'verbunden' : 'nicht verbunden'),
+      tile('Ladeziel', tgt ? tgt + ' %' + (d.careMode === 'ACTIVATED' ? ' · Schonung' : '') : '–'),
+      tile('km-Stand', d.odometerKm != null ? fmt(Math.round(d.odometerKm), 0) + ' km' : '–')].join('')}</div>`;
+}
 function renderVehCard() {
+  try { renderVehSlide(); } catch (e) { }
   const el = $('veh-card'), wrap = $('hero-car'); if (!el) return;
   const c = load(KEY_WXO + 'S', null), d = c && c.d, on = isDesk() && apiEnabled() && d && d.soc != null && !liveHero;
   el.classList.toggle('on', !!on); wrap.classList.toggle('has-veh', !!on); if (!on) return;
@@ -6009,14 +6030,14 @@ function openWxoSheet() {
 }
 /* Start: Verbrauchs-Prognose und Zählerstand seitlich wischen (Standard: Prognose). Höhe folgt der sichtbaren Karte. */
 const dSw = { tr: $('dash-swipe-track'), idx: 0 };
-function dashSlides() { return [$('btm-card'), $('wxo-card'), $('meter-card')].filter(x => x && !x.classList.contains('hidden') && !(x.id === 'btm-card' && liveHero)); }
+function dashSlides() { return [$('btm-card'), $('wxo-card'), $('veh-slide'), $('meter-card')].filter(x => x && !x.classList.contains('hidden') && !(x.id === 'btm-card' && liveHero)); }
 const dashIdx = (id) => Math.max(0, dashSlides().indexOf($(id)));
 /** Karte beim Öffnen: Prognose oder Zählerstand (Akku-Temperatur liegt links davon und wird nur per Wischen erreicht) */
 const dashDefaultIdx = () => dashFirstSlide() === 'wx' && !$('wxo-card').classList.contains('hidden') ? dashIdx('wxo-card') : dashIdx('meter-card');
 function dashSwipeSync() {
   const sl = dashSlides(), w = dSw.tr.clientWidth + 12, i = Math.max(0, Math.min(sl.length - 1, Math.round(dSw.tr.scrollLeft / (w || 1)))); dSw.idx = i;
   const two = sl.length > 1, dd = $('dash-dots'); dd.classList.toggle('hidden', !two);
-  if (dd.children.length !== sl.length) dd.innerHTML = sl.map((x, k) => `<button type="button" data-dslide="${k}" aria-label="${x.id === 'btm-card' ? 'Akku-Temperatur' : x.id === 'wxo-card' ? 'Verbrauchs-Prognose' : 'Zählerstand'}" class="pointer-events-auto h-1.5 w-1.5 rounded-full bg-slate-300 dark:bg-slate-700 transition-all"></button>`).join('');
+  if (dd.children.length !== sl.length) dd.innerHTML = sl.map((x, k) => `<button type="button" data-dslide="${k}" aria-label="${x.id === 'btm-card' ? 'Akku-Temperatur' : x.id === 'wxo-card' ? 'Verbrauchs-Prognose' : x.id === 'veh-slide' ? 'Fahrzeugstatus' : 'Zählerstand'}" class="pointer-events-auto h-1.5 w-1.5 rounded-full bg-slate-300 dark:bg-slate-700 transition-all"></button>`).join('');
   dd.querySelectorAll('[data-dslide]').forEach((b, k) => { const on = k === i; b.classList.toggle('w-4', on); b.classList.toggle('w-1.5', !on); ['bg-slate-400', 'dark:bg-slate-500'].forEach(c => b.classList.toggle(c, on)); ['bg-slate-300', 'dark:bg-slate-700'].forEach(c => b.classList.toggle(c, !on)); });
 }
 function dashSwipeTo(i, smooth = true) { const sl = dashSlides(); if (!sl[i]) return; dSw.tr.scrollTo({ left: sl[i].offsetLeft - dSw.tr.offsetLeft, behavior: smooth ? 'smooth' : 'auto' }); }
@@ -7563,6 +7584,7 @@ function applyDesk() {
 }
 try { matchMedia('(min-width: 1280px)').addEventListener('change', applyDesk); } catch (e) { }
 applyDesk();
+try { renderVehCard(); } catch (e) { }
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && navOpen()) closeNavDrawer(); });
 (() => { let sx = 0, sy = 0, on = false;     // Start: vom linken Rand nach rechts wischen öffnet, nach links schließt
   document.addEventListener('touchstart', (e) => { const t = e.touches[0], open = navOpen(); on = e.touches.length === 1 && !lbOpen && (open || (currentView === 'dashboard' && t.clientX < 40)); sx = t.clientX; sy = t.clientY; }, { passive: true });
