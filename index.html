@@ -1328,6 +1328,7 @@
           <div class="space-y-3">
           <p id="cloud-status" class="text-sm">Wird geladen …</p>
       <p id="vehicle-status" class="text-sm text-slate-500 dark:text-slate-400"></p>
+      <button id="veh-raw" type="button" class="mt-2 w-full rounded-xl border border-slate-300 dark:border-slate-700 py-2.5 text-sm font-semibold active:scale-95 transition">Rohdaten vom Auto prüfen</button>
       <div class="grid grid-cols-2 gap-2">
         <button id="btn-cloud" class="w-full px-2 py-3 rounded-2xl bg-slate-900 dark:bg-slate-700 text-white text-sm font-medium active:scale-95 transition">Mit Google anmelden</button>
         <button id="btn-help" class="w-full px-2 py-3 rounded-2xl bg-slate-200 dark:bg-slate-800 text-sm font-medium active:scale-95 transition">Vercel-Vorlage</button>
@@ -2120,6 +2121,23 @@ function renderVehicleStatus() {
     ? 'Škoda-API verbunden' + (keyExpiry() ? ' · Schlüssel gültig bis ' + new Date(keyExpiry() + 'T12:00:00').toLocaleDateString('de-DE') : '')
     : 'Fahrzeugdaten: für dieses Konto nicht eingerichtet (manuelle Eingabe)';
 }
+/* Diagnose: welche Felder meldet das Auto? Zeigt Temperatur-Felder hervorgehoben und die komplette Antwort zum Kopieren */
+$('veh-raw').addEventListener('click', async () => {
+  const box = $('au-sheet-box'), show = (h) => { box.innerHTML = '<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div><p class="text-lg font-bold">Rohdaten vom Auto</p>' + h + '<button type="button" data-cc="close" class="h-12 w-full rounded-2xl border border-slate-300 dark:border-slate-700 text-sm font-semibold">Schließen</button>'; $('au-sheet').classList.remove('hidden'); };
+  if (!apiEnabled()) { show('<p class="text-sm text-left">Für dieses Konto sind keine Fahrzeugdaten eingerichtet.</p>'); return; }
+  show('<p class="text-sm text-left text-slate-500">Frage den Škoda-Server ab …</p>');
+  try {
+    const res = await fetch('/api/vehicle?raw=1', { headers: await authHeaders() }), d = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(d.error || 'HTTP ' + res.status);
+    const hits = []; (function walk(o, path) { if (o && typeof o === 'object') Object.keys(o).forEach(k => { const p = path ? path + '.' + k : k; if (/temp|celsius|kelvin/i.test(k)) hits.push([p, JSON.stringify(o[k])]); walk(o[k], p); }); })(d.data, '');
+    const json = JSON.stringify(d.data, null, 2);
+    show(`<p class="text-sm text-left">${hits.length ? '<b class="text-emerald-600 dark:text-emerald-400">Temperatur-Felder gefunden:</b>' : '<b class="text-amber-600 dark:text-amber-400">Keine Temperatur-Felder in der Antwort.</b>'} <span class="text-slate-500">(Abfrage: ${esc(d.include || '')}, Status ${d.status})</span></p>
+      ${hits.length ? '<div class="rounded-xl bg-slate-100 dark:bg-slate-800 p-2.5 font-mono text-[11.5px] break-all">' + hits.map(([p, v]) => esc(p) + ' = ' + esc(v.slice(0, 120))).join('<br>') + '</div>' : ''}
+      <pre id="veh-raw-json" class="max-h-[45vh] overflow-auto rounded-xl bg-slate-100 dark:bg-slate-800 p-2.5 text-[10.5px] leading-snug">${esc(json)}</pre>
+      <button type="button" id="veh-raw-copy" class="h-11 w-full rounded-2xl bg-emerald-600 text-sm font-semibold text-white">Antwort kopieren</button>`);
+    $('veh-raw-copy').addEventListener('click', async () => { try { await navigator.clipboard.writeText(json); $('veh-raw-copy').textContent = '✓ Kopiert'; } catch (e) { $('veh-raw-copy').textContent = 'Kopieren nicht möglich'; } });
+  } catch (e) { show('<p class="text-sm text-left text-red-600 dark:text-red-400">Nicht verfügbar: ' + esc(e.message) + '</p>'); }
+});
 async function checkVehicle(uid) {                                                  // einmal nach der Anmeldung, ohne Škoda-Abfrage
   if (vehicle.uid !== uid) vehicle = { uid, ok: false, expires: null };             // anderes Konto: nichts vom vorherigen übernehmen
   try {

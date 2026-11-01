@@ -2,6 +2,7 @@
 // Anmeldung per Firebase-Token (Header "Authorization: Bearer <Token>"). Welcher API-Schlüssel und welche VIN gelten,
 // steht in der Vercel-Variable SKODA_ACCOUNTS (siehe lib/auth.js). Die Schlüssel verlassen den Server nie.
 //   GET /api/vehicle?check=1  -> { enabled, keyExpires }   (keine Škoda-Abfrage, zählt nicht gegen das Limit)
+//   GET /api/vehicle?raw=1    -> rohe Škoda-Antwort ohne VIN (Diagnose: welche Felder gibt es?)
 //   GET /api/vehicle          -> Fahrzeugdaten (Limit der Škoda-API: 20 Anfragen/Stunde/Fahrzeug -> 60 s Cache je Konto)
 import { verifyUser, accountFor } from '../lib/auth.js';
 
@@ -17,6 +18,19 @@ export default async function handler(req, res) {
 
   if (req.query && req.query.check) return res.status(200).json({ enabled: !!acc, keyExpires: acc?.expires ?? null });
   if (!acc) return res.status(403).json({ error: 'Für dieses Konto sind keine Fahrzeugdaten hinterlegt' });
+
+  /* Diagnose: rohe Antwort des Škoda-Servers (ohne VIN), um zu sehen, welche Felder das Fahrzeug liefert (z. B. Akkutemperatur).
+     Versucht zusätzlich die Klimatisierung; wird sie nicht unterstützt, nur Laden + km-Stand. Zählt gegen das Abfrage-Limit. */
+  if (req.query && req.query.raw) {
+    try {
+      const base = 'https://public.api.connect.skoda-auto.cz/api/v1/vehicles/' + encodeURIComponent(acc.vin) + '?include=';
+      let r = await fetch(base + 'charging,odometer,air-conditioning', { headers: { 'X-API-Key': acc.key, Accept: 'application/json' } }), inc = 'charging,odometer,air-conditioning';
+      if (!r.ok && r.status === 400) { r = await fetch(base + 'charging,odometer', { headers: { 'X-API-Key': acc.key, Accept: 'application/json' } }); inc = 'charging,odometer'; }
+      const text = await r.text(); let data = null; try { data = JSON.parse(text); } catch (e) { }
+      const strip = (o) => { if (o && typeof o === 'object') for (const k of Object.keys(o)) { if (/^vin$/i.test(k) || /licen[cs]ePlate/i.test(k)) o[k] = '…'; else strip(o[k]); } return o; };
+      return res.status(200).json({ status: r.status, include: inc, data: data ? strip(data) : text.slice(0, 2000) });
+    } catch (err) { return res.status(502).json({ error: 'Škoda-Server nicht erreichbar' }); }
+  }
 
   const hit = cache.get(user.email);
   if (hit && Date.now() - hit.at < 60_000) return res.status(200).json(hit.body);
