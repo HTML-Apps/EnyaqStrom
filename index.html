@@ -636,7 +636,9 @@
           <div class="flex flex-col items-center py-4" aria-hidden="true"><span class="h-2.5 w-2.5 rounded-full bg-emerald-500"></span><span class="my-1 w-0.5 flex-1 bg-slate-300 dark:bg-slate-700"></span><span class="h-2.5 w-2.5 rounded-sm bg-pink-400"></span></div>
           <div class="min-w-0 flex-1 space-y-1.5">
             <div class="relative"><input id="rt-a" type="text" autocomplete="off" placeholder="Start (z. B. Zuhause)" aria-label="Start" class="w-full min-w-0 rounded-xl bg-slate-100 dark:bg-slate-800 px-3 py-2.5 text-[15px] focus:outline-none focus:ring-2 focus:ring-emerald-500"><div id="rt-sug-a" class="hidden absolute inset-x-0 top-full z-20 mt-1 overflow-hidden rounded-xl bg-white dark:bg-slate-900 shadow-xl ring-1 ring-slate-200 dark:ring-slate-700"></div></div>
+            <div id="rt-v-w" class="relative hidden"><div class="flex items-center gap-1.5"><span class="shrink-0 text-xs text-sky-600 dark:text-sky-300" aria-hidden="true">über</span><input id="rt-v" type="text" autocomplete="off" placeholder="Zwischenstopp (Ort, Straße)" aria-label="Zwischenstopp" class="w-full min-w-0 rounded-xl bg-slate-100 dark:bg-slate-800 px-3 py-2 text-[14px] focus:outline-none focus:ring-2 focus:ring-sky-500"><button id="rt-v-x" type="button" aria-label="Zwischenstopp entfernen" class="shrink-0 px-1 text-lg text-slate-400">✕</button></div><div id="rt-sug-v" class="hidden absolute inset-x-0 top-full z-20 mt-1 overflow-hidden rounded-xl bg-white dark:bg-slate-900 shadow-xl ring-1 ring-slate-200 dark:ring-slate-700"></div></div>
             <div class="relative"><input id="rt-b" type="text" autocomplete="off" placeholder="Ziel (Ort, Adresse)" aria-label="Ziel" class="w-full min-w-0 rounded-xl bg-slate-100 dark:bg-slate-800 px-3 py-2.5 text-[15px] focus:outline-none focus:ring-2 focus:ring-emerald-500"><div id="rt-sug-b" class="hidden absolute inset-x-0 top-full z-20 mt-1 overflow-hidden rounded-xl bg-white dark:bg-slate-900 shadow-xl ring-1 ring-slate-200 dark:ring-slate-700"></div></div>
+            <button id="rt-v-add" type="button" class="text-xs font-semibold text-sky-600 dark:text-sky-300">+ Zwischenstopp (andere Route)</button>
           </div>
           <button id="rt-swap" type="button" aria-label="Start und Ziel tauschen" class="self-center px-1 text-xl text-sky-600 dark:text-sky-300 active:scale-90 transition">⇅</button>
         </div>
@@ -8853,9 +8855,9 @@ function rtFactor(skipId, override) {
   let s = 2, w0 = 2; list.forEach(x => { const age = Math.max(0, (Date.now() - Date.parse(x.dep)) / 864e5), w = Math.pow(0.5, age / 180) * Math.max(0.2, Math.min(1, (x.km || 0) / 100)); s += w * Math.min(1.4, Math.max(0.7, x.real / x.raw100)); w0 += w; });
   return Math.round(s / w0 * 1000) / 1000;
 }
-async function rtRoute(a, b) {
-  const key = [a.lat, a.lon, b.lat, b.lon].map(v => v.toFixed(4)).join(','); if (RT.route[key]) return RT.route[key];
-  const rr = await fetch('https://router.project-osrm.org/route/v1/driving/' + a.lon.toFixed(5) + ',' + a.lat.toFixed(5) + ';' + b.lon.toFixed(5) + ',' + b.lat.toFixed(5) + '?overview=false&steps=true&geometries=geojson');
+async function rtRoute(a, b, v) {
+  const wp = [a, v, b].filter(Boolean), key = wp.map(p => p.lat.toFixed(4) + ',' + p.lon.toFixed(4)).join(';'); if (RT.route[key]) return RT.route[key];
+  const rr = await fetch('https://router.project-osrm.org/route/v1/driving/' + wp.map(p => p.lon.toFixed(5) + ',' + p.lat.toFixed(5)).join(';') + '?overview=false&steps=true&geometries=geojson');
   if (!rr.ok) throw new Error('Route nicht gefunden (' + rr.status + ')'); const rj = await rr.json(), rt = rj.routes && rj.routes[0]; if (!rt) throw new Error('Keine Route gefunden');
   const raw = [];                                                                 // Teilstücke: { a, b, len, v, mw }
   (rt.legs || []).forEach(l => (l.steps || []).forEach(s => { const c = (s.geometry && s.geometry.coordinates) || [], v = s.duration > 0 ? s.distance / s.duration : 13, mw = /(^|[;\s])A\s?\d/.test(s.ref || '') || v > 24;
@@ -9137,12 +9139,12 @@ async function rtRun() {
   if (!RT.a || !RT.b) { RT.res = null; RT.err = ''; RT.busy = false; rtRenderRes(); return; }
   RT.busy = true; RT.err = ''; rtRenderRes(); const o = rtParams();
   try { const pairs = o.round ? [[RT.a, RT.b], [RT.b, RT.a]] : [[RT.a, RT.b]], legs = [];
-    for (const [x, y] of pairs) { const route = await rtRoute(x, y); let wx = null; try { wx = await rtWeather(route, o.dep); } catch (e) { } legs.push({ route, wx }); }
+    for (const [x, y] of pairs) { const route = await rtRoute(x, y, RT.v); let wx = null; try { wx = await rtWeather(route, o.dep); } catch (e) { } legs.push({ route, wx }); }
     if (n !== RT.n) return; RT.o = o; RT.res = RT.base = rtCalc(legs, o); RT.ch = null; }
   catch (e) { if (n !== RT.n) return; RT.res = null; RT.err = 'Prognose nicht möglich: ' + ((e && e.message) || 'kein Internet?'); }
   RT.busy = false; rtRenderRes(); if (RT.res) rtFindStops(n);
   try { const pk = (p) => p ? { label: p.label, lat: Math.round(p.lat * 1e5) / 1e5, lon: Math.round(p.lon * 1e5) / 1e5 } : null;   // Planung geräteübergreifend (Einstellungen → Cloud)
-    const v = { a: pk(RT.a), b: pk(RT.b), pers: o.pers, tempo: o.tempo, vab: o.vab, round: !!o.round, stay: o.stay, soc: o.soc, dep: new Date(o.dep).toISOString(), at: new Date().toISOString() }, cur = getSettings().rtLast;
+    const v = { a: pk(RT.a), b: pk(RT.b), v: pk(RT.v), pers: o.pers, tempo: o.tempo, vab: o.vab, round: !!o.round, stay: o.stay, soc: o.soc, dep: new Date(o.dep).toISOString(), at: new Date().toISOString() }, cur = getSettings().rtLast;
     const same = cur && JSON.stringify({ ...cur, at: 0 }) === JSON.stringify({ ...v, at: 0 }); save(KEY_RT, v); if (!same) setQuickSetting('rtLast', v); } catch (e) { }
 }
 function rtSugHide(w) { const el = $('rt-sug-' + w); el.innerHTML = ''; el.classList.add('hidden'); }
@@ -9160,7 +9162,10 @@ function rtSuggest(w) {
   RT.sugT = setTimeout(async () => { try { const res = await hpSearch(t); if (n === RT.sugN) rtSugShow(w, own.concat(res), res.length || own.length ? '' : 'Nichts gefunden'); } catch (e) { if (n === RT.sugN) rtSugShow(w, own, 'Ortssuche nicht erreichbar'); } }, 350);
 }
 function rtPick(w, p) { RT[w] = p; $('rt-' + w).value = p.label; rtSugHide(w); RT.sugN++; rtRun(); }
-['a', 'b'].forEach(w => {
+function rtViaUi() { const on = !!(RT.v || RT.vOpen); $('rt-v-w').classList.toggle('hidden', !on); $('rt-v-add').classList.toggle('hidden', on); $('rt-v').value = RT.v ? RT.v.label : $('rt-v').value; }
+$('rt-v-add').addEventListener('click', () => { RT.vOpen = true; rtViaUi(); $('rt-v').focus(); });
+$('rt-v-x').addEventListener('click', () => { const had = !!RT.v; RT.v = null; RT.vOpen = false; $('rt-v').value = ''; rtSugHide('v'); rtViaUi(); if (had) rtRun(); });
+['a', 'b', 'v'].forEach(w => {
   const inp = $('rt-' + w);
   inp.addEventListener('input', () => rtSuggest(w)); inp.addEventListener('focus', () => { inp.select(); rtSuggest(w); });
   inp.addEventListener('blur', () => setTimeout(async () => { rtSugHide(w); const t = inp.value.trim(); if (RT[w] || !t) return; try { rtPick(w, await hpResolve(t)); } catch (e) { RT.err = (e && e.message) || 'Ort nicht gefunden'; RT.res = null; rtRenderRes(); } }, 200));
@@ -9177,7 +9182,7 @@ $('rt-save').addEventListener('click', () => {
   const r = RT.res, o = RT.o; if (!r) return; const cap = batteryKwh(), k = deDec($('rt-abrp-k').value), s = deDec($('rt-abrp-s').value), msg = $('rt-save-msg');
   if (k !== undefined && !(k > 3 && k < 60)) { msg.textContent = 'ABRP-Verbrauch bitte in kWh/100 km (z. B. 19,1).'; msg.className = 'mt-1.5 text-xs text-left text-red-600 dark:text-red-400'; return; }
   if (s !== undefined && !(s >= -20 && s < o.soc)) { msg.textContent = 'ABRP-Ankunft bitte in % und kleiner als der Start-Akku.'; msg.className = 'mt-1.5 text-xs text-left text-red-600 dark:text-red-400'; return; }
-  const en = { id: labId(), dep: new Date(o.dep).toISOString(), a: { label: RT.a.label, lat: RT.a.lat, lon: RT.a.lon }, b: { label: RT.b.label, lat: RT.b.lat, lon: RT.b.lon }, km: Math.round(r.km * 10) / 10,
+  const en = { id: labId(), dep: new Date(o.dep).toISOString(), a: { label: RT.a.label, lat: RT.a.lat, lon: RT.a.lon }, b: { label: RT.b.label, lat: RT.b.lat, lon: RT.b.lon }, ...(RT.v ? { v: { label: RT.v.label, lat: RT.v.lat, lon: RT.v.lon } } : {}), km: Math.round(r.km * 10) / 10,
     k100: Math.round(r.k100 * 100) / 100, raw100: Math.round(r.raw100 * 100) / 100, kwh: Math.round(r.kwh * 10) / 10, soc0: o.soc, socA: Math.round(r.socA), k: r.k, pers: o.pers, tempo: o.tempo, vab: o.vab, tAvg: Math.round(r.tAvg * 10) / 10 }; if (o.round) { en.round = true; en.stay = o.stay; } if (r.stops && r.stops.length) en.stop = r.stops.map(x => ({ op: x.op, km: Math.round(r.dkm[x.j]), from: Math.round(x.sArr), to: x.tgt }));
   if (k !== undefined) en.abrp = k; else if (s !== undefined) { en.abrpSoc = s; en.abrp = Math.round((o.soc - s) / 100 * cap / r.km * 100 * 100) / 100; }
   const lab = getLab(); lab.fc = (lab.fc || []).concat(en); setLab(lab); $('rt-abrp-k').value = ''; $('rt-abrp-s').value = '';
@@ -9206,7 +9211,7 @@ function rtRenderCmp() {
     : '<p class="mt-2 text-sm text-slate-600 dark:text-slate-300 text-left">Noch kein Realwert eingetragen.</p>'}
     <p class="mt-2.5 border-t border-slate-100 dark:border-slate-800 pt-2 text-[11px] text-slate-500 dark:text-slate-400 text-left">📈 Persönlicher Faktor der App: <b class="text-slate-700 dark:text-slate-200">${fmt(k, 2)}</b> · lernt aus jedem eingetragenen Realwert</p></div>`;
   const pill = 'flex-1 whitespace-nowrap rounded-lg bg-slate-100 dark:bg-slate-800 px-1.5 py-1';
-  const row = (x) => { const d = new Date(x.dep), dl = d.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' }), tt = esc(x.a.label + (x.round ? ' ⇄ ' : ' → ') + x.b.label);
+  const row = (x) => { const d = new Date(x.dep), dl = d.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' }), tt = esc(x.a.label + (x.round ? ' ⇄ ' : ' → ') + x.b.label + (x.v ? ' (über ' + x.v.label + ')' : ''));
     if (!(x.real > 0)) return `<button type="button" data-rtrow="${esc(x.id)}" class="flex w-full items-center justify-between gap-2 border-t border-slate-100 dark:border-slate-800 py-2.5 text-left first:border-t-0"><span class="min-w-0"><span class="block truncate text-[13px]">${tt}</span><span class="block text-[11px] text-slate-500 dark:text-slate-400">${dl} · App ${fmt(x.k100, 1)}${x.abrp ? ' · ABRP ' + fmt(x.abrp, 1) : ''}</span></span><span class="shrink-0 rounded-lg bg-amber-100 dark:bg-amber-950 px-2 py-1 text-[12px] font-semibold text-amber-700 dark:text-amber-300">✍️ Real eintragen</span></button>`;
     const a = Math.abs(x.k100 - x.real), b = x.abrp ? Math.abs(x.abrp - x.real) : null, dot = b == null ? 'bg-slate-400 dark:bg-slate-600' : a < b ? 'bg-emerald-500' : b < a ? 'bg-violet-500' : 'bg-slate-400';
     return `<button type="button" data-rtrow="${esc(x.id)}" class="block w-full border-t border-slate-100 dark:border-slate-800 py-2.5 text-left first:border-t-0"><span class="flex items-center justify-between gap-2"><span class="min-w-0"><span class="block truncate text-[13px]">${tt}</span><span class="block text-[11px] text-slate-500 dark:text-slate-400">${dl} · ${fmt(x.km, 0)} km</span></span><span class="h-2.5 w-2.5 shrink-0 rounded-full ${dot}"></span></span>
@@ -9261,13 +9266,13 @@ $('au-sheet').addEventListener('click', (e) => {
 /* Planung von einem anderen Gerät übernehmen, wenn hier nichts gerade bearbeitet wird */
 function rtCloudPlan() {
   const l = getSettings().rtLast, ae = document.activeElement; if (!l || !l.a || !l.b || (ae && /^rt-/.test(ae.id))) return;
-  const same = (p, q) => p && q && Math.abs(p.lat - q.lat) < 1e-4 && Math.abs(p.lon - q.lon) < 1e-4; if (same(RT.a, l.a) && same(RT.b, l.b) && !!RT.round === !!l.round) return;
-  RT.a = l.a; RT.b = l.b; RT.round = !!l.round; $('rt-a').value = l.a.label; $('rt-b').value = l.b.label; if (l.pers) $('rt-pers').value = String(l.pers); if (l.stay) $('rt-stay').value = String(l.stay); rtRoundUi(); if (RT.tab === 'plan') rtRun();
+  const same = (p, q) => p && q && Math.abs(p.lat - q.lat) < 1e-4 && Math.abs(p.lon - q.lon) < 1e-4; if (same(RT.a, l.a) && same(RT.b, l.b) && (!!RT.v === !!l.v && (!l.v || same(RT.v, l.v))) && !!RT.round === !!l.round) return;
+  RT.a = l.a; RT.b = l.b; RT.v = l.v || null; RT.vOpen = false; rtViaUi(); RT.round = !!l.round; $('rt-a').value = l.a.label; $('rt-b').value = l.b.label; if (l.pers) $('rt-pers').value = String(l.pers); if (l.stay) $('rt-stay').value = String(l.stay); rtRoundUi(); if (RT.tab === 'plan') rtRun();
 }
 function rtShow() {
   rtTabs();
   if (!RT.a && !RT.b) { const l = getSettings().rtLast || load(KEY_RT, null) || {}, home = getTPlaces().find(p => p.kind === 'home' && Number.isFinite(p.lat));
-    RT.a = l.a || (home ? { lat: home.lat, lon: home.lon, label: home.name } : null); RT.b = l.b || null;
+    RT.a = l.a || (home ? { lat: home.lat, lon: home.lon, label: home.name } : null); RT.b = l.b || null; RT.v = l.v || null; rtViaUi();
     $('rt-a').value = RT.a ? RT.a.label : ''; $('rt-b').value = RT.b ? RT.b.label : '';
     if (l.pers) $('rt-pers').value = String(l.pers); if (l.dep && Date.parse(l.dep) > Date.now() - 3600e3) { const d = new Date(l.dep); $('rt-dep').value = d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + 'T' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()); } RT.round = !!l.round; if (l.stay) $('rt-stay').value = String(l.stay); rtRoundUi(); if (l.tempo != null) $('rt-tempo').value = String(l.tempo); if (l.vab) $('rt-vab').value = String(l.vab); }
   const now = new Date(); now.setMinutes(Math.ceil(now.getMinutes() / 15) * 15, 0, 0);
