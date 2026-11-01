@@ -5932,26 +5932,33 @@ $('frost-banner').addEventListener('click', (e) => {
 const KEY_ICE = 'enyaq.ice', ICE_LVL = ['gering', 'möglich', 'wahrscheinlich'];
 const iceSet = () => { const s = getSettings(); return { dep: /^\d{1,2}:\d{2}$/.test(s.iceDep || '') ? s.iceDep.padStart(5, '0') : '06:30', we: !!s.iceWe, park: ['open', 'carport', 'garage'].includes(s.icePark) ? s.icePark : 'open', min: s.iceMin === 'high' ? 2 : 1, k: Number(s.iceK) > 0 ? Number(s.iceK) : 1 }; };
 const iceLoc = () => { const hm = getTPlaces().find(p => p.kind === 'home' && Number.isFinite(p.lat)); return hm ? { lat: hm.lat, lon: hm.lon } : wxLoc(); };
+/* Eis-Risiko für den Morgen von `day` aus stündlichen Werten (Nacht ab 18 Uhr des Vortags bis zur Abfahrt) */
+function iceEval(H, day, st) {
+  const prev = wxIso(new Date(Date.parse(day + 'T12:00:00') - 864e5)), [dh] = st.dep.split(':').map(Number), pf = st.park === 'carport' ? 0.35 : 1, rows = [];
+  H.time.forEach((t, i) => { const d = t.slice(0, 10), hr = +t.slice(11, 13); if (!((d === prev && hr >= 18) || (d === day && hr <= dh))) return;
+    const T = Number(H.temperature_2m[i]), Td = Number(H.dew_point_2m[i]), cc = Number(H.cloud_cover[i]) || 0, ws = Number(H.wind_speed_10m[i]) || 0, p = Number(H.precipitation[i]) || 0;
+    if (H.temperature_2m[i] == null || !Number.isFinite(T)) return; const wf = ws < 1.5 ? 1 : ws < 3 ? 0.75 : ws < 5 ? 0.45 : 0.2, Tg = T - 4 * (1 - cc / 100) * wf * pf * st.k;
+    rows.push({ d, hr, T, Td: Number.isFinite(Td) ? Td : T - 3, cc, ws, p, Tg }); });
+  const late = rows.filter(x => x.d === day && x.hr >= dh - 6); if (!late.length) return null;
+  const frostH = late.filter(x => x.Tg <= 0 && x.Tg <= x.Td + 0.5).length, minTg = Math.min(...late.map(x => x.Tg)), gap = Math.min(...late.map(x => x.Tg - x.Td));
+  let glaze = false; rows.forEach((x, i) => { if (x.p >= 0.2 && rows.slice(i + 1).some(y => y.Tg <= -0.5)) glaze = true; });
+  const lvl = glaze && minTg <= 0 || (frostH >= 3 && minTg <= -1) ? 2 : frostH >= 1 || (minTg <= 0.5 && gap <= 1.5) ? 1 : 0, last = rows[rows.length - 1];
+  return { day, lvl, T: last.T, minT: Math.min(...late.map(x => x.T)), minTg, cc: late.reduce((a, x) => a + x.cc, 0) / late.length, ws: late.reduce((a, x) => a + x.ws, 0) / late.length, glaze, frostH };
+}
+async function iceHourly(l, st) {
+  const sig = [l.lat.toFixed(3), l.lon.toFixed(3), wxIso(new Date())].join('|'), c = load(KEY_ICE + 'H', null);
+  if (c && c.sig === sig && Date.now() - c.t < 3600e3) return c.H;
+  const r = await fetch('https://api.open-meteo.com/v1/forecast?latitude=' + l.lat + '&longitude=' + l.lon + '&hourly=temperature_2m,dew_point_2m,cloud_cover,wind_speed_10m,precipitation&wind_speed_unit=ms&timezone=auto&past_days=1&forecast_days=8');
+  if (!r.ok) { if (c && c.H) return c.H; throw new Error('Wetter ' + r.status); } const H = (await r.json()).hourly; if (!H || !H.time) throw new Error('Wetter leer');
+  save(KEY_ICE + 'H', { sig, t: Date.now(), H }); return H;
+}
 async function iceRisk() {
   const st = iceSet(); if (st.park === 'garage') return null; const l = iceLoc(); if (!l) return null;
   const tm = new Date(Date.now() + 864e5), day = wxIso(tm), wd = tm.getDay(); if (!st.we && (wd === 0 || wd === 6)) return null;
-  const sig = [l.lat.toFixed(3), l.lon.toFixed(3), day, st.dep, st.park, st.k].join('|'), c = load(KEY_ICE, null);
-  if (c && c.sig === sig && Date.now() - c.t < 3600e3) return c.res;
-  const r = await fetch('https://api.open-meteo.com/v1/forecast?latitude=' + l.lat + '&longitude=' + l.lon + '&hourly=temperature_2m,dew_point_2m,cloud_cover,wind_speed_10m,precipitation&wind_speed_unit=ms&timezone=auto&forecast_days=3');
-  if (!r.ok) return c && c.res && c.res.day === day ? c.res : null; const H = (await r.json()).hourly; if (!H || !H.time) return null;
-  const today = wxIso(new Date()), [dh] = st.dep.split(':').map(Number), pf = st.park === 'carport' ? 0.35 : 1, rows = [];
-  H.time.forEach((t, i) => { const d = t.slice(0, 10), hr = +t.slice(11, 13); if (!((d === today && hr >= 18) || (d === day && hr <= dh))) return;
-    const T = Number(H.temperature_2m[i]), Td = Number(H.dew_point_2m[i]), cc = Number(H.cloud_cover[i]) || 0, ws = Number(H.wind_speed_10m[i]) || 0, p = Number(H.precipitation[i]) || 0;
-    if (!Number.isFinite(T)) return; const wf = ws < 1.5 ? 1 : ws < 3 ? 0.75 : ws < 5 ? 0.45 : 0.2, Tg = T - 4 * (1 - cc / 100) * wf * pf * st.k;
-    rows.push({ d, hr, T, Td: Number.isFinite(Td) ? Td : T - 3, cc, ws, p, Tg }); });
-  if (!rows.length) return null;
-  const late = rows.filter(x => x.d === day && x.hr >= dh - 6), frostH = late.filter(x => x.Tg <= 0 && x.Tg <= x.Td + 0.5).length;
-  const minTg = Math.min(...late.map(x => x.Tg)), gap = Math.min(...late.map(x => x.Tg - x.Td));
-  let glaze = false; rows.forEach((x, i) => { if (x.p >= 0.2 && rows.slice(i + 1).some(y => y.Tg <= -0.5)) glaze = true; });
-  const lvl = glaze && minTg <= 0 || (frostH >= 3 && minTg <= -1) ? 2 : frostH >= 1 || (minTg <= 0.5 && gap <= 1.5) ? 1 : 0, last = rows[rows.length - 1];
-  const res = { day, lvl, T: last.T, minT: Math.min(...late.map(x => x.T)), minTg, cc: late.reduce((a, x) => a + x.cc, 0) / late.length, ws: late.reduce((a, x) => a + x.ws, 0) / late.length, glaze, frostH };
-  save(KEY_ICE, { sig, t: Date.now(), res }); return res;
+  return iceEval(await iceHourly(l, st), day, st);
 }
+/** Eis-Risiko je Morgen für die nächsten Tage (7-Tage-Prognose) – unabhängig von der Wochenend-Einstellung */
+async function iceDays(days) { const st = iceSet(), l = iceLoc(); if (st.park === 'garage' || !l) return {}; const H = await iceHourly(l, st), out = {}; days.forEach(d => { const r = iceEval(H, d, st); if (r) out[d] = r; }); return out; }
 /* =====================================================================
    Verbrauchs-Prognose (Start): lernendes Modell aus den eigenen Ladungen + Open-Meteo-Vorhersage.
    Jede genaue Strecke zwischen zwei Ladungen (Akku-%, ≥ 20 km) ist ein Lernpunkt: Verbrauch aus dem Akku (ohne Ladeverluste, wie der Bordcomputer) gegen die mittlere Tagestemperatur
@@ -6175,8 +6182,8 @@ function openWxoSheet() {
   $('wxo-sheet-box').innerHTML = `<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div><p class="text-xl font-bold">Prognose 7 Tage</p>
     <div class="flex justify-end gap-2 text-[11.5px] text-slate-500 dark:text-slate-400"><span>kWh/100 km</span><span class="w-[62px] text-right">Reichweite</span></div>
     <div class="divide-y divide-slate-200 dark:divide-slate-800 !mt-1">${days.map((x, i) => `<div class="flex items-center gap-2 py-2.5"><span class="w-[54px] shrink-0 whitespace-nowrap leading-tight"><span class="block text-[15px] font-semibold">${i === 0 ? 'Heute' : i === 1 ? 'Morgen' : wxDay(x.d).wd + '.'}</span><span class="block text-[11.5px] text-slate-500 dark:text-slate-400">${wxDay(x.d).dm}</span></span><span class="shrink-0 text-2xl">${wxoIconHtml(x.w, 42)}</span>
-      <span class="w-[84px] shrink-0 whitespace-nowrap text-[13px] leading-snug text-slate-500 dark:text-slate-400">${fmt(x.lo, 0).replace('-', '−')} bis ${fmt(x.hi, 0).replace('-', '−')} °C${x.p >= 1 ? '<br>' + fmt(x.p, 0) + ' mm' : ''}</span>
-      <span class="min-w-0 flex-1 text-right"><span class="block text-[18px] font-bold leading-tight">${fmt(x.k, 1)}</span>${wxoPartsHtml(x.parts)}</span><span class="w-[62px] shrink-0 whitespace-nowrap text-right text-[15px]">${wxoFmtR(x.r)} km</span></div>`).join('')}</div>
+      <span class="w-[84px] shrink-0 whitespace-nowrap text-[13px] leading-snug text-slate-500 dark:text-slate-400">${fmt(x.lo, 0).replace('-', '−')} bis ${fmt(x.hi, 0).replace('-', '−')} °C${x.p >= 1 ? '<br>' + fmt(x.p, 0) + ' mm' : ''}<span class="block sm:hidden" data-icem="${x.d}"></span></span>
+      <span class="hidden min-w-[26px] flex-1 justify-center sm:flex" data-iced="${x.d}"></span><span class="min-w-0 flex-1 text-right sm:flex-none"><span class="block text-[18px] font-bold leading-tight">${fmt(x.k, 1)}</span>${wxoPartsHtml(x.parts)}</span><span class="w-[62px] shrink-0 whitespace-nowrap text-right text-[15px]">${wxoFmtR(x.r)} km</span></div>`).join('')}</div>
     <details class="group rounded-2xl bg-slate-100 dark:bg-slate-800/60 p-3 text-[12.5px] leading-relaxed">
       <summary class="flex cursor-pointer list-none items-center justify-between font-semibold [&::-webkit-details-marker]:hidden">So rechnet die Prognose<span class="text-slate-400 transition-transform group-open:rotate-90">›</span></summary>
       <p class="mt-1">Grundverbrauch (ab ${WXO_T0} °C, trocken): <b>${fmt(m.a, 1)}</b> kWh/100 km${m.n ? '' : ' <span class="text-slate-400">(Startwert)</span>'}</p>
@@ -6185,11 +6192,17 @@ function openWxoSheet() {
       <p>Regentag: <b>+${fmt(m.c, 1)}</b> ${m.wetN >= 4 ? '' : '<span class="text-slate-400">(noch nah am Startwert ' + fmt(P.c, 1) + ')</span>'}</p>
       <p>Feuchter Morgen (5–9 Uhr ≥ 90 %, unter 10 °C): <b>+${fmt(m.e, 1)}</b> ${m.humN >= 4 ? '' : '<span class="text-slate-400">(noch nah am Startwert ' + fmt(P.e, 1) + ')</span>'}</p>
       <p class="text-slate-500 dark:text-slate-400">❄️ Kälte · 🌧️ Regen · 💧 beschlagene Scheiben (Heizung + Klima)</p>
+      <p class="text-slate-500 dark:text-slate-400"><span class="text-sky-500">✻</span> großes Symbol: Scheibe morgens vereist wahrscheinlich, blass: möglich (Eis-Warnung, Ort „Zuhause“, Abfahrt laut Einstellungen)</p>
       ${m.sd ? `<p>Typische Abweichung: ±${fmt(m.sd, 1)} kWh/100 km</p>` : ''}
       <p class="mt-1.5 text-slate-500 dark:text-slate-400">Gelernt aus ${m.n} genauen Ladungen (mit Akku-% und km-Stand, ≥ 20 km) und dem Wetter an deinem Standort. Jede neue Ladung verbessert die Werte; neuere zählen stärker (eine 90 Tage alte Ladung halb so viel). Verbrauch ohne Ladeverluste (aus dem Akku, vergleichbar mit der Anzeige im Auto). Wetter: Open-Meteo${wxIconStyle() === 'meteo' ? ', Symbole: Meteocons von Bas Milius (MIT)' : ''}. Reichweite: ${fmt(o.cap, 1)} kWh netto bei 100 % Akku.</p>
     </details>
     <button type="button" data-wxo="close" class="h-12 w-full rounded-2xl border border-slate-300 dark:border-slate-700 text-sm font-semibold">Schließen</button>`;
   $('wxo-sheet').classList.remove('hidden');
+  iceDays(days.map(x => x.d)).then(map => {
+    document.querySelectorAll('#wxo-sheet-box [data-icem]').forEach(el => { const r = map[el.dataset.icem]; if (!r || !r.lvl) return; const hi = r.lvl >= 2;     // Handy: als zweite Zeile unter den Temperaturen
+      el.innerHTML = `<span class="inline-flex items-center gap-1 font-semibold ${hi ? 'text-sky-500 dark:text-sky-300' : 'text-sky-500/60 dark:text-sky-300/60'}" title="Scheibe vereist ${ICE_LVL[r.lvl]}"><svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20M4.9 6l14.2 12M19.1 6L4.9 18M9 3.5l3 2 3-2M9 20.5l3-2 3 2"/></svg>${hi ? 'Eis' : 'Eis möglich'}</span>`; });
+    document.querySelectorAll('#wxo-sheet-box [data-iced]').forEach(el => { const r = map[el.dataset.iced]; if (!r || !r.lvl) return; const hi = r.lvl >= 2;
+    el.innerHTML = `<span class="flex flex-col items-center ${hi ? 'text-sky-500 dark:text-sky-300' : 'text-sky-500/45 dark:text-sky-300/45'}" title="Scheibe vereist ${ICE_LVL[r.lvl]} (Scheibe ≈ ${fmt(Math.round(r.minTg) || 0, 0).replace('-', '−')} °C)"><svg class="${hi ? 'h-6 w-6' : 'h-5 w-5'}" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20M4.9 6l14.2 12M19.1 6L4.9 18M9 3.5l3 2 3-2M9 20.5l3-2 3 2"/></svg><span class="text-[10px] leading-tight">${hi ? 'Eis' : 'Eis?'}</span><span class="sr-only">Scheibe vereist ${ICE_LVL[r.lvl]}</span></span>`; }); }).catch(() => { });
 }
 /* Start: Verbrauchs-Prognose und Zählerstand seitlich wischen (Standard: Prognose). Höhe folgt der sichtbaren Karte. */
 const dSw = { tr: $('dash-swipe-track'), idx: 0 };
