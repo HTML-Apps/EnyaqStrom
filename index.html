@@ -625,6 +625,44 @@
     <div id="rec-list" class="space-y-3"></div>
   </section>
 
+  <section id="view-route" class="view hidden space-y-3">
+    <div class="-mt-2 flex h-[60px] items-center justify-between gap-3 -mb-[10px]">
+      <h1 class="min-w-0 truncate font-barlow font-semibold text-2xl uppercase tracking-[0.14em] text-white">Strecken-Prognose</h1>
+    </div>
+    <div id="rt-tabs" class="flex bg-slate-200 dark:bg-slate-800 rounded-xl p-1"></div>
+    <div id="rt-plan" class="space-y-3">
+      <div class="rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-3.5">
+        <div class="flex gap-2.5">
+          <div class="flex flex-col items-center py-4" aria-hidden="true"><span class="h-2.5 w-2.5 rounded-full bg-emerald-500"></span><span class="my-1 w-0.5 flex-1 bg-slate-300 dark:bg-slate-700"></span><span class="h-2.5 w-2.5 rounded-sm bg-pink-400"></span></div>
+          <div class="min-w-0 flex-1 space-y-1.5">
+            <div class="relative"><input id="rt-a" type="text" autocomplete="off" placeholder="Start (z. B. Zuhause)" aria-label="Start" class="w-full min-w-0 rounded-xl bg-slate-100 dark:bg-slate-800 px-3 py-2.5 text-[15px] focus:outline-none focus:ring-2 focus:ring-emerald-500"><div id="rt-sug-a" class="hidden absolute inset-x-0 top-full z-20 mt-1 overflow-hidden rounded-xl bg-white dark:bg-slate-900 shadow-xl ring-1 ring-slate-200 dark:ring-slate-700"></div></div>
+            <div class="relative"><input id="rt-b" type="text" autocomplete="off" placeholder="Ziel (Ort, Adresse)" aria-label="Ziel" class="w-full min-w-0 rounded-xl bg-slate-100 dark:bg-slate-800 px-3 py-2.5 text-[15px] focus:outline-none focus:ring-2 focus:ring-emerald-500"><div id="rt-sug-b" class="hidden absolute inset-x-0 top-full z-20 mt-1 overflow-hidden rounded-xl bg-white dark:bg-slate-900 shadow-xl ring-1 ring-slate-200 dark:ring-slate-700"></div></div>
+          </div>
+          <button id="rt-swap" type="button" aria-label="Start und Ziel tauschen" class="self-center px-1 text-xl text-sky-600 dark:text-sky-300 active:scale-90 transition">⇅</button>
+        </div>
+        <div class="mt-2.5 flex flex-wrap gap-1.5 text-[13px]">
+          <label class="flex items-center gap-1 rounded-xl bg-slate-100 dark:bg-slate-800 px-2 py-1"><span aria-hidden="true">🕗</span><input id="rt-dep" type="datetime-local" aria-label="Abfahrt" class="w-[156px] bg-transparent text-[13px] focus:outline-none"></label>
+          <label class="flex items-center gap-1 rounded-xl bg-slate-100 dark:bg-slate-800 px-2 py-1"><span aria-hidden="true">🔋</span><input id="rt-soc" type="text" inputmode="numeric" aria-label="Akku bei Abfahrt in Prozent" class="w-8 bg-transparent text-right focus:outline-none">%</label>
+          <label class="flex items-center gap-1 rounded-xl bg-slate-100 dark:bg-slate-800 px-2 py-1"><span aria-hidden="true">👤</span><select id="rt-pers" aria-label="Personen" class="bg-transparent focus:outline-none"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option></select></label>
+          <label class="flex items-center gap-1 rounded-xl bg-slate-100 dark:bg-slate-800 px-2 py-1"><span aria-hidden="true">⏱</span><select id="rt-tempo" aria-label="Tempo gegenüber Routenplaner und Autobahn-Einstellung" class="bg-transparent focus:outline-none"><option value="-10">−10 %</option><option value="-5">−5 %</option><option value="0" selected>±0 %</option><option value="5">+5 %</option><option value="10">+10 %</option></select></label>
+          <label class="flex items-center gap-1 rounded-xl bg-slate-100 dark:bg-slate-800 px-2 py-1"><span aria-hidden="true">🛣️</span><select id="rt-vab" aria-label="Tempo auf der Autobahn" class="bg-transparent focus:outline-none"><option value="100">AB 100</option><option value="110">AB 110</option><option value="120" selected>AB 120</option><option value="130">AB 130</option><option value="140">AB 140</option></select></label>
+        </div>
+      </div>
+      <div id="rt-res"></div>
+      <div id="rt-abrp" class="hidden rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-3.5 border border-dashed border-violet-400/50">
+        <p class="text-[11px] font-semibold uppercase tracking-[0.06em] text-violet-600 dark:text-violet-300">ABRP zum Vergleich <span class="text-slate-500 dark:text-slate-400">(optional)</span></p>
+        <div class="mt-2 flex items-center gap-2">
+          <label class="flex min-w-0 flex-1 items-center rounded-xl bg-slate-100 dark:bg-slate-800 px-3 py-2"><input id="rt-abrp-k" type="text" inputmode="decimal" placeholder="z. B. 19,1" aria-label="ABRP-Verbrauch in kWh pro 100 km" class="w-full min-w-0 bg-transparent text-[15px] focus:outline-none"><span class="shrink-0 text-[11px] text-slate-500 dark:text-slate-400">kWh/100</span></label>
+          <span class="text-xs text-slate-500 dark:text-slate-400">oder</span>
+          <label class="flex min-w-0 flex-1 items-center rounded-xl bg-slate-100 dark:bg-slate-800 px-3 py-2"><input id="rt-abrp-s" type="text" inputmode="numeric" placeholder="Ankunft" aria-label="ABRP-Ankunft in Prozent" class="w-full min-w-0 bg-transparent text-[15px] focus:outline-none"><span class="shrink-0 text-[11px] text-slate-500 dark:text-slate-400">%</span></label>
+        </div>
+        <button id="rt-save" type="button" class="mt-2.5 w-full rounded-2xl bg-emerald-600 py-3 text-sm font-semibold text-white active:scale-95 transition">📌 Fahrt merken &amp; später abgleichen</button>
+        <p id="rt-save-msg" class="mt-1.5 hidden text-xs text-left text-emerald-600 dark:text-emerald-400"></p>
+      </div>
+    </div>
+    <div id="rt-cmp" class="hidden space-y-3"></div>
+  </section>
+
   <!-- ============ WISSEN (Start → „Wissen“) ============ -->
   <section id="view-kb" class="view hidden space-y-3">
     <div class="-mt-2 flex h-[60px] items-center justify-between gap-3 -mb-[10px]">
@@ -1425,6 +1463,7 @@
       <button type="button" data-nav="wish" class="relative flex min-w-0 flex-col items-center gap-1 rounded-2xl bg-slate-100 dark:bg-slate-800 px-0.5 py-2 text-[10.5px] font-semibold leading-tight tracking-tight active:scale-95 transition"><svg class="h-[22px] w-[22px] text-violet-600 dark:text-violet-300" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.3-9.2C1.4 8.4 3.5 4.5 7.3 4.5c2 0 3.4 1.1 4.7 2.7 1.3-1.6 2.7-2.7 4.7-2.7 3.8 0 5.9 3.9 4.6 7.3C19.5 16.4 12 21 12 21z"/></svg><span class="max-w-full truncate">Wunschliste</span></button>
       <button type="button" data-nav="backup" class="relative flex min-w-0 flex-col items-center gap-1 rounded-2xl bg-slate-100 dark:bg-slate-800 px-0.5 py-2 text-[10.5px] font-semibold leading-tight tracking-tight active:scale-95 transition"><svg class="h-[22px] w-[22px] text-violet-600 dark:text-violet-300" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9"/><path d="M12 7v5h5"/></svg><span class="max-w-full truncate">Sicherung</span></button>
       <button type="button" data-nav="car" class="relative flex min-w-0 flex-col items-center gap-1 rounded-2xl bg-slate-100 dark:bg-slate-800 px-0.5 py-2 text-[10.5px] font-semibold leading-tight tracking-tight active:scale-95 transition"><svg class="h-[22px] w-[22px] text-violet-600 dark:text-violet-300" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 17h14M6 17v2M18 17v2M4 13l2-5h12l2 5v4H4z"/><circle cx="8" cy="14" r="1"/><circle cx="16" cy="14" r="1"/></svg><span class="max-w-full truncate">Fahrzeug</span></button>
+      <button type="button" data-nav="route" class="relative flex min-w-0 flex-col items-center gap-1 rounded-2xl bg-slate-100 dark:bg-slate-800 px-0.5 py-2 text-[10.5px] font-semibold leading-tight tracking-tight active:scale-95 transition"><svg class="h-[22px] w-[22px] text-violet-600 dark:text-violet-300" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 19l5-8 4 5 3-4 6 7z"/><path d="M15 9V3l4 2-4 2"/></svg><span class="max-w-full truncate">Strecke</span></button>
       <button type="button" data-nav="settings" class="relative flex min-w-0 flex-col items-center gap-1 rounded-2xl bg-slate-100 dark:bg-slate-800 px-0.5 py-2 text-[10.5px] font-semibold leading-tight tracking-tight active:scale-95 transition"><svg class="h-[22px] w-[22px] text-violet-600 dark:text-violet-300" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></svg><span class="max-w-full truncate">Einstellungen</span></button>
     </div>
     </div>
@@ -2225,6 +2264,7 @@ function showView(name) {
   if (name === 'badges') { try { renderBadges(); } catch (e) { } }
   if (name === 'recs') { try { renderRecs(); } catch (e) { console.error(e); } }
   if (name === 'wish') { try { renderWish(); } catch (e) { console.error(e); } }
+  if (name === 'route') { try { rtShow(); } catch (e) { console.error(e); } }
   if (name === 'tires') { tireSet = 'aw'; tireSel = null; try { renderTires(); } catch (e) { console.error(e); } }   // beim Öffnen immer Allwetter
   if (name !== 'history' && editMode) setEditMode(false);
   if (name === 'history') renderHistory();
@@ -3459,7 +3499,8 @@ function importPrefsFromBackup(text) {
     const bids = new Set(base.bt.map(x => String(x.id))), ab = (Array.isArray(d.lab.bt) ? d.lab.bt : []).filter(x => x && x.id && !bids.has(String(x.id)));
     const tids = new Set(base.tires.map(x => String(x.id))), at = (Array.isArray(d.lab.tires) ? d.lab.tires : []).filter(x => x && x.id && x.v && !tids.has(String(x.id)));
     const wids = new Set(base.wish.map(x => String(x.id))), aw = (Array.isArray(d.lab.wish) ? d.lab.wish : []).filter(x => x && x.id && x.title && !wids.has(String(x.id)));
-    if (!cur || ac.length || ar.length || as.length || nr || al.length || ab.length || at.length || aw.length) setLab({ curves: base.curves.concat(ac), recs: base.recs.concat(ar), speeds: base.speeds.concat(as), routes: rts, lt: base.lt.concat(al), bt: base.bt.concat(ab), tires: base.tires.concat(at), wish: base.wish.concat(aw) });
+    const fids = new Set(base.fc.map(x => String(x.id))), af = (Array.isArray(d.lab.fc) ? d.lab.fc : []).filter(x => x && x.id && x.km > 0 && !fids.has(String(x.id)));
+    if (!cur || ac.length || ar.length || as.length || nr || al.length || ab.length || at.length || aw.length || af.length) setLab({ fc: base.fc.concat(af), curves: base.curves.concat(ac), recs: base.recs.concat(ar), speeds: base.speeds.concat(as), routes: rts, lt: base.lt.concat(al), bt: base.bt.concat(ab), tires: base.tires.concat(at), wish: base.wish.concat(aw) });
   }
   if (d.settings && typeof d.settings === 'object' && Object.keys(d.settings).length && confirm('Die Sicherung enthält auch Einstellungen (Strompreis, Akku, Fahrzeugdaten, Kauftag …).\n\nOK = Einstellungen aus der Sicherung übernehmen\nAbbrechen = aktuelle Einstellungen behalten')) {
     const keep = load(KEY_SETTINGS, {}) || {}, n = { ...d.settings }; delete n.pin; if (keep.pin) n.pin = keep.pin;
@@ -7578,7 +7619,7 @@ const NAV_GO = {
   tax: () => { repMode = 'fahrten'; showView('report'); setTimeout(() => { const t = $('tax-card'); if (t && !t.classList.contains('hidden')) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 250); },
   akte: () => { repMode = 'stat'; setDpTab('akte', false); showView('report'); }, checkheft: () => { repMode = 'stat'; setDpTab('checkheft', false); showView('report'); }, ausst: () => { repMode = 'stat'; setDpTab('ausst', false); showView('report'); },
   reminders: () => showView('reminders'), kb: () => showView('kb'), providers: () => showView('providers'), tires: () => showView('tires'), wish: () => { wishTab = 'open'; showView('wish'); },
-  backup: () => openSettings('daten'), car: () => openSettings('fahrzeug'), settings: () => showView('settings'), account: () => openSettings('konto'),
+  route: () => showView('route'), backup: () => openSettings('daten'), car: () => openSettings('fahrzeug'), settings: () => showView('settings'), account: () => openSettings('konto'),
   'rep-kosten': () => { repMode = 'kosten'; showView('report'); }, 'rep-fahrten': () => { repMode = 'fahrten'; showView('report'); },
   'hist-kosten': () => { histFilter = 'kosten'; showView('history'); }, 'hist-laden': () => { histFilter = 'laden'; showView('history'); },
   'akte-pdf': () => { NAV_GO.akte(); setTimeout(() => $('btn-akte').click(), 300); }, 'ch-pdf': () => { NAV_GO.checkheft(); setTimeout(() => { const b = $('btn-ch-pdf'); if (b && !b.classList.contains('hidden')) b.scrollIntoView({ block: 'center' }); }, 300); },
@@ -7588,7 +7629,7 @@ const NAV_GO = {
 /* Suche im Schnellmenü: Titel, Ort in der App und Stichwörter; alle Suchwörter müssen vorkommen (Groß/klein und Umlaute egal) */
 const NAV_IDX = [
   ['cap-home', 'Laden Zuhause erfassen', 'Laden', 'wallbox zähler foto heim'], ['cap-bosch', 'Laden Bosch erfassen', 'Laden', 'arbeit werk lichtblick'], ['cap-away', 'Laden unterwegs erfassen', 'Laden', 'schnelllader dc ladesäule'],
-  ['costs', 'Kosten erfassen', 'Kosten', 'ausgabe beleg rechnung versicherung'], ['rep', 'Bericht Laden', 'Berichte › Laden', 'monat kwh'], ['rep-kosten', 'Bericht Kosten', 'Berichte › Kosten', 'tco ausgaben'],
+  ['route', 'Strecken-Prognose', 'Fahrzeug', 'route strecke verbrauch prognose abrp höhenprofil wind wetter reichweite ankunft akku planen'], ['costs', 'Kosten erfassen', 'Kosten', 'ausgabe beleg rechnung versicherung'], ['rep', 'Bericht Laden', 'Berichte › Laden', 'monat kwh'], ['rep-kosten', 'Bericht Kosten', 'Berichte › Kosten', 'tco ausgaben'],
   ['eff', 'Verbräuche & Effizienz', 'Start', 'verbrauch kwh/100 km ladekosten pro km strompreis'], ['trends', 'Trends', 'Start', 'laufleistung stromkosten gesamtkosten monate'], ['recs', 'Rekorde', 'Rekorde', 'verbrauch bestwert strecke tempomat messreihe reichweite langzeitverbrauch seit kauf bordcomputer akku temperatur °c notieren'],
   ['akkutemp', 'Akku-Temperatur notieren', 'Rekorde › Akku °C', 'akku temperatur °c grad notieren batterie'], ['curve', 'DC-Ladekurve', 'Berichte › Akku', 'schnellladen ladeleistung kw ladezeit rechner sommer winter'],
   ['akku', 'Akku', 'Berichte › Akku', 'kapazität pflege temperatur soh netto rebalancing'], ['stat', 'Statistik', 'Berichte › Daten', 'fahrzeugdaten verbrauch laufleistung'], ['badges', 'Abzeichen', 'Abzeichen', 'badges erfolge'],
@@ -7614,7 +7655,7 @@ $('btn-nav').addEventListener('click', openNavDrawer);
 $('nav-drawer-bg').addEventListener('click', closeNavDrawer);
 $('nav-drawer').addEventListener('click', (e) => { const b = e.target.closest('[data-nav]'); if (!b) return; closeNavDrawer(); const f = NAV_GO[b.dataset.nav]; if (f) f(); });
 /* PC (≥ 1280 px): Erinnerungen-Seite fest in die rechte Spalte, Schnellmenü dauerhaft offen; zurück, sobald das Fenster schmaler wird */
-const NAV_VIEW = { home: 'dashboard', 'cap-home': 'capture', 'cap-bosch': 'capture', 'cap-away': 'capture', costs: 'costs', rep: 'report', hist: 'history', badges: 'badges', recs: 'recs', akkutemp: 'recs', kb: 'kb', providers: 'providers', tires: 'tires', wish: 'wish', settings: 'settings' };
+const NAV_VIEW = { home: 'dashboard', 'cap-home': 'capture', 'cap-bosch': 'capture', 'cap-away': 'capture', costs: 'costs', rep: 'report', hist: 'history', badges: 'badges', recs: 'recs', akkutemp: 'recs', kb: 'kb', providers: 'providers', tires: 'tires', wish: 'wish', route: 'route', settings: 'settings' };
 function deskNavMark(name) { $('nav-home').classList.toggle('nav-on', name === 'dashboard'); document.querySelectorAll('#nav-tiles [data-nav]').forEach(b => b.classList.toggle('nav-on', NAV_VIEW[b.dataset.nav] === name && name !== 'capture')); }
 function applyDesk() {
   const vr = $('view-reminders'), aside = $('desk-rem');
@@ -7801,11 +7842,11 @@ const LAB_DEF = {
     pts: { 10: 101, 20: 102, 30: 94, 40: 83, 50: 74, 60: 66, 70: 58, 80: 55, 81: 40, 90: 30, 95: 27, 100: 22 }, tail: [{ a: 80, b: 90, min: 10 }, { a: 90, b: 100, min: 13 }] }],
   recs: [], speeds: [{ id: 's1', season: 'Sommer', klima: 'an', note: 'eben', rows: [{ v: 90, k: 13 }, { v: 100, k: 15 }, { v: 110, k: 17 }, { v: 120, k: 18.5 }, { v: 130, k: 21 }] }] };
 const cvMig = (c) => c && c.id === 'c1' && c.date === '2026-08-21' && c.s1 === 80 && !c.tail ? { ...c, tail: LAB_DEF.curves[0].tail, pts: { ...LAB_DEF.curves[0].pts, ...(c.pts || {}) } } : c;   // 80→100 % nachgetragen (10 + 13 min)
-function getLab() { const o = load(KEY_LAB, null); return { curves: o && Array.isArray(o.curves) ? o.curves.map(cvMig) : LAB_DEF.curves.slice(), recs: o && Array.isArray(o.recs) ? o.recs : [], routes: o && o.routes && typeof o.routes === 'object' && !Array.isArray(o.routes) ? o.routes : {}, lt: o && Array.isArray(o.lt) ? o.lt : [], bt: o && Array.isArray(o.bt) ? o.bt : [], tires: o && Array.isArray(o.tires) ? o.tires : [], wish: o && Array.isArray(o.wish) ? o.wish : [], speeds: o && Array.isArray(o.speeds) ? o.speeds : o && o.speed && Array.isArray(o.speed.rows) ? [{ id: 's1', season: 'Sommer', klima: 'an', note: 'eben', rows: o.speed.rows }] : JSON.parse(JSON.stringify(LAB_DEF.speeds)) }; }
+function getLab() { const o = load(KEY_LAB, null); return { curves: o && Array.isArray(o.curves) ? o.curves.map(cvMig) : LAB_DEF.curves.slice(), recs: o && Array.isArray(o.recs) ? o.recs : [], routes: o && o.routes && typeof o.routes === 'object' && !Array.isArray(o.routes) ? o.routes : {}, lt: o && Array.isArray(o.lt) ? o.lt : [], bt: o && Array.isArray(o.bt) ? o.bt : [], tires: o && Array.isArray(o.tires) ? o.tires : [], wish: o && Array.isArray(o.wish) ? o.wish : [], fc: o && Array.isArray(o.fc) ? o.fc : [], speeds: o && Array.isArray(o.speeds) ? o.speeds : o && o.speed && Array.isArray(o.speed.rows) ? [{ id: 's1', season: 'Sommer', klima: 'an', note: 'eben', rows: o.speed.rows }] : JSON.parse(JSON.stringify(LAB_DEF.speeds)) }; }
 const recKey = (r) => String(r || '').trim().toLowerCase();
 /* Zusammenführen statt Überschreiben: jedes Element (Kurve, Rekord, Messreihe, Strecke) trägt u = letzte Änderung (ms),
    Löschungen stehen in del { id: ms }. So gewinnt beim Abgleich zwischen Geräten/Cloud immer der neueste Stand je Element. */
-const LAB_LISTS = ['curves', 'recs', 'speeds', 'lt', 'bt', 'tires', 'wish'];
+const LAB_LISTS = ['curves', 'recs', 'speeds', 'lt', 'bt', 'tires', 'wish', 'fc'];
 function labStamp(o) {
   const prev = load(KEY_LAB, null) || {}, now = Date.now(), del = { ...(prev.del || {}) };
   LAB_LISTS.forEach(k => { const pm = new Map((prev[k] || []).map(x => [String(x.id), x])), ids = new Set();
@@ -8792,6 +8833,244 @@ $('rec-sheet').addEventListener('click', (e) => {
   }
   $('rec-sheet').classList.add('hidden');
 });
+
+/* =====================================================================
+   Strecken-Prognose: Route (OSRM) + Höhen (Open-Meteo) + Wetter entlang der Strecke (Temperatur, Regen, Wind zur Ankunftszeit je Abschnitt).
+   Physik je Abschnitt (akkuseitig, ohne Ladeverluste): Rollen + Luft (cw 0,257 · 2,56 m², Luftdichte nach Temperatur), Steigung (bergab mit
+   Rekuperation), Anfahren/Bremsen nach Tempo, Nebenverbraucher, Heizung/Klima + kalter Akku, Nässe (mehr Rollwiderstand).
+   Persönlicher Faktor: lernt aus den selbst eingetragenen Realwerten gemerkter Fahrten (lab.fc), neue Fahrten zählen mehr (Halbwertszeit 180 Tage).
+   ===================================================================== */
+const RT_P = { m: 2050, crr: 0.0095, cw: 0.257, A: 2.56, eta: 0.87, rec: 0.65, aux: 0.35, mp: 75 };
+const RT = { a: null, b: null, res: null, busy: false, err: '', tab: 'plan', n: 0, route: {}, wx: {}, sugN: 0, sugT: 0, sug: {} };
+const KEY_RT = 'enyaq.rtLast';
+const rtFmtP = (v) => (v >= 0.05 ? '+' : v <= -0.05 ? '−' : '±') + fmt(Math.abs(v), 1) + ' %';
+const rtDev = (p, r) => (p - r) / r * 100;
+function rtFactor(skipId, override) {
+  const list = getLab().fc.map(x => override && x.id === override.id ? override : x).filter(x => x.id !== skipId && x.real > 0 && x.raw100 > 0);
+  let s = 2, w0 = 2; list.forEach(x => { const age = Math.max(0, (Date.now() - Date.parse(x.dep)) / 864e5), w = Math.pow(0.5, age / 180); s += w * Math.min(1.4, Math.max(0.7, x.real / x.raw100)); w0 += w; });
+  return Math.round(s / w0 * 1000) / 1000;
+}
+async function rtRoute(a, b) {
+  const key = [a.lat, a.lon, b.lat, b.lon].map(v => v.toFixed(4)).join(','); if (RT.route[key]) return RT.route[key];
+  const rr = await fetch('https://router.project-osrm.org/route/v1/driving/' + a.lon.toFixed(5) + ',' + a.lat.toFixed(5) + ';' + b.lon.toFixed(5) + ',' + b.lat.toFixed(5) + '?overview=false&steps=true&geometries=geojson');
+  if (!rr.ok) throw new Error('Route nicht gefunden (' + rr.status + ')'); const rj = await rr.json(), rt = rj.routes && rj.routes[0]; if (!rt) throw new Error('Keine Route gefunden');
+  const raw = [];                                                                 // Teilstücke: { a, b, len, v, mw }
+  (rt.legs || []).forEach(l => (l.steps || []).forEach(s => { const c = (s.geometry && s.geometry.coordinates) || [], v = s.duration > 0 ? s.distance / s.duration : 13, mw = /(^|[;\s])A\s?\d/.test(s.ref || '') || v > 24;
+    for (let i = 1; i < c.length; i++) { const p = { lat: c[i - 1][1], lon: c[i - 1][0] }, q = { lat: c[i][1], lon: c[i][0] }, len = geoDist(p, q); if (len > 0) raw.push({ p, q, len, v: Math.max(3, v), mw }); } }));
+  const tot = raw.reduce((s, x) => s + x.len, 0); if (!(tot > 100)) throw new Error('Strecke zu kurz');
+  const N = Math.max(12, Math.min(240, Math.round(tot / 1000))), L = tot / N, segs = []; let j = 0, off = 0;
+  const at = (k, o) => { const r = raw[k], f = r.len ? o / r.len : 0; return { lat: r.p.lat + (r.q.lat - r.p.lat) * f, lon: r.p.lon + (r.q.lon - r.p.lon) * f }; };
+  let pos = at(0, 0); const pts = [pos];
+  for (let i = 0; i < N; i++) { let need = L, t = 0, mwl = 0;
+    while (need > 1e-6 && j < raw.length) { const r = raw[j], take = Math.min(need, r.len - off); t += take / r.v; if (r.mw) mwl += take; need -= take; off += take; if (off >= r.len - 1e-6) { j++; off = 0; } }
+    const end = j < raw.length ? at(j, off) : raw[raw.length - 1].q, y = Math.sin((end.lon - pos.lon) * Math.PI / 180) * Math.cos(end.lat * Math.PI / 180), x = Math.cos(pos.lat * Math.PI / 180) * Math.sin(end.lat * Math.PI / 180) - Math.sin(pos.lat * Math.PI / 180) * Math.cos(end.lat * Math.PI / 180) * Math.cos((end.lon - pos.lon) * Math.PI / 180);
+    segs.push({ len: L, v: L / Math.max(t, 0.1), mw: mwl / L > 0.5, brg: (Math.atan2(y, x) * 180 / Math.PI + 360) % 360, lat: (pos.lat + end.lat) / 2, lon: (pos.lon + end.lon) / 2, d: (i + 0.5) * L }); pos = end; pts.push(end); }
+  const el = [];
+  for (let k = 0; k < pts.length; k += 100) { const ch = pts.slice(k, k + 100), er = await fetch('https://api.open-meteo.com/v1/elevation?latitude=' + ch.map(s => s.lat.toFixed(5)).join(',') + '&longitude=' + ch.map(s => s.lon.toFixed(5)).join(','));
+    if (!er.ok) throw new Error('Höhen nicht verfügbar (' + er.status + ')'); el.push(...((await er.json()).elevation || []).map(Number)); }
+  const h = el.map((v, i) => (Number(el[i - 1] ?? v) + v * 2 + Number(el[i + 1] ?? v)) / 4);
+  const res = { km: tot / 1000, segs, h: h.length === pts.length ? h : pts.map(() => 0), noH: h.length !== pts.length };
+  RT.route[key] = res; return res;
+}
+async function rtWeather(route, dep) {
+  const n = Math.max(2, Math.min(8, Math.round(route.km / 30) + 1)), idx = [...new Set(Array.from({ length: n }, (_, i) => Math.round(i * (route.segs.length - 1) / (n - 1))))];
+  const key = idx.map(i => route.segs[i].lat.toFixed(2) + ',' + route.segs[i].lon.toFixed(2)).join(';'), c = RT.wx[key];
+  let data = c && Date.now() - c.t < 30 * 60e3 ? c.d : null;
+  if (!data) { const r = await fetch('https://api.open-meteo.com/v1/forecast?latitude=' + idx.map(i => route.segs[i].lat.toFixed(3)).join(',') + '&longitude=' + idx.map(i => route.segs[i].lon.toFixed(3)).join(',') + '&hourly=temperature_2m,precipitation,wind_speed_10m,wind_direction_10m&wind_speed_unit=ms&timezone=auto&past_days=1&forecast_days=16');
+    if (!r.ok) throw new Error('Wetter nicht verfügbar'); const j = await r.json(); data = Array.isArray(j) ? j : [j]; RT.wx[key] = { t: Date.now(), d: data }; }
+  return { pts: idx.map((si, k) => ({ d: route.segs[si].d, h: data[k] && data[k].hourly })) };
+}
+function rtWxAt(wx, d, ms) {
+  if (!wx) return null; let best = wx.pts[0]; wx.pts.forEach(p => { if (Math.abs(p.d - d) < Math.abs(best.d - d)) best = p; }); const h = best.h; if (!h || !h.time) return null;
+  const t = new Date(ms), k = t.getFullYear() + '-' + pad2(t.getMonth() + 1) + '-' + pad2(t.getDate()) + 'T' + pad2(t.getHours()) + ':00', i = h.time.indexOf(k); if (i < 0) return null;
+  return { T: Number(h.temperature_2m[i]), rain: Number(h.precipitation[i]) || 0, ws: Number(h.wind_speed_10m[i]) || 0, wd: Number(h.wind_direction_10m[i]) || 0 };
+}
+function rtCalc(route, wx, o) {
+  const m = RT_P.m + RT_P.mp * (o.pers - 1), g = 9.81, cap = batteryKwh(), f = 1 + o.tempo / 100, J = 3.6e6;
+  const bat = (x) => x > 0 ? x / RT_P.eta : x * RT_P.rec;
+  let t = 0, E = { base: 0, slope: 0, wind: 0, rain: 0, heat: 0 }, cum = [0], Ts = [], rainKm = 0, hwSum = 0, noWx = !wx;
+  route.segs.forEach((s, i) => {
+    const v = (s.mw ? o.vab / 3.6 : s.v) * f, dt = s.len / v, w = rtWxAt(wx, s.d, o.dep + t * 1000) || { T: 10, rain: 0, ws: 0, wd: 0 }; if (!rtWxAt(wx, s.d, o.dep + t * 1000)) noWx = true;
+    const rho = 1.293 * 273.15 / (273.15 + w.T), hw = w.ws * 0.7 * Math.cos((w.wd - s.brg) * Math.PI / 180), dh = route.h[i + 1] - route.h[i], Fs = m * g * dh;
+    const aero = (u) => 0.5 * rho * RT_P.cw * RT_P.A * u * Math.abs(u), wet = w.rain >= 0.3 ? 1.2 : 1;
+    const F0 = RT_P.crr * m * g + aero(v), Fw = RT_P.crr * m * g + aero(v + hw), Fr = RT_P.crr * wet * m * g + aero(v + hw);
+    const stops = v < 11 ? 2 : v < 17 ? 1 : v < 22 ? 0.3 : 0.03, acc = stops * s.len / 1000 * 0.5 * m * v * v * (1 / RT_P.eta - RT_P.rec);
+    const e0 = bat(F0 * s.len), e1 = bat(F0 * s.len + Fs), e2 = bat(Fw * s.len + Fs), e3 = bat(Fr * s.len + Fs);
+    const pH = w.T < 18 ? 0.09 * (18 - w.T) : w.T > 24 ? 0.08 * (w.T - 24) : 0, cold = Math.max(0, e3) * 0.004 * Math.max(0, 15 - w.T);
+    const eb = (e0 + acc) / J + RT_P.aux * dt / 3600, es = (e1 - e0) / J, ew = (e2 - e1) / J, er = (e3 - e2) / J, eh = pH * dt / 3600 + cold / J + (i === 0 ? 0.5 * Math.max(0, 15 - w.T) / 15 : 0);
+    E.base += eb; E.slope += es; E.wind += ew; E.rain += er; E.heat += eh; cum.push(cum[cum.length - 1] + eb + es + ew + er + eh);
+    t += dt; Ts.push(w.T); if (w.rain >= 0.3) rainKm += s.len / 1000; hwSum += hw * s.len;
+  });
+  const k = rtFactor(), raw = cum[cum.length - 1], kwh = raw * k, km = route.km;
+  let up = 0, dn = 0; for (let i = 1; i < route.h.length; i++) { const d = route.h[i] - route.h[i - 1]; if (d > 0) up += d; else dn -= d; }
+  return { km, dur: t, raw, k, kwh, k100: kwh / km * 100, raw100: raw / km * 100, E: Object.fromEntries(Object.entries(E).map(([a, v]) => [a, v * k])), soc: cum.map(c => o.soc - c * k / cap * 100),
+    socA: o.soc - kwh / cap * 100, up: Math.round(up), dn: Math.round(dn), tMin: Math.min(...Ts), tMax: Math.max(...Ts), tAvg: Ts.reduce((a, x) => a + x, 0) / Ts.length, rainKm, hw: hwSum / (km * 1000), noWx, noH: route.noH, h: route.h };
+}
+function rtSvg(r) {
+  const W = 312, H = 104, B = 4, n = r.h.length, X = (i) => i / (n - 1) * W;
+  let y0 = Math.min(...r.h), y1 = Math.max(...r.h); const pad = Math.max(15, (y1 - y0) * 0.2); y0 -= pad; y1 += pad;
+  const Yh = (v) => B + (1 - (v - y0) / (y1 - y0 || 1)) * (H - 2 * B), Ys = (v) => B + (1 - (Math.max(-5, Math.min(100, v)) - 0) / 100) * (H - 2 * B);
+  const ln = r.h.map((v, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Yh(v).toFixed(1)).join(' '), sl = r.soc.map((v, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Ys(v).toFixed(1)).join(' ');
+  const res = Ys(WXO_RES), last = r.soc[r.soc.length - 1];
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="mt-2 w-full" style="height:${H}px" aria-hidden="true"><defs><linearGradient id="rtg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#64748b" stop-opacity=".5"/><stop offset="1" stop-color="#64748b" stop-opacity=".05"/></linearGradient></defs>`
+    + `<path d="${ln} L${W} ${H} L0 ${H} Z" fill="url(#rtg)"/><path d="${ln}" fill="none" stroke="#94a3b8" stroke-width="1.6" vector-effect="non-scaling-stroke"/>`
+    + `<line x1="0" x2="${W}" y1="${res.toFixed(1)}" y2="${res.toFixed(1)}" stroke="#f87171" stroke-dasharray="3 4" stroke-width="1" vector-effect="non-scaling-stroke"/>`
+    + `<path d="${sl}" fill="none" stroke="#34d399" stroke-width="2.4" stroke-linecap="round" vector-effect="non-scaling-stroke"/><circle cx="${X(n - 1) - 3}" cy="${Ys(last).toFixed(1)}" r="3.5" fill="${last < WXO_RES ? '#f87171' : '#34d399'}"/></svg>`
+    + `<div class="flex justify-between text-[10px] text-slate-500 dark:text-slate-400"><span>${Math.round(r.h[0])} m</span><span class="text-red-400">${WXO_RES} % Reserve</span><span>${Math.round(r.h[n - 1])} m</span></div>`;
+}
+function rtRenderRes() {
+  const el = $('rt-res'), ab = $('rt-abrp'); if (!el) return; const r = RT.res;
+  ab.classList.toggle('hidden', !r || RT.busy);
+  if (RT.busy) { el.innerHTML = '<div class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 text-sm text-slate-500 dark:text-slate-400 text-left">Route, Höhen und Wetter werden geladen …</div>'; return; }
+  if (RT.err) { el.innerHTML = `<div class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 text-sm text-red-600 dark:text-red-400 text-left">${esc(RT.err)}<button type="button" data-rt="retry" class="mt-1 block text-xs font-semibold text-sky-600 dark:text-sky-300">Erneut versuchen ›</button></div>`; return; }
+  if (!r) { el.innerHTML = '<p class="px-1 text-xs text-slate-500 dark:text-slate-400 text-left">Start und Ziel eingeben – die App rechnet mit Route, Höhenprofil, Wetter und Wind zur Abfahrtszeit, kalibriert mit deinen eingetragenen Fahrten.</p>'; return; }
+  const eta = new Date(RT.o.dep + r.dur * 1000), dur = Math.round(r.dur / 60), lo = r.socA < WXO_RES;
+  const chip = (i, sg, v, t) => `<span class="inline-flex items-center gap-1 whitespace-nowrap rounded-[10px] bg-slate-100 dark:bg-slate-800 px-2 py-1 text-[12px]" title="${t}"><span aria-hidden="true">${i}</span>${(sg ? (v >= 0 ? '+' : '−') : '') + fmt(Math.abs(v), 1)}</span>`;
+  el.innerHTML = `<div class="rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
+    <div class="flex items-end justify-between gap-3"><div class="min-w-0"><p class="text-[11px] uppercase tracking-[0.06em] text-slate-500 dark:text-slate-400">Verbrauch</p><p class="font-barlow text-[40px] font-bold leading-none text-emerald-500 dark:text-emerald-400">${fmt(r.kwh, 1)}<span class="text-lg"> kWh</span></p><p class="mt-0.5 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">${fmt(r.k100, 1)} kWh/100 km · ${fmt(r.km, 0)} km · ${Math.floor(dur / 60)} h ${pad2(dur % 60)}</p></div>
+      <div class="shrink-0 text-right"><p class="text-[11px] uppercase tracking-[0.06em] text-slate-500 dark:text-slate-400">Ankunft</p><p class="font-barlow text-[40px] font-bold leading-none ${lo ? 'text-red-500' : ''}">${Math.round(r.socA)}<span class="text-lg"> %</span></p><p class="mt-0.5 text-xs text-slate-500 dark:text-slate-400">~ ${hhmm(eta.getTime())} Uhr</p></div></div>
+    ${lo ? `<p class="mt-2 rounded-xl bg-red-500/10 px-3 py-2 text-xs text-red-600 dark:text-red-300 text-left">${r.socA < 0 ? 'Reicht nicht – unterwegs laden.' : 'Ankunft unter ' + WXO_RES + ' % – Ladestopp einplanen oder voller starten.'}</p>` : ''}
+    ${rtSvg(r)}
+    <div class="mt-1 flex justify-between gap-2 text-[11px] text-slate-500 dark:text-slate-400"><span><span class="text-emerald-500">━</span> Akku</span><span>Höhe · ↑ ${r.up} m ↓ ${r.dn} m</span></div>
+    <div class="mt-2.5 flex flex-wrap gap-1.5">${chip('🛣️', false, r.E.base, 'Rollen, Luft, Anfahren, Nebenverbraucher – flach, windstill, trocken')}${chip('⛰️', true, r.E.slope, 'Steigungen minus Rekuperation bergab')}${chip('💨', true, r.E.wind, (r.hw > 0.2 ? 'Gegenwind' : r.hw < -0.2 ? 'Rückenwind' : 'Wind') + ' im Schnitt ' + fmt(Math.abs(r.hw) * 3.6, 0) + ' km/h')}${chip('🔥', true, r.E.heat, 'Heizung/Klima und kalter Akku, ' + fmt(r.tMin, 0) + ' bis ' + fmt(r.tMax, 0) + ' °C')}${Math.abs(r.E.rain) >= 0.05 ? chip('🌧️', true, r.E.rain, 'Nässe auf ' + fmt(r.rainKm, 0) + ' km') : ''}</div>
+    <p class="mt-2 text-[11px] text-slate-500 dark:text-slate-400 text-left">${fmt(r.tAvg, 0)} °C · ${r.hw > 0.2 ? 'Gegenwind' : r.hw < -0.2 ? 'Rückenwind' : 'kaum Wind'}${r.rainKm >= 1 ? ' · Regen' : ''} · persönlicher Faktor ${fmt(r.k, 2)}${r.noWx ? ' · ⚠️ teils ohne Wettervorhersage (10 °C angenommen)' : ''}${r.noH ? ' · ⚠️ ohne Höhenprofil' : ''}</p></div>`;
+}
+function rtParams() {
+  const dv = $('rt-dep').value, dep = dv ? new Date(dv).getTime() : Date.now(), soc = Math.max(1, Math.min(100, Number($('rt-soc').value) || 80));
+  return { dep: isNaN(dep) ? Date.now() : dep, soc, pers: Number($('rt-pers').value) || 1, tempo: Number($('rt-tempo').value) || 0, vab: Number($('rt-vab').value) || 120 };
+}
+async function rtRun() {
+  const n = ++RT.n; $('rt-save-msg').classList.add('hidden');
+  if (!RT.a || !RT.b) { RT.res = null; RT.err = ''; RT.busy = false; rtRenderRes(); return; }
+  RT.busy = true; RT.err = ''; rtRenderRes(); const o = rtParams();
+  try { const route = await rtRoute(RT.a, RT.b); let wx = null; try { wx = await rtWeather(route, o.dep); } catch (e) { }
+    if (n !== RT.n) return; RT.o = o; RT.res = rtCalc(route, wx, o); }
+  catch (e) { if (n !== RT.n) return; RT.res = null; RT.err = 'Prognose nicht möglich: ' + ((e && e.message) || 'kein Internet?'); }
+  RT.busy = false; rtRenderRes();
+  try { save(KEY_RT, { a: RT.a, b: RT.b, pers: o.pers, tempo: o.tempo, vab: o.vab }); } catch (e) { }
+}
+function rtSugHide(w) { const el = $('rt-sug-' + w); el.innerHTML = ''; el.classList.add('hidden'); }
+function rtSugShow(w, list, more) {
+  const el = $('rt-sug-' + w); RT.sug[w] = list;
+  el.innerHTML = list.map((x, i) => `<button type="button" data-rtsug="${w}:${i}" class="block w-full px-3 py-2 text-left active:bg-slate-100 dark:active:bg-slate-800"><span class="block truncate text-sm">${esc(x.label)}</span>${x.sub ? `<span class="block truncate text-[11px] text-slate-500 dark:text-slate-400">${esc(x.sub)}</span>` : ''}</button>`).join('')
+    + (more ? `<p class="px-3 py-2 text-xs text-slate-500 dark:text-slate-400 text-left">${more}</p>` : '');
+  el.classList.toggle('hidden', !list.length && !more);
+}
+function rtSuggest(w) {
+  clearTimeout(RT.sugT); const t = $('rt-' + w).value.trim(); RT[w] = null;
+  const tl = t.toLowerCase(), own = getTPlaces().filter(p => p.name && Number.isFinite(p.lat) && (!tl || p.name.toLowerCase().includes(tl))).slice(0, 4).map(p => ({ lat: p.lat, lon: p.lon, label: p.name, sub: 'Gespeicherter Ort' }));
+  if (t.length < 2) { rtSugShow(w, own, ''); return; }
+  rtSugShow(w, own, 'Suche …'); const n = ++RT.sugN;
+  RT.sugT = setTimeout(async () => { try { const res = await hpSearch(t); if (n === RT.sugN) rtSugShow(w, own.concat(res), res.length || own.length ? '' : 'Nichts gefunden'); } catch (e) { if (n === RT.sugN) rtSugShow(w, own, 'Ortssuche nicht erreichbar'); } }, 350);
+}
+function rtPick(w, p) { RT[w] = p; $('rt-' + w).value = p.label; rtSugHide(w); RT.sugN++; rtRun(); }
+['a', 'b'].forEach(w => {
+  const inp = $('rt-' + w);
+  inp.addEventListener('input', () => rtSuggest(w)); inp.addEventListener('focus', () => { inp.select(); rtSuggest(w); });
+  inp.addEventListener('blur', () => setTimeout(async () => { rtSugHide(w); const t = inp.value.trim(); if (RT[w] || !t) return; try { rtPick(w, await hpResolve(t)); } catch (e) { RT.err = (e && e.message) || 'Ort nicht gefunden'; RT.res = null; rtRenderRes(); } }, 200));
+  $('rt-sug-' + w).addEventListener('mousedown', (e) => e.preventDefault());
+  $('rt-sug-' + w).addEventListener('click', (e) => { const b = e.target.closest('[data-rtsug]'); if (!b) return; const [ww, i] = b.dataset.rtsug.split(':'); const p = RT.sug[ww] && RT.sug[ww][Number(i)]; if (p) rtPick(ww, p); });
+});
+$('rt-swap').addEventListener('click', () => { [RT.a, RT.b] = [RT.b, RT.a]; $('rt-a').value = RT.a ? RT.a.label : ''; $('rt-b').value = RT.b ? RT.b.label : ''; rtRun(); });
+['rt-dep', 'rt-pers', 'rt-tempo', 'rt-vab'].forEach(id => $(id).addEventListener('change', rtRun));
+$('rt-soc').addEventListener('change', rtRun);
+$('rt-res').addEventListener('click', (e) => { if (e.target.closest('[data-rt="retry"]')) rtRun(); });
+$('rt-save').addEventListener('click', () => {
+  const r = RT.res, o = RT.o; if (!r) return; const cap = batteryKwh(), k = deDec($('rt-abrp-k').value), s = deDec($('rt-abrp-s').value), msg = $('rt-save-msg');
+  if (k !== undefined && !(k > 3 && k < 60)) { msg.textContent = 'ABRP-Verbrauch bitte in kWh/100 km (z. B. 19,1).'; msg.className = 'mt-1.5 text-xs text-left text-red-600 dark:text-red-400'; return; }
+  if (s !== undefined && !(s >= -20 && s < o.soc)) { msg.textContent = 'ABRP-Ankunft bitte in % und kleiner als der Start-Akku.'; msg.className = 'mt-1.5 text-xs text-left text-red-600 dark:text-red-400'; return; }
+  const en = { id: labId(), dep: new Date(o.dep).toISOString(), a: { label: RT.a.label, lat: RT.a.lat, lon: RT.a.lon }, b: { label: RT.b.label, lat: RT.b.lat, lon: RT.b.lon }, km: Math.round(r.km * 10) / 10,
+    k100: Math.round(r.k100 * 100) / 100, raw100: Math.round(r.raw100 * 100) / 100, kwh: Math.round(r.kwh * 10) / 10, soc0: o.soc, socA: Math.round(r.socA), k: r.k, pers: o.pers, tempo: o.tempo, vab: o.vab, tAvg: Math.round(r.tAvg * 10) / 10 };
+  if (k !== undefined) en.abrp = k; else if (s !== undefined) { en.abrpSoc = s; en.abrp = Math.round((o.soc - s) / 100 * cap / r.km * 100 * 100) / 100; }
+  const lab = getLab(); lab.fc = (lab.fc || []).concat(en); setLab(lab); $('rt-abrp-k').value = ''; $('rt-abrp-s').value = '';
+  msg.textContent = '✓ Gemerkt – nach der Fahrt unter „Abgleich“ den echten Verbrauch eintragen.'; msg.className = 'mt-1.5 text-xs text-left text-emerald-600 dark:text-emerald-400'; rtTabs();
+});
+function rtTabs() {
+  const n = getLab().fc.length;
+  $('rt-tabs').innerHTML = [['plan', 'Prognose'], ['cmp', 'Abgleich' + (n ? ' (' + n + ')' : '')]].map(([k, l]) => `<button type="button" data-rttab="${k}" class="flex-1 py-1.5 rounded-lg text-[13px] font-medium ${RT.tab === k ? 'bg-white dark:bg-slate-700 shadow-sm' : 'text-slate-600 dark:text-slate-400'}">${l}</button>`).join('');
+  $('rt-plan').classList.toggle('hidden', RT.tab !== 'plan'); $('rt-cmp').classList.toggle('hidden', RT.tab !== 'cmp'); if (RT.tab === 'cmp') rtRenderCmp();
+}
+$('rt-tabs').addEventListener('click', (e) => { const b = e.target.closest('[data-rttab]'); if (!b) return; RT.tab = b.dataset.rttab; rtTabs(); });
+function rtStats(list) {
+  const done = list.filter(x => x.real > 0), both = done.filter(x => x.abrp > 0);
+  const avg = (l, f) => l.length ? l.reduce((s, x) => s + Math.abs(rtDev(f(x), x.real)), 0) / l.length : null;
+  let wa = 0, wb = 0; both.forEach(x => { const a = Math.abs(x.k100 - x.real), b = Math.abs(x.abrp - x.real); if (a < b) wa++; else if (b < a) wb++; });
+  return { done, both, app: avg(done, x => x.k100), appB: avg(both, x => x.k100), abrp: avg(both, x => x.abrp), wa, wb };
+}
+function rtRenderCmp() {
+  const el = $('rt-cmp'), list = getLab().fc.slice().sort((a, b) => Date.parse(b.dep) - Date.parse(a.dep)), st = rtStats(list), k = rtFactor();
+  const card = 'rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm';
+  if (!list.length) { el.innerHTML = `<div class="${card} p-4 text-sm text-slate-600 dark:text-slate-300 text-left">Noch keine gemerkten Fahrten. Unter „Prognose“ eine Strecke berechnen, optional den ABRP-Wert eintragen und „Fahrt merken“ tippen. Nach der Fahrt hier den echten Verbrauch vom Bordcomputer eintragen.</div>`; return; }
+  const tot = st.wa + st.wb, pa = tot ? st.wa / tot * 100 : 50;
+  const head = `<div class="${card} p-4"><div class="flex items-baseline justify-between gap-2"><p class="text-[11px] uppercase tracking-[0.06em] text-slate-500 dark:text-slate-400">Wer liegt näher dran?</p><span class="text-[11px] text-slate-500 dark:text-slate-400 whitespace-nowrap">${st.done.length} ${st.done.length === 1 ? 'Fahrt' : 'Fahrten'}${st.both.length ? ' · ' + st.both.length + ' mit ABRP' : ''}</span></div>
+    ${st.done.length ? `<div class="mt-2 flex items-center gap-3"><div class="flex-1"><p class="font-barlow text-[30px] font-bold leading-none text-emerald-500 dark:text-emerald-400">${fmt(st.app, 1)} %</p><p class="text-[11px] text-slate-500 dark:text-slate-400">Ø Abweichung App</p></div><span class="font-barlow text-lg font-bold text-slate-400 dark:text-slate-600">vs</span><div class="flex-1 text-right"><p class="font-barlow text-[30px] font-bold leading-none text-violet-500 dark:text-violet-400">${st.abrp == null ? '–' : fmt(st.abrp, 1) + ' %'}</p><p class="text-[11px] text-slate-500 dark:text-slate-400">Ø Abweichung ABRP</p></div></div>
+    ${st.both.length ? `<div class="mt-2 flex h-2 overflow-hidden rounded-full"><span style="width:${pa}%" class="bg-emerald-500"></span><span style="width:${100 - pa}%" class="bg-violet-500"></span></div><div class="mt-1 flex justify-between text-[11px] text-slate-500 dark:text-slate-400"><span>App näher: ${st.wa}×</span><span>ABRP näher: ${st.wb}×</span></div>${st.appB != null && st.both.length !== st.done.length ? `<p class="mt-1 text-[11px] text-slate-500 dark:text-slate-400 text-left">Nur Fahrten mit ABRP-Wert: App Ø ${fmt(st.appB, 1)} %</p>` : ''}` : ''}`
+    : '<p class="mt-2 text-sm text-slate-600 dark:text-slate-300 text-left">Noch kein Realwert eingetragen.</p>'}
+    <p class="mt-2.5 border-t border-slate-100 dark:border-slate-800 pt-2 text-[11px] text-slate-500 dark:text-slate-400 text-left">📈 Persönlicher Faktor der App: <b class="text-slate-700 dark:text-slate-200">${fmt(k, 2)}</b> · lernt aus jedem eingetragenen Realwert</p></div>`;
+  const pill = 'flex-1 whitespace-nowrap rounded-lg bg-slate-100 dark:bg-slate-800 px-1.5 py-1';
+  const row = (x) => { const d = new Date(x.dep), dl = d.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' }), tt = esc(x.a.label + ' → ' + x.b.label);
+    if (!(x.real > 0)) return `<button type="button" data-rtrow="${esc(x.id)}" class="flex w-full items-center justify-between gap-2 border-t border-slate-100 dark:border-slate-800 py-2.5 text-left first:border-t-0"><span class="min-w-0"><span class="block truncate text-[13px]">${tt}</span><span class="block text-[11px] text-slate-500 dark:text-slate-400">${dl} · App ${fmt(x.k100, 1)}${x.abrp ? ' · ABRP ' + fmt(x.abrp, 1) : ''}</span></span><span class="shrink-0 rounded-lg bg-amber-100 dark:bg-amber-950 px-2 py-1 text-[12px] font-semibold text-amber-700 dark:text-amber-300">✍️ Real eintragen</span></button>`;
+    const a = Math.abs(x.k100 - x.real), b = x.abrp ? Math.abs(x.abrp - x.real) : null, dot = b == null ? 'bg-slate-400 dark:bg-slate-600' : a < b ? 'bg-emerald-500' : b < a ? 'bg-violet-500' : 'bg-slate-400';
+    return `<button type="button" data-rtrow="${esc(x.id)}" class="block w-full border-t border-slate-100 dark:border-slate-800 py-2.5 text-left first:border-t-0"><span class="flex items-center justify-between gap-2"><span class="min-w-0"><span class="block truncate text-[13px]">${tt}</span><span class="block text-[11px] text-slate-500 dark:text-slate-400">${dl} · ${fmt(x.km, 0)} km</span></span><span class="h-2.5 w-2.5 shrink-0 rounded-full ${dot}"></span></span>
+      <span class="mt-1.5 flex gap-1.5 text-[11.5px] tabular-nums"><span class="${pill}"><span class="text-emerald-600 dark:text-emerald-400">App</span> ${fmt(x.k100, 1)} <span class="text-slate-500 dark:text-slate-400">${rtFmtP(rtDev(x.k100, x.real))}</span></span><span class="${pill}"><span class="text-violet-600 dark:text-violet-400">ABRP</span> ${x.abrp ? fmt(x.abrp, 1) + ' <span class="text-slate-500 dark:text-slate-400">' + rtFmtP(rtDev(x.abrp, x.real)) + '</span>' : '–'}</span><span class="${pill} !flex-[0.8]"><span class="text-amber-600 dark:text-amber-400">Real</span> <b>${fmt(x.real, 1)}</b></span></span></button>`; };
+  el.innerHTML = head + `<div class="${card} px-4 py-1.5">${list.map(row).join('')}</div>`;
+}
+$('rt-cmp').addEventListener('click', (e) => { const b = e.target.closest('[data-rtrow]'); if (b) rtSheet(b.dataset.rtrow); });
+function rtSheet(id) {
+  const x = getLab().fc.find(e => e.id === id); if (!x) return; const box = $('au-sheet-box'), d = new Date(x.dep);
+  const inp = (fid, val, unit, ph, cls = '') => `<label class="flex min-w-0 flex-1 items-center rounded-xl bg-slate-100 dark:bg-slate-800 px-3 py-2.5 ${cls}"><input id="${fid}" type="text" inputmode="decimal" autocomplete="off" value="${val == null ? '' : String(val).replace('.', ',')}" placeholder="${ph}" class="w-full min-w-0 bg-transparent text-base focus:outline-none"><span class="shrink-0 text-[11px] text-slate-500 dark:text-slate-400">${unit}</span></label>`;
+  const tile = (l, c, v, extra = '') => `<div class="flex-1 rounded-2xl bg-slate-100 dark:bg-slate-800 px-3 py-2 ${extra}"><p class="text-[10.5px] font-semibold uppercase tracking-[0.06em] ${c}">${l}</p><p class="font-barlow text-[26px] font-bold leading-none" data-rtv="${l}">${v}</p></div>`;
+  box.innerHTML = `<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div>
+    <div class="flex items-start justify-between gap-2"><div class="min-w-0"><p class="text-lg font-bold">Wie war die Fahrt?</p><p class="truncate text-xs text-slate-500 dark:text-slate-400">${esc(x.a.label)} → ${esc(x.b.label)} · ${d.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' })} · ${fmt(x.km, 0)} km</p></div><button type="button" data-rts="close" aria-label="Schließen" class="px-1 text-xl text-slate-400">✕</button></div>
+    <div class="flex gap-2">${tile('App', 'text-emerald-600 dark:text-emerald-400', fmt(x.k100, 1))}${tile('ABRP', 'text-violet-600 dark:text-violet-400', x.abrp ? fmt(x.abrp, 1) : '–')}${tile('Real', 'text-amber-600 dark:text-amber-400', x.real ? fmt(x.real, 1) : '–', 'ring-2 ring-amber-400')}</div>
+    <div><p class="text-sm font-semibold">Echter Verbrauch</p><p class="text-xs text-slate-500 dark:text-slate-400 text-left">Bordcomputer → „Seit Start“, nach Ankunft ablesen – oder den Akkustand bei Ankunft</p>
+      <div class="mt-1.5 flex gap-2">${inp('rts-real', x.real, 'kWh/100 km', 'z. B. 18,9', 'ring-2 ring-emerald-500')}${inp('rts-soc', x.realSoc, '% Ankunft', '–')}</div></div>
+    <div><p class="text-sm font-semibold">ABRP-Prognose</p><div class="mt-1.5 flex gap-2">${inp('rts-abrp', x.abrp, 'kWh/100 km', 'optional')}</div></div>
+    <div id="rts-prev" class="rounded-2xl bg-slate-100 dark:bg-slate-800 px-3 py-2.5 text-[13px] text-left"></div>
+    <p id="rts-msg" class="hidden text-xs text-left text-red-600 dark:text-red-400"></p>
+    <button type="button" data-rts="save" class="h-12 w-full rounded-2xl bg-emerald-600 text-sm font-semibold text-white active:scale-95 transition">Speichern</button>
+    <button type="button" data-rts="del" class="w-full py-1 text-xs font-semibold text-red-600 dark:text-red-400">Gemerkte Fahrt löschen</button>`;
+  box.dataset.rtid = id; $('au-sheet').classList.remove('hidden'); rtSheetPrev();
+  ['rts-real', 'rts-soc', 'rts-abrp'].forEach(f => $(f).addEventListener('input', rtSheetPrev));
+}
+function rtSheetVals() {
+  const x = getLab().fc.find(e => e.id === $('au-sheet-box').dataset.rtid); if (!x) return null; const cap = batteryKwh();
+  const real = deDec($('rts-real').value), soc = deDec($('rts-soc').value), abrp = deDec($('rts-abrp').value);
+  const r = real !== undefined ? real : soc !== undefined && soc < x.soc0 ? Math.round((x.soc0 - soc) / 100 * cap / x.km * 100 * 100) / 100 : undefined;
+  return { x, real: r, soc, abrp, rawReal: real };
+}
+function rtSheetPrev() {
+  const v = rtSheetVals(); if (!v) return; const { x, real, abrp } = v, el = $('rts-prev'), box = $('au-sheet-box');
+  box.querySelector('[data-rtv="Real"]').textContent = real > 0 ? fmt(real, 1) : '–'; box.querySelector('[data-rtv="ABRP"]').textContent = abrp > 0 ? fmt(abrp, 1) : '–';
+  if (!(real > 0)) { el.innerHTML = '<span class="text-slate-500 dark:text-slate-400">Echten Verbrauch oder Akku bei Ankunft eintragen – dann siehst du, wer näher lag.</span>'; return; }
+  const da = rtDev(x.k100, real), db = abrp > 0 ? rtDev(abrp, real) : null, k0 = rtFactor(x.id), k1 = rtFactor(null, { ...x, real });
+  const win = db == null ? '' : Math.abs(da) < Math.abs(db) ? '🏁 Die App lag diesmal näher' : Math.abs(db) < Math.abs(da) ? '🏁 ABRP lag diesmal näher' : '🏁 Gleichstand';
+  el.innerHTML = `<div class="flex justify-between gap-2"><span><span class="text-emerald-600 dark:text-emerald-400">App</span> <b>${rtFmtP(da)}</b></span>${db == null ? '' : `<span><span class="text-violet-600 dark:text-violet-400">ABRP</span> <b>${rtFmtP(db)}</b></span>`}</div>
+    <p class="mt-1 text-xs text-left text-slate-500 dark:text-slate-400">${win ? win + ' · ' : ''}${Math.abs(k1 - k0) >= 0.005 ? 'persönlicher Faktor ' + fmt(k0, 2) + ' → ' + fmt(k1, 2) : 'persönlicher Faktor bleibt ' + fmt(k1, 2)}</p>`;
+}
+$('au-sheet').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-rts]'); if (!b) return; const act = b.dataset.rts, id = $('au-sheet-box').dataset.rtid;
+  if (act === 'close') { $('au-sheet').classList.add('hidden'); return; }
+  if (act === 'del') { if (!confirm('Diese gemerkte Fahrt löschen?')) return; const lab = getLab(); lab.fc = lab.fc.filter(x => x.id !== id); setLab(lab); $('au-sheet').classList.add('hidden'); rtTabs(); return; }
+  const v = rtSheetVals(); if (!v) return; const msg = $('rts-msg');
+  if (v.rawReal !== undefined && !(v.rawReal > 3 && v.rawReal < 60)) { msg.textContent = 'Echten Verbrauch bitte in kWh/100 km eingeben (z. B. 18,9).'; msg.classList.remove('hidden'); return; }
+  if (v.soc !== undefined && !(v.soc >= -20 && v.soc < v.x.soc0)) { msg.textContent = 'Akku bei Ankunft muss unter dem Start-Akku (' + v.x.soc0 + ' %) liegen.'; msg.classList.remove('hidden'); return; }
+  if (v.abrp !== undefined && !(v.abrp > 3 && v.abrp < 60)) { msg.textContent = 'ABRP-Wert bitte in kWh/100 km eingeben.'; msg.classList.remove('hidden'); return; }
+  const lab = getLab(); lab.fc = lab.fc.map(x => { if (x.id !== id) return x; const n = { ...x }; delete n.real; delete n.realSoc; delete n.abrp;
+    if (v.real > 0) n.real = v.real; if (v.soc !== undefined) n.realSoc = v.soc; if (v.abrp > 0) n.abrp = v.abrp; if (v.abrp > 0 && x.abrpSoc != null && v.abrp !== x.abrp) delete n.abrpSoc; return n; });
+  setLab(lab); $('au-sheet').classList.add('hidden'); rtTabs();
+});
+function rtShow() {
+  rtTabs();
+  if (!RT.a && !RT.b) { const l = load(KEY_RT, null) || {}, home = getTPlaces().find(p => p.kind === 'home' && Number.isFinite(p.lat));
+    RT.a = l.a || (home ? { lat: home.lat, lon: home.lon, label: home.name } : null); RT.b = l.b || null;
+    $('rt-a').value = RT.a ? RT.a.label : ''; $('rt-b').value = RT.b ? RT.b.label : '';
+    if (l.pers) $('rt-pers').value = String(l.pers); if (l.tempo != null) $('rt-tempo').value = String(l.tempo); if (l.vab) $('rt-vab').value = String(l.vab); }
+  const now = new Date(); now.setMinutes(Math.ceil(now.getMinutes() / 15) * 15, 0, 0);
+  if (!$('rt-dep').value || new Date($('rt-dep').value).getTime() < Date.now() - 3600e3) $('rt-dep').value = now.getFullYear() + '-' + pad2(now.getMonth() + 1) + '-' + pad2(now.getDate()) + 'T' + pad2(now.getHours()) + ':' + pad2(now.getMinutes());
+  if (!$('rt-soc').value) { $('rt-soc').value = '80'; wxoSoc().then(s => { if (s != null && $('rt-soc').value === '80') { $('rt-soc').value = String(Math.round(s)); if (RT.res || RT.busy) rtRun(); } }).catch(() => { }); }
+  if (RT.tab === 'plan') rtRun();
+}
 
 if (window.__noStorage) {                                                       // Hinweis: Browser-Speicher gesperrt
   const d = document.createElement('div'); d.setAttribute('role', 'alert');
