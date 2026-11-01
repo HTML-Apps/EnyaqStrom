@@ -2482,7 +2482,7 @@ $('btn-save-settings').addEventListener('click', () => {
     if (+m[2] < 1990 || +m[2] * 12 + +m[1] > now.getFullYear() * 12 + now.getMonth() + 1) { alert('Das Baujahr ' + yr + ' kann nicht stimmen: Es muss zwischen 01/1990 und ' + String(now.getMonth() + 1).padStart(2, '0') + '/' + now.getFullYear() + ' liegen.'); $('set-year').focus(); return; }
   }
   const txt = (id, n) => $(id).value.trim().replace(/\s+/g, ' ').slice(0, n) || undefined;
-  if (save(KEY_SETTINGS, { title: $('set-title').value.trim() || DEFAULT_TITLE, brand: txt('set-brand', 30), model: txt('set-model', 40), plate: (txt('set-plate', 15) || '').toUpperCase() || undefined, year: yr || undefined, vin: vin || undefined, price, battery, power, remDays, remKm, purchase, wltp: wl, wltpNet: wln !== undefined ? Math.round(wln * 100) / 100 : undefined, purchaseKm: pk !== undefined ? Math.round(pk) : undefined, purchasePrice: pp !== undefined ? Math.round(pp * 100) / 100 : undefined, commuteKm: getSettings().commuteKm || undefined, ccEnd: getSettings().ccEnd || undefined, wxIcons: getSettings().wxIcons || undefined, carN: getSettings().carN ?? undefined, carSec: getSettings().carSec ?? undefined, wxoCut: getSettings().wxoCut ?? undefined, dashFirst: getSettings().dashFirst || undefined, refLo: rlo, refHi: rhi, nextHu, nextService, certAcKwh: certAcKwh !== undefined ? Math.round(certAcKwh * 10) / 10 : undefined, certDcKwh: certDcKwh !== undefined ? Math.round(certDcKwh * 10) / 10 : undefined, certKm: certKm !== undefined ? Math.round(certKm) : undefined })) {   // commuteKm: im Steuerhelfer (Berichte → Fahrten) gepflegt
+  if (save(KEY_SETTINGS, { title: $('set-title').value.trim() || DEFAULT_TITLE, brand: txt('set-brand', 30), model: txt('set-model', 40), plate: (txt('set-plate', 15) || '').toUpperCase() || undefined, year: yr || undefined, vin: vin || undefined, price, battery, power, remDays, remKm, purchase, wltp: wl, wltpNet: wln !== undefined ? Math.round(wln * 100) / 100 : undefined, purchaseKm: pk !== undefined ? Math.round(pk) : undefined, purchasePrice: pp !== undefined ? Math.round(pp * 100) / 100 : undefined, commuteKm: getSettings().commuteKm || undefined, ccEnd: getSettings().ccEnd || undefined, nRep: getSettings().nRep || undefined, nTrips: getSettings().nTrips || undefined, nBakYm: getSettings().nBakYm || undefined, nBakAt: getSettings().nBakAt || undefined, nBakSnz: getSettings().nBakSnz || undefined, wxIcons: getSettings().wxIcons || undefined, carN: getSettings().carN ?? undefined, carSec: getSettings().carSec ?? undefined, wxoCut: getSettings().wxoCut ?? undefined, dashFirst: getSettings().dashFirst || undefined, refLo: rlo, refHi: rhi, nextHu, nextService, certAcKwh: certAcKwh !== undefined ? Math.round(certAcKwh * 10) / 10 : undefined, certDcKwh: certDcKwh !== undefined ? Math.round(certDcKwh * 10) / 10 : undefined, certKm: certKm !== undefined ? Math.round(certKm) : undefined })) {   // commuteKm: im Steuerhelfer (Berichte → Fahrten) gepflegt
     renderReminderBadges(); renderHeroStats(); pushPrefs();
     $('settings-msg').classList.remove('hidden'); setTimeout(() => $('settings-msg').classList.add('hidden'), 2500);
   }
@@ -5341,6 +5341,10 @@ const MONTHS_LONG = ['Januar','Februar','März','April','Mai','Juni','Juli','Aug
 const KEY_REPORT_SEEN = 'enyaq.reportSeen';
 let reportYM = null;                                      // { y, m } des angezeigten Monats; null = Standardmonat beim nächsten Öffnen
 const ymKey = (y, m) => y + '-' + pad2(m + 1);
+/* Hinweis-Status geräteübergreifend: in den Einstellungen (Cloud-Dokument) gespeichert, damit „gesehen/erledigt“ auf allen Geräten gilt.
+   nRep = Monatsbericht gesehen (JJJJ-MM), nTrips = Fahrtenbuch-Hinweis ausgeblendet (JJJJ-MM), nBakYm/nBakAt = letzte Sicherung, nBakSnz = Sicherung heute ausgeblendet */
+function nagSet(obj) { const st = load(KEY_SETTINGS, {}) || {}; Object.assign(st, obj); save(KEY_SETTINGS, st); try { pushPrefs(); } catch (e) { } }
+const maxStr = (...a) => a.filter(Boolean).sort().pop() || '';
 const sgn = (n, d = 1) => (n > 0.0001 ? '+' : n < -0.0001 ? '−' : '±') + fmt(Math.abs(n), d);
 const isoWeek = (d) => {                                  // ISO-Kalenderwoche
   const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())), day = t.getUTCDay() || 7;
@@ -5385,13 +5389,13 @@ function defaultReportMonth() {                           // Standard: laufender
 }
 function markReportSeen(y, m) {
   const p = prevMonthOf();
-  if (y === p.getFullYear() && m === p.getMonth()) save(KEY_REPORT_SEEN, ymKey(y, m));
+  if (y === p.getFullYear() && m === p.getMonth()) { save(KEY_REPORT_SEEN, ymKey(y, m)); if (getSettings().nRep !== ymKey(y, m)) nagSet({ nRep: ymKey(y, m) }); }
 }
 
 /** Hinweiskarte auf dem Dashboard, solange der Bericht des Vormonats noch nicht angesehen wurde. */
 function renderReportBanner() {
   const el = $('report-banner'), p = prevMonthOf(), key = ymKey(p.getFullYear(), p.getMonth());
-  const show = load(KEY_REPORT_SEEN, '') !== key && monthHasCharges(p.getFullYear(), p.getMonth());
+  const show = maxStr(load(KEY_REPORT_SEEN, ''), getSettings().nRep) < key && monthHasCharges(p.getFullYear(), p.getMonth());
   el.classList.toggle('hidden', !show);
   if (show) $('report-banner-text').textContent = 'Dein Bericht für ' + MONTHS_LONG[p.getMonth()] + ' ist fertig';
 }
@@ -5402,12 +5406,12 @@ function renderTripsBanner() {
   const el = $('trips-banner'); if (!el || typeof getTrips !== 'function') return;
   const n = new Date(), mKey = ymKey(n.getFullYear(), n.getMonth()), trips = getTrips();
   const newest = trips.reduce((a, t) => Math.max(a, Date.parse(t.e) || 0), 0), cut = new Date(n.getFullYear(), n.getMonth(), 1).getTime() - 3 * 864e5;
-  const show = trips.length > 0 && newest < cut && load(KEY_TRIPS_NAG, '') !== mKey;
+  const show = trips.length > 0 && newest < cut && maxStr(load(KEY_TRIPS_NAG, ''), getSettings().nTrips) < mKey;
   el.classList.toggle('hidden', !show);
   if (show) { const p = prevMonthOf(); $('trips-banner-text').textContent = 'Fahrtenbuch für ' + MONTHS_LONG[p.getMonth()] + ' importieren'; }
 }
 $('trips-banner-go').addEventListener('click', () => { openSettings('fahrten'); setTimeout(() => $('btn-trips').scrollIntoView({ behavior: 'smooth', block: 'center' }), 80); });
-$('trips-banner-x').addEventListener('click', () => { const n = new Date(); save(KEY_TRIPS_NAG, ymKey(n.getFullYear(), n.getMonth())); renderTripsBanner(); });
+$('trips-banner-x').addEventListener('click', () => { const n = new Date(), k = ymKey(n.getFullYear(), n.getMonth()); save(KEY_TRIPS_NAG, k); nagSet({ nTrips: k }); renderTripsBanner(); });
 $('report-banner').addEventListener('click', () => { const p = prevMonthOf(); reportYM = { y: p.getFullYear(), m: p.getMonth() }; showView('report'); });
 
 /** km, die im Monat gefahren wurden: aus den km-Ständen von Ladungen und Kosten (letzter Stand im Monat minus letzter Stand davor). */
@@ -6715,7 +6719,7 @@ try { renderWrapCard(); } catch (e) { }
    im Dokument enyaqStrom/<uid>/settings/prefs, gleiche Regel wie Anbieter und Kategorien. Die PIN bleibt nur auf dem Gerät.
    Erster Abgleich: Was die Cloud hat, gilt; fehlt dort etwas und ist lokal vorhanden, wird es hochgeladen. Danach gilt die Cloud (Änderung auf einem Gerät wirkt auf allen).
    ===================================================================== */
-const SYNC_SET_KEYS = ['title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAcKwh', 'certDcKwh', 'certKm', 'wltpNet', 'ccEnd', 'wxoCut', 'dashFirst', 'carN', 'carSec', 'wxIcons'];
+const SYNC_SET_KEYS = ['title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAcKwh', 'certDcKwh', 'certKm', 'wltpNet', 'ccEnd', 'wxoCut', 'dashFirst', 'carN', 'carSec', 'wxIcons', 'nRep', 'nTrips', 'nBakYm', 'nBakAt', 'nBakSnz'];
 /** Einstellungen für die Cloud: feste Reihenfolge, ohne leere Werte (Firestore verbietet undefined). null = nichts vorhanden. */
 function syncSet(src) {
   const o = {}; if (src && typeof src === 'object') SYNC_SET_KEYS.forEach(k => { const v = src[k]; if (v != null && v !== '' && !(typeof v === 'number' && !isFinite(v))) o[k] = v; });
@@ -6743,6 +6747,7 @@ window.onCloudPrefs = (d, first, uid) => {
   if (ns && JSON.stringify(ns) !== JSON.stringify(ls)) {
     const raw = load(KEY_SETTINGS, {}) || {}; SYNC_SET_KEYS.forEach(k => delete raw[k]); save(KEY_SETTINGS, { ...raw, ...ns });   // PIN, WLTP usw. bleiben
     applyTitle(); renderReminderBadges(); renderHeroStats(); try { fillWxoPrefs(); window.carReschedule && window.carReschedule(); } catch (e) { }
+    try { renderReportBanner(); renderTripsBanner(); renderBakBanner(); } catch (e) { }   // Hinweise, die auf einem anderen Gerät erledigt wurden
     if (currentView === 'settings' && !$('view-settings').contains(document.activeElement)) fillSettings();   // nicht mitten in eine Eingabe schreiben
     if (currentView === 'dashboard') renderDashboard();
   }
@@ -6819,7 +6824,8 @@ function dvName(c, i, ext) {                                                    
    denn das Google-Fenster darf nur nach einem Tipp öffnen. Status: enyaq.driveBackup = { ym, at, auto (true/false), snooze ('JJJJ-MM-TT') }.
    ===================================================================== */
 const KEY_DVBAK = 'enyaq.driveBackup';
-const bakState = () => ({ auto: true, ...(load(KEY_DVBAK, {}) || {}) });
+const bakState = () => { const l = { auto: true, ...(load(KEY_DVBAK, {}) || {}) }, st = getSettings();   // lokale Werte + geräteübergreifender Stand
+  const ym = maxStr(l.ym, st.nBakYm), at = maxStr(l.at, st.nBakAt), sn = maxStr(l.snooze, st.nBakSnz); if (ym) l.ym = ym; if (at) l.at = at; if (sn) l.snooze = sn; return l; };
 const bakYM = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); };
 const bakHasData = () => getReadings().length + getCosts().length + getReminders().length + getTrips().length > 0;
 const bakDue = () => { const b = bakState(); return b.auto && window.cloud?.isSignedIn() && bakHasData() && b.ym !== bakYM(); };
@@ -6840,7 +6846,7 @@ async function bakUpload(tok) {
     const mp = '--' + bd + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify(meta) + '\r\n--' + bd + '\r\nContent-Type: application/json\r\n\r\n' + body + '\r\n--' + bd + '--';
     await dvFetch(tok, 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', { method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + bd }, body: mp });
   }
-  const b = bakState(); b.ym = ym; b.at = new Date().toISOString(); delete b.snooze; save(KEY_DVBAK, b);
+  const b = bakState(); b.ym = ym; b.at = new Date().toISOString(); delete b.snooze; save(KEY_DVBAK, b); nagSet({ nBakYm: b.ym, nBakAt: b.at });
   return { name, kb: Math.round(body.length / 1024) };
 }
 let bakBusy = false;
@@ -6862,7 +6868,7 @@ function renderBakInfo() { const b = bakState(); $('bak-auto').checked = b.auto 
 $('bak-auto').addEventListener('change', (e) => { const b = bakState(); b.auto = e.target.checked; save(KEY_DVBAK, b); renderBakBanner(); });
 $('bak-now').addEventListener('click', () => runBackup(false));
 $('bak-banner-go').addEventListener('click', () => runBackup(false));
-$('bak-banner-x').addEventListener('click', () => { const b = bakState(); b.snooze = todayYMD(); save(KEY_DVBAK, b); renderBakBanner(); });
+$('bak-banner-x').addEventListener('click', () => { const b = bakState(); b.snooze = todayYMD(); save(KEY_DVBAK, b); nagSet({ nBakSnz: b.snooze }); renderBakBanner(); });
 /* Prüfen: kurz nach dem Start, beim Wechsel auf Start und regelmäßig (Drive-Zugriff kann zwischendurch durch einen Beleg-Upload entstehen) */
 function bakCheck() { if (bakDue()) runBackup(true); renderBakBanner(); }
 setTimeout(bakCheck, 4000); setInterval(bakCheck, 5 * 60 * 1000);
