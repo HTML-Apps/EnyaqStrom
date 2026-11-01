@@ -6971,7 +6971,7 @@ const tripVisible = (t) => (t.km || 0) >= 1;                                    
 function commitTrips(next) {
   const prev = getTrips(); next.sort((a, b) => (a.s < b.s ? -1 : a.s > b.s ? 1 : 0));
   if (!save(KEY_TRIPS, next)) return false;
-  try { setTimeout(ltFillKm, 0); } catch (e) { }                                  // Langzeit-Ablesungen per Sprache: km-Stand jetzt genau aus den Fahrten
+  try { setTimeout(() => { ltFillKm(); btFillTrips(); }, 0); } catch (e) { }                                  // Langzeit-Ablesungen per Sprache: km-Stand jetzt genau aus den Fahrten
   if (!window.cloud?.isSignedIn()) return Promise.resolve('local');
   return window.cloud.pushTrips(prev, next).then(n => 'cloud:' + n).catch(e => { console.error('Firestore-Schreibfehler (Fahrten)', e); window.onCloudStatus?.({ error: 'Fahrten: ' + (e.code === 'permission-denied' ? 'Keine Berechtigung für enyaqStrom/<uid>/tripMonths (Firestore-Regel ergänzen)' : e.code || e.message) }); return 'error:' + (e.code || e.message); });
 }
@@ -7331,7 +7331,7 @@ window.onCloudTrips = (months, first, uid) => {                    // months = {
     if (missing.length) { next = cloud.concat(missing); window.cloud.pushTrips(cloud, next).catch(() => { }); }
   }
   next.sort((a, b) => (a.s < b.s ? -1 : a.s > b.s ? 1 : 0));
-  if (JSON.stringify(next) !== JSON.stringify(local)) { save(KEY_TRIPS, next); refreshViews(); try { ltFillKm(); } catch (e) { } }
+  if (JSON.stringify(next) !== JSON.stringify(local)) { save(KEY_TRIPS, next); refreshViews(); try { ltFillKm(); btFillTrips(); } catch (e) { } }
 };
 window.onCloudPlaces = (d, first, uid) => {                       // d = { list (Orte), labels, rules, defLabel } oder null
   if (first) checkCacheUid(uid);
@@ -8035,6 +8035,7 @@ function btSvg(es) {
     + es.map(e => `<circle cx="${xs(Date.parse(e.at)).toFixed(1)}" cy="${Y(e.t).toFixed(1)}" r="2.4" fill="#f97316"/>`).join('')
     + [t0, (t0 + t1) / 2, t1].map((t, i) => `<text x="${xs(t).toFixed(1)}" y="${H - 5}" text-anchor="${i === 0 ? 'start' : i === 2 ? 'end' : 'middle'}" font-size="9.5" fill="#94a3b8">${fmtX(t)}</text>`).join('') + '</svg>';
 }
+const btTripTxt = (e) => { const t = e.trip; if (!t) return ''; if (t.k === 'fahrt') return (t.ago != null ? t.ago + ' min nach ' : 'nach ') + (t.min ? t.min + ' min' : '') + (t.km ? ' / ' + t.km + ' km' : '') + ' Fahrt'; return t.h ? t.h + ' h geparkt' : ''; };
 function btCard(list) {
   const all = (list || []).filter(e => Number.isFinite(e.t) && e.at).sort((a, b) => Date.parse(a.at) - Date.parse(b.at)), last = all[all.length - 1];
   if (btVal == null) btVal = last ? Math.round(last.t) : 15;
@@ -8050,7 +8051,7 @@ function btCard(list) {
   h += `<div class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 space-y-1.5"><div class="flex items-center justify-between gap-2"><p class="text-sm font-bold">Verlauf</p><div class="flex rounded-lg bg-slate-100 dark:bg-slate-800 p-0.5 text-[11px] font-semibold">${[['30', '30 T'], ['365', '1 J'], ['all', 'Alle']].map(([k, l]) => `<button type="button" data-btr="${k}" class="rounded-md px-2 py-0.5 ${btRange === k ? 'bg-white dark:bg-slate-600 shadow-sm' : 'text-slate-500 dark:text-slate-400'}">${l}</button>`).join('')}</div></div>`
     + (es.length ? btSvg(es) + `<div class="flex items-center gap-3.5 text-[11px] text-slate-500 dark:text-slate-400"><span><span class="inline-block h-[3px] w-3 bg-orange-500 align-middle"></span> Akku</span><span><span class="inline-block w-3 border-t-2 border-dashed border-sky-400 align-middle"></span> Außen</span><span class="ml-auto">${es.length} ${es.length === 1 ? 'Wert' : 'Werte'}</span></div>`
       : `<p class="py-4 text-sm text-slate-500 dark:text-slate-400 text-left">${all.length ? 'Keine Werte in diesem Zeitraum.' : 'Noch keine Werte. Temperatur oben einstellen und speichern – die App merkt sich den letzten Wert, beim nächsten Mal reicht oft ein Tipp.'}</p>`) + '</div>';
-  if (all.length) h += `<details class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm px-4 py-3"><summary class="cursor-pointer text-sm font-semibold">Alle Einträge (${all.length})</summary><div class="mt-2">${all.slice().reverse().slice(0, 200).map(e => `<div class="flex items-center gap-2 border-t border-slate-100 dark:border-slate-800 py-2 text-[13px]"><span class="w-[92px] shrink-0 tabular-nums">${new Date(e.at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' })} ${hhmm(Date.parse(e.at))}</span><b class="w-12 shrink-0 tabular-nums text-orange-600 dark:text-orange-400">${fmt(e.t, 0)} °C</b><span class="min-w-0 flex-1 truncate text-xs text-slate-500 dark:text-slate-400">${[Number.isFinite(e.out) ? 'außen ' + fmt(e.out, 0) + ' °C' : '', (BT_CTX.find(c => c[0] === e.ctx) || [])[1] || ''].filter(Boolean).join(' · ')}</span><button type="button" data-btdel="${esc(e.id)}" aria-label="Eintrag löschen" class="shrink-0 px-1.5 text-slate-400 active:text-red-500">✕</button></div>`).join('')}</div></details>`;
+  if (all.length) h += `<details class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm px-4 py-3"><summary class="cursor-pointer text-sm font-semibold">Alle Einträge (${all.length})</summary><div class="mt-2">${all.slice().reverse().slice(0, 200).map(e => `<div class="flex items-center gap-2 border-t border-slate-100 dark:border-slate-800 py-2 text-[13px]"><span class="w-[92px] shrink-0 tabular-nums">${new Date(e.at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' })} ${hhmm(Date.parse(e.at))}</span><b class="w-12 shrink-0 tabular-nums text-orange-600 dark:text-orange-400">${fmt(e.t, 0)} °C</b><span class="min-w-0 flex-1 truncate text-xs text-slate-500 dark:text-slate-400">${[Number.isFinite(e.out) ? 'außen ' + fmt(e.out, 0) + ' °C' : '', ((BT_CTX.find(c => c[0] === e.ctx) || [])[1] || '') + (e.ctxAuto ? ' (auto)' : ''), btTripTxt(e)].filter(Boolean).join(' · ')}</span><button type="button" data-btdel="${esc(e.id)}" aria-label="Eintrag löschen" class="shrink-0 px-1.5 text-slate-400 active:text-red-500">✕</button></div>`).join('')}</div></details>`;
   if (btOut.v == null && wxLoc() && Date.now() - btOut.t > 15 * 60000) btOutside().then(v => { const el = $('btq-out'); if (el) el.textContent = v != null ? 'Außen ' + fmt(v, 0) + ' °C · automatisch' : 'Außen nicht verfügbar'; });
   return h;
 }
@@ -8148,6 +8149,26 @@ async function gtKmAt(iso) {
   const i = rs.findIndex(x => x.t >= t); if (i <= 0) return { km: null, est: true }; const a = rs[i - 1], b = rs[i];
   return { km: Math.round(a.km + (b.km - a.km) * (t - a.t) / Math.max(1, b.t - a.t)), est: true };
 }
+/** Fahrt zu einem Zeitpunkt aus dem Fahrtenbuch: während einer Fahrt oder bis 45 min danach → { ctx: 'fahrt', min, km };
+    letzte Fahrt länger als 2 h her → { ctx: 'geparkt' }. Nur wenn das Fahrtenbuch über den Zeitpunkt hinaus reicht (sonst null = noch unbekannt). */
+function tripCtxAt(iso) {
+  const t = Date.parse(iso), ts = getTrips().filter(x => x.s && x.e); if (!Number.isFinite(t) || !ts.length) return null;
+  const S = (x) => Date.parse(x.s), E = (x) => Date.parse(x.e); if (!ts.some(x => S(x) > t || (S(x) <= t && t <= E(x)))) return null;   // Fahrtenbuch reicht noch nicht bis hierher
+  const inT = ts.find(x => S(x) <= t && t <= E(x));
+  if (inT) return { ctx: 'fahrt', min: Math.max(1, Math.round((t - S(inT)) / 60000)), km: inT.km > 0 ? Math.round(inT.km * (t - S(inT)) / Math.max(1, E(inT) - S(inT))) : undefined };
+  const before = ts.filter(x => E(x) < t).sort((a, b) => E(b) - E(a))[0]; if (!before) return null;
+  const gap = (t - E(before)) / 60000;
+  if (gap <= 45) return { ctx: 'fahrt', min: Math.round((E(before) - S(before)) / 60000), km: before.km > 0 ? Math.round(before.km) : undefined, ago: Math.round(gap) };
+  return gap >= 120 ? { ctx: 'geparkt', parkedH: Math.round(gap / 60) } : null;
+}
+/** Akku °C: Anlass und Fahrt automatisch aus dem Fahrtenbuch ergänzen (eigener Anlass bleibt), auch nachträglich nach dem Import */
+function btFillTrips() {
+  const lab = getLab(); if (!Array.isArray(lab.bt)) return 0; let n = 0;
+  lab.bt = lab.bt.map(e => { if (!e.at || e.trip) return e; const c = tripCtxAt(e.at); if (!c) return e;
+    const o = { ...e, trip: { k: c.ctx } }; if (c.min) o.trip.min = c.min; if (c.km) o.trip.km = c.km; if (c.ago != null) o.trip.ago = c.ago; if (c.parkedH) o.trip.h = c.parkedH;
+    if (!o.ctx) { o.ctx = c.ctx; o.ctxAuto = true; } n++; return o; });
+  if (n) setLab(lab); return n;
+}
 /** Nachträglich: Langzeit-Ablesungen per Sprachbefehl ohne (genauen) km-Stand bekommen ihn aus dem Fahrtenbuch, sobald es importiert ist */
 function ltFillKm() {
   const lab = getLab(); if (!Array.isArray(lab.lt)) return 0; let n = 0;
@@ -8198,7 +8219,7 @@ async function gtImport(silent) {
         await fetch(api + '/lists/' + encodeURIComponent(L.id) + '/tasks/' + encodeURIComponent(t.id), { method: 'PATCH', headers: { ...H, 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'completed' }) }).catch(() => { });
       }
     }
-    if (n || nl) { lab.bt.sort((a, b) => Date.parse(a.at) - Date.parse(b.at)); setLab(lab); if (n) btmVal = null; }
+    if (n || nl) { lab.bt.sort((a, b) => Date.parse(a.at) - Date.parse(b.at)); setLab(lab); if (n) btmVal = null; try { btFillTrips(); ltFillKm(); } catch (e) { } }
     btmMsg = n || nl ? '✓ ' + [n ? n + ' Akku' : '', nl ? nl + ' Langzeit' : ''].filter(Boolean).join(' + ') + ' aus Google Tasks' : silent ? '' : 'Keine neuen „Akku …“- oder „Langzeit …“-Aufgaben.';
     renderBtm(); if (n && currentView === 'recs') renderRecs();
   } catch (e) { if (!silent) { btmMsg = '⚠️ Google Tasks: kein Zugriff'; renderBtm();
@@ -8264,7 +8285,7 @@ async function gtMirror(silent) {
 let gtMirSkip = false;
 $('set-gt-mirror').addEventListener('change', (e) => { setQuickSetting('gtMirror', e.target.checked || undefined); if (e.target.checked) gtMirror(false); else $('gt-sync-msg').textContent = 'Aus – bestehende Aufgaben bleiben in Google Tasks, bis du die Liste dort löschst.'; });
 $('gt-sync').addEventListener('click', () => { if (!gtMirrorOn()) { $('set-gt-mirror').checked = true; setQuickSetting('gtMirror', true); } gtMirror(false); });
-setTimeout(() => { gtImport(true); gtMirror(true); try { ltFillKm(); } catch (e) { } }, 3000); document.addEventListener('visibilitychange', () => { if (!document.hidden) { gtImport(true); gtMirror(true); } });
+setTimeout(() => { gtImport(true); gtMirror(true); try { ltFillKm(); btFillTrips(); } catch (e) { } }, 3000); document.addEventListener('visibilitychange', () => { if (!document.hidden) { gtImport(true); gtMirror(true); } });
 renderBtm();
 if (wxLoc() && !$('wxo-card').classList.contains('hidden')) { /* Prognose sichtbar: Beobachter setzt die Startkarte */ } else dashSwipeTo(dashDefaultIdx(), false);
 dashSwipeSync();
