@@ -62,8 +62,8 @@ function iceEval(H, day, st) {
 const deg = (v) => String(Math.round(v) || 0).replace('-', '−') + ' °C';
 function message(r, st) {
   const sky = r.cc < 25 ? 'klar' : r.cc < 60 ? 'teils bewölkt' : 'bewölkt', wind = r.ws < 1.5 ? 'windstill' : r.ws < 4 ? 'wenig Wind' : 'windig';
-  return { title: (r.lvl >= 2 ? '🧊 ' : '❄️ ') + 'Morgen früh: Scheibe vereist ' + LVL[r.lvl],
-    body: `${deg(r.T)} um ${st.dep} · ${sky}, ${wind}\nScheibe ≈ ${deg(r.minTg)}${r.glaze ? ' · Eisschicht nach Nässe' : ''}` };
+  return { title: r.lvl >= 2 ? 'Eisgefahr' : 'Eisgefahr möglich',
+    body: `${deg(r.T)} um ${st.dep} · ${sky}, ${wind}\n| Scheibe ≈ ${deg(r.minTg)}${r.glaze ? ' · Eisschicht nach Nässe' : ''}` };
 }
 async function riskFor(uid) {
   const [prefs, places] = await Promise.all([fsGet(`enyaqStrom/${uid}/settings/prefs`), fsGet(`enyaqStrom/${uid}/settings/places`)]);
