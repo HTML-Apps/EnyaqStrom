@@ -5861,12 +5861,13 @@ const wxoPred = (m, T, wet, hum) => wxoPredX(m, wxoX(T, wet ? 1 : 0, hum ? 1 : 0
 function wxoParts(m, T, wet, hum) { const x = wxoX(T, wet ? 1 : 0, hum ? 1 : 0); return { cold: m.b * x[1] + m.d * x[2], rain: m.c * x[3], hum: m.e * x[4] }; }
 /** 7-Tage-Vorhersage: Tagesmittel, Niederschlag, Wettercode (1 h zwischengespeichert) */
 async function wxoForecast(l) {
-  const c = load(KEY_WXO + 'F', null), same = c && c.lat === l.lat && c.lon === l.lon && c.day === wxIso(new Date());
+  const c = load(KEY_WXO + 'F', null), same = c && c.lat === l.lat && c.lon === l.lon && c.day === wxIso(new Date()) && c.days && c.days[0] && 't7' in c.days[0];
   if (same && Date.now() - c.t < 3600e3) return c.days;
   try {
     const r = await fetch('https://api.open-meteo.com/v1/forecast?latitude=' + l.lat + '&longitude=' + l.lon + '&daily=temperature_2m_mean,temperature_2m_min,temperature_2m_max,precipitation_sum,weather_code&hourly=temperature_2m,relative_humidity_2m&timezone=auto&forecast_days=8');
     if (!r.ok) throw new Error(r.status);
-    const j = await r.json(), d = j.daily, hd = wxoHumDays(j), days = d.time.map((t, i) => ({ hum: hd[t] || 0, d: t, T: d.temperature_2m_mean[i] ?? (d.temperature_2m_min[i] + d.temperature_2m_max[i]) / 2, lo: d.temperature_2m_min[i], hi: d.temperature_2m_max[i], p: d.precipitation_sum[i] ?? 0, w: d.weather_code[i] }));
+    const j = await r.json(), d = j.daily, hd = wxoHumDays(j), hr = (t, h) => { const k = (j.hourly && j.hourly.time || []).indexOf(t + 'T' + String(h).padStart(2, '0') + ':00'); const v = k >= 0 ? j.hourly.temperature_2m[k] : null; return v == null ? null : v; };
+    const days = d.time.map((t, i) => ({ t7: hr(t, WXO_H1), t16: hr(t, WXO_H2), hum: hd[t] || 0, d: t, T: d.temperature_2m_mean[i] ?? (d.temperature_2m_min[i] + d.temperature_2m_max[i]) / 2, lo: d.temperature_2m_min[i], hi: d.temperature_2m_max[i], p: d.precipitation_sum[i] ?? 0, w: d.weather_code[i] }));
     save(KEY_WXO + 'F', { lat: l.lat, lon: l.lon, day: wxIso(new Date()), t: Date.now(), days }); return days;
   } catch (e) { if (c && c.lat === l.lat) return c.days.filter(x => x.d >= wxIso(new Date())); throw e; }
 }
@@ -5936,6 +5937,8 @@ function renderVehCard() {
     <div class="relative mb-2.5 mt-2 h-3.5 overflow-hidden rounded-full bg-slate-800"><div class="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400 ${charging ? 'animate-pulse' : ''}" style="width:${Math.max(2, Math.min(100, soc))}%"></div>${tgt ? `<div class="absolute -inset-y-0.5 border-l-2 border-white/80" style="left:${tgt}%"></div>` : ''}</div>
     ${rows}<p class="mt-1.5 text-[10.5px] text-slate-400">Stand vom Auto: ${atTxt}</p></div>`;
 }
+const WXO_H1 = 7, WXO_H2 = 16;                                                        // Anzeige: Temperatur zur Hin- und Rückfahrt (nur Anzeige, gerechnet wird mit dem Tagesmittel)
+const wxoTT = (v) => fmt(Math.round(v), 0).replace('-', '−') + '°';
 const wxoCut = () => { const v = Number(getSettings().wxoCut); return Number.isInteger(v) && v >= 0 && v <= 24 ? v : 18; };   // ab dieser Stunde gilt „Morgen“
 const dashFirst = () => { const v = getSettings().dashFirst; return v === 'meter' || v === 'dyn' ? v : 'wx'; };
 const DASH_DYN_SOC = 30;                                                                  // „Dynamisch“: unter diesem Akkustand zuerst der Zählerstand
@@ -5974,7 +5977,7 @@ async function renderWxo() {
   $('wxo-days').innerHTML = days.slice(0, wxoNLast).map((x, i) => { const on = i === hl;
     return `<div class="min-w-0 rounded-2xl px-1.5 py-2 text-center ${on ? 'bg-sky-50 dark:bg-sky-950/60 ring-[1.5px] ring-sky-400' : 'bg-slate-100 dark:bg-slate-800/60'}">
       <p class="text-center text-[11px] font-semibold ${on ? 'text-sky-700 dark:text-sky-300' : 'text-slate-500 dark:text-slate-400'}">${lab(i)}</p>
-      <p class="mt-0.5 text-center text-[22px] leading-none">${wxoIconHtml(x.w, wxIconStyle() === 'meteo' ? 40 : 30)}</p><p class="text-center text-[12.5px] font-semibold leading-tight">${fmt(x.T, 0).replace('-', '−')}°</p>
+      <p class="mt-0.5 text-center text-[22px] leading-none">${wxoIconHtml(x.w, wxIconStyle() === 'meteo' ? 40 : 30)}</p><p class="text-center text-[12.5px] font-semibold leading-tight whitespace-nowrap" title="${WXO_H1} Uhr / ${WXO_H2} Uhr · Ø ${fmt(x.T, 0)}°">${x.t7 != null && x.t16 != null ? wxoTT(x.t7) + ' / ' + wxoTT(x.t16) : wxoTT(x.T)}</p>
       <p class="mt-0.5 text-center text-[15px] font-bold leading-tight">${fmt(x.k, 1)}</p><p class="text-center text-[9.5px] leading-tight text-slate-500 dark:text-slate-400">kWh/100 km</p>
       <div class="mx-1.5 mt-1.5 h-[5px] rounded-full bg-slate-200 dark:bg-slate-700"><div class="h-[5px] rounded-full bg-gradient-to-r from-emerald-500 to-sky-400" style="width:${Math.max(8, Math.min(100, x.r / best * 100)).toFixed(0)}%"></div></div>
       <p class="mt-0.5 text-center text-[12px]"><b>${wxoFmtR(x.r)}</b> <span class="text-slate-500 dark:text-slate-400">km</span></p></div>`; }).join('');
