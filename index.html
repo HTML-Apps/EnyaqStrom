@@ -8102,15 +8102,16 @@ function gtWordNum(t) {                                                         
   t = t.toLowerCase(); if (GT_NUM[t] != null) return GT_NUM[t];
   const m = /^(\w+?)und(zwanzig|dreißig|vierzig|fünfzig)$/.exec(t); return m && GT_NUM[m[1]] != null ? GT_NUM[m[1]] + GT_NUM[m[2]] : null;
 }
-/** „Akku 12 Grad“, „Akkutemperatur: -3,5 °C nach Fahrt“, „Akku minus drei geparkt“ → { t, ctx } oder null */
+/** „Akku 12 Grad“, „12° Akku Nachfahrt“, „Akkutemperatur: -3,5 °C nach Fahrt“, „Akku minus drei geparkt“ → { t, ctx } oder null.
+    Reihenfolge egal (Gemini schreibt die Zahl gern vorne), Zahl als Ziffer oder Wort, Anlass auch zusammengeschrieben („Nachfahrt“, „vorladen“). */
 function gtParse(title) {
-  const s0 = String(title || '').trim().toLowerCase().replace(/−/g, '-'); if (!/^akku/.test(s0)) return null;
-  let s = s0.replace(/^akku\s*-?\s*(temperatur|temp\.?)?\s*[:=]?\s*/, '');
-  let neg = false; if (/^(minus|-)\s*/.test(s)) { neg = true; s = s.replace(/^(minus|-)\s*/, ''); }
-  let v = null; const n = /^(\d{1,2}(?:[.,]\d)?)(?![\d.,])/.exec(s);
-  if (n) { v = Number(n[1].replace(',', '.')); s = s.slice(n[0].length); } else { const w = /^([a-zäöüß]+)/.exec(s); if (w) { v = gtWordNum(w[1]); s = s.slice(w[0].length); } }
-  if (v == null || !Number.isFinite(v)) return null; if (neg) v = -v; if (v < -30 || v > 70) return null;
-  const ctx = /nach (der )?fahrt|gefahren/.test(s) ? 'fahrt' : /geparkt|parken|stand/.test(s) ? 'geparkt' : /vor (dem )?laden|laden/.test(s) ? 'laden' : null;
+  const s0 = String(title || '').trim().toLowerCase().replace(/−/g, '-'); if (!/akku/.test(s0)) return null;
+  const s = ' ' + s0.replace(/akku\s*-?\s*(temperatur|temp\.?)?/g, ' ').replace(/[:=]/g, ' ') + ' ';
+  let v = null, m = /(?:^|[^\d,.])(minus\s*|-\s*)?(\d{1,2}(?:[.,]\d)?)(?![\d.,])/.exec(s);
+  if (m) v = (m[1] ? -1 : 1) * Number(m[2].replace(',', '.'));
+  else { const w = /(?:^|\s)(minus\s+)?([a-zäöüß]+)/g; let x; while ((x = w.exec(s))) { const n = gtWordNum(x[2]); if (n != null) { v = (x[1] ? -1 : 1) * n; break; } } }
+  if (v == null || !Number.isFinite(v) || v < -30 || v > 70) return null;
+  const ctx = /nach\s*(der\s*)?fahrt|gefahren/.test(s) ? 'fahrt' : /geparkt|parken|im stand/.test(s) ? 'geparkt' : /vor\s*(dem\s*)?laden|laden/.test(s) ? 'laden' : null;
   return { t: Math.round(v * 10) / 10, ctx };
 }
 /** Außentemperatur zu einem Zeitpunkt der letzten Tage (stündlich, Open-Meteo) */
