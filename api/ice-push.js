@@ -62,7 +62,7 @@ function iceEval(H, day, st) {
 const deg = (v) => String(Math.round(v) || 0).replace('-', '−') + ' °C';
 function message(r, st) {
   const sky = r.cc < 25 ? 'klar' : r.cc < 60 ? 'teils bewölkt' : 'bewölkt', wind = r.ws < 1.5 ? 'windstill' : r.ws < 4 ? 'wenig Wind' : 'windig';
-  return { title: r.lvl >= 2 ? 'Eisgefahr' : 'Eisgefahr möglich',
+  return { title: r.lvl >= 2 ? '❄️ Eisgefahr' : '❄️ Eisgefahr möglich',
     body: `${deg(r.T)} um ${st.dep} · ${sky}, ${wind}\n| Scheibe ≈ ${deg(r.minTg)}${r.glaze ? ' · Eisschicht nach Nässe' : ''}` };
 }
 async function riskFor(uid) {
