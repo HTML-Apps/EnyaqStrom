@@ -9338,19 +9338,21 @@ function rtSheet(id) {
     <div class="flex gap-2">${tile('App', 'text-emerald-600 dark:text-emerald-400', fmt(x.k100, 1))}${tile('ABRP', 'text-violet-600 dark:text-violet-400', x.abrp ? fmt(x.abrp, 1) : '–')}${tile('Real', 'text-amber-600 dark:text-amber-400', x.real ? fmt(x.real, 1) : '–', 'ring-2 ring-amber-400')}</div>
     <div><p class="text-sm font-semibold">Echter Verbrauch</p><p class="text-xs text-slate-500 dark:text-slate-400 text-left">${x.round ? 'Hin- und Rückfahrt zusammen – am einfachsten den Akkustand bei Rückkehr eintragen („Seit Start“ setzt sich beim Parken zurück)' : 'Bordcomputer → „Seit Start“, nach Ankunft ablesen – oder den Akkustand bei Ankunft'}</p>
       <div class="mt-1.5 flex gap-2">${inp('rts-real', x.real, 'kWh/100 km', 'z. B. 18,9', 'ring-2 ring-emerald-500')}${x.stop ? '' : inp('rts-soc', x.realSoc, x.round ? '% zurück' : '% Ankunft', '–')}</div></div>
-    <div><p class="text-sm font-semibold">ABRP-Prognose</p><div class="mt-1.5 flex gap-2">${inp('rts-abrp', x.abrp, 'kWh/100 km', 'optional')}</div></div>
+    <div><p class="text-sm font-semibold">ABRP-Prognose</p>${x.stop ? '' : `<p class="text-xs text-slate-500 dark:text-slate-400 text-left">Akkustand bei Ankunft laut ABRP – oder den Verbrauch, falls bekannt</p>`}<div class="mt-1.5 flex gap-2">${inp('rts-abrp', x.abrp, 'kWh/100 km', 'optional')}${x.stop ? '' : inp('rts-abrps', x.abrpSoc, x.round ? '% zurück' : '% Ankunft', '–')}</div></div>
     <div id="rts-prev" class="rounded-2xl bg-slate-100 dark:bg-slate-800 px-3 py-2.5 text-[13px] text-left"></div>
     <p id="rts-msg" class="hidden text-xs text-left text-red-600 dark:text-red-400"></p>
     <button type="button" data-rts="save" class="h-12 w-full rounded-2xl bg-emerald-600 text-sm font-semibold text-white active:scale-95 transition">Speichern</button>
     <button type="button" data-rts="del" class="w-full py-1 text-xs font-semibold text-red-600 dark:text-red-400">Gemerkte Fahrt löschen</button>`;
   box.dataset.rtid = id; $('au-sheet').classList.remove('hidden'); rtSheetPrev();
   ['rts-real', 'rts-soc', 'rts-abrp'].forEach(f => $(f) && $(f).addEventListener('input', rtSheetPrev));
+  if ($('rts-abrps')) $('rts-abrps').addEventListener('input', () => { const v = deDec($('rts-abrps').value); if (v !== undefined && v < x.soc0) $('rts-abrp').value = String(Math.round((x.soc0 - v) / 100 * batteryKwh() / x.km * 100 * 10) / 10).replace('.', ','); rtSheetPrev(); });   // ABRP-Ankunft % → kWh/100 km
+  if ($('rts-abrp') && $('rts-abrps')) $('rts-abrp').addEventListener('input', () => { $('rts-abrps').value = ''; });
 }
 function rtSheetVals() {
   const x = getLab().fc.find(e => e.id === $('au-sheet-box').dataset.rtid); if (!x) return null; const cap = batteryKwh();
-  const real = deDec($('rts-real').value), soc = $('rts-soc') ? deDec($('rts-soc').value) : undefined, abrp = deDec($('rts-abrp').value);
+  const real = deDec($('rts-real').value), soc = $('rts-soc') ? deDec($('rts-soc').value) : undefined, abrp = deDec($('rts-abrp').value), abrpSoc = $('rts-abrps') ? deDec($('rts-abrps').value) : undefined;
   const r = real !== undefined ? real : soc !== undefined && soc < x.soc0 ? Math.round((x.soc0 - soc) / 100 * cap / x.km * 100 * 100) / 100 : undefined;
-  return { x, real: r, soc, abrp, rawReal: real };
+  return { x, real: r, soc, abrp, abrpSoc, rawReal: real };
 }
 function rtSheetPrev() {
   const v = rtSheetVals(); if (!v) return; const { x, real, abrp } = v, el = $('rts-prev'), box = $('au-sheet-box');
@@ -9368,9 +9370,10 @@ $('au-sheet').addEventListener('click', (e) => {
   const v = rtSheetVals(); if (!v) return; const msg = $('rts-msg');
   if (v.rawReal !== undefined && !(v.rawReal > 3 && v.rawReal < 60)) { msg.textContent = 'Echten Verbrauch bitte in kWh/100 km eingeben (z. B. 18,9).'; msg.classList.remove('hidden'); return; }
   if (v.soc !== undefined && !(v.soc >= -20 && v.soc < v.x.soc0)) { msg.textContent = 'Akku bei Ankunft muss unter dem Start-Akku (' + v.x.soc0 + ' %) liegen.'; msg.classList.remove('hidden'); return; }
-  if (v.abrp !== undefined && !(v.abrp > 3 && v.abrp < 60)) { msg.textContent = 'ABRP-Wert bitte in kWh/100 km eingeben.'; msg.classList.remove('hidden'); return; }
+  if (v.abrpSoc !== undefined && !(v.abrpSoc >= -20 && v.abrpSoc < v.x.soc0)) { msg.textContent = 'ABRP-Ankunft muss unter dem Start-Akku (' + v.x.soc0 + ' %) liegen.'; msg.classList.remove('hidden'); return; }
+  if (v.abrp !== undefined && !(v.abrp > 3 && v.abrp < 60)) { msg.textContent = 'ABRP-Wert bitte als Akkustand in % oder in kWh/100 km eingeben.'; msg.classList.remove('hidden'); return; }
   const lab = getLab(); lab.fc = lab.fc.map(x => { if (x.id !== id) return x; const n = { ...x }; delete n.real; delete n.realSoc; delete n.abrp;
-    if (v.real > 0) n.real = v.real; if (v.soc !== undefined) n.realSoc = v.soc; if (v.abrp > 0) n.abrp = v.abrp; if (v.abrp > 0 && x.abrpSoc != null && v.abrp !== x.abrp) delete n.abrpSoc; return n; });
+    if (v.real > 0) n.real = v.real; if (v.soc !== undefined) n.realSoc = v.soc; if (v.abrp > 0) n.abrp = v.abrp; delete n.abrpSoc; if (v.abrp > 0 && v.abrpSoc !== undefined) n.abrpSoc = v.abrpSoc; return n; });
   setLab(lab); $('au-sheet').classList.add('hidden'); rtTabs();
 });
 /* Planung von einem anderen Gerät übernehmen, wenn hier nichts gerade bearbeitet wird */
