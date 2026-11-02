@@ -5945,7 +5945,10 @@ function iceEval(H, day, st) {
   const frostH = late.filter(x => x.Tg <= 0 && x.Tg <= x.Td + 0.5).length, minTg = Math.min(...late.map(x => x.Tg)), gap = Math.min(...late.map(x => x.Tg - x.Td));
   let glaze = false; rows.forEach((x, i) => { if (x.p >= 0.2 && rows.slice(i + 1).some(y => y.Tg <= -0.5)) glaze = true; });
   const lvl = glaze && minTg <= 0 || (frostH >= 3 && minTg <= -1) ? 2 : frostH >= 1 || (minTg <= 0.5 && gap <= 1.5) ? 1 : 0, last = rows[rows.length - 1];
-  return { day, lvl, T: last.T, minT: Math.min(...late.map(x => x.T)), minTg, cc: late.reduce((a, x) => a + x.cc, 0) / late.length, ws: late.reduce((a, x) => a + x.ws, 0) / late.length, glaze, frostH };
+  /* Eis-Wahrscheinlichkeit (Schätzung, kein Messwert): innerhalb der Stufe nach Stärke abgestuft – gering 5–25 %, möglich 30–60 %, wahrscheinlich 65–95 % */
+  const cl = (v) => Math.max(0, Math.min(1, v)), sev = lvl >= 2 ? cl((-1 - minTg) / 4 + frostH / 14 + (glaze ? 0.5 : 0)) : lvl === 1 ? cl((0.5 - minTg) / 2 + (1.5 - gap) / 3) : cl((2.5 - minTg) / 3 + (3 - gap) / 6);
+  const p = Math.round(((lvl >= 2 ? 65 : lvl === 1 ? 30 : 5) + sev * (lvl === 0 ? 20 : 30)) / 5) * 5;
+  return { day, lvl, p, T: last.T, minT: Math.min(...late.map(x => x.T)), minTg, cc: late.reduce((a, x) => a + x.cc, 0) / late.length, ws: late.reduce((a, x) => a + x.ws, 0) / late.length, glaze, frostH };
 }
 async function iceHourly(l, st) {
   const sig = [l.lat.toFixed(3), l.lon.toFixed(3), wxIso(new Date())].join('|'), c = load(KEY_ICE + 'H', null);
@@ -6195,17 +6198,18 @@ function openWxoSheet() {
       <p>Regentag: <b>+${fmt(m.c, 1)}</b> ${m.wetN >= 4 ? '' : '<span class="text-slate-400">(noch nah am Startwert ' + fmt(P.c, 1) + ')</span>'}</p>
       <p>Feuchter Morgen (5–9 Uhr ≥ 90 %, unter 10 °C): <b>+${fmt(m.e, 1)}</b> ${m.humN >= 4 ? '' : '<span class="text-slate-400">(noch nah am Startwert ' + fmt(P.e, 1) + ')</span>'}</p>
       <p class="text-slate-500 dark:text-slate-400">❄️ Kälte · 🌧️ Regen · 💧 beschlagene Scheiben (Heizung + Klima)</p>
-      <p class="text-slate-500 dark:text-slate-400"><img src="Bilder/wx/snowman.svg" alt="" class="inline h-4 w-4 align-[-3px]"> Eis: Scheibe morgens vereist wahrscheinlich, blass „Eis?“: möglich (Eis-Warnung, Ort „Zuhause“, Abfahrt laut Einstellungen)</p>
+      <p class="text-slate-500 dark:text-slate-400"><span class="font-semibold text-orange-500">70 %</span> Eis-Wahrscheinlichkeit morgens – geschätzt aus der Scheibentemperatur (Temperatur, Taupunkt, Bewölkung, Wind, Stellplatz); <span class="text-yellow-500">gelb</span> Raureif möglich, <span class="text-orange-500">orange</span> wahrscheinlich vereist, <span class="text-red-500">rot</span> fast sicher bzw. Eisschicht. Ab 20 % angezeigt (Eis-Warnung, Ort „Zuhause“, Abfahrt laut Einstellungen)</p>
       ${m.sd ? `<p>Typische Abweichung: ±${fmt(m.sd, 1)} kWh/100 km</p>` : ''}
       <p class="mt-1.5 text-slate-500 dark:text-slate-400">Gelernt aus ${m.n} genauen Ladungen (mit Akku-% und km-Stand, ≥ 20 km) und dem Wetter an deinem Standort. Jede neue Ladung verbessert die Werte; neuere zählen stärker (eine 90 Tage alte Ladung halb so viel). Verbrauch ohne Ladeverluste (aus dem Akku, vergleichbar mit der Anzeige im Auto). Wetter: Open-Meteo${wxIconStyle() === 'meteo' ? ', Symbole: Meteocons von Bas Milius (MIT)' : ''}. Reichweite: ${fmt(o.cap, 1)} kWh netto bei 100 % Akku.</p>
     </details>
     <button type="button" data-wxo="close" class="h-12 w-full rounded-2xl border border-slate-300 dark:border-slate-700 text-sm font-semibold">Schließen</button>`;
   $('wxo-sheet').classList.remove('hidden');
-  iceDays(days.map(x => x.d)).then(map => {
-    document.querySelectorAll('#wxo-sheet-box [data-icem]').forEach(el => { const r = map[el.dataset.icem]; if (!r || !r.lvl) return; const hi = r.lvl >= 2;     // Handy: als zweite Zeile unter den Temperaturen
-      el.innerHTML = `<span class="inline-flex items-center gap-1 font-semibold ${hi ? 'text-sky-500 dark:text-sky-300' : 'text-sky-500/60 dark:text-sky-300/60'}" title="Scheibe vereist ${ICE_LVL[r.lvl]}"><img src="Bilder/wx/snowman.svg" alt="" width="30" height="30" class="-my-1.5 -ml-1.5 -mr-0.5 h-[30px] w-[30px] ${hi ? '' : 'opacity-60'}">${hi ? 'Eis' : 'Eis?'}</span>`; });
-    document.querySelectorAll('#wxo-sheet-box [data-iced]').forEach(el => { const r = map[el.dataset.iced]; if (!r || !r.lvl) return; const hi = r.lvl >= 2;
-    el.innerHTML = `<span class="flex flex-col items-center ${hi ? 'text-sky-500 dark:text-sky-300' : 'text-sky-500/45 dark:text-sky-300/45'}" title="Scheibe vereist ${ICE_LVL[r.lvl]} (Scheibe ≈ ${fmt(Math.round(r.minTg) || 0, 0).replace('-', '−')} °C)"><img src="Bilder/wx/snowman.svg" alt="" width="32" height="32" class="-my-1.5 ${hi ? 'h-12 w-12' : 'h-10 w-10 opacity-60'}"><span class="text-[10px] leading-tight">${hi ? 'Eis' : 'Eis?'}</span><span class="sr-only">Scheibe vereist ${ICE_LVL[r.lvl]}</span></span>`; }); }).catch(() => { });
+  iceDays(days.map(x => x.d)).then(map => {                                     // Eis-Wahrscheinlichkeit je Morgen: Prozent + Balken (Handy unter den Temperaturen, PC in der Lücke)
+    const bar = (r, w) => { const p = r.p, c = p < 50 ? '#eab308' : p < 80 ? '#f97316' : '#ef4444', t = 'Eis morgens ≈ ' + p + ' % (Scheibe ≈ ' + fmt(Math.round(r.minTg) || 0, 0).replace('-', '−') + ' °C, ' + ICE_LVL[r.lvl] + ')';
+      return `<span class="inline-flex items-center gap-1.5" title="${t}"><span class="whitespace-nowrap text-[12px] font-bold tabular-nums" style="color:${c}">${p} %</span><span class="block h-[5px] overflow-hidden rounded-full bg-slate-300 dark:bg-slate-700" style="width:${w}px"><span class="block h-full rounded-full" style="width:${p}%;background:${c}"></span></span><span class="sr-only">${t}</span></span>`; };
+    document.querySelectorAll('#wxo-sheet-box [data-icem]').forEach(el => { const r = map[el.dataset.icem]; if (r && r.p >= 20) el.innerHTML = bar(r, 40); });
+    document.querySelectorAll('#wxo-sheet-box [data-iced]').forEach(el => { const r = map[el.dataset.iced]; if (r && r.p >= 20) el.innerHTML = bar(r, 46); });
+  }).catch(() => { });
 }
 /* Start: Verbrauchs-Prognose und Zählerstand seitlich wischen (Standard: Prognose). Höhe folgt der sichtbaren Karte. */
 const dSw = { tr: $('dash-swipe-track'), idx: 0 };
