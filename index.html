@@ -235,8 +235,9 @@
     <div id="dash-swipe" class="relative">
     <div id="dash-swipe-track" class="no-scrollbar flex gap-3 overflow-x-auto snap-x snap-mandatory overscroll-x-contain">
     <div id="btm-card" class="flex flex-col w-full shrink-0 snap-center snap-always rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4"></div>
-    <div id="wxo-card" class="hidden flex flex-col w-full shrink-0 snap-center snap-always rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
+    <div id="wxo-card" class="relative hidden flex flex-col w-full shrink-0 snap-center snap-always rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
       <div class="flex items-center justify-between gap-2"><div class="min-w-0"><p class="font-barlow text-xl font-bold uppercase tracking-[0.08em] leading-6">Verbrauchs-Prognose</p></div><button id="wxo-more" type="button" class="shrink-0 text-xs font-semibold text-sky-700 dark:text-sky-300 active:opacity-70">7 Tage ›</button></div>
+      <div id="wxo-ice-tip" role="status" class="hidden absolute inset-x-2 top-2.5 z-10 rounded-2xl bg-slate-800 dark:bg-slate-700 px-3 py-2 text-left text-white shadow-lg"></div>
       <div id="wxo-days" class="mt-2 grid grid-cols-3 gap-1.5"></div>
       <p id="wxo-tip" class="mt-2 hidden truncate text-center text-[13px] leading-5 text-slate-600 dark:text-slate-300"></p>
     </div>
@@ -6148,12 +6149,13 @@ async function renderWxo() {
   wxoLast = { m, days, eff, cap };
   wxoNLast = wxoN(); $('wxo-days').style.gridTemplateColumns = 'repeat(' + wxoNLast + ', minmax(0, 1fr))';
   $('wxo-days').innerHTML = days.slice(0, wxoNLast).map((x, i) => { const on = i === hl;
-    return `<div class="min-w-0 rounded-2xl px-1.5 py-2 text-center ${on ? 'bg-sky-50 dark:bg-sky-950/60 ring-[1.5px] ring-sky-400' : 'bg-slate-100 dark:bg-slate-800/60'}">
+    return `<div data-wd="${x.d}" class="relative min-w-0 rounded-2xl px-1.5 py-2 text-center ${on ? 'bg-sky-50 dark:bg-sky-950/60 ring-[1.5px] ring-sky-400' : 'bg-slate-100 dark:bg-slate-800/60'}">
       <p class="text-center text-[11px] font-semibold ${on ? 'text-sky-700 dark:text-sky-300' : 'text-slate-500 dark:text-slate-400'}">${lab(i)}</p>
       <p class="mt-0.5 text-center text-[22px] leading-none">${wxoIconHtml(x.w, wxIconStyle() === 'meteo' ? 40 : 30)}</p><p class="text-center text-[12.5px] font-semibold leading-tight whitespace-nowrap" title="${WXO_H1} Uhr / ${WXO_H2} Uhr · Ø ${fmt(x.T, 0)}°">${x.t7 != null && x.t16 != null ? wxoTT(x.t7) + ' / ' + wxoTT(x.t16) : wxoTT(x.T)}</p>
       <p class="mt-0.5 text-center text-[15px] font-bold leading-tight">${fmt(x.k, 1)}</p><p class="text-center text-[9.5px] leading-tight text-slate-500 dark:text-slate-400">kWh/100 km</p>
       <div class="mx-1.5 mt-1.5 h-[5px] rounded-full bg-slate-200 dark:bg-slate-700"><div class="h-[5px] rounded-full bg-gradient-to-r from-emerald-500 to-sky-400" style="width:${Math.max(8, Math.min(100, x.r / best * 100)).toFixed(0)}%"></div></div>
       <p class="mt-0.5 text-center text-[12px]"><b>${wxoFmtR(x.r)}</b> <span class="text-slate-500 dark:text-slate-400">km</span></p></div>`; }).join('');
+  wxoIceBadges(days.slice(0, wxoNLast).map(x => x.d), tok);
   /* Reicht-bis: aktueller Akkustand vom Auto (Škoda-API) bis 20 % Reserve, mit Ø km/Tag und dem vorhergesagten Verbrauch des jeweiligen Tages.
      Ohne Fahrzeugdaten: ab dem typischen Ladeziel (Ladehub 20–80 %). */
   const hb = wxoHabits(), tip = $('wxo-tip'), soc = Number.isFinite(socNow) ? socNow : null, from = soc ?? hb.target;
@@ -6234,7 +6236,24 @@ $('btn-live').addEventListener('click', () => setTimeout(() => dashSwipeTo(dashS
 mouseSwipe(dSw.tr, 12);
 dashSwipeSync();
 $('wxo-more').addEventListener('click', openWxoSheet);
-$('wxo-days').addEventListener('click', openWxoSheet);
+$('wxo-days').addEventListener('click', (e) => { const b = e.target.closest('[data-iceb]'); if (b) { e.stopPropagation(); wxoIceTip(b); return; } openWxoSheet(); });
+/* Eis-Badge oben rechts an den Prognose-Kacheln (ab 20 %), Farben wie in der 7-Tage-Prognose; Tipp darauf zeigt kurz die Erklärung über den Kacheln */
+const ICE_COL = (p) => p < 50 ? '#eab308' : p < 80 ? '#f97316' : '#ef4444', ICE_NAME = (p) => p < 50 ? 'Raureif' : p < 80 ? 'Vereist' : 'Eisschicht';
+let wxoIceMap = {}, wxoIceT = 0;
+function wxoIceBadges(ds, tok) {
+  iceDays(ds).then(map => { if (tok !== wxoTok) return; wxoIceMap = map;
+    document.querySelectorAll('#wxo-days [data-wd]').forEach(el => { const r = map[el.dataset.wd], old = el.querySelector('[data-iceb]'); if (old) old.remove(); if (!r || r.p < 20) return;
+      el.insertAdjacentHTML('beforeend', `<button type="button" data-iceb="${el.dataset.wd}" aria-label="Eis morgens ${r.p} Prozent – Erklärung" class="absolute -top-[7px] -right-1 z-[1] inline-flex items-center gap-0.5 rounded-full py-0.5 pl-1 pr-1.5 text-[10px] font-bold leading-none text-slate-900 shadow-sm active:scale-95 transition" style="background:${ICE_COL(r.p)}"><svg class="h-2.5 w-2.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20M4.9 6l14.2 12M19.1 6L4.9 18M9 3.5l3 2 3-2M9 20.5l3-2 3 2"/></svg>${r.p} %</button>`); });
+  }).catch(() => { });
+}
+function wxoIceTip(b) {
+  const r = wxoIceMap[b.dataset.iceb], el = $('wxo-ice-tip'); if (!r) return; clearTimeout(wxoIceT);
+  const day = b.dataset.iceb === wxIso(new Date()) ? 'Heute früh' : b.dataset.iceb === wxIso(new Date(Date.now() + 864e5)) ? 'Morgen früh' : wxDay(b.dataset.iceb).wd + '. früh', cur = ICE_NAME(r.p);
+  const item = (e, n) => `<span class="${n === cur ? 'font-bold' : 'opacity-55'}">${e} ${n}</span>`;
+  el.innerHTML = `<p class="text-[13px] font-semibold">${day}: Eis ≈ ${r.p} % · Scheibe ≈ ${fmt(Math.round(r.minTg) || 0, 0).replace('-', '−')} °C</p><p class="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[12.5px]">${item('🟡', 'Raureif')}${item('🟠', 'Vereist')}${item('🔴', 'Eisschicht')}</p>`;
+  el.classList.remove('hidden'); wxoIceT = setTimeout(() => el.classList.add('hidden'), 5000);
+}
+$('wxo-ice-tip').addEventListener('click', () => { clearTimeout(wxoIceT); $('wxo-ice-tip').classList.add('hidden'); });
 $('wxo-sheet').addEventListener('click', (e) => { if (e.target === $('wxo-sheet') || e.target.closest('[data-wxo="close"]')) $('wxo-sheet').classList.add('hidden'); });
 wxoBoot(); fillWxoPrefs(); renderWxo(); setInterval(() => { if (!document.hidden && currentView === 'dashboard') renderWxo(); }, 30 * 60 * 1000);
 setTimeout(() => renderFrost(), 1500); setInterval(() => { if (!document.hidden && currentView === 'dashboard') renderFrost(); }, 15 * 60 * 1000);
