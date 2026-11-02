@@ -6243,7 +6243,7 @@ let wxoIceMap = {}, wxoIceT = 0;
 function wxoIceBadges(ds, tok) {
   iceDays(ds).then(map => { if (tok !== wxoTok) return; wxoIceMap = map;
     document.querySelectorAll('#wxo-days [data-wd]').forEach(el => { const r = map[el.dataset.wd], old = el.querySelector('[data-iceb]'); if (old) old.remove(); if (!r || r.p < 20) return;
-      el.insertAdjacentHTML('beforeend', `<button type="button" data-iceb="${el.dataset.wd}" aria-label="Eis morgens ${r.p} Prozent – Erklärung" class="absolute -top-[7px] -right-1 z-[1] inline-flex items-center gap-0.5 rounded-full py-0.5 pl-1 pr-1.5 text-[10px] font-bold leading-none text-slate-900 shadow-sm active:scale-95 transition" style="background:${ICE_COL(r.p)}"><svg class="h-2.5 w-2.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20M4.9 6l14.2 12M19.1 6L4.9 18M9 3.5l3 2 3-2M9 20.5l3-2 3 2"/></svg>${r.p} %</button>`); });
+      el.insertAdjacentHTML('beforeend', `<button type="button" data-iceb="${el.dataset.wd}" aria-label="Eis morgens ${r.p} Prozent – Erklärung" class="absolute -top-[7px] -right-1 z-[1] inline-flex items-center gap-0.5 rounded-full py-0.5 pl-1 pr-1.5 text-[10px] font-bold leading-none text-slate-900 shadow-sm active:scale-95 transition" style="background:${ICE_COL(r.p)}"><span class="text-[10px] leading-none" aria-hidden="true">❄️</span>${r.p} %</button>`); });
   }).catch(() => { });
 }
 function wxoIceTip(b) {
