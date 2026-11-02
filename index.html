@@ -6972,7 +6972,7 @@ try { renderWrapCard(); } catch (e) { }
    im Dokument enyaqStrom/<uid>/settings/prefs, gleiche Regel wie Anbieter und Kategorien. Die PIN bleibt nur auf dem Gerät.
    Erster Abgleich: Was die Cloud hat, gilt; fehlt dort etwas und ist lokal vorhanden, wird es hochgeladen. Danach gilt die Cloud (Änderung auf einem Gerät wirkt auf allen).
    ===================================================================== */
-const SYNC_SET_KEYS = ['title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAcKwh', 'certDcKwh', 'certKm', 'wltpNet', 'ccEnd', 'wxoCut', 'dashFirst', 'carN', 'carSec', 'wxIcons', 'nRep', 'nTrips', 'nBakYm', 'nBakAt', 'nBakSnz', 'gtMirror', 'gtList', 'rtLast', 'iceDep', 'iceWe', 'icePark', 'iceMin', 'iceK'];
+const SYNC_SET_KEYS = ['title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAcKwh', 'certDcKwh', 'certKm', 'wltpNet', 'ccEnd', 'wxoCut', 'dashFirst', 'carN', 'carSec', 'wxIcons', 'nRep', 'nTrips', 'nBakYm', 'nBakAt', 'nBakSnz', 'gtMirror', 'gtList', 'iceDep', 'iceWe', 'icePark', 'iceMin', 'iceK'];
 /** Einstellungen für die Cloud: feste Reihenfolge, ohne leere Werte (Firestore verbietet undefined). null = nichts vorhanden. */
 function syncSet(src) {
   const o = {}; if (src && typeof src === 'object') SYNC_SET_KEYS.forEach(k => { const v = src[k]; if (v != null && v !== '' && !(typeof v === 'number' && !isFinite(v))) o[k] = v; });
@@ -6981,7 +6981,7 @@ function syncSet(src) {
 function pushPrefs() {
   if (!window.cloud?.isSignedIn()) return;
   const w = Number(getSettings().wltp);
-  window.cloud.setPrefs({ wltp: w > 0 ? w : null, wxLoc: wxLoc() || null, provInfo: load(KEY_PROVINFO, null), settings: syncSet(load(KEY_SETTINGS, {})), kb: load('enyaq.kb', null), lab: load(KEY_LAB, null) }).catch(() => { });
+  window.cloud.setPrefs({ wltp: w > 0 ? w : null, wxLoc: wxLoc() || null, provInfo: load(KEY_PROVINFO, null), settings: syncSet(load(KEY_SETTINGS, {})), kb: load('enyaq.kb', null), lab: labNoFc(load(KEY_LAB, null)) }).catch(() => { });
 }
 window.onCloudPrefs = (d, first, uid) => {
   if (first) checkCacheUid(uid);
@@ -7011,10 +7011,10 @@ window.onCloudPrefs = (d, first, uid) => {
   /* Labor (Ladekurven, Rekorde, Tempomat-Messreihe): wie Wissen */
   /* Labor: zusammenführen (neuester Stand je Element), nie durch einen älteren oder fehlenden Cloud-Stand löschen */
   const lq = load(KEY_LAB, null), cq = d && d.lab && typeof d.lab === 'object' ? d.lab : null; let nq = labMerge(lq, cq);
-  if (nq && labCanon(nq) !== labCanon(cq)) up = true;
+  if (nq && labCanon(labNoFc(nq)) !== labCanon(labNoFc(cq))) up = true;                    // gemerkte Fahrten laufen über das eigene Routen-Dokument
   if (labCanon(nq) !== labCanon(lq)) { if (nq) save(KEY_LAB, nq); try { renderCurve(); if (currentView === 'recs') renderRecs(); if (currentView === 'tires') renderTires(); if (currentView === 'wish') renderWish(); if (currentView === 'route') rtTabs(); } catch (e) { } }
   try { if (currentView === 'route') rtCloudPlan(); } catch (e) { }
-  if (up) window.cloud.setPrefs({ wltp: nw, wxLoc: nl, provInfo: np, settings: ns, kb: nk, lab: nq }).catch(() => { });
+  if (up) window.cloud.setPrefs({ wltp: nw, wxLoc: nl, provInfo: np, settings: ns, kb: nk, lab: labNoFc(nq) }).catch(() => { });
 };
 
 /* =====================================================================
@@ -7962,7 +7962,7 @@ function labMerge(a, b) {
   return out;
 }
 const labCanon = (o) => JSON.stringify(o, (k, v) => v && typeof v === 'object' && !Array.isArray(v) ? Object.keys(v).sort().reduce((r, x) => (r[x] = v[x], r), {}) : v);
-function setLab(o) { save(KEY_LAB, JSON.parse(JSON.stringify(labStamp(o)))); try { pushPrefs(); } catch (e) { } try { renderCurve(); } catch (e) { } if (currentView === 'recs') renderRecs(); if (currentView === 'tires') renderTires(); if (currentView === 'wish') renderWish(); }
+function setLab(o) { save(KEY_LAB, JSON.parse(JSON.stringify(labStamp(o)))); try { pushPrefs(); } catch (e) { } try { pushRoutes(); } catch (e) { } try { renderCurve(); } catch (e) { } if (currentView === 'recs') renderRecs(); if (currentView === 'tires') renderTires(); if (currentView === 'wish') renderWish(); }
 const labId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 const deDec = (v) => { const t = String(v == null ? '' : v).trim().replace('−', '-').replace(',', '.'); return t === '' ? undefined : Number(t); };
 const labD = (iso) => { const d = new Date(iso + 'T12:00:00'); return isNaN(d) ? '' : d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }); };
@@ -9232,7 +9232,7 @@ async function rtRun() {
   RT.busy = false; rtRenderRes(); if (RT.res) rtFindStops(n);
   try { const pk = (p) => p ? { label: p.label, lat: Math.round(p.lat * 1e5) / 1e5, lon: Math.round(p.lon * 1e5) / 1e5 } : null;   // Planung geräteübergreifend (Einstellungen → Cloud)
     const v = { a: pk(RT.a), b: pk(RT.b), v: pk(RT.v), pers: o.pers, tempo: o.tempo, vab: o.vab, round: !!o.round, stay: o.stay, soc: o.soc, dep: new Date(o.dep).toISOString(), at: new Date().toISOString() }, cur = getSettings().rtLast;
-    const same = cur && JSON.stringify({ ...cur, at: 0 }) === JSON.stringify({ ...v, at: 0 }); save(KEY_RT, v); if (!same) setQuickSetting('rtLast', v); } catch (e) { }
+    const same = cur && JSON.stringify({ ...cur, at: 0 }) === JSON.stringify({ ...v, at: 0 }); save(KEY_RT, v); if (!same) { setQuickSetting('rtLast', v); pushRoutes(); } } catch (e) { }
 }
 function rtSugHide(w) { const el = $('rt-sug-' + w); el.innerHTML = ''; el.classList.add('hidden'); }
 function rtSugShow(w, list, more) {
@@ -9408,6 +9408,25 @@ $('ice-test').addEventListener('click', async () => {
   b.disabled = false;
 });
 
+/* ---- Routenplaner-Daten geräteübergreifend: eigenes Dokument enyaqStrom/<uid>/settings/routes = { list: gemerkte Fahrten (lab.fc), del: Löschungen, rtLast: Planung }.
+   Unabhängig vom großen Einstellungs-Dokument; Zusammenführen je Fahrt (neuester Stand gewinnt), Planung nach Zeitstempel. ---- */
+const labNoFc = (o) => { if (!o) return o; const c = { ...o }; delete c.fc; return c; };
+let rtPushT = 0;
+function pushRoutes() { clearTimeout(rtPushT); rtPushT = setTimeout(() => { if (!window.cloud?.isSignedIn()) return; const L = load(KEY_LAB, null) || {}, rl = getSettings().rtLast;
+  window.cloud.setRoutes({ list: L.fc || [], del: L.del || {}, rtLast: rl || null }).catch(e => { try { window.onCloudStatus?.({ error: 'Routenplaner speichern: ' + (e.message || e) }); } catch (er) { } }); }, 800); }
+window.onCloudRoutes = (d, first) => {
+  const L = load(KEY_LAB, null) || {}, loc = L.fc || [], rem = d && Array.isArray(d.list) ? d.list : [], del = { ...(L.del || {}) };
+  Object.entries((d && d.del) || {}).forEach(([k, t]) => { if (!(del[k] >= t)) del[k] = t; });
+  const m = new Map(); [loc, rem].forEach(l => l.forEach(x => { if (!x || !x.id) return; const c = m.get(String(x.id)); if (!c || (x.u || 0) > (c.u || 0)) m.set(String(x.id), x); }));
+  const fc = [...m.values()].filter(x => !(del[String(x.id)] >= (x.u || 0))), canon = (l) => JSON.stringify(l.slice().sort((a, b) => String(a.id).localeCompare(String(b.id))));
+  let push = !d || canon(fc) !== canon(rem);
+  if (canon(fc) !== canon(loc)) { save(KEY_LAB, { ...L, fc, del }); try { if (currentView === 'route') rtTabs(); } catch (e) { } }
+  const lr = getSettings().rtLast, cr = d && d.rtLast;                       // Planung: neuerer Stand gewinnt
+  if (cr && (!lr || String(cr.at || '') > String(lr.at || ''))) { const st = load(KEY_SETTINGS, {}) || {}; st.rtLast = cr; save(KEY_SETTINGS, st); try { if (currentView === 'route') rtCloudPlan(); } catch (e) { } }
+  else if (lr && (!cr || String(lr.at || '') > String(cr.at || ''))) push = true;
+  if (push) pushRoutes();
+};
+
 if (window.__noStorage) {                                                       // Hinweis: Browser-Speicher gesperrt
   const d = document.createElement('div'); d.setAttribute('role', 'alert');
   d.className = 'fixed inset-x-3 top-3 z-[70] rounded-2xl bg-amber-500 text-slate-950 px-4 py-3 text-sm shadow-xl text-left';
@@ -9428,7 +9447,7 @@ const app = initializeApp({
 });
 const auth = getAuth(app);
 const db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });   // Offline-Queue
-let user = null, unsub = null, unsubP = null, unsubC = null, unsubK = null, unsubR = null, unsubG = null, unsubF = null, unsubT = null, unsubL = null, driveTok = null, driveExp = 0;
+let user = null, unsub = null, unsubP = null, unsubC = null, unsubK = null, unsubR = null, unsubG = null, unsubF = null, unsubT = null, unsubL = null, unsubRt = null, driveTok = null, driveExp = 0;
 const col = () => collection(db, 'enyaqStrom', user.uid, 'readings');
 const costsCol = () => collection(db, 'enyaqStrom', user.uid, 'costs');                // Kosten (Service, Wäsche, Versicherung …)
 const remCol = () => collection(db, 'enyaqStrom', user.uid, 'reminders');                // Erinnerungen (Wartung, Service nach Datum/km)
@@ -9438,7 +9457,8 @@ const prefDoc = () => doc(db, 'enyaqStrom', user.uid, 'settings', 'prefs');     
 const provDoc = () => doc(db, 'enyaqStrom', user.uid, 'settings', 'providers');     // eigenes Dokument für die Anbieter-Liste
 const tripCol = () => collection(db, 'enyaqStrom', user.uid, 'tripMonths');          // Fahrtenbuch: ein Dokument je Monat { list, updatedAt }
 const placesDoc = () => doc(db, 'enyaqStrom', user.uid, 'settings', 'places');
-const pushDoc = () => doc(db, 'enyaqStrom', user.uid, 'settings', 'push');           // Push-Adressen je Gerät { devices: { <id>: { sub, at, ua } | null } }      // benannte Orte des Fahrtenbuchs
+const pushDoc = () => doc(db, 'enyaqStrom', user.uid, 'settings', 'push');
+const routeDoc = () => doc(db, 'enyaqStrom', user.uid, 'settings', 'routes');        // Routenplaner: gemerkte Fahrten + aktuelle Planung (eigenes Dokument)           // Push-Adressen je Gerät { devices: { <id>: { sub, at, ua } | null } }      // benannte Orte des Fahrtenbuchs
 /** Schreibt nur Monate, deren Fahrten sich geändert haben; leer gewordene Monate werden gelöscht. Liefert die Zahl der geschriebenen Monate. */
 async function pushTripMonths(prev, next) {
   if (!user) return 0;
@@ -9488,6 +9508,7 @@ window.cloud = {
   setPrefs: (o) => user ? setDoc(prefDoc(), { ...o, updatedAt: new Date().toISOString() }) : Promise.resolve(),
   pushTrips: (prev, next) => pushTripMonths(prev, next),
   setTripPrefs: (o) => user ? setDoc(placesDoc(), { ...o, updatedAt: new Date().toISOString() }) : Promise.resolve(),
+  setRoutes: (o) => user ? setDoc(routeDoc(), { ...o, updatedAt: new Date().toISOString() }) : Promise.resolve(),
   setPush: (id, v) => user ? setDoc(pushDoc(), { devices: { [id]: v }, updatedAt: new Date().toISOString() }, { merge: true }) : Promise.reject(new Error('Bitte zuerst bei Google anmelden.')),
   setProviders: (list) => user ? setDoc(provDoc(), { list, updatedAt: new Date().toISOString() }) : Promise.resolve(),
   token: () => user ? user.getIdToken() : Promise.resolve(null),       // Anmelde-Token für die Vercel-Funktionen
@@ -9498,7 +9519,7 @@ window.cloud = {
 
 onAuthStateChanged(auth, (u) => {
   driveTok = null; driveExp = 0;
-  user = u; if (unsub) { unsub(); unsub = null; } if (unsubP) { unsubP(); unsubP = null; } if (unsubC) { unsubC(); unsubC = null; } if (unsubK) { unsubK(); unsubK = null; } if (unsubR) { unsubR(); unsubR = null; } if (unsubG) { unsubG(); unsubG = null; } if (unsubF) { unsubF(); unsubF = null; } if (unsubT) { unsubT(); unsubT = null; } if (unsubL) { unsubL(); unsubL = null; }
+  user = u; if (unsubRt) { unsubRt(); unsubRt = null; } if (unsub) { unsub(); unsub = null; } if (unsubP) { unsubP(); unsubP = null; } if (unsubC) { unsubC(); unsubC = null; } if (unsubK) { unsubK(); unsubK = null; } if (unsubR) { unsubR(); unsubR = null; } if (unsubG) { unsubG(); unsubG = null; } if (unsubF) { unsubF(); unsubF = null; } if (unsubT) { unsubT(); unsubT = null; } if (unsubL) { unsubL(); unsubL = null; }
   window.onCloudStatus?.(u ? { email: u.email || u.displayName || 'Konto', uid: u.uid } : null);
   if (!u) return;
   let firstP = true;
@@ -9509,6 +9530,9 @@ onAuthStateChanged(auth, (u) => {
     (err) => window.onCloudStatus?.({ error: 'Fahrten: ' + (err.code === 'permission-denied' ? 'Keine Berechtigung für enyaqStrom/<uid>/tripMonths (Firestore-Regel ergänzen)' : err.message) }));
   unsubL = onSnapshot(placesDoc(), (snap) => { window.onCloudPlaces?.(snap.exists() ? snap.data() : null, firstL, u.uid); firstL = false; },
     (err) => window.onCloudStatus?.({ error: 'Orte: ' + (err.code === 'permission-denied' ? 'Keine Berechtigung für enyaqStrom/<uid>/settings/places (Firestore-Regel ergänzen)' : err.message) }));
+  let firstRt = true;
+  unsubRt = onSnapshot(routeDoc(), (snap) => { window.onCloudRoutes?.(snap.exists() ? snap.data() : null, firstRt); firstRt = false; },
+    (err) => window.onCloudStatus?.({ error: 'Routenplaner: ' + (err.code === 'permission-denied' ? 'Keine Berechtigung für enyaqStrom/<uid>/settings/routes (Firestore-Regel ergänzen)' : err.message) }));
   let firstF = true;
   unsubF = onSnapshot(prefDoc(), (snap) => { window.onCloudPrefs?.(snap.exists() ? snap.data() : null, firstF, u.uid); firstF = false; },
     (err) => window.onCloudStatus?.({ error: 'Einstellungen (WLTP, Standort): ' + (err.code === 'permission-denied' ? 'Keine Berechtigung für enyaqStrom/<uid>/settings/prefs (Firestore-Regel ergänzen)' : err.message) }));
