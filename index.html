@@ -5894,28 +5894,10 @@ async function renderFrost() {
     $('frost-t').innerHTML = `<span class="block">Prognose gestern: ${ICE_LVL[ask.lvl]}${Number.isFinite(ask.tg) ? ' (Scheibe ≈ ' + fmt(Math.round(ask.tg) || 0, 0).replace('-', '−') + ' °C)' : ''}. Deine Antwort macht die Warnung genauer.</span><span class="mt-1.5 flex gap-2"><button type="button" data-ice="1" class="rounded-lg bg-sky-600 px-3 py-1 text-xs font-semibold text-white">Ja, vereist</button><button type="button" data-ice="0" class="rounded-lg bg-black/10 dark:bg-white/10 px-3 py-1 text-xs font-semibold">Nein, frei</button></span>`;
     el.classList.remove('hidden'); return;
   }
-  if (h < 16 || fc.snooze === todayYMD()) { el.classList.add('hidden'); return; }
-  let min = null, ice = null; try { [min, ice] = await Promise.all([frostMin().catch(() => null), iceRisk().catch(() => null)]); } catch (e) { }
+  /* Abends kein eigener Hinweis mehr (die Eis-Badges an der Verbrauchs-Prognose zeigen es dezent) – nur die Prognose für die Rückfrage am Morgen merken */
+  el.classList.add('hidden'); if (h < 16) return;
+  let ice = null; try { ice = await iceRisk(); } catch (e) { }
   if (ice) { const c = load(KEY_FROST, {}) || {}; if (!c.ask || c.ask.day !== ice.day || !c.ask.done) { c.ask = ice.lvl >= 1 || ice.minTg <= 2 ? { day: ice.day, lvl: ice.lvl, tg: Math.round(ice.minTg * 10) / 10 } : null; save(KEY_FROST, c); } }
-  const iceOn = ice && ice.lvl >= st.min, frost = min != null && min < 0;
-  if (!iceOn && !frost) { el.classList.add('hidden'); return; }
-  const tt = (v) => fmt(Math.round(v) || 0, 0).replace('-', '−') + ' °C', dep = st.dep, [hh, mm] = dep.split(':').map(Number), pre = new Date(2000, 0, 1, hh, mm - 15);
-  let w1 = null; try { w1 = wxoLast && wxoLast.days && wxoLast.days[1] && wxoLast.days[1].d === wxIso(new Date(Date.now() + 864e5)) ? wxoLast.days[1] : null; } catch (e) { }
-  let rng = '';
-  if (w1) rng = 'Morgen ≈ ' + fmt(w1.k, 1) + ' kWh/100 km · volle Ladung ≈ ' + wxoFmtR(w1.r) + ' km.';
-  else if (frost) { const loss = Math.min(35, Math.round(10 + Math.max(0, -min) * 1.5)), rs = getReadings(); let k100 = null; try { const t = rs.length ? consumptionTotals(rs, rs.map((_, i) => i)) : null; k100 = t && t.km ? t.kwh100 : null; } catch (e) { }
-    const full = k100 ? batteryKwh() / (k100 * BAT.eta) * 100 : null; rng = 'Reichweite ca. ' + loss + ' % geringer' + (full ? ' (volle Ladung ≈ ' + fmt(Math.round(full * (1 - loss / 100) / 5) * 5, 0) + ' statt ' + fmt(Math.round(full / 5) * 5, 0) + ' km)' : '') + '.'; }
-  const plug = (min != null && min < 3) || (ice && ice.T < 3) ? ' Heute Abend anstecken: Vorklimatisieren aus dem Netz schont den Akku.' : '';
-  if (iceOn) {
-    $('frost-h').textContent = 'Morgen früh: Scheibe vereist ' + (ice.lvl >= 2 ? 'wahrscheinlich' : 'möglich');
-    const sky = ice.cc < 25 ? 'klar' : ice.cc < 60 ? 'teils bewölkt' : 'bewölkt', wind = ice.ws < 1.5 ? 'windstill' : ice.ws < 4 ? 'wenig Wind' : 'windig';
-    $('frost-t').innerHTML = `<span class="block">${tt(ice.T)} um ${dep} Uhr, ${sky}, ${wind} · Scheibe ≈ ${tt(ice.minTg)}${ice.glaze ? ' · Nässe am Abend, danach Frost: Eisschicht' : ''}</span>`
-      + `<span class="block mt-0.5"><b>Tipp:</b> Vorklimatisierung auf ${pad2(pre.getHours())}:${pad2(pre.getMinutes())} stellen (Abfahrt ${dep})${ice.lvl >= 2 ? ' – oder Scheibenabdeckung drauf bzw. 10 min früher los' : ''}.${esc(plug)}</span>${rng ? `<span class="block mt-0.5">${rng}</span>` : ''}`;
-  } else {
-    $('frost-h').textContent = 'Morgen früh ' + tt(min);
-    $('frost-t').textContent = rng + (plug || ' Heute Abend anstecken: Vorklimatisieren aus dem Netz schont den Akku.');
-  }
-  el.classList.remove('hidden');
 }
 $('frost-x').addEventListener('click', () => { const c = load(KEY_FROST, {}) || {}; if (c.ask && c.ask.day === todayYMD() && new Date().getHours() < 12) c.ask.done = true; else c.snooze = todayYMD(); save(KEY_FROST, c); $('frost-banner').classList.add('hidden'); });
 $('frost-banner').addEventListener('click', (e) => {
@@ -6121,7 +6103,7 @@ function setQuickSetting(k, v) { const st = load(KEY_SETTINGS, {}) || {}; if (v 
 function fillWxoPrefs() {
   Promise.resolve().then(() => fillIcePush()).catch(() => { });                    // erst nach dem Laden des Skripts (Konstanten weiter unten)
   try { const st = iceSet(), f = (id, v) => { const e = $(id); if (e && document.activeElement !== e) e.value = v; }; f('set-ice-dep', st.dep); f('set-ice-park', st.park); f('set-ice-min', st.min === 2 ? 'high' : 'mid'); f('set-ice-we', st.we ? '1' : '0');
-    $('set-ice-info').textContent = 'Ab 16 Uhr am Vortag auf der Startseite, wenn die Scheibe am Ort „Zuhause“ vereisen dürfte (Temperatur, Taupunkt, Bewölkung, Wind). Morgens fragt die App kurz nach, ob es gestimmt hat.' + (Math.abs(st.k - 1) >= 0.02 ? ' Gelernt: dein Stellplatz kühlt ' + fmt(Math.abs(st.k - 1) * 100, 0) + ' % ' + (st.k > 1 ? 'stärker' : 'schwächer') + ' aus als üblich.' : ''); } catch (e) { }
+    $('set-ice-info').textContent = 'Eis-Wahrscheinlichkeit für den Ort „Zuhause“ (Temperatur, Taupunkt, Bewölkung, Wind) als Badge an der Verbrauchs-Prognose und in der 7-Tage-Ansicht; „Hinweis ab“ gilt für die Push-Nachricht. Morgens fragt die App kurz nach, ob es gestimmt hat.' + (Math.abs(st.k - 1) >= 0.02 ? ' Gelernt: dein Stellplatz kühlt ' + fmt(Math.abs(st.k - 1) * 100, 0) + ' % ' + (st.k > 1 ? 'stärker' : 'schwächer') + ' aus als üblich.' : ''); } catch (e) { }
   const gm = $('set-gt-mirror'); if (gm) gm.checked = !!getSettings().gtMirror;
   const wi = $('set-wx-icons'); if (wi && document.activeElement !== wi) wi.value = wxIconStyle();
   const cn = $('set-car-n'), cs = $('set-car-sec'); if (cn && document.activeElement !== cn) cn.value = String(carAutoN()); if (cs && document.activeElement !== cs) { const v = String(carAutoMs() / 1000); cs.value = [...cs.options].some(o => o.value === v) ? v : '30'; } const a = $('set-wxo-cut'), b = $('set-dash-first'); if (a && document.activeElement !== a) a.value = String(wxoCut()); if (b && document.activeElement !== b) b.value = dashFirst(); }
