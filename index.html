@@ -3120,7 +3120,7 @@ function renderHistory() {
     const extra = (r.odometerKm != null ? row('Kilometerstand', (st.km ? '<span class="text-xs font-normal text-slate-500">(+' + fmt(st.km, 0) + ' km)</span> ' : '') + fmt(r.odometerKm, 0) + ' km') : '') +
       (r.battTemp != null ? row('Akku-Temperatur', String(r.battTemp).replace('-', '−') + ' °C') : '') +
       (r.socStart != null && r.socEnd != null ? row('Ladestand', (st.loss != null && st.loss >= 0 && st.loss < 60 ? '<span class="text-xs font-normal text-slate-500">(Verlust ≈ ' + fmt(st.loss, 0) + ' %)</span> ' : '') + r.socStart + ' % → ' + r.socEnd + ' %') + row('Batteriekapazität', fmt(capOf(r), 1) + ' kWh') : '') +
-      (st.kwh100 != null ? row('Verbrauch/100 km <span class="text-xs">(inkl. Ladeverluste)</span>', (st.method === 'charge' ? '≈ ' : '') + fmt(st.kwh100, 1) + ' kWh' + (st.cost100 != null ? ' · ' + eur(st.cost100) : ''))
+      (st.kwh100 != null ? row('Gesamtverbrauch/100 km', (st.method === 'charge' ? '≈ ' : '') + fmt(st.kwh100, 1) + ' kWh' + (st.cost100 != null ? ' · ' + eur(st.cost100) : ''))
         + (st.method === 'charge' ? '<p class="text-xs text-slate-500 mt-1 text-right">grob: ohne Akku-% der letzten Ladung aus den geladenen kWh berechnet</p>' : st.rough ? '<p class="text-xs text-slate-500 mt-1 text-right">kleine Akku-Entnahme – Wert ungenau</p>' : '')
         + (st.cost100 == null ? '<p class="text-xs text-slate-500 mt-1 text-right">Preis fehlt – €/100 km nicht berechenbar (im Bearbeiten-Modus eintragen)</p>' : '') : '') +
       (st.gap ? row('Verbrauch/100 km', '–') + '<p class="text-xs text-slate-500 mt-1 text-right">Akku-Start liegt über dem Ende der letzten Ladung – dazwischen wurde woanders geladen</p>' : '');
