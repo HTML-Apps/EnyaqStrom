@@ -6164,8 +6164,8 @@ function wxoBoot() {
   $('wxo-card').classList.remove('hidden');
 }
 function wxoPartsHtml(q) {
-  if (!q) return ''; const t = [[q.cold, '❄️'], [q.rain, '🌧️'], [q.hum, '💧']].filter(([v]) => v >= 0.05).map(([v, i]) => '<span class="whitespace-nowrap">' + i + ' +' + fmt(v, 1) + '</span>');
-  return t.length ? `<span class="block text-[11.5px] leading-tight text-slate-500 dark:text-slate-400">${t.join(' · ')}</span>` : '';
+  if (!q) return ''; const t = [[q.cold, '❄️'], [q.rain, '🌧️'], [q.hum, '💧']].filter(([v]) => v >= 0.05);   // je Anteil eine Zeile: Symbole und Zahlen jeweils untereinander
+  return t.length ? `<span class="mt-px flex justify-end"><span class="grid grid-cols-[auto_30px] items-center gap-x-1 text-[11.5px] leading-[1.35] text-slate-500 dark:text-slate-400">${t.map(([v, i]) => `<span class="text-center">${i}</span><span class="text-right tabular-nums">+${fmt(v, 1)}</span>`).join('')}</span></span>` : '';
 }
 function openWxoSheet() {
   const o = wxoLast; if (!o) return; const { m, days } = o, P = WXO_PRIOR;
