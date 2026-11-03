@@ -147,7 +147,7 @@
   #view-dashboard:not(.live-mode) #meter-card > .grid.grid-cols-2 > div { padding-top: .5rem; padding-bottom: .5rem; }
   /* ===== PC / Querformat ab 1280 px: Schnellmenü fest links, App mittig wie am Handy, Erinnerungen fest rechts (am Handy unverändert) ===== */
   #desk-rem { display: none; }
-  #view-dashboard.live-mode #btm-card { display: none; }
+  #view-dashboard.live-mode #btm-card, #view-dashboard.live-mode #ltm-card { display: none; }
   @media (min-width: 1280px) {
     #hero-rem-sub { display: none; }
     body { padding-left: var(--dl); padding-right: var(--dr); }
@@ -234,6 +234,7 @@
 
     <div id="dash-swipe" class="relative">
     <div id="dash-swipe-track" class="no-scrollbar flex gap-3 overflow-x-auto snap-x snap-mandatory overscroll-x-contain">
+    <div id="ltm-card" class="flex flex-col w-full shrink-0 snap-center snap-always rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4"></div>
     <div id="btm-card" class="flex flex-col w-full shrink-0 snap-center snap-always rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4"></div>
     <div id="wxo-card" class="relative hidden flex flex-col w-full shrink-0 snap-center snap-always rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
       <div class="flex items-center justify-between gap-2"><div class="min-w-0"><p class="font-barlow text-xl font-bold uppercase tracking-[0.08em] leading-6">Verbrauchs-Prognose</p></div><button id="wxo-more" type="button" class="shrink-0 text-xs font-semibold text-sky-700 dark:text-sky-300 active:opacity-70">7 Tage ›</button></div>
@@ -6040,7 +6041,7 @@ async function wxoSoc() {
     const res = await fetch('/api/vehicle', { headers: await authHeaders() }), d = await res.json().catch(() => ({}));
     if (!res.ok || d.soc == null) return old;
     if (d.odometerKm != null) carKmCache = { t: Date.now(), km: Math.round(d.odometerKm), at: d.capturedAt || null };
-    save(KEY_WXO + 'S', { t: Date.now(), soc: d.soc, d }); try { renderVehCard(); } catch (e) { } return d.soc;
+    save(KEY_WXO + 'S', { t: Date.now(), soc: d.soc, d }); try { renderVehCard(); } catch (e) { } try { if (!ltmSaved) renderLtm(); } catch (e) { } return d.soc;
   } catch (e) { return old; }
 }
 /* PC: Fahrzeugstatus rechts neben dem Auto (Glas-Karte) – aus der stündlichen Abfrage beim Auto (gleicher Zwischenspeicher wie der Restakku) */
@@ -6197,14 +6198,14 @@ function openWxoSheet() {
 }
 /* Start: Verbrauchs-Prognose und Zählerstand seitlich wischen (Standard: Prognose). Höhe folgt der sichtbaren Karte. */
 const dSw = { tr: $('dash-swipe-track'), idx: 0 };
-function dashSlides() { return [$('btm-card'), $('wxo-card'), $('veh-slide'), $('meter-card')].filter(x => x && !x.classList.contains('hidden') && !(x.id === 'btm-card' && liveHero)); }
+function dashSlides() { return [$('ltm-card'), $('btm-card'), $('wxo-card'), $('veh-slide'), $('meter-card')].filter(x => x && !x.classList.contains('hidden') && !((x.id === 'btm-card' || x.id === 'ltm-card') && liveHero)); }
 const dashIdx = (id) => Math.max(0, dashSlides().indexOf($(id)));
 /** Karte beim Öffnen: Prognose oder Zählerstand (Akku-Temperatur liegt links davon und wird nur per Wischen erreicht) */
 const dashDefaultIdx = () => dashFirstSlide() === 'wx' && !$('wxo-card').classList.contains('hidden') ? dashIdx('wxo-card') : dashIdx('meter-card');
 function dashSwipeSync() {
   const sl = dashSlides(), w = dSw.tr.clientWidth + 12, i = Math.max(0, Math.min(sl.length - 1, Math.round(dSw.tr.scrollLeft / (w || 1)))); dSw.idx = i;
   const two = sl.length > 1, dd = $('dash-dots'); dd.classList.toggle('hidden', !two);
-  if (dd.children.length !== sl.length) dd.innerHTML = sl.map((x, k) => `<button type="button" data-dslide="${k}" aria-label="${x.id === 'btm-card' ? 'Akku-Temperatur' : x.id === 'wxo-card' ? 'Verbrauchs-Prognose' : x.id === 'veh-slide' ? 'Fahrzeugstatus' : 'Zählerstand'}" class="pointer-events-auto h-1.5 w-1.5 rounded-full bg-slate-300 dark:bg-slate-700 transition-all"></button>`).join('');
+  if (dd.children.length !== sl.length) dd.innerHTML = sl.map((x, k) => `<button type="button" data-dslide="${k}" aria-label="${x.id === 'ltm-card' ? 'Langzeitverbrauch' : x.id === 'btm-card' ? 'Akku-Temperatur' : x.id === 'wxo-card' ? 'Verbrauchs-Prognose' : x.id === 'veh-slide' ? 'Fahrzeugstatus' : 'Zählerstand'}" class="pointer-events-auto h-1.5 w-1.5 rounded-full bg-slate-300 dark:bg-slate-700 transition-all"></button>`).join('');
   dd.querySelectorAll('[data-dslide]').forEach((b, k) => { const on = k === i; b.classList.toggle('w-4', on); b.classList.toggle('w-1.5', !on); ['bg-slate-400', 'dark:bg-slate-500'].forEach(c => b.classList.toggle(c, on)); ['bg-slate-300', 'dark:bg-slate-700'].forEach(c => b.classList.toggle(c, !on)); });
 }
 function dashSwipeTo(i, smooth = true) { const sl = dashSlides(); if (!sl[i]) return; dSw.tr.scrollTo({ left: sl[i].offsetLeft - dSw.tr.offsetLeft, behavior: smooth ? 'smooth' : 'auto' }); }
@@ -6212,7 +6213,7 @@ function dashSwipeTo(i, smooth = true) { const sl = dashSlides(); if (!sl[i]) re
 $('dash-dots').addEventListener('pointerdown', () => { window.dSwUser = true; });
 let dSwT = null; dSw.tr.addEventListener('scroll', () => { clearTimeout(dSwT); dSwT = setTimeout(dashSwipeSync, 60); }, { passive: true });
 $('dash-dots').addEventListener('click', (e) => { const b = e.target.closest('[data-dslide]'); if (b) dashSwipeTo(Number(b.dataset.dslide)); });
-try { new ResizeObserver(() => dashSwipeSync()).observe($('btm-card')); new ResizeObserver(() => dashSwipeSync()).observe($('wxo-card')); new ResizeObserver(() => dashSwipeSync()).observe($('meter-card')); } catch (e) { }
+try { new ResizeObserver(() => dashSwipeSync()).observe($('ltm-card')); new ResizeObserver(() => dashSwipeSync()).observe($('btm-card')); new ResizeObserver(() => dashSwipeSync()).observe($('wxo-card')); new ResizeObserver(() => dashSwipeSync()).observe($('meter-card')); } catch (e) { }
 let dSwVis = false; new MutationObserver(() => { const v = !$('wxo-card').classList.contains('hidden'); if (v !== dSwVis) { dSwVis = v; dashSwipeTo(dashDefaultIdx(), false); } dashSwipeSync(); }).observe($('wxo-card'), { attributes: true, attributeFilter: ['class'] });
 $('btn-live').addEventListener('click', () => setTimeout(() => dashSwipeTo(dashSlides().length - 1), 0));
 mouseSwipe(dSw.tr, 12);
@@ -8333,8 +8334,7 @@ function renderBtm() {
     <div class="mt-2 flex items-center gap-2.5"><button type="button" data-btm="-1" aria-label="1 Grad weniger" class="${stepB}">−</button><span class="flex-1 text-center font-barlow text-[50px] font-bold leading-none text-orange-500 dark:text-orange-400 tabular-nums"><span id="btm-val">${btmVal}</span> <span class="text-[24px]">°C</span></span><button type="button" data-btm="1" aria-label="1 Grad mehr" class="${stepB}">+</button></div>
     <div class="mt-2.5 flex gap-1.5">${BT_CTX.map(([k, l]) => `<button type="button" data-btmctx="${k}" aria-pressed="${btmCtx === k}" class="flex-1 rounded-full border py-1.5 text-xs font-semibold ${pill(btmCtx === k)}">${l}</button>`).join('')}</div>
     <div class="min-h-2 flex-1"></div>
-    <div class="flex items-center gap-2"><span class="min-w-0 ${btmJ || /⚠️/.test(btmMsg) ? 'line-clamp-2' : 'truncate'} text-xs leading-4 text-left text-slate-500 dark:text-slate-400">${info}</span>${btmSaved ? '<button type="button" data-btm="undo" class="ml-auto h-10 shrink-0 rounded-2xl bg-slate-200 dark:bg-slate-800 px-4 text-sm font-semibold text-sky-700 dark:text-sky-300 active:scale-95 transition">Rückgängig</button>' : '<button type="button" data-btm="save" class="ml-auto h-10 shrink-0 rounded-2xl bg-emerald-600 px-5 text-sm font-semibold text-white active:scale-95 transition">Speichern</button>'}</div>
-    <p class="sr-only">${now.toLocaleDateString('de-DE')}</p>`;
+    <div class="flex items-center gap-2"><span class="min-w-0 ${btmJ || /⚠️/.test(btmMsg) ? 'line-clamp-2' : 'truncate'} text-xs leading-4 text-left text-slate-500 dark:text-slate-400">${info}</span>${btmSaved ? '<button type="button" data-btm="undo" class="ml-auto h-10 shrink-0 rounded-2xl bg-slate-200 dark:bg-slate-800 px-4 text-sm font-semibold text-sky-700 dark:text-sky-300 active:scale-95 transition">Rückgängig</button>' : '<button type="button" data-btm="save" class="ml-auto h-10 shrink-0 rounded-2xl bg-emerald-600 px-5 text-sm font-semibold text-white active:scale-95 transition">Speichern</button>'}</div>`;
 }
 $('btm-card').addEventListener('click', async (e) => {
   const c = e.target.closest('[data-btmctx]'); if (c) { btmCtx = btmCtx === c.dataset.btmctx ? null : c.dataset.btmctx; renderBtm(); return; }
@@ -8348,6 +8348,50 @@ $('btm-card').addEventListener('click', async (e) => {
     lab.bt = (lab.bt || []).concat(en); btmSaved = en; btmCtx = null; btmMsg = ''; setLab(lab); renderBtm(); return;
   }
   if (a === 'undo' && btmSaved) { const lab = getLab(), id = btmSaved.id; lab.bt = (lab.bt || []).filter(x => x.id !== id); btmSaved = null; setLab(lab); renderBtm(); }
+});
+/* Start: Langzeitverbrauch-Karte (ganz links im Wisch-Bereich, links der Akku-Temperatur). ±0,1 kWh/100 km, Datum antippbar,
+   km-Stand vom Auto (stündlicher Zwischenstand; beim Speichern einmal frisch geholt). Speichert in lab.lt wie Rekorde → Langzeit. */
+let ltmVal = null, ltmDate = null, ltmSaved = null, ltmMsg = '';
+function ltmCarKm() {                                                               // { km, at } aus dem letzten Abruf beim Auto
+  const c = load(KEY_WXO + 'S', null), d = c && c.d;
+  if (carKmCache && (!d || carKmCache.t >= c.t)) return { km: carKmCache.km, at: carKmCache.at || new Date(carKmCache.t).toISOString() };
+  return d && d.odometerKm != null ? { km: Math.round(d.odometerKm), at: d.capturedAt || new Date(c.t).toISOString() } : null;
+}
+function renderLtm() {
+  const el = $('ltm-card'); if (!el) return;
+  const all = (getLab().lt || []).filter(e => e.k100 > 0 && e.date).sort((a, b) => a.date.localeCompare(b.date) || (a.km || 0) - (b.km || 0)), last = all[all.length - 1];
+  if (ltmVal == null) ltmVal = last ? last.k100 : 16;
+  const today = wxIso(new Date()); if (!ltmDate) ltmDate = today;
+  const car = apiEnabled() && ltmDate === today ? ltmCarKm() : null, kmTxt = ltmDate !== today ? '<span class="font-normal text-slate-500 dark:text-slate-400">wird geschätzt</span>' : car ? fmt(car.km, 0) + ' km' : (() => { const k = (() => { try { return lastKnownKm(); } catch (_) { return null; } })(); return k ? '≈ ' + fmt(k, 0) + ' km' : 'km folgt'; })();
+  const carAt = car && car.at ? new Date(car.at) : null, carSub = car ? (carAt ? (wxIso(carAt) === today ? hhmm(carAt.getTime()) : carAt.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })) : '') : '';
+  const stepB = 'flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-800 text-2xl font-semibold active:scale-90 transition select-none';
+  const chip = (a, l, on) => `<button type="button" data-ltm="${a}" class="rounded-full border px-3 py-1.5 text-xs font-semibold ${on ? 'border-transparent bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300'} active:scale-95 transition">${l}</button>`;
+  const d = last ? Math.round((ltmVal - last.k100) * 10) / 10 : null;
+  const info = ltmMsg ? ltmMsg : ltmSaved ? `<span class="text-emerald-600 dark:text-emerald-400">✓ ${fmt(ltmSaved.k100, 1)} gespeichert${ltmSaved.km ? ' · ' + fmt(ltmSaved.km, 0) + ' km' : ''}</span>`
+    : last ? `zuletzt ${fmt(last.k100, 1)} · ${new Date(last.date + 'T12:00:00').toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}${d ? ` · <span class="${d > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}">${d > 0 ? '+' : '−'}${fmt(Math.abs(d), 1)}</span>` : ''}` : 'noch keine Ablesung';
+  const dTxt = ltmDate === today ? 'Heute' : new Date(ltmDate + 'T12:00:00').toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
+  el.innerHTML = `<div class="flex items-baseline justify-between gap-2"><p class="font-barlow text-xl font-bold uppercase tracking-[0.08em] leading-6">Langzeitverbrauch</p><span class="flex shrink-0 gap-3"><button type="button" data-ltm="tasks" class="text-xs font-semibold text-sky-700 dark:text-sky-300">📥 Tasks</button><button type="button" data-ltm="open" class="text-xs font-semibold text-sky-700 dark:text-sky-300">Verlauf ›</button></span></div>
+    <div class="mt-2 flex items-center gap-2.5"><button type="button" data-ltm="-0.1" aria-label="0,1 weniger" class="${stepB}">−</button><span class="flex-1 text-center font-barlow font-bold leading-none text-emerald-600 dark:text-emerald-400 tabular-nums"><span id="ltm-val" class="text-[50px]">${fmt(ltmVal, 1)}</span> <span class="text-[18px]">kWh/100</span></span><button type="button" data-ltm="0.1" aria-label="0,1 mehr" class="${stepB}">+</button></div>
+    <div class="mt-2.5 grid grid-cols-2 gap-1.5"><label class="relative min-w-0 rounded-xl bg-slate-100 dark:bg-slate-800/70 px-2.5 py-1.5"><p class="text-[10.5px] text-left text-slate-500 dark:text-slate-400">Datum ✎</p><p class="truncate text-[13px] font-semibold">${dTxt}</p><input id="ltm-date" type="date" max="${today}" value="${ltmDate}" aria-label="Datum der Ablesung" class="absolute inset-0 h-full w-full cursor-pointer opacity-0"></label>
+      <button type="button" data-ltm="km" class="min-w-0 rounded-xl bg-slate-100 dark:bg-slate-800/70 px-2.5 py-1.5 text-left active:scale-[.98] transition"><p class="truncate text-[10.5px] text-slate-500 dark:text-slate-400">km-Stand${apiEnabled() && ltmDate === today ? ' <span class="text-emerald-600 dark:text-emerald-400">↻</span>' : ''}</p><p class="truncate text-[13px] font-semibold tabular-nums">${kmTxt} <span class="text-[10.5px] font-normal text-slate-500 dark:text-slate-400">${carSub}</span></p></button></div>
+    <div class="min-h-2 flex-1"></div>
+    <div class="flex items-center gap-2"><span class="min-w-0 truncate text-xs leading-4 text-left text-slate-500 dark:text-slate-400">${info}</span>${ltmSaved ? '<button type="button" data-ltm="undo" class="ml-auto h-10 shrink-0 rounded-2xl bg-slate-200 dark:bg-slate-800 px-4 text-sm font-semibold text-sky-700 dark:text-sky-300 active:scale-95 transition">Rückgängig</button>' : '<button type="button" data-ltm="save" class="ml-auto h-10 shrink-0 rounded-2xl bg-emerald-600 px-5 text-sm font-semibold text-white active:scale-95 transition">Speichern</button>'}</div>`;
+}
+$('ltm-card').addEventListener('change', (e) => { if (e.target.id === 'ltm-date') { ltmDate = e.target.value || wxIso(new Date()); ltmSaved = null; ltmMsg = ''; renderLtm(); } });
+$('ltm-card').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-ltm]'); if (!b) return; const a = b.dataset.ltm;
+  if (a === '0.1' || a === '-0.1') { ltmVal = Math.max(5, Math.min(49.9, Math.round((ltmVal + Number(a)) * 10) / 10)); if (ltmSaved || ltmMsg) { ltmSaved = null; ltmMsg = ''; renderLtm(); } else $('ltm-val').textContent = fmt(ltmVal, 1); return; }
+  if (a === 'open') { recRoute = 'lt'; showView('recs'); return; }
+  if (a === 'tasks') { gtImport(false); return; }
+  if (a === 'km') { if (ltmDate !== wxIso(new Date())) return; if (!apiEnabled()) { ltmMsg = 'Keine Fahrzeugdaten eingerichtet'; renderLtm(); return; } b.disabled = true; ltmMsg = 'km-Stand wird geholt …'; renderLtm();
+    try { await fetchCarKm(); ltmMsg = ''; } catch (er) { ltmMsg = '<span class="text-red-600 dark:text-red-400">km-Stand nicht verfügbar</span>'; } renderLtm(); return; }
+  if (a === 'save') {
+    b.disabled = true; const date = ltmDate || wxIso(new Date()), today = date === wxIso(new Date()), en = { id: labId(), date, at: today ? new Date().toISOString() : date + 'T12:00:00', k100: Math.round(ltmVal * 10) / 10 };
+    if (today && apiEnabled()) { try { en.km = (await fetchCarKm()).km; } catch (er) { const c = ltmCarKm(); if (c && Date.now() - Date.parse(c.at) < 6 * 3600e3) en.km = c.km; } }
+    if (!(en.km > 0)) { const k = await gtKmAt(en.at).catch(() => ({ km: null, est: true })); if (k.km > 0) en.km = k.km; if (k.est || !(k.km > 0)) en.kmEst = true; }
+    const lab = getLab(); lab.lt = (lab.lt || []).concat(en); ltmSaved = en; ltmMsg = ''; ltmDate = null; setLab(lab); renderLtm(); return;
+  }
+  if (a === 'undo' && ltmSaved) { const lab = getLab(), id = ltmSaved.id; lab.lt = (lab.lt || []).filter(x => x.id !== id); ltmSaved = null; setLab(lab); renderLtm(); }
 });
 /* =====================================================================
    Akku-Temperatur per Sprachbefehl: Gemini/Android Auto legt eine Aufgabe in Google Tasks an („Akku 12 Grad“, „Akkutemperatur minus 3 nach Fahrt“).
@@ -8479,7 +8523,7 @@ async function gtImport(silent) {
     const jumps = flag.map(en => [en, btJump(en, lab.bt)]).filter(x => x[1]);                    // nur Hinweis, Werte bleiben gespeichert
     if (jumps.length) btmMsg += ' · <span class="text-amber-600 dark:text-amber-400">' + (jumps.length === 1 ? '⚠️ ' + fmt(jumps[0][0].t, 0) + ' °C, ' + btJumpD(jumps[0][1]) + ' – bitte prüfen' : '⚠️ ' + jumps.length + '× ≥ ' + BT_JUMP + '° Sprung – im Verlauf prüfen') + '</span>';
     save('enyaq.gtLast', new Date().toISOString()); try { renderVcStatus(); } catch (e) { }
-    renderBtm(); if (n && currentView === 'recs') renderRecs();
+    renderBtm(); try { renderLtm(); } catch (e) { } if (n && currentView === 'recs') renderRecs();
   } catch (e) { if (!silent) { btmMsg = '⚠️ Google Tasks: kein Zugriff'; renderBtm();
       $('au-sheet-box').innerHTML = '<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div><p class="text-lg font-bold">Google Tasks</p><p class="text-sm text-left">' + esc(e.message || String(e)) + '</p><button type="button" data-cc="close" class="h-12 w-full rounded-2xl border border-slate-300 dark:border-slate-700 text-sm font-semibold">Schließen</button>';
       $('au-sheet').classList.remove('hidden'); } }
@@ -8545,7 +8589,7 @@ $('set-gt-mirror').addEventListener('change', (e) => { setQuickSetting('gtMirror
 $('gt-sync').addEventListener('click', () => { if (!gtMirrorOn()) { $('set-gt-mirror').checked = true; setQuickSetting('gtMirror', true); } gtMirror(false); });
 $('vc-fetch').addEventListener('click', () => gtImport(false));
 setTimeout(() => { gtImport(true); gtMirror(true); try { ltFillKm(); btFillTrips(); } catch (e) { } }, 3000); document.addEventListener('visibilitychange', () => { if (!document.hidden) { gtImport(true); gtMirror(true); } });
-renderBtm();
+renderBtm(); renderLtm();
 if (wxLoc() && !$('wxo-card').classList.contains('hidden')) { /* Prognose sichtbar: Beobachter setzt die Startkarte */ } else dashSwipeTo(dashDefaultIdx(), false);
 dashSwipeSync();
 if (btOut.v == null && wxLoc()) btOutside().then(() => { if (!btmSaved) renderBtm(); }).catch(() => { });
