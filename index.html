@@ -649,7 +649,7 @@
         <div class="mt-2.5 space-y-1.5 text-[13px]">
           <div class="flex gap-1.5">
             <label class="flex min-w-0 flex-1 items-center rounded-xl bg-slate-100 dark:bg-slate-800 px-2 py-1"><input id="rt-dep" type="datetime-local" aria-label="Abfahrt" class="w-full min-w-0 bg-transparent text-[13px] focus:outline-none"></label>
-            <label class="flex shrink-0 items-center gap-0.5 rounded-xl bg-slate-100 dark:bg-slate-800 px-1.5 py-1"><span aria-hidden="true">🔋</span><input id="rt-soc" type="text" inputmode="numeric" aria-label="Akku bei Abfahrt in Prozent" class="w-[26px] bg-transparent text-right focus:outline-none">%</label>
+            <label class="flex shrink-0 items-center gap-0.5 rounded-xl bg-slate-100 dark:bg-slate-800 px-1.5 py-1"><button id="rt-soc-full" type="button" title="Voller Akku (100 %)" aria-label="Akku auf 100 % setzen" class="active:scale-90 transition">🔋</button><input id="rt-soc" type="text" inputmode="numeric" aria-label="Akku bei Abfahrt in Prozent" class="w-[26px] bg-transparent text-right focus:outline-none">%</label>
             <label class="flex shrink-0 items-center gap-0.5 rounded-xl bg-slate-100 dark:bg-slate-800 px-1.5 py-1"><span aria-hidden="true">👤</span><select id="rt-pers" aria-label="Personen" class="bg-transparent focus:outline-none"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option></select></label>
           </div>
           <div class="flex flex-wrap gap-1 whitespace-nowrap text-[12.5px]">
@@ -6127,6 +6127,7 @@ const wxoN = () => !isDesk() ? 3 : ($('wxo-card').clientWidth || document.queryS
 let wxoNLast = 0; window.addEventListener('resize', () => { clearTimeout(window.__wxoRs); window.__wxoRs = setTimeout(() => { if (wxoN() !== wxoNLast) try { renderWxo(); } catch (e) { } }, 250); });
 let wxoTok = 0, wxoLast = null;
 const wxoFmtR = (km) => fmt(Math.round(km / 5) * 5, 0);
+const wxoLowR = (km) => Math.round(km / 5) * 5 < 250;                                // Reichweite unter 250 km: ganz in Rot
 async function renderWxo() {
   const el = $('wxo-card'), l = wxLoc(); if (!el) return;
   if (!l || liveHero) { el.classList.add('hidden'); return; }
@@ -6145,7 +6146,7 @@ async function renderWxo() {
       <p class="mt-0.5 text-center text-[22px] leading-none">${wxoIconHtml(x.w, wxIconStyle() === 'meteo' ? 40 : 30)}</p><p class="text-center text-[12.5px] font-semibold leading-tight whitespace-nowrap" title="${WXO_H1} Uhr / ${WXO_H2} Uhr · Ø ${fmt(x.T, 0)}°">${x.t7 != null && x.t16 != null ? wxoTT(x.t7) + ' / ' + wxoTT(x.t16) : wxoTT(x.T)}</p>
       <p class="mt-0.5 text-center text-[15px] font-bold leading-tight">${fmt(x.k, 1)}</p><p class="text-center text-[9.5px] leading-tight text-slate-500 dark:text-slate-400">kWh/100 km</p>
       <div class="mx-1.5 mt-1.5 h-[5px] rounded-full bg-slate-200 dark:bg-slate-700"><div class="h-[5px] rounded-full bg-gradient-to-r from-emerald-500 to-sky-400" style="width:${Math.max(8, Math.min(100, x.r / best * 100)).toFixed(0)}%"></div></div>
-      <p class="mt-0.5 text-center text-[12px]"><b>${wxoFmtR(x.r)}</b> <span class="text-slate-500 dark:text-slate-400">km</span></p></div>`; }).join('');
+      <p class="mt-0.5 text-center text-[12px]${wxoLowR(x.r) ? ' text-red-600 dark:text-red-400' : ''}"><b>${wxoFmtR(x.r)}</b> <span class="${wxoLowR(x.r) ? '' : 'text-slate-500 dark:text-slate-400'}">km</span></p></div>`; }).join('');
   wxoIceBadges(days.slice(0, wxoNLast).map(x => x.d), tok);
   /* Reicht-bis: aktueller Akkustand vom Auto (Škoda-API) bis 20 % Reserve, mit Ø km/Tag und dem vorhergesagten Verbrauch des jeweiligen Tages.
      Ohne Fahrzeugdaten: ab dem typischen Ladeziel (Ladehub 20–80 %). */
@@ -6182,7 +6183,7 @@ function openWxoSheet() {
     <div class="flex shrink-0 justify-end gap-2 text-[11.5px] text-slate-500 dark:text-slate-400"><span>kWh/100 km</span><span class="w-[62px] text-right">Reichweite</span></div>
     <div class="divide-y divide-slate-200 dark:divide-slate-800 !mt-1 max-sm:!-mt-1 max-sm:flex max-sm:min-h-0 max-sm:flex-1 max-sm:flex-col max-sm:overflow-y-auto">${days.map((x, i) => `<div class="flex items-center gap-2 py-2.5 max-sm:flex-[1_0_auto] max-sm:py-1.5"><span class="w-[54px] shrink-0 whitespace-nowrap leading-tight"><span class="block text-[15px] font-semibold">${i === 0 ? 'Heute' : i === 1 ? 'Morgen' : wxDay(x.d).wd + '.'}</span><span class="block text-[11.5px] text-slate-500 dark:text-slate-400">${wxDay(x.d).dm}</span></span><span class="shrink-0 text-2xl">${wxoIconHtml(x.w, 42)}</span>
       <span class="w-[84px] shrink-0 whitespace-nowrap text-[13px] leading-snug text-slate-500 dark:text-slate-400">${fmt(x.lo, 0).replace('-', '−')} bis ${fmt(x.hi, 0).replace('-', '−')} °C${x.p >= 1 ? '<br>' + fmt(x.p, 0) + ' mm' : ''}<span class="block sm:hidden" data-icem="${x.d}"></span></span>
-      <span class="hidden min-w-[26px] flex-1 justify-center sm:flex" data-iced="${x.d}"></span><span class="min-w-0 flex-1 text-right sm:w-[72px] sm:flex-none sm:shrink-0"><span class="block text-[18px] font-bold leading-tight">${fmt(x.k, 1)}</span>${wxoPartsHtml(x.parts)}</span><span class="w-[62px] shrink-0 whitespace-nowrap text-right text-[15px]">${wxoFmtR(x.r)} km</span></div>`).join('')}</div>
+      <span class="hidden min-w-[26px] flex-1 justify-center sm:flex" data-iced="${x.d}"></span><span class="min-w-0 flex-1 text-right sm:w-[72px] sm:flex-none sm:shrink-0"><span class="block text-[18px] font-bold leading-tight">${fmt(x.k, 1)}</span>${wxoPartsHtml(x.parts)}</span><span class="w-[62px] shrink-0 whitespace-nowrap text-right text-[15px]${wxoLowR(x.r) ? ' text-red-600 dark:text-red-400' : ''}">${wxoFmtR(x.r)} km</span></div>`).join('')}</div>
     <details class="group rounded-2xl bg-slate-100 dark:bg-slate-800/60 p-3 text-[12.5px] leading-relaxed max-sm:shrink-0 max-sm:max-h-[45dvh] max-sm:overflow-y-auto">
       <summary class="flex cursor-pointer list-none items-center justify-between font-semibold [&::-webkit-details-marker]:hidden">So rechnet die Prognose<span class="text-slate-400 transition-transform group-open:rotate-90">›</span></summary>
       <p class="mt-1">Grundverbrauch (ab ${WXO_T0} °C, trocken): <b>${fmt(m.a, 1)}</b> kWh/100 km${m.n ? '' : ' <span class="text-slate-400">(Startwert)</span>'}</p>
@@ -9361,6 +9362,7 @@ $('rt-stay').addEventListener('change', (e) => { if (e.target.value === 'off') {
 function rtRoundUi() { const b = $('rt-rt'), on = !!RT.round; b.setAttribute('aria-pressed', String(on)); ['bg-pink-100', 'text-pink-700', 'dark:bg-pink-950', 'dark:text-pink-300'].forEach(c => b.classList.toggle(c, on)); ['bg-slate-100', 'dark:bg-slate-800'].forEach(c => b.classList.toggle(c, !on)); b.classList.toggle('hidden', on); $('rt-stay-w').classList.toggle('hidden', !on); $('rt-stay-w').classList.toggle('flex', on); }
 $('rt-rt').addEventListener('click', () => { RT.round = !RT.round; rtRoundUi(); rtRun(); });
 $('rt-soc').addEventListener('change', rtRun);
+$('rt-soc-full').addEventListener('click', (e) => { e.preventDefault(); $('rt-soc').value = '100'; rtRun(); });   // Tipp aufs Batterie-Symbol: voller Akku
 $('rt-res').addEventListener('click', (e) => { if (e.target.closest('[data-rt="retry"]')) rtRun(); if (e.target.closest('[data-rt="stops"]')) rtFindStops(RT.n); const al = e.target.closest('[data-rtalt]'); if (al) { RT.altK = Number(al.dataset.rtalt); const cur = (RT.res.stops || [])[RT.altK]; RT.altSel = cur ? cur.cid : null; RT.altPlan = RT.res.stops; rtAltSheet(); } });
 $('rt-save').addEventListener('click', () => {
   const r = RT.res, o = RT.o; if (!r) return; const cap = batteryKwh(), k = deDec($('rt-abrp-k').value), s = deDec($('rt-abrp-s').value), msg = $('rt-save-msg');
