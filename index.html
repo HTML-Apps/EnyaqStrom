@@ -1286,6 +1286,15 @@
         </div>
           <p class="mt-1.5 text-xs text-slate-500 dark:text-slate-400">Schneller geht es direkt in der Historie: Etikett einer Fahrt antippen und „Für alle Fahrten dieser Strecke“ angehakt lassen. Gilt in beide Richtungen, Umkreis 300 m, einzelne Fahrten bleiben änderbar.</p>
         </details>
+        <div class="py-4 first:pt-4 last:pb-0">
+          <p class="text-sm font-semibold text-slate-800 dark:text-slate-200">Vergleich mit Benziner (Rückblick)</p>
+          <div class="mt-2 grid grid-cols-2 gap-2">
+            <div class="min-w-0 col-span-2"><label for="set-cmp-car" class="text-xs text-slate-500 dark:text-slate-400">Vergleichsauto</label><input id="set-cmp-car" type="text" inputmode="text" autocomplete="off" placeholder="z. B. Škoda Karoq 1.5 TSI" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
+            <div class="min-w-0"><label for="set-cmp-l" class="text-xs text-slate-500 dark:text-slate-400">Verbrauch l/100 km</label><input id="set-cmp-l" type="text" inputmode="decimal" autocomplete="off" placeholder="7,0" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
+            <div class="min-w-0"><label for="set-cmp-eur" class="text-xs text-slate-500 dark:text-slate-400">Spritpreis €/l</label><input id="set-cmp-eur" type="text" inputmode="decimal" autocomplete="off" placeholder="1,75" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
+          </div>
+          <p class="mt-1.5 text-xs text-slate-500 dark:text-slate-400">Der Rückblick zeigt, was dieser Benziner für dieselben Kilometer an Sprit gekostet hätte – verglichen mit deinen Ladekosten.</p>
+        </div>
       </div>
     </div>
     <div class="rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
@@ -2070,7 +2079,7 @@ $('btn-odo').addEventListener('click', async () => {                      // km-
     const d = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(d.error || 'HTTP ' + res.status);
     if (d.odometerKm == null) throw new Error('Das Auto meldet keinen km-Stand');
-    $('km-input').value = Math.round(d.odometerKm); paintOdo(true);
+    odoNote(d); $('km-input').value = Math.round(d.odometerKm); paintOdo(true);
   } catch (e) { info.textContent = 'Nicht verfügbar: ' + e.message; info.title = e.message; }
 });
 
@@ -2081,7 +2090,7 @@ async function fetchCarKm() {
   const res = await fetch('/api/vehicle', { headers: await authHeaders() }), d = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(d.error || 'HTTP ' + res.status);
   if (d.odometerKm == null) throw new Error('Das Auto meldet keinen km-Stand');
-  carKmCache = { t: Date.now(), km: Math.round(d.odometerKm), at: d.capturedAt || null }; return carKmCache;
+  odoNote(d); carKmCache = { t: Date.now(), km: Math.round(d.odometerKm), at: d.capturedAt || null }; return carKmCache;
 }
 function kmFetchNote(inp, text, ok) {
   const host = inp.parentElement; let n = host.querySelector(':scope > [data-kmnote]');
@@ -2512,6 +2521,7 @@ function fillSettings() {
   try { fillWxoPrefs(); } catch (e) { }
   renderProviders(); renderCategories(); renderTPlaceList(); renderTLabelSettings(); renderTripsLast();
   const s = getSettings();
+  $('set-cmp-car').value = s.cmpCar || ''; $('set-cmp-l').value = s.cmpL ? String(s.cmpL).replace('.', ',') : ''; $('set-cmp-eur').value = s.cmpEur ? String(s.cmpEur).replace('.', ',') : '';
   $('set-price').value = String(s.price).replace('.', ',');
   $('set-battery').value = String(batteryKwh()).replace('.', ',');
   $('set-title').value = s.title || DEFAULT_TITLE;
@@ -2805,7 +2815,7 @@ async function pollLive() {
     const res = await fetch('/api/vehicle', { headers: await authHeaders() });
     const d = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(d.error || 'HTTP ' + res.status);
-    applyCarSync(live, d, now);
+    odoNote(d); applyCarSync(live, d, now);
   } catch (e) { live.syncNote = 'Abgleich ' + hhmm(now) + ' Uhr fehlgeschlagen (' + e.message + ') – Simulation läuft weiter'; }
   live.lastPollAt = now;                                                  // auch bei Fehlern: erst in 6 Minuten erneut versuchen
   const cur = getLive();
@@ -2846,7 +2856,7 @@ async function loadFromCar() {
     const res = await fetch('/api/vehicle', { headers: await authHeaders() });
     const d = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(d.error || 'HTTP ' + res.status);
-    carData = d;
+    carData = d; odoNote(d);
     const ex = d.keyExpiresAt ? new Date(d.keyExpiresAt) : null;                   // Ablaufdatum aus der Škoda-Antwort übernehmen
     if (ex && !isNaN(ex) && ex.toISOString().slice(0, 10) !== keyExpiry()) { vehicle.expires = ex.toISOString().slice(0, 10); save(KEY_VEHICLE, vehicle); renderVehicleStatus(); }
     if (d.soc != null) { $('soc0-input').value = Math.round(d.soc); $('soc0-input').dataset.live = '1'; }               // Erfassen: Akku-Start = aktueller Ladestand des Autos
@@ -6046,7 +6056,7 @@ async function wxoSoc() {
   try {
     const res = await fetch('/api/vehicle', { headers: await authHeaders() }), d = await res.json().catch(() => ({}));
     if (!res.ok || d.soc == null) return old;
-    if (d.odometerKm != null) carKmCache = { t: Date.now(), km: Math.round(d.odometerKm), at: d.capturedAt || null };
+    if (d.odometerKm != null) { carKmCache = { t: Date.now(), km: Math.round(d.odometerKm), at: d.capturedAt || null }; odoNote(d); }
     save(KEY_WXO + 'S', { t: Date.now(), soc: d.soc, d }); try { renderVehCard(); } catch (e) { } try { if (!ltmSaved) renderLtm(); } catch (e) { } return d.soc;
   } catch (e) { return old; }
 }
@@ -6325,7 +6335,7 @@ renderWxLoc();
    Rückblick als teilbares Bild (Poster 4:5, ohne Zählerstand und ohne Standort): Canvas → Teilen-Dialog des Geräts, sonst PNG-Download
    ===================================================================== */
 async function wrShare(btn) {
-  /* Teilbares Bild = letzte Seite des Rückblicks („Alles auf einen Blick“ + 6 Kacheln): gleiche Farben, Schriften und Werte, auf 1080 × 1350 px hochskaliert */
+  /* Teilbares Bild = letzte Seite des Rückblicks („Alles auf einen Blick“ + 6–8 Kacheln): gleiche Farben, Schriften und Werte, auf 1080 × 1350 px hochskaliert */
   if (!wrCur) return; const { p, st } = wrCur, W = 1080, H = 1350, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
   try { await document.fonts.load('700 100px "Barlow Condensed"'); } catch (e) { }
   const g = cv.getContext('2d'), DF = "'Barlow Condensed','Arial Narrow',system-ui,sans-serif", SF = 'system-ui,-apple-system,"Segoe UI",sans-serif';
@@ -6334,11 +6344,13 @@ async function wrShare(btn) {
   const rr = (x, y, w, h, r) => { g.beginPath(); g.roundRect ? g.roundRect(x, y, w, h, r) : g.rect(x, y, w, h); g.fill(); };
   const tiles = [['Gefahren', fmt(st.km || 0, 0), 'km'], ['Geladen', fmt(st.kwh, 0), 'kWh'], ['Ø Verbrauch inkl. Verluste', st.kwh100 != null ? fmt(st.kwh100, 1) : '–', 'kWh/100 km'],
     ['Ladekosten', fmt(st.laden, 2), '€'], ['Ladungen', fmt(st.n, 0), ''], ['Ø Strompreis', st.kwh > 0 ? fmt(st.laden / st.kwh * 100, 1) : '–', 'ct/kWh']];
+  if (st.km > 0) { const cc = cmpCar(), lit = st.km * cc.l / 100; tiles.push(['Gespart vs. Benziner', fmt(lit * cc.eur - st.laden, 0), '€'], ['Sprit vermieden', fmt(lit, 0), 'Liter']); }
+  const ROWS = Math.ceil(tiles.length / 2);
   const S = 2.74, M = 72, GAP = Math.round(12 * S), TW = (W - 2 * M - GAP) / 2, PAD = Math.round(14 * S), LS = Math.round(12 * S), VS = Math.round(36 * S), US = Math.round(13 * S);
   const TH = PAD + LS + 10 + Math.round(VS * 1.05) + PAD, HEAD = Math.round(44 * S), SUB = Math.round(16 * S);
   g.font = '700 ' + HEAD + 'px ' + DF; const lines = []; 'Alles auf einen Blick'.split(' ').forEach(wd => { const l = lines.length ? lines[lines.length - 1] + ' ' + wd : wd; if (lines.length && g.measureText(l).width <= W - 2 * M) lines[lines.length - 1] = l; else lines.push(wd); });   // wie auf der Seite umbrechen, falls zu breit
   const LH = Math.round(HEAD * 0.98), headH = LH * (lines.length - 1) + HEAD;
-  const blockH = headH + 18 + SUB + Math.round(20 * S) + 3 * TH + 2 * GAP, top = Math.round((H - blockH) / 2);
+  const blockH = headH + 18 + SUB + Math.round(20 * S) + ROWS * TH + (ROWS - 1) * GAP, top = Math.round((H - blockH) / 2);
   g.fillStyle = BG; g.fillRect(0, 0, W, H);
   lines.forEach((l, k) => txt(l, M, top + HEAD * 0.82 + k * LH, HEAD, 700, INK, DF));
   txt(p.label, M, top + headH + 18 + SUB * 0.8, SUB, 400, MU);
@@ -6840,6 +6852,8 @@ const wltpVal = () => { const v = Number(getSettings().wltp); return v > 5 && v 
 const wrD = (ms) => { const d = new Date(ms); return String(d.getDate()).padStart(2, '0') + '.' + String(d.getMonth() + 1).padStart(2, '0') + '.'; };
 const wrDY = (ms) => wrD(ms) + new Date(ms).getFullYear();
 const wrTitle = () => ((getSettings().title || DEFAULT_TITLE).split('|')[0].trim() || 'Enyaq') + ' Wrapped';
+/** Vergleichs-Benziner aus Einstellungen → Fahrtenbuch (Standard: 7,0 l/100 km, 1,75 €/l) */
+const cmpCar = () => { const s = getSettings(), l = Number(s.cmpL), e = Number(s.cmpEur); return { name: (s.cmpCar || '').trim() || 'ein Benziner', l: l > 1 && l < 30 ? l : 7, eur: e > 0.5 && e < 5 ? e : 1.75 }; };
 const wrSeen = () => { const l = load(KEY_WRAP, []); return Array.isArray(l) ? l : []; };
 
 /** Kennzahlen einer Periode: km (aus den km-Ständen), geladene kWh, Kosten (Laden + Kosten − Einnahmen), Ø Verbrauch inkl. Ladeverluste, Zahl der Ladungen. */
@@ -6883,7 +6897,7 @@ const wrDur = (days) => days < 14 ? fmt(days, 0) + ' Tage' : days < 70 ? fmt(day
 const wrBar = (pct, ac) => '<div style="height:10px;border-radius:5px;background:rgba(255,255,255,.18);overflow:hidden"><div style="width:' + Math.max(2, Math.min(100, pct)) + '%;height:100%;background:' + ac + '"></div></div>';
 const wrSmall = (t) => '<div style="font-size:13px;color:#cbd5e1;margin-top:6px">' + t + '</div>';
 
-/** Die 5 Seiten einer Periode. */
+/** Die Seiten einer Periode (Strecke, Energie, Verbrauch, Kosten, Ersparnis vs. Benziner, Überblick). */
 function wrPages(p) {
   const st = p.st || wrStats(p), pv = p.prev ? wrStats(p.prev) : null, w = wltpVal(), city = ((wxLoc() || {}).label || '').split(',')[0] || 'Zuhause', MU = '#cbd5e1';
   const page = (bg, ac, lead, big, unit, sub, vis, cmp, cmp2) => ({ bg, ac, body:
@@ -6916,10 +6930,17 @@ function wrPages(p) {
     c4b = 'Vorperiode (' + wrD(p.prev.t0) + '–' + wrD(p.prev.t1) + '): ' + eur(pv.cost) + ' für ' + fmt(pv.km, 0) + ' km.';
   } else if (ck != null) { c4 = fmt(ck * 100, 2) + ' € pro 100 km.'; c4b = 'Das sind ' + eur(st.cost / st.days) + ' pro Tag.'; }
   pages.push(page('#4c0519', '#fda4af', 'Deine Kosten', fmt(st.cost, 2), '€', per, vis4, c4, c4b));
+  // 5 Ersparnis gegenüber dem Vergleichs-Benziner (nur Energie: Sprit vs. Ladekosten)
+  const cc = cmpCar(), lit = (st.km || 0) * cc.l / 100, fuel = lit * cc.eur, sav = fuel - st.laden;
+  if (st.km > 0) { const mx = Math.max(fuel, st.laden, 0.01), row = (l, v, col) => '<div style="font-size:13px;color:' + MU + ';margin:10px 0 4px">' + l + ' · ' + fmt(v, 0) + ' €</div>' + wrBar(v / mx * 100, col);
+    pages.push(page('#1e1b4b', '#c4b5fd', sav >= 0 ? 'Gegenüber dem Benziner gespart' : 'Gegenüber dem Benziner mehr bezahlt', fmt(Math.abs(sav), 0), '€', per,
+      row('Sprit für ' + esc(cc.name), fuel, 'rgba(255,255,255,.55)') + row('Strom fürs Laden', st.laden, '#c4b5fd'),
+      'Statt ' + fmt(lit, 0) + ' Liter Sprit (' + fmt(cc.l, 1) + ' l/100 km zu ' + fmt(cc.eur, 2) + ' €/l).',
+      fmt(st.laden / st.km * 100, 1) + ' ct/km statt ' + fmt(fuel / st.km * 100, 1) + ' ct/km · nur Energiekosten, Werte unter Einstellungen → Fahrtenbuch')); }
   // 5 Überblick
   const tile = (l, v, u) => '<div style="background:rgba(255,255,255,.08);border-radius:20px;padding:14px 12px;min-width:0"><div style="font-size:' + (l.length > 16 ? 11 : 12) + 'px;line-height:1.3;color:' + MU + '">' + l + '</div><div style="' + WR_F + ';font-size:36px;font-weight:700;line-height:1.05;color:#6ee7b7">' + v + '<wbr><span style="font-family:system-ui,sans-serif;font-size:' + (u.length > 6 ? 11 : 12) + 'px;font-weight:500;color:' + MU + ';margin-left:4px;white-space:nowrap;display:inline-block">' + u + '</span></div></div>';
   pages.push({ bg: '#0f172a', ac: '#6ee7b7', body: '<div style="' + WR_F + ';font-size:44px;font-weight:700;line-height:1">Alles auf einen Blick</div><div style="font-size:16px;color:' + MU + ';margin:6px 0 20px">' + per + '</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">' +
-    tile('Gefahren', fmt(st.km || 0, 0), 'km') + tile('Geladen', fmt(st.kwh, 0), 'kWh') + tile('Ø Verbrauch inkl. Verluste', st.kwh100 != null ? fmt(st.kwh100, 1) : '–', 'kWh/100 km') + tile('Ladekosten', fmt(st.laden, 2), '€') + tile('Ladungen', fmt(st.n, 0), '') + tile('Ø Strompreis', st.kwh > 0 ? fmt(st.laden / st.kwh * 100, 1) : '–', 'ct/kWh') + '</div>' });
+    tile('Gefahren', fmt(st.km || 0, 0), 'km') + tile('Geladen', fmt(st.kwh, 0), 'kWh') + tile('Ø Verbrauch inkl. Verluste', st.kwh100 != null ? fmt(st.kwh100, 1) : '–', 'kWh/100 km') + tile('Ladekosten', fmt(st.laden, 2), '€') + tile('Ladungen', fmt(st.n, 0), '') + tile('Ø Strompreis', st.kwh > 0 ? fmt(st.laden / st.kwh * 100, 1) : '–', 'ct/kWh') + (st.km > 0 ? tile('Gespart vs. Benziner', fmt(sav, 0), '€') + tile('Sprit vermieden', fmt(lit, 0), 'Liter') : '') + '</div>' });
   return pages;
 }
 
@@ -6987,7 +7008,7 @@ try { renderWrapCard(); } catch (e) { }
    im Dokument enyaqStrom/<uid>/settings/prefs, gleiche Regel wie Anbieter und Kategorien. Die PIN bleibt nur auf dem Gerät.
    Erster Abgleich: Was die Cloud hat, gilt; fehlt dort etwas und ist lokal vorhanden, wird es hochgeladen. Danach gilt die Cloud (Änderung auf einem Gerät wirkt auf allen).
    ===================================================================== */
-const SYNC_SET_KEYS = ['title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAcKwh', 'certDcKwh', 'certKm', 'wltpNet', 'ccEnd', 'wxoCut', 'dashFirst', 'carN', 'carSec', 'wxIcons', 'nRep', 'nTrips', 'nBakYm', 'nBakAt', 'nBakSnz', 'gtMirror', 'gtList', 'iceDep', 'iceWe', 'icePark', 'iceMin', 'iceK'];
+const SYNC_SET_KEYS = ['title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAcKwh', 'certDcKwh', 'certKm', 'wltpNet', 'ccEnd', 'wxoCut', 'dashFirst', 'carN', 'carSec', 'wxIcons', 'nRep', 'nTrips', 'nBakYm', 'nBakAt', 'nBakSnz', 'gtMirror', 'gtList', 'iceDep', 'iceWe', 'icePark', 'iceMin', 'iceK', 'cmpCar', 'cmpL', 'cmpEur'];
 /** Einstellungen für die Cloud: feste Reihenfolge, ohne leere Werte (Firestore verbietet undefined). null = nichts vorhanden. */
 function syncSet(src) {
   const o = {}; if (src && typeof src === 'object') SYNC_SET_KEYS.forEach(k => { const v = src[k]; if (v != null && v !== '' && !(typeof v === 'number' && !isFinite(v))) o[k] = v; });
@@ -7404,6 +7425,27 @@ $('tplace-save').addEventListener('click', () => {
   setTPlaces(l); $('tplace-dialog').classList.add('hidden');
 });
 
+/* ---- km pro Tag vom Auto (ohne Fahrtenbuch): bei jeder Abfrage beim Škoda-Server den km-Stand je Tag merken (erster + letzter Wert).
+   lab.odo = [{ id: 'o' + Tag, d: 'YYYY-MM-DD', km0, t0, km1, t1 }] – synchronisiert wie die übrigen Messreihen. Gefahren an Tag D = letzter Stand D − letzter Stand des
+   vorherigen Tags mit Wert; liegen Tage ohne Abfrage dazwischen, gilt der Wert für den ganzen Zeitraum. */
+function odoNote(d) {
+  const km = d && Number(d.odometerKm); if (!(km > 0)) return;
+  const at = d.capturedAt && Number.isFinite(Date.parse(d.capturedAt)) ? d.capturedAt : new Date().toISOString(), day = wxIso(new Date(at)), id = 'o' + day, kmr = Math.round(km);
+  const lab = getLab(), cur = lab.odo.find(x => x.id === id);
+  if (cur && cur.km1 === kmr && Date.parse(cur.t1) >= Date.parse(at)) return;                 // nichts Neues
+  if (cur && Date.parse(at) < Date.parse(cur.t1)) return;                                      // ältere Meldung
+  lab.odo = lab.odo.filter(x => x.id !== id).concat(cur ? { ...cur, km1: kmr, t1: at } : { id, d: day, km0: kmr, t0: at, km1: kmr, t1: at });
+  if (lab.odo.length > 800) lab.odo = lab.odo.sort((a, b) => a.d.localeCompare(b.d)).slice(-800);
+  setLab(lab); if (currentView === 'history' && histFilter === 'fahrten') try { renderTrips(); } catch (e) { }
+}
+/** Tage mit gefahrenen km laut Auto: [{ k: Tag, km, from: erster Tag des Zeitraums (bei Lücken), a, b }], neueste zuerst */
+function odoDays() {
+  const l = getLab().odo.filter(x => x.d && x.km1 > 0).sort((a, b) => a.d.localeCompare(b.d)), out = [];
+  for (let i = 1; i < l.length; i++) { const p = l[i - 1], c = l[i], km = c.km1 - p.km1; if (km < 1 || km > 3000) continue;
+    const nx = wxIso(new Date(Date.parse(p.d + 'T12:00:00') + 864e5)); out.push({ k: c.d, km, from: nx !== c.d ? nx : null, a: p.km1, b: c.km1 }); }
+  return out.reverse();
+}
+
 /* ---- Historie → Fahrten ---- */
 let tripDays = 21;
 const fmtMin = (m) => m == null ? '' : m < 60 ? Math.round(m) + ' min' : Math.floor(m / 60) + ' h ' + pad2(Math.round(m % 60)) + ' min';
@@ -7411,20 +7453,34 @@ const hm = (iso) => { const d = new Date(iso); return pad2(d.getHours()) + ':' +
 const dayKey = (iso) => wxIso(new Date(iso));
 function renderTrips() {
   const all = getTrips().filter(tripVisible).sort((a, b) => (a.s < b.s ? 1 : -1)), wrap = $('trips-wrap'); if (!wrap) return;
-  $('trips-empty').classList.toggle('hidden', all.length > 0); $('trips-kpi').classList.toggle('hidden', !all.length); $('trips-csv').classList.toggle('hidden', !all.length);
+  /* km vom Auto nur für die Zeit nach dem letzten Fahrtenbuch-Import (davor ist das Fahrtenbuch genauer) */
+  const tAll = getTrips().filter(t => t.e), lastDay = tAll.reduce((m, t) => { const k = dayKey(t.e); return k > m ? k : m; }, ''), lastKm = tAll.reduce((m, t) => Math.max(m, Number(t.o1) || 0), 0);
+  const odo = odoDays().filter(o => o.k > lastDay).map(o => { if (lastDay && (o.from || o.k) <= lastDay) { const from = wxIso(new Date(Date.parse(lastDay + 'T12:00:00') + 864e5)); return lastKm > 0 ? { ...o, km: Math.max(0, o.b - Math.max(o.a, lastKm)), from: from !== o.k ? from : null } : o; } return o; }).filter(o => o.km >= 1);
+  const any = all.length || odo.length;
+  $('trips-empty').classList.toggle('hidden', !!any); $('trips-kpi').classList.toggle('hidden', !any); $('trips-csv').classList.toggle('hidden', !all.length);
   const imp = load(KEY_TRIPS_IMP, null);
-  $('trips-info').textContent = all.length ? all.length + ' Fahrten' + (imp && imp.at ? ' · Import vom ' + fmtDate(imp.at) : '') : '';
-  if (!all.length) { $('trips-list').innerHTML = ''; $('trips-more').classList.add('hidden'); return; }
-  const last = new Date(all[0].s), ym = last.getFullYear() + '-' + pad2(last.getMonth() + 1), mt = all.filter(t => tripYM(t) === ym), km = mt.reduce((a, t) => a + (t.km || 0), 0);
+  $('trips-info').textContent = [all.length ? all.length + ' Fahrten' + (imp && imp.at ? ' · Import vom ' + fmtDate(imp.at) : '') : '', odo.length ? 'danach km vom Auto' : ''].filter(Boolean).join(' · ');
+  if (!any) { $('trips-list').innerHTML = ''; $('trips-more').classList.add('hidden'); return; }
+  const lastK = [all.length ? dayKey(all[0].s) : '', odo.length ? odo[0].k : ''].sort().pop(), last = new Date(lastK + 'T12:00:00'), ym = lastK.slice(0, 7);
+  const mt = all.filter(t => tripYM(t) === ym), mo = odo.filter(o => o.k.slice(0, 7) === ym), km = mt.reduce((a, t) => a + (t.km || 0), 0) + mo.reduce((a, o) => a + o.km, 0);
   const tile = (l, v, u) => `<div class="rounded-2xl bg-white dark:bg-slate-900 shadow-sm p-3"><p class="text-xs text-slate-500 dark:text-slate-400 truncate">${l}</p><p class="text-xl font-semibold tabular-nums text-slate-900 dark:text-slate-100">${v}${u ? ' <span class="text-xs font-normal text-slate-500 dark:text-slate-400">' + u + '</span>' : ''}</p></div>`;
-  $('trips-kpi').innerHTML = tile(MONTHS_LONG[last.getMonth()], fmt(km, 0), 'km') + tile('Fahrten', mt.length, '') + tile('Ø Strecke', mt.length ? fmt(km / mt.length, 0) : '–', 'km');
+  const dDays = new Set(mt.map(t => dayKey(t.s)).concat(mo.map(o => o.k))).size;
+  $('trips-kpi').innerHTML = tile(MONTHS_LONG[last.getMonth()], fmt(km, 0), 'km') + (mo.length ? tile('Tage gefahren', dDays, '') + tile('Ø pro Tag', dDays ? fmt(km / dDays, 0) : '–', 'km')
+    : tile('Fahrten', mt.length, '') + tile('Ø Strecke', mt.length ? fmt(km / mt.length, 0) : '–', 'km'));
   const days = [], idx = new Map();
   all.forEach(t => { const k = dayKey(t.s); if (!idx.has(k)) { idx.set(k, days.length); days.push({ k, trips: [] }); } days[idx.get(k)].trips.push(t); });
+  odo.forEach(o => { if (!idx.has(o.k)) { idx.set(o.k, days.length); days.push({ k: o.k, trips: [], odo: o }); } });
+  days.sort((a, b) => b.k.localeCompare(a.k));
   const today = dayKey(new Date().toISOString()), yest = dayKey(new Date(Date.now() - 864e5).toISOString());
   const pos = (p, a) => geoOf(p) ? `<button type="button" data-tpos="${esc(p)}" data-taddr="${esc(a || '')}" class="min-w-0 truncate text-left text-sm underline decoration-dotted decoration-slate-400 underline-offset-4">${esc(placeName(a, p))}</button>` : `<span class="min-w-0 truncate text-sm">${esc(placeName(a, p))}</span>`;
   $('trips-list').innerHTML = days.slice(0, tripDays).map(d => {
     const dd = new Date(d.k + 'T12:00:00'), sum = d.trips.reduce((a, t) => a + (t.km || 0), 0);
     const title = (d.k === today ? 'Heute, ' : d.k === yest ? 'Gestern, ' : '') + WEEKDAYS[dd.getDay()].slice(0, 2) + ' ' + pad2(dd.getDate()) + '.' + pad2(dd.getMonth() + 1) + '.' + (dd.getFullYear() !== new Date().getFullYear() ? dd.getFullYear() : '');
+    if (d.odo) { const o = d.odo, fd = o.from ? new Date(o.from + 'T12:00:00') : null;
+      return `<div class="space-y-2"><div class="flex justify-between items-baseline px-0.5"><span class="font-semibold">${title}</span><span class="text-sm text-slate-500 dark:text-slate-400">${fd ? 'seit ' + WEEKDAYS[fd.getDay()].slice(0, 2) + ' ' + pad2(fd.getDate()) + '.' + pad2(fd.getMonth() + 1) + '.' : 'km vom Auto'}</span></div>
+        <div class="rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-3.5 flex items-center gap-3"><span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" aria-hidden="true"><svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M12 14l3-5"/><path d="M4.5 18a9 9 0 1 1 15 0"/></svg></span>
+          <div class="min-w-0 flex-1"><p class="text-sm">km-Stand vom Auto</p><p class="truncate text-xs text-slate-500 dark:text-slate-400 tabular-nums">${fmt(o.km < o.b - o.a ? o.b - o.km : o.a, 0)} → ${fmt(o.b, 0)} km · Fahrten folgen mit dem Fahrtenbuch</p></div>
+          <span class="shrink-0 text-lg font-semibold tabular-nums">${fmt(o.km, 0)} <span class="text-xs font-normal text-slate-500 dark:text-slate-400">km</span></span></div></div>`; }
     return `<div class="space-y-2"><div class="flex justify-between items-baseline px-0.5"><span class="font-semibold">${title}</span><span class="text-sm text-slate-500 dark:text-slate-400">${d.trips.length} ${d.trips.length === 1 ? 'Fahrt' : 'Fahrten'} · ${fmt(sum, 0)} km</span></div>`
       + d.trips.slice().reverse().map(t => { const tl = tripLabel(t), SRC = { rule: ' · Regel', auto: ' · auto', file: '', manual: '' };
         return `<div class="rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-3.5 flex gap-3">
@@ -7442,6 +7498,10 @@ function renderTrips() {
   $('trips-more').classList.toggle('hidden', days.length <= tripDays);
 }
 $('trips-more').addEventListener('click', () => { tripDays += 30; renderTrips(); });
+/* Vergleichs-Benziner (Rückblick): sofort speichern */
+$('set-cmp-car').addEventListener('change', (e) => setQuickSetting('cmpCar', e.target.value.trim().slice(0, 40) || undefined));
+[['set-cmp-l', 'cmpL', 1, 30], ['set-cmp-eur', 'cmpEur', 0.5, 5]].forEach(([id, k, lo, hi]) => $(id).addEventListener('change', (e) => { const v = deDec(e.target.value);
+  if (e.target.value.trim() === '') { setQuickSetting(k, undefined); return; } if (Number.isFinite(v) && v > lo && v < hi) { setQuickSetting(k, Math.round(v * 100) / 100); e.target.value = String(Math.round(v * 100) / 100).replace('.', ','); } else e.target.value = getSettings()[k] ? String(getSettings()[k]).replace('.', ',') : ''; }));
 $('trips-go-set').addEventListener('click', () => openSettings('fahrten'));
 $('trips-list').addEventListener('click', (e) => {
   const tg = e.target.closest('[data-ttag]');
@@ -7746,7 +7806,7 @@ const NAV_IDX = [
   ['wrap', 'Rückblick', 'Start', 'jahr wrapped'], ['reminders', 'Erinnerungen', 'Erinnerungen', 'wartung termine fällig'], ['kb', 'Wissen', 'Wissen', 'notizen links tipps'], ['wish', 'Wunschliste', 'Wunschliste', 'zubehör kaufen wunsch matten kofferraum links shop'], ['tires', 'Reifen', 'Reifen', 'profiltiefe profil reifenprofil mm sommer winter allwetter messen'], ['providers', 'Ladekarten', 'Ladeanbieter', 'anbieter tarife preise'],
   ['bak-now', 'Jetzt in Google Drive sichern', 'Einstellungen › Sicherung & Belege', 'backup drive'], ['backup', 'Sicherung & Belege', 'Einstellungen', 'export import drive'],
   ['car', 'Fahrzeug & Kauf', 'Einstellungen', 'kennzeichen fin kaufpreis kauftag'], ['set-laden', 'Laden & Akku', 'Einstellungen', 'strompreis kapazität wltp referenz temperatur'], ['set-rem', 'Nächste HU / Service', 'Einstellungen › Erinnerungen', 'vorwarnung fälligkeit tüv'],
-  ['set-wetter', 'Eis-Warnung (Scheibe vereist)', 'Einstellungen › Wetter', 'eis frost scheibe vereist kratzen raureif vorklimatisieren abfahrt stellplatz carport garage benachrichtigung push nachricht'], ['set-fahrten', 'Fahrtenbuch-Einstellungen', 'Einstellungen', 'orte etiketten regeln import'], ['set-listen', 'Anbieter & Kategorien', 'Einstellungen', 'etiketten liste'], ['set-wetter', 'Wetter', 'Einstellungen', 'standort frost'],
+  ['set-wetter', 'Eis-Warnung (Scheibe vereist)', 'Einstellungen › Wetter', 'eis frost scheibe vereist kratzen raureif vorklimatisieren abfahrt stellplatz carport garage benachrichtigung push nachricht'], ['set-fahrten', 'Fahrtenbuch-Einstellungen', 'Einstellungen', 'orte etiketten regeln import benziner vergleich sprit spritpreis ersparnis gespart'], ['set-listen', 'Anbieter & Kategorien', 'Einstellungen', 'etiketten liste'], ['set-wetter', 'Wetter', 'Einstellungen', 'standort frost'],
   ['account', 'Konto & Cloud', 'Einstellungen', 'anmelden google škoda api'], ['set-gefahr', 'Alle Daten löschen', 'Einstellungen', 'zurücksetzen reset']];
 const navNorm = (t) => String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 function navSearch() {
@@ -7949,11 +8009,11 @@ const LAB_DEF = {
     pts: { 10: 101, 20: 102, 30: 94, 40: 83, 50: 74, 60: 66, 70: 58, 80: 55, 81: 40, 90: 30, 95: 27, 100: 22 }, tail: [{ a: 80, b: 90, min: 10 }, { a: 90, b: 100, min: 13 }] }],
   recs: [], speeds: [{ id: 's1', season: 'Sommer', klima: 'an', note: 'eben', rows: [{ v: 90, k: 13 }, { v: 100, k: 15 }, { v: 110, k: 17 }, { v: 120, k: 18.5 }, { v: 130, k: 21 }] }] };
 const cvMig = (c) => c && c.id === 'c1' && c.date === '2026-08-21' && c.s1 === 80 && !c.tail ? { ...c, tail: LAB_DEF.curves[0].tail, pts: { ...LAB_DEF.curves[0].pts, ...(c.pts || {}) } } : c;   // 80→100 % nachgetragen (10 + 13 min)
-function getLab() { const o = load(KEY_LAB, null); return { curves: o && Array.isArray(o.curves) ? o.curves.map(cvMig) : LAB_DEF.curves.slice(), recs: o && Array.isArray(o.recs) ? o.recs : [], routes: o && o.routes && typeof o.routes === 'object' && !Array.isArray(o.routes) ? o.routes : {}, lt: o && Array.isArray(o.lt) ? o.lt : [], bt: o && Array.isArray(o.bt) ? o.bt : [], tires: o && Array.isArray(o.tires) ? o.tires : [], wish: o && Array.isArray(o.wish) ? o.wish : [], fc: o && Array.isArray(o.fc) ? o.fc : [], speeds: o && Array.isArray(o.speeds) ? o.speeds : o && o.speed && Array.isArray(o.speed.rows) ? [{ id: 's1', season: 'Sommer', klima: 'an', note: 'eben', rows: o.speed.rows }] : JSON.parse(JSON.stringify(LAB_DEF.speeds)) }; }
+function getLab() { const o = load(KEY_LAB, null); return { curves: o && Array.isArray(o.curves) ? o.curves.map(cvMig) : LAB_DEF.curves.slice(), recs: o && Array.isArray(o.recs) ? o.recs : [], routes: o && o.routes && typeof o.routes === 'object' && !Array.isArray(o.routes) ? o.routes : {}, lt: o && Array.isArray(o.lt) ? o.lt : [], bt: o && Array.isArray(o.bt) ? o.bt : [], tires: o && Array.isArray(o.tires) ? o.tires : [], wish: o && Array.isArray(o.wish) ? o.wish : [], fc: o && Array.isArray(o.fc) ? o.fc : [], odo: o && Array.isArray(o.odo) ? o.odo : [], speeds: o && Array.isArray(o.speeds) ? o.speeds : o && o.speed && Array.isArray(o.speed.rows) ? [{ id: 's1', season: 'Sommer', klima: 'an', note: 'eben', rows: o.speed.rows }] : JSON.parse(JSON.stringify(LAB_DEF.speeds)) }; }
 const recKey = (r) => String(r || '').trim().toLowerCase();
 /* Zusammenführen statt Überschreiben: jedes Element (Kurve, Rekord, Messreihe, Strecke) trägt u = letzte Änderung (ms),
    Löschungen stehen in del { id: ms }. So gewinnt beim Abgleich zwischen Geräten/Cloud immer der neueste Stand je Element. */
-const LAB_LISTS = ['curves', 'recs', 'speeds', 'lt', 'bt', 'tires', 'wish', 'fc'];
+const LAB_LISTS = ['curves', 'recs', 'speeds', 'lt', 'bt', 'tires', 'wish', 'fc', 'odo'];
 function labStamp(o) {
   const prev = load(KEY_LAB, null) || {}, now = Date.now(), del = { ...(prev.del || {}) };
   LAB_LISTS.forEach(k => { const pm = new Map((prev[k] || []).map(x => [String(x.id), x])), ids = new Set();
