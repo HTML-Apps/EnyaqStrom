@@ -3008,7 +3008,7 @@ function renderTrends() {
     { key: 'km', title: 'Monatliche Laufleistung', unit: 'km', dec: 0, val: (y, m) => kmDrivenIn(y, m) || 0, goodDown: null },
     { key: 'strom', title: 'Monatliche Kosten (Strom)', unit: '€', dec: 2, val: (y, m) => monthReport(y, m, 'all').cost || 0, goodDown: true },
     { key: 'ges', title: 'Monatliche Kosten (Gesamt)', unit: '€', dec: 2, val: (y, m) => Math.max(0, costTotals(y, m).total || 0), goodDown: true },
-    { key: 'eff', title: 'Effizienz (ohne Ladeverluste)', unit: 'kWh/100 km', su: 'kWh/100', dec: 1, labels: true, val: (y, m) => effM[y + '-' + m] || 0, goodDown: true, base: true,
+    { key: 'eff', title: 'Effizienz (ohne Ladeverluste)', unit: 'kWh/100 km', su: 'kWh/100', dec: 1, val: (y, m) => effM[y + '-' + m] || 0, goodDown: true, base: true,
       note: 'ab Akku wie der Bordcomputer' }];
   /* Effizienz je Monat: Σ Akku-kWh ÷ Σ km der genauen Strecken zwischen zwei Ladungen (ab 30 km im Monat) */
   const effM = {}; (() => { const rs = getReadings(), acc = {}; try { tcSegments().forEach(x => { const d = new Date(rs[x.i].date), k = d.getFullYear() + '-' + d.getMonth(), o = acc[k] = acc[k] || { km: 0, bat: 0 }; o.km += x.km; o.bat += x.bat; }); } catch (e) { }
@@ -3016,7 +3016,7 @@ function renderTrends() {
   box.innerHTML = defs.map(d => {
     const vals = months.map(mo => ({ ...mo, v: d.val(mo.y, mo.m) })), done = vals.filter(x => !x.cur && x.v > 0);
     const last = vals[vals.length - 2], avg = done.length ? done.reduce((a, x) => a + x.v, 0) / done.length : 0;
-    const max0 = Math.max(...vals.map(x => x.v), avg, 1), pos = vals.filter(x => x.v > 0).map(x => x.v), lo = d.base && pos.length ? Math.max(0, Math.floor(Math.min(...pos) * 0.8)) : 0, max = (max0 - lo) * (d.labels ? 1.12 : 1);   // Platz für Werte über den Balken
+    const max0 = Math.max(...vals.map(x => x.v), avg, 1), pos = vals.filter(x => x.v > 0).map(x => x.v), lo = d.base && pos.length ? Math.max(0, Math.floor(Math.min(...pos) * 0.8)) : 0, max = (max0 - lo) * 1.12;   // Platz für die Werte über den Balken
     const ch = avg > 0 && last.v > 0 ? (last.v - avg) / avg * 100 : null, hp = (v) => v > 0 ? Math.max(0, (v - lo) / (max || 1) * 100) : 0;
     const chCls = ch == null || d.goodDown == null || Math.abs(ch) < 0.05 ? 'text-slate-700 dark:text-slate-200' : (ch < 0) === d.goodDown ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400';
     const num = (v) => v > 0 ? fmt(v, d.dec) : '–', ul = '<span class="ml-1 text-xs font-medium text-slate-500 dark:text-slate-400">' + (d.su || d.unit) + '</span>';
@@ -3034,7 +3034,7 @@ function renderTrends() {
         <div class="min-w-0 flex-1 flex flex-col">
           <div class="relative flex-1 min-h-[150px] flex items-end gap-1">
             ${avg > 0 ? `<div class="absolute inset-x-0 border-t-2 border-dashed border-emerald-500/70 pointer-events-none" style="bottom:${hp(avg).toFixed(1)}%" title="Durchschnitt ${num(avg)} ${d.unit}"></div>` : ''}
-            ${vals.map(x => `<div class="relative flex-1 h-full flex items-end" title="${MONTHS_LONG[x.m]} ${x.y}: ${num(x.v)} ${d.unit}${x.cur ? ' (Zwischenstand)' : ''}"><div class="relative w-full rounded-t ${x.cur ? 'bg-emerald-300/80 dark:bg-emerald-300/70' : 'bg-emerald-600 dark:bg-emerald-500/80'}" style="height:${x.v > 0 ? Math.max(3, hp(x.v)).toFixed(1) : 1.5}%">${d.labels && x.v > 0 ? `<span class="absolute inset-x-[-4px] bottom-full mb-0.5 text-center text-[10px] font-semibold leading-none tabular-nums text-slate-600 dark:text-slate-300">${fmt(x.v, d.dec)}</span>` : ''}</div></div>`).join('')}
+            ${vals.map(x => `<div class="relative flex-1 h-full flex items-end" title="${MONTHS_LONG[x.m]} ${x.y}: ${num(x.v)} ${d.unit}${x.cur ? ' (Zwischenstand)' : ''}"><div class="relative w-full rounded-t ${x.cur ? 'bg-emerald-300/80 dark:bg-emerald-300/70' : 'bg-emerald-600 dark:bg-emerald-500/80'}" style="height:${x.v > 0 ? Math.max(3, hp(x.v)).toFixed(1) : 1.5}%">${x.v > 0 ? `<span class="absolute inset-x-[-4px] bottom-full mb-0.5 text-center text-[10px] font-semibold leading-none tabular-nums text-slate-600 dark:text-slate-300">${x.v >= 1000 ? fmt(x.v / 1000, 1) + 'k' : fmt(x.v, d.key === 'eff' ? 1 : 0)}</span>` : ''}</div></div>`).join('')}
           </div>
           <div class="mt-1.5 flex gap-1 text-[10px] text-slate-500 dark:text-slate-400">${vals.map(x => `<span class="flex-1 text-center">${MONTHS[x.m]}</span>`).join('')}</div>
         </div>
