@@ -8360,7 +8360,7 @@ $('rec-sheet').addEventListener('click', (ev) => {
   $('rec-sheet').classList.add('hidden');
 });
 /* Start: kleine Akku-Temperatur-Karte (links der Verbrauchs-Prognose im Wisch-Bereich). Speichert in dieselbe Liste wie Rekorde → Akku °C (lab.bt). */
-let btmVal = null, btmCtx = null, btmSaved = null, btmMsg = '';
+let btmVal = null, btmCtx = 'geparkt', btmSaved = null, btmMsg = '';
 function renderBtm() {
   const el = $('btm-card'); if (!el) return;
   const all = (getLab().bt || []).filter(e => Number.isFinite(e.t) && e.at).sort((a, b) => Date.parse(a.at) - Date.parse(b.at)), last = all[all.length - 1];
@@ -8385,7 +8385,7 @@ $('btm-card').addEventListener('click', async (e) => {
   if (a === 'save') {
     b.disabled = true; const out = await btOutside(), lab = getLab(), en = { id: labId(), at: new Date().toISOString(), t: btmVal };
     if (Number.isFinite(out)) en.out = Math.round(out * 10) / 10; if (btmCtx) en.ctx = btmCtx;
-    lab.bt = (lab.bt || []).concat(en); btmSaved = en; btmCtx = null; btmMsg = ''; setLab(lab); renderBtm(); return;
+    lab.bt = (lab.bt || []).concat(en); btmSaved = en; btmCtx = 'geparkt'; btmMsg = ''; setLab(lab); renderBtm(); return;
   }
   if (a === 'undo' && btmSaved) { const lab = getLab(), id = btmSaved.id; lab.bt = (lab.bt || []).filter(x => x.id !== id); btmSaved = null; setLab(lab); renderBtm(); }
 });
