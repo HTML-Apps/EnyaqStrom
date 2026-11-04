@@ -1292,8 +1292,9 @@
             <div class="min-w-0 col-span-2"><label for="set-cmp-car" class="text-xs text-slate-500 dark:text-slate-400">Vergleichsauto</label><input id="set-cmp-car" type="text" inputmode="text" autocomplete="off" placeholder="z. B. Škoda Karoq 1.5 TSI" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
             <div class="min-w-0"><label for="set-cmp-l" class="text-xs text-slate-500 dark:text-slate-400">Verbrauch l/100 km</label><input id="set-cmp-l" type="text" inputmode="decimal" autocomplete="off" placeholder="7,0" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
             <div class="min-w-0"><label for="set-cmp-eur" class="text-xs text-slate-500 dark:text-slate-400">Spritpreis €/l</label><input id="set-cmp-eur" type="text" inputmode="decimal" autocomplete="off" placeholder="1,75" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
+            <div class="min-w-0 col-span-2"><label for="set-cmp-co2" class="text-xs text-slate-500 dark:text-slate-400">CO₂ deines Ladestroms g/kWh (Ökostrom = 0)</label><input id="set-cmp-co2" type="text" inputmode="numeric" autocomplete="off" placeholder="0" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
           </div>
-          <p class="mt-1.5 text-xs text-slate-500 dark:text-slate-400">Der Rückblick zeigt, was dieser Benziner für dieselben Kilometer an Sprit gekostet hätte – verglichen mit deinen Ladekosten.</p>
+          <p class="mt-1.5 text-xs text-slate-500 dark:text-slate-400">Der Rückblick zeigt, was dieser Benziner für dieselben Kilometer an Sprit gekostet und an CO₂ ausgestoßen hätte (2,37 kg je Liter) – verglichen mit deinen Ladekosten und deinem Strom. Zum Vergleich: deutscher Strommix etwa 360–380 g/kWh.</p>
         </div>
       </div>
     </div>
@@ -2521,7 +2522,7 @@ function fillSettings() {
   try { fillWxoPrefs(); } catch (e) { }
   renderProviders(); renderCategories(); renderTPlaceList(); renderTLabelSettings(); renderTripsLast();
   const s = getSettings();
-  $('set-cmp-car').value = s.cmpCar || ''; $('set-cmp-l').value = s.cmpL ? String(s.cmpL).replace('.', ',') : ''; $('set-cmp-eur').value = s.cmpEur ? String(s.cmpEur).replace('.', ',') : '';
+  $('set-cmp-car').value = s.cmpCar || ''; $('set-cmp-l').value = s.cmpL ? String(s.cmpL).replace('.', ',') : ''; $('set-cmp-eur').value = s.cmpEur ? String(s.cmpEur).replace('.', ',') : ''; $('set-cmp-co2').value = s.cmpCo2 ? String(s.cmpCo2) : '';
   $('set-price').value = String(s.price).replace('.', ',');
   $('set-battery').value = String(batteryKwh()).replace('.', ',');
   $('set-title').value = s.title || DEFAULT_TITLE;
@@ -6344,7 +6345,7 @@ async function wrShare(btn) {
   const rr = (x, y, w, h, r) => { g.beginPath(); g.roundRect ? g.roundRect(x, y, w, h, r) : g.rect(x, y, w, h); g.fill(); };
   const tiles = [['Gefahren', fmt(st.km || 0, 0), 'km'], ['Geladen', fmt(st.kwh, 0), 'kWh'], ['Ø Verbrauch inkl. Verluste', st.kwh100 != null ? fmt(st.kwh100, 1) : '–', 'kWh/100 km'],
     ['Ladekosten', fmt(st.laden, 2), '€'], ['Ladungen', fmt(st.n, 0), ''], ['Ø Strompreis', st.kwh > 0 ? fmt(st.laden / st.kwh * 100, 1) : '–', 'ct/kWh']];
-  if (st.km > 0) { const cc = cmpCar(), lit = st.km * cc.l / 100; tiles.push(['Gespart vs. Benziner', fmt(lit * cc.eur - st.laden, 0), '€'], ['Sprit vermieden', fmt(lit, 0), 'Liter']); }
+  if (st.km > 0) { const cc = cmpCar(), lit = st.km * cc.l / 100; const co = fmtCo2(cmpCo2(st.km, st.kwh).sav).split(' '); tiles.push(['Gespart vs. Benziner', fmt(lit * cc.eur - st.laden, 0), '€'], ['CO₂ vermieden', co[0], co[1]]); }
   const ROWS = Math.ceil(tiles.length / 2);
   const S = 2.74, M = 72, GAP = Math.round(12 * S), TW = (W - 2 * M - GAP) / 2, PAD = Math.round(14 * S), LS = Math.round(12 * S), VS = Math.round(36 * S), US = Math.round(13 * S);
   const TH = PAD + LS + 10 + Math.round(VS * 1.05) + PAD, HEAD = Math.round(44 * S), SUB = Math.round(16 * S);
@@ -6853,7 +6854,11 @@ const wrD = (ms) => { const d = new Date(ms); return String(d.getDate()).padStar
 const wrDY = (ms) => wrD(ms) + new Date(ms).getFullYear();
 const wrTitle = () => ((getSettings().title || DEFAULT_TITLE).split('|')[0].trim() || 'Enyaq') + ' Wrapped';
 /** Vergleichs-Benziner aus Einstellungen → Fahrtenbuch (Standard: 7,0 l/100 km, 1,75 €/l) */
-const cmpCar = () => { const s = getSettings(), l = Number(s.cmpL), e = Number(s.cmpEur); return { name: (s.cmpCar || '').trim() || 'ein Benziner', l: l > 1 && l < 30 ? l : 7, eur: e > 0.5 && e < 5 ? e : 1.75 }; };
+const cmpCar = () => { const s = getSettings(), l = Number(s.cmpL), e = Number(s.cmpEur), g = Number(s.cmpCo2); return { name: (s.cmpCar || '').trim() || 'ein Benziner', l: l > 1 && l < 30 ? l : 7, eur: e > 0.5 && e < 5 ? e : 1.75, g: g >= 0 && g < 2000 ? g : 0 }; };
+const CO2_L = 2.37;                                                                   // kg CO₂ je Liter Benzin (Verbrennung)
+/** CO₂-Bilanz: Benziner (Liter × 2,37 kg) gegen geladenen Strom (kWh × g/kWh laut Einstellung, Ökostrom = 0) → kg */
+const cmpCo2 = (km, kwh) => { const c = cmpCar(), fuel = km * c.l / 100 * CO2_L, el = (kwh || 0) * c.g / 1000; return { fuel, el, sav: fuel - el }; };
+const fmtCo2 = (kg) => Math.abs(kg) >= 1000 ? fmt(kg / 1000, 1) + ' t' : fmt(kg, 0) + ' kg';
 const wrSeen = () => { const l = load(KEY_WRAP, []); return Array.isArray(l) ? l : []; };
 
 /** Kennzahlen einer Periode: km (aus den km-Ständen), geladene kWh, Kosten (Laden + Kosten − Einnahmen), Ø Verbrauch inkl. Ladeverluste, Zahl der Ladungen. */
@@ -6934,13 +6939,14 @@ function wrPages(p) {
   const cc = cmpCar(), lit = (st.km || 0) * cc.l / 100, fuel = lit * cc.eur, sav = fuel - st.laden;
   if (st.km > 0) { const mx = Math.max(fuel, st.laden, 0.01), row = (l, v, col) => '<div style="font-size:13px;color:' + MU + ';margin:10px 0 4px">' + l + ' · ' + fmt(v, 0) + ' €</div>' + wrBar(v / mx * 100, col);
     pages.push(page('#1e1b4b', '#c4b5fd', sav >= 0 ? 'Gegenüber dem Benziner gespart' : 'Gegenüber dem Benziner mehr bezahlt', fmt(Math.abs(sav), 0), '€', per,
-      row('Sprit für ' + esc(cc.name), fuel, 'rgba(255,255,255,.55)') + row('Strom fürs Laden', st.laden, '#c4b5fd'),
-      'Statt ' + fmt(lit, 0) + ' Liter Sprit (' + fmt(cc.l, 1) + ' l/100 km zu ' + fmt(cc.eur, 2) + ' €/l).',
-      fmt(st.laden / st.km * 100, 1) + ' ct/km statt ' + fmt(fuel / st.km * 100, 1) + ' ct/km · nur Energiekosten, Werte unter Einstellungen → Fahrtenbuch')); }
+      row('Sprit für ' + esc(cc.name), fuel, 'rgba(255,255,255,.55)') + row('Strom fürs Laden', st.laden, '#c4b5fd')
+        + (() => { const c = cmpCo2(st.km, st.kwh); return '<div style="display:flex;align-items:center;gap:12px;margin-top:14px;padding:10px 14px;border-radius:16px;background:rgba(134,239,172,.12)"><div style="font-size:24px">🌱</div><div style="min-width:0"><div style="font-size:18px;font-weight:700;color:#86efac">' + fmtCo2(c.sav) + ' CO₂ vermieden</div><div style="font-size:13px;color:' + MU + ';margin-top:2px">Benziner ' + fmtCo2(c.fuel) + ' · Laden ' + (cc.g ? fmtCo2(c.el) + ' (' + fmt(cc.g, 0) + ' g/kWh)' : '0 kg (Ökostrom)') + '</div></div></div>'; })(),
+      'Statt ' + fmt(lit, 0) + ' l Sprit (' + fmt(cc.l, 1) + ' l/100 km · ' + fmt(cc.eur, 2) + ' €/l).',
+      fmt(st.laden / st.km * 100, 1) + ' statt ' + fmt(fuel / st.km * 100, 1) + ' ct/km · nur Energiekosten')); }
   // 5 Überblick
   const tile = (l, v, u) => '<div style="background:rgba(255,255,255,.08);border-radius:20px;padding:14px 12px;min-width:0"><div style="font-size:' + (l.length > 16 ? 11 : 12) + 'px;line-height:1.3;color:' + MU + '">' + l + '</div><div style="' + WR_F + ';font-size:36px;font-weight:700;line-height:1.05;color:#6ee7b7">' + v + '<wbr><span style="font-family:system-ui,sans-serif;font-size:' + (u.length > 6 ? 11 : 12) + 'px;font-weight:500;color:' + MU + ';margin-left:4px;white-space:nowrap;display:inline-block">' + u + '</span></div></div>';
   pages.push({ bg: '#0f172a', ac: '#6ee7b7', body: '<div style="' + WR_F + ';font-size:44px;font-weight:700;line-height:1">Alles auf einen Blick</div><div style="font-size:16px;color:' + MU + ';margin:6px 0 20px">' + per + '</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">' +
-    tile('Gefahren', fmt(st.km || 0, 0), 'km') + tile('Geladen', fmt(st.kwh, 0), 'kWh') + tile('Ø Verbrauch inkl. Verluste', st.kwh100 != null ? fmt(st.kwh100, 1) : '–', 'kWh/100 km') + tile('Ladekosten', fmt(st.laden, 2), '€') + tile('Ladungen', fmt(st.n, 0), '') + tile('Ø Strompreis', st.kwh > 0 ? fmt(st.laden / st.kwh * 100, 1) : '–', 'ct/kWh') + (st.km > 0 ? tile('Gespart vs. Benziner', fmt(sav, 0), '€') + tile('Sprit vermieden', fmt(lit, 0), 'Liter') : '') + '</div>' });
+    tile('Gefahren', fmt(st.km || 0, 0), 'km') + tile('Geladen', fmt(st.kwh, 0), 'kWh') + tile('Ø Verbrauch inkl. Verluste', st.kwh100 != null ? fmt(st.kwh100, 1) : '–', 'kWh/100 km') + tile('Ladekosten', fmt(st.laden, 2), '€') + tile('Ladungen', fmt(st.n, 0), '') + tile('Ø Strompreis', st.kwh > 0 ? fmt(st.laden / st.kwh * 100, 1) : '–', 'ct/kWh') + (st.km > 0 ? tile('Gespart vs. Benziner', fmt(sav, 0), '€') + tile('CO₂ vermieden', fmtCo2(cmpCo2(st.km, st.kwh).sav).replace(/ (kg|t)$/, ''), / t$/.test(fmtCo2(cmpCo2(st.km, st.kwh).sav)) ? 't' : 'kg') : '') + '</div>' });
   return pages;
 }
 
@@ -7008,7 +7014,7 @@ try { renderWrapCard(); } catch (e) { }
    im Dokument enyaqStrom/<uid>/settings/prefs, gleiche Regel wie Anbieter und Kategorien. Die PIN bleibt nur auf dem Gerät.
    Erster Abgleich: Was die Cloud hat, gilt; fehlt dort etwas und ist lokal vorhanden, wird es hochgeladen. Danach gilt die Cloud (Änderung auf einem Gerät wirkt auf allen).
    ===================================================================== */
-const SYNC_SET_KEYS = ['title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAcKwh', 'certDcKwh', 'certKm', 'wltpNet', 'ccEnd', 'wxoCut', 'dashFirst', 'carN', 'carSec', 'wxIcons', 'nRep', 'nTrips', 'nBakYm', 'nBakAt', 'nBakSnz', 'gtMirror', 'gtList', 'iceDep', 'iceWe', 'icePark', 'iceMin', 'iceK', 'cmpCar', 'cmpL', 'cmpEur'];
+const SYNC_SET_KEYS = ['title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAcKwh', 'certDcKwh', 'certKm', 'wltpNet', 'ccEnd', 'wxoCut', 'dashFirst', 'carN', 'carSec', 'wxIcons', 'nRep', 'nTrips', 'nBakYm', 'nBakAt', 'nBakSnz', 'gtMirror', 'gtList', 'iceDep', 'iceWe', 'icePark', 'iceMin', 'iceK', 'cmpCar', 'cmpL', 'cmpEur', 'cmpCo2'];
 /** Einstellungen für die Cloud: feste Reihenfolge, ohne leere Werte (Firestore verbietet undefined). null = nichts vorhanden. */
 function syncSet(src) {
   const o = {}; if (src && typeof src === 'object') SYNC_SET_KEYS.forEach(k => { const v = src[k]; if (v != null && v !== '' && !(typeof v === 'number' && !isFinite(v))) o[k] = v; });
@@ -7500,7 +7506,7 @@ function renderTrips() {
 $('trips-more').addEventListener('click', () => { tripDays += 30; renderTrips(); });
 /* Vergleichs-Benziner (Rückblick): sofort speichern */
 $('set-cmp-car').addEventListener('change', (e) => setQuickSetting('cmpCar', e.target.value.trim().slice(0, 40) || undefined));
-[['set-cmp-l', 'cmpL', 1, 30], ['set-cmp-eur', 'cmpEur', 0.5, 5]].forEach(([id, k, lo, hi]) => $(id).addEventListener('change', (e) => { const v = deDec(e.target.value);
+[['set-cmp-l', 'cmpL', 1, 30], ['set-cmp-eur', 'cmpEur', 0.5, 5], ['set-cmp-co2', 'cmpCo2', -0.01, 2000]].forEach(([id, k, lo, hi]) => $(id).addEventListener('change', (e) => { const v = deDec(e.target.value);
   if (e.target.value.trim() === '') { setQuickSetting(k, undefined); return; } if (Number.isFinite(v) && v > lo && v < hi) { setQuickSetting(k, Math.round(v * 100) / 100); e.target.value = String(Math.round(v * 100) / 100).replace('.', ','); } else e.target.value = getSettings()[k] ? String(getSettings()[k]).replace('.', ',') : ''; }));
 $('trips-go-set').addEventListener('click', () => openSettings('fahrten'));
 $('trips-list').addEventListener('click', (e) => {
@@ -7806,7 +7812,7 @@ const NAV_IDX = [
   ['wrap', 'Rückblick', 'Start', 'jahr wrapped'], ['reminders', 'Erinnerungen', 'Erinnerungen', 'wartung termine fällig'], ['kb', 'Wissen', 'Wissen', 'notizen links tipps'], ['wish', 'Wunschliste', 'Wunschliste', 'zubehör kaufen wunsch matten kofferraum links shop'], ['tires', 'Reifen', 'Reifen', 'profiltiefe profil reifenprofil mm sommer winter allwetter messen'], ['providers', 'Ladekarten', 'Ladeanbieter', 'anbieter tarife preise'],
   ['bak-now', 'Jetzt in Google Drive sichern', 'Einstellungen › Sicherung & Belege', 'backup drive'], ['backup', 'Sicherung & Belege', 'Einstellungen', 'export import drive'],
   ['car', 'Fahrzeug & Kauf', 'Einstellungen', 'kennzeichen fin kaufpreis kauftag'], ['set-laden', 'Laden & Akku', 'Einstellungen', 'strompreis kapazität wltp referenz temperatur'], ['set-rem', 'Nächste HU / Service', 'Einstellungen › Erinnerungen', 'vorwarnung fälligkeit tüv'],
-  ['set-wetter', 'Eis-Warnung (Scheibe vereist)', 'Einstellungen › Wetter', 'eis frost scheibe vereist kratzen raureif vorklimatisieren abfahrt stellplatz carport garage benachrichtigung push nachricht'], ['set-fahrten', 'Fahrtenbuch-Einstellungen', 'Einstellungen', 'orte etiketten regeln import benziner vergleich sprit spritpreis ersparnis gespart'], ['set-listen', 'Anbieter & Kategorien', 'Einstellungen', 'etiketten liste'], ['set-wetter', 'Wetter', 'Einstellungen', 'standort frost'],
+  ['set-wetter', 'Eis-Warnung (Scheibe vereist)', 'Einstellungen › Wetter', 'eis frost scheibe vereist kratzen raureif vorklimatisieren abfahrt stellplatz carport garage benachrichtigung push nachricht'], ['set-fahrten', 'Fahrtenbuch-Einstellungen', 'Einstellungen', 'orte etiketten regeln import benziner vergleich sprit spritpreis ersparnis gespart co2 co₂ ökostrom strommix klima'], ['set-listen', 'Anbieter & Kategorien', 'Einstellungen', 'etiketten liste'], ['set-wetter', 'Wetter', 'Einstellungen', 'standort frost'],
   ['account', 'Konto & Cloud', 'Einstellungen', 'anmelden google škoda api'], ['set-gefahr', 'Alle Daten löschen', 'Einstellungen', 'zurücksetzen reset']];
 const navNorm = (t) => String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 function navSearch() {
