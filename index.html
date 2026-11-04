@@ -95,6 +95,8 @@
   #akte-print { display: none; }
   /* Schnellmenü und Einstellungs-Seitenleiste: oben aus dem Schwarz der Statusleiste in das Blau der Seitenleiste blenden (wie im Rückblick) */
   @media (prefers-color-scheme: dark) { #nav-drawer-panel, #set-drawer-panel { background: linear-gradient(180deg,#000 0,#000 env(safe-area-inset-top,0px),rgba(0,0,0,.55) calc(env(safe-area-inset-top,0px) + 80px),rgba(0,0,0,0) calc(env(safe-area-inset-top,0px) + 230px)),#0f172a; background-repeat: no-repeat; } }
+  /* Prognose 7 Tage am Handy (ganze Seite): oben ebenso weich aus dem Schwarz der Statusleiste blenden – am PC unverändert */
+  @media (prefers-color-scheme: dark) and (max-width: 639.98px) { #wxo-sheet-box { background: linear-gradient(180deg,#000 0,#000 env(safe-area-inset-top,0px),rgba(0,0,0,.55) calc(env(safe-area-inset-top,0px) + 80px),rgba(0,0,0,0) calc(env(safe-area-inset-top,0px) + 230px)),#0f172a; background-repeat: no-repeat; } }
   .no-sb { scrollbar-width: none; } .no-sb::-webkit-scrollbar { display: none; }
   .cv-print { display: none; }
   /* Akte wird auf dem Bildschirm UND im Druck als eigene Seite gezeigt: so sind die Diagramm-Bilder sicher gezeichnet, bevor der Druckdialog sie erfasst */
