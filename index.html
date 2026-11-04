@@ -646,14 +646,18 @@
           </div>
           <button id="rt-swap" type="button" aria-label="Start und Ziel tauschen" class="self-center px-1 text-xl text-sky-600 dark:text-sky-300 active:scale-90 transition">⇅</button>
         </div>
-        <div class="mt-2.5 flex flex-wrap gap-1.5 text-[13px]">
-          <label class="flex items-center gap-1 rounded-xl bg-slate-100 dark:bg-slate-800 px-2 py-1"><span aria-hidden="true">🕗</span><input id="rt-dep" type="datetime-local" aria-label="Abfahrt" class="w-[156px] bg-transparent text-[13px] focus:outline-none"></label>
-          <label class="flex items-center gap-1 rounded-xl bg-slate-100 dark:bg-slate-800 px-2 py-1"><span aria-hidden="true">🔋</span><input id="rt-soc" type="text" inputmode="numeric" aria-label="Akku bei Abfahrt in Prozent" class="w-8 bg-transparent text-right focus:outline-none">%</label>
-          <label class="flex items-center gap-1 rounded-xl bg-slate-100 dark:bg-slate-800 px-2 py-1"><span aria-hidden="true">👤</span><select id="rt-pers" aria-label="Personen" class="bg-transparent focus:outline-none"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option></select></label>
-          <label class="flex items-center gap-1 rounded-xl bg-slate-100 dark:bg-slate-800 px-2 py-1"><span aria-hidden="true">⏱</span><select id="rt-tempo" aria-label="Tempo gegenüber Routenplaner und Autobahn-Einstellung" class="bg-transparent focus:outline-none"><option value="-10">−10 %</option><option value="-5">−5 %</option><option value="0" selected>±0 %</option><option value="5">+5 %</option><option value="10">+10 %</option></select></label>
-          <button id="rt-rt" type="button" aria-pressed="false" class="flex items-center gap-1 rounded-xl bg-slate-100 dark:bg-slate-800 px-2 py-1 font-medium">↺ Hin &amp; zurück</button>
-          <label id="rt-stay-w" class="hidden items-center gap-1 rounded-xl bg-slate-100 dark:bg-slate-800 px-2 py-1"><span class="text-slate-500 dark:text-slate-400">zurück nach</span><select id="rt-stay" aria-label="Aufenthalt am Ziel" class="bg-transparent focus:outline-none"><option value="0.5">30 min</option><option value="1">1 h</option><option value="2">2 h</option><option value="3" selected>3 h</option><option value="4">4 h</option><option value="6">6 h</option><option value="8">8 h</option><option value="10">10 h</option></select></label>
-          <label class="flex items-center gap-1 rounded-xl bg-slate-100 dark:bg-slate-800 px-2 py-1"><span aria-hidden="true">🛣️</span><select id="rt-vab" aria-label="Tempo auf der Autobahn" class="bg-transparent focus:outline-none"><option value="100">AB 100</option><option value="110">AB 110</option><option value="120" selected>AB 120</option><option value="130">AB 130</option><option value="140">AB 140</option></select></label>
+        <div class="mt-2.5 space-y-1.5 text-[13px]">
+          <div class="flex gap-1.5">
+            <label class="flex min-w-0 flex-1 items-center rounded-xl bg-slate-100 dark:bg-slate-800 px-2 py-1"><input id="rt-dep" type="datetime-local" aria-label="Abfahrt" class="w-full min-w-0 bg-transparent text-[13px] focus:outline-none"></label>
+            <label class="flex shrink-0 items-center gap-0.5 rounded-xl bg-slate-100 dark:bg-slate-800 px-1.5 py-1"><span aria-hidden="true">🔋</span><input id="rt-soc" type="text" inputmode="numeric" aria-label="Akku bei Abfahrt in Prozent" class="w-[26px] bg-transparent text-right focus:outline-none">%</label>
+            <label class="flex shrink-0 items-center gap-0.5 rounded-xl bg-slate-100 dark:bg-slate-800 px-1.5 py-1"><span aria-hidden="true">👤</span><select id="rt-pers" aria-label="Personen" class="bg-transparent focus:outline-none"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option></select></label>
+          </div>
+          <div class="flex flex-wrap gap-1 whitespace-nowrap text-[12.5px]">
+            <label class="flex shrink-0 grow items-center justify-center gap-0.5 rounded-xl bg-slate-100 dark:bg-slate-800 px-1.5 py-1"><span aria-hidden="true">⏱</span><select id="rt-tempo" aria-label="Tempo gegenüber Routenplaner und Autobahn-Einstellung" class="bg-transparent focus:outline-none"><option value="-10">−10 %</option><option value="-5">−5 %</option><option value="0" selected>±0 %</option><option value="5">+5 %</option><option value="10">+10 %</option></select></label>
+            <button id="rt-rt" type="button" aria-pressed="false" class="flex shrink-0 grow items-center justify-center gap-0.5 rounded-xl bg-slate-100 dark:bg-slate-800 px-1.5 py-1 font-medium">↺ Hin &amp; zurück</button>
+            <label id="rt-stay-w" title="Hin &amp; zurück: Rückfahrt nach …" class="hidden shrink-0 grow items-center justify-center gap-1 rounded-xl bg-pink-100 text-pink-700 dark:bg-pink-950 dark:text-pink-300 px-1.5 py-1 font-medium"><span>↺ zurück</span><select id="rt-stay" aria-label="Hin und zurück: Aufenthalt am Ziel" class="bg-transparent focus:outline-none"><option value="off">aus</option><option value="0.5">½ h</option><option value="1">1 h</option><option value="2">2 h</option><option value="3" selected>3 h</option><option value="4">4 h</option><option value="6">6 h</option><option value="8">8 h</option><option value="10">10 h</option></select></label>
+            <label class="flex shrink-0 grow items-center justify-center gap-0.5 rounded-xl bg-slate-100 dark:bg-slate-800 px-1.5 py-1"><span aria-hidden="true">🛣️</span><select id="rt-vab" aria-label="Tempo auf der Autobahn" class="bg-transparent focus:outline-none"><option value="100">AB 100</option><option value="110">AB 110</option><option value="120" selected>AB 120</option><option value="130">AB 130</option><option value="140">AB 140</option></select></label>
+          </div>
         </div>
       </div>
       <div id="rt-res"></div>
@@ -9351,8 +9355,10 @@ $('rt-v-x').addEventListener('click', () => { const had = !!RT.v; RT.v = null; R
   $('rt-sug-' + w).addEventListener('click', (e) => { const b = e.target.closest('[data-rtsug]'); if (!b) return; const [ww, i] = b.dataset.rtsug.split(':'); const p = RT.sug[ww] && RT.sug[ww][Number(i)]; if (p) rtPick(ww, p); });
 });
 $('rt-swap').addEventListener('click', () => { [RT.a, RT.b] = [RT.b, RT.a]; $('rt-a').value = RT.a ? RT.a.label : ''; $('rt-b').value = RT.b ? RT.b.label : ''; rtRun(); });
-['rt-dep', 'rt-pers', 'rt-tempo', 'rt-vab', 'rt-stay'].forEach(id => $(id).addEventListener('change', rtRun));
-function rtRoundUi() { const b = $('rt-rt'), on = !!RT.round; b.setAttribute('aria-pressed', String(on)); ['bg-pink-100', 'text-pink-700', 'dark:bg-pink-950', 'dark:text-pink-300'].forEach(c => b.classList.toggle(c, on)); ['bg-slate-100', 'dark:bg-slate-800'].forEach(c => b.classList.toggle(c, !on)); $('rt-stay-w').classList.toggle('hidden', !on); $('rt-stay-w').classList.toggle('flex', on); }
+['rt-dep', 'rt-pers', 'rt-tempo', 'rt-vab'].forEach(id => $(id).addEventListener('change', rtRun));
+let rtStayLast = '3';
+$('rt-stay').addEventListener('change', (e) => { if (e.target.value === 'off') { e.target.value = rtStayLast; RT.round = false; rtRoundUi(); } else rtStayLast = e.target.value; rtRun(); });   // „nur hin“ schaltet Hin & zurück aus
+function rtRoundUi() { const b = $('rt-rt'), on = !!RT.round; b.setAttribute('aria-pressed', String(on)); ['bg-pink-100', 'text-pink-700', 'dark:bg-pink-950', 'dark:text-pink-300'].forEach(c => b.classList.toggle(c, on)); ['bg-slate-100', 'dark:bg-slate-800'].forEach(c => b.classList.toggle(c, !on)); b.classList.toggle('hidden', on); $('rt-stay-w').classList.toggle('hidden', !on); $('rt-stay-w').classList.toggle('flex', on); }
 $('rt-rt').addEventListener('click', () => { RT.round = !RT.round; rtRoundUi(); rtRun(); });
 $('rt-soc').addEventListener('change', rtRun);
 $('rt-res').addEventListener('click', (e) => { if (e.target.closest('[data-rt="retry"]')) rtRun(); if (e.target.closest('[data-rt="stops"]')) rtFindStops(RT.n); const al = e.target.closest('[data-rtalt]'); if (al) { RT.altK = Number(al.dataset.rtalt); const cur = (RT.res.stops || [])[RT.altK]; RT.altSel = cur ? cur.cid : null; RT.altPlan = RT.res.stops; rtAltSheet(); } });
@@ -9448,14 +9454,14 @@ $('au-sheet').addEventListener('click', (e) => {
 function rtCloudPlan() {
   const l = getSettings().rtLast, ae = document.activeElement; if (!l || !l.a || !l.b || (ae && /^rt-/.test(ae.id))) return;
   const same = (p, q) => p && q && Math.abs(p.lat - q.lat) < 1e-4 && Math.abs(p.lon - q.lon) < 1e-4; if (same(RT.a, l.a) && same(RT.b, l.b) && (!!RT.v === !!l.v && (!l.v || same(RT.v, l.v))) && !!RT.round === !!l.round) return;
-  RT.a = l.a; RT.b = l.b; RT.v = l.v || null; RT.vOpen = false; rtViaUi(); RT.round = !!l.round; $('rt-a').value = l.a.label; $('rt-b').value = l.b.label; if (l.pers) $('rt-pers').value = String(l.pers); if (l.stay) $('rt-stay').value = String(l.stay); rtRoundUi(); if (RT.tab === 'plan') rtRun();
+  RT.a = l.a; RT.b = l.b; RT.v = l.v || null; RT.vOpen = false; rtViaUi(); RT.round = !!l.round; $('rt-a').value = l.a.label; $('rt-b').value = l.b.label; if (l.pers) $('rt-pers').value = String(l.pers); if (l.stay) { $('rt-stay').value = String(l.stay); rtStayLast = $('rt-stay').value; } rtRoundUi(); if (RT.tab === 'plan') rtRun();
 }
 function rtShow() {
   rtTabs();
   if (!RT.a && !RT.b) { const l = getSettings().rtLast || load(KEY_RT, null) || {}, home = getTPlaces().find(p => p.kind === 'home' && Number.isFinite(p.lat));
     RT.a = l.a || (home ? { lat: home.lat, lon: home.lon, label: home.name } : null); RT.b = l.b || null; RT.v = l.v || null; rtViaUi();
     $('rt-a').value = RT.a ? RT.a.label : ''; $('rt-b').value = RT.b ? RT.b.label : '';
-    if (l.pers) $('rt-pers').value = String(l.pers); if (l.dep && Date.parse(l.dep) > Date.now() - 3600e3) { const d = new Date(l.dep); $('rt-dep').value = d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + 'T' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()); } RT.round = !!l.round; if (l.stay) $('rt-stay').value = String(l.stay); rtRoundUi(); if (l.tempo != null) $('rt-tempo').value = String(l.tempo); if (l.vab) $('rt-vab').value = String(l.vab); }
+    if (l.pers) $('rt-pers').value = String(l.pers); if (l.dep && Date.parse(l.dep) > Date.now() - 3600e3) { const d = new Date(l.dep); $('rt-dep').value = d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + 'T' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()); } RT.round = !!l.round; if (l.stay) { $('rt-stay').value = String(l.stay); rtStayLast = $('rt-stay').value; } rtRoundUi(); if (l.tempo != null) $('rt-tempo').value = String(l.tempo); if (l.vab) $('rt-vab').value = String(l.vab); }
   const now = new Date(); now.setMinutes(Math.ceil(now.getMinutes() / 15) * 15, 0, 0);
   if (!$('rt-dep').value || new Date($('rt-dep').value).getTime() < Date.now() - 3600e3) $('rt-dep').value = now.getFullYear() + '-' + pad2(now.getMonth() + 1) + '-' + pad2(now.getDate()) + 'T' + pad2(now.getHours()) + ':' + pad2(now.getMinutes());
   if (!$('rt-soc').value) { $('rt-soc').value = '80'; wxoSoc().then(s => { if (s != null && $('rt-soc').value === '80') { $('rt-soc').value = String(Math.round(s)); if (RT.res || RT.busy) rtRun(); } }).catch(() => { }); }
