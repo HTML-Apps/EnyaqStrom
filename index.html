@@ -6048,6 +6048,8 @@ async function wxoSoc() {
 }
 /* PC: Fahrzeugstatus rechts neben dem Auto (Glas-Karte) – aus der stündlichen Abfrage beim Auto (gleicher Zwischenspeicher wie der Restakku) */
 /* Handy: Fahrzeugstatus als eigene Karte im Wisch-Bereich (zwischen Prognose und Zählerstand); am PC steht er neben dem Auto */
+/** Farbe des Akku-Balkens: unter 15 % rot, unter 25 % orange, sonst grün */
+const socBarCls = (soc) => soc < 15 ? 'from-red-600 to-red-400' : soc < 25 ? 'from-orange-600 to-orange-400' : 'from-emerald-600 to-emerald-400';
 function renderVehSlide() {
   const el = $('veh-slide'); if (!el) return;
   const c = load(KEY_WXO + 'S', null), d = c && c.d, on = !isDesk() && apiEnabled() && d && d.soc != null;
@@ -6058,7 +6060,7 @@ function renderVehSlide() {
   const tile = (a, b, col) => `<div class="min-w-0 rounded-xl bg-slate-100 dark:bg-slate-800/70 px-2.5 py-1.5"><p class="text-[10.5px] text-left text-slate-500 dark:text-slate-400">${a}</p><p class="truncate text-[13px] font-semibold ${col || ''}">${b}</p></div>`;
   el.innerHTML = `<div class="flex items-center justify-between gap-2"><p class="font-barlow text-xl font-bold uppercase tracking-[0.08em] leading-6">Fahrzeugstatus</p><span class="text-[11px] ${ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}">● ${ok ? 'Alles OK' : 'Bitte prüfen'}</span></div>
     <div class="mt-1.5 flex items-baseline gap-2"><span class="font-barlow text-[36px] font-bold leading-none">${soc} %</span>${d.rangeKm != null ? `<span class="text-[15px] font-semibold">${fmt(d.rangeKm, 0)} km</span>` : ''}<span class="ml-auto text-[10.5px] text-slate-500 dark:text-slate-400">${at.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })} · ${hhmm(at.getTime())}</span></div>
-    <div class="relative mt-2 h-3 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800"><div class="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400 ${charging ? 'animate-pulse' : ''}" style="width:${Math.max(2, Math.min(100, soc))}%"></div>${tgt ? `<div class="absolute inset-y-0 border-l-2 border-slate-900/70 dark:border-white/80" style="left:${tgt}%"></div>` : ''}</div>
+    <div class="relative mt-2 h-3 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800"><div class="h-full rounded-full bg-gradient-to-r ${socBarCls(soc)} ${charging ? 'animate-pulse' : ''}" style="width:${Math.max(2, Math.min(100, soc))}%"></div>${tgt ? `<div class="absolute inset-y-0 border-l-2 border-slate-900/70 dark:border-white/80" style="left:${tgt}%"></div>` : ''}</div>
     <div class="min-h-2 flex-1"></div>
     <div class="grid grid-cols-2 gap-1.5">${[
       locked != null ? tile('Verriegelt', locked ? '🔒 geschlossen' : '🔓 geöffnet', locked ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400') : tile('Ladestatus', d.chargeState === 'READY_FOR_CHARGING' ? 'bereit' : charging ? 'lädt' : 'kein Laden'),
@@ -6088,7 +6090,7 @@ function renderVehCard() {
   el.innerHTML = `<div class="rounded-[20px] border border-white/10 bg-slate-900/55 px-4 py-3.5 text-white backdrop-blur-md">
     <div class="flex items-center justify-between"><span class="font-barlow text-[15px] font-bold uppercase tracking-[0.08em]">Fahrzeugstatus</span><span class="text-[11px] ${ok ? 'text-emerald-400' : 'text-amber-400'}">● ${ok ? 'Alles OK' : 'Bitte prüfen'}</span></div>
     <div class="mt-2 flex items-baseline gap-2"><span class="font-barlow text-[40px] font-bold leading-none">${soc} %</span>${d.rangeKm != null ? `<span class="text-[15px] font-semibold">${fmt(d.rangeKm, 0)} km</span>` : ''}</div>
-    <div class="relative mb-2.5 mt-2 h-3.5 overflow-hidden rounded-full bg-slate-800"><div class="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400 ${charging ? 'animate-pulse' : ''}" style="width:${Math.max(2, Math.min(100, soc))}%"></div>${tgt ? `<div class="absolute -inset-y-0.5 border-l-2 border-white/80" style="left:${tgt}%"></div>` : ''}</div>
+    <div class="relative mb-2.5 mt-2 h-3.5 overflow-hidden rounded-full bg-slate-800"><div class="h-full rounded-full bg-gradient-to-r ${socBarCls(soc)} ${charging ? 'animate-pulse' : ''}" style="width:${Math.max(2, Math.min(100, soc))}%"></div>${tgt ? `<div class="absolute -inset-y-0.5 border-l-2 border-white/80" style="left:${tgt}%"></div>` : ''}</div>
     ${rows}<p class="mt-1.5 text-[10.5px] text-slate-400">Stand vom Auto: ${atTxt}</p></div>`;
 }
 const WXO_H1 = 7, WXO_H2 = 16;                                                        // Anzeige: Temperatur zur Hin- und Rückfahrt (nur Anzeige, gerechnet wird mit dem Tagesmittel)
