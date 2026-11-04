@@ -8301,7 +8301,7 @@ function btCard(list) {
   h += `<div class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 space-y-1.5"><div class="flex items-center justify-between gap-2"><p class="text-sm font-bold">Verlauf</p><div class="flex rounded-lg bg-slate-100 dark:bg-slate-800 p-0.5 text-[11px] font-semibold">${[['30', '30 T'], ['365', '1 J'], ['all', 'Alle']].map(([k, l]) => `<button type="button" data-btr="${k}" class="rounded-md px-2 py-0.5 ${btRange === k ? 'bg-white dark:bg-slate-600 shadow-sm' : 'text-slate-500 dark:text-slate-400'}">${l}</button>`).join('')}</div></div>`
     + (es.length ? btSvg(es) + `<div class="flex items-center gap-3.5 text-[11px] text-slate-500 dark:text-slate-400"><span><span class="inline-block h-[3px] w-3 bg-orange-500 align-middle"></span> Akku</span><span><span class="inline-block w-3 border-t-2 border-dashed border-sky-400 align-middle"></span> Außen</span><span class="ml-auto">${es.length} ${es.length === 1 ? 'Wert' : 'Werte'}</span></div>`
       : `<p class="py-4 text-sm text-slate-500 dark:text-slate-400 text-left">${all.length ? 'Keine Werte in diesem Zeitraum.' : 'Noch keine Werte. Temperatur oben einstellen und speichern – die App merkt sich den letzten Wert, beim nächsten Mal reicht oft ein Tipp.'}</p>`) + '</div>';
-  if (all.length) h += `<details class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm px-4 py-3"><summary class="cursor-pointer text-sm font-semibold">Alle Einträge (${all.length})</summary><div class="mt-2">${all.slice().reverse().slice(0, 200).map(e => { const j = btJump(e, all); return `<div class="flex items-center gap-2 border-t border-slate-100 dark:border-slate-800 py-2 text-[13px]"><span class="w-[92px] shrink-0 tabular-nums">${new Date(e.at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' })} ${hhmm(Date.parse(e.at))}</span><b class="w-12 shrink-0 tabular-nums text-orange-600 dark:text-orange-400">${fmt(e.t, 0)} °C</b><span class="min-w-0 flex-1 truncate text-xs text-slate-500 dark:text-slate-400">${j ? `<span class="text-amber-600 dark:text-amber-400" title="${fmt(Math.abs(j.d), 0)}° ${j.d > 0 ? 'über' : 'unter'} dem vorherigen Wert (${fmt(j.prev.t, 0)} °C) – bitte prüfen">⚠️ ${j.d > 0 ? '+' : '−'}${fmt(Math.abs(j.d), 0)}°</span> ` : ''}${[Number.isFinite(e.out) ? 'außen ' + fmt(e.out, 0) + ' °C' : '', ((BT_CTX.find(c => c[0] === e.ctx) || [])[1] || '') + (e.ctxAuto ? ' (auto)' : ''), btTripTxt(e)].filter(Boolean).join(' · ')}</span><button type="button" data-btdel="${esc(e.id)}" aria-label="Eintrag löschen" class="shrink-0 px-1.5 text-slate-400 active:text-red-500">✕</button></div>`; }).join('')}</div></details>`;
+  if (all.length) h += `<details data-btlist ${btListOpen ? 'open' : ''} class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm px-4 py-3"><summary class="cursor-pointer text-sm font-semibold">Alle Einträge (${all.length})</summary><div class="mt-2">${all.slice().reverse().slice(0, 200).map(e => { const j = btJump(e, all); return `<div data-btedit="${esc(e.id)}" role="button" tabindex="0" aria-label="Eintrag bearbeiten" class="flex cursor-pointer items-center gap-2 border-t border-slate-100 dark:border-slate-800 py-2 text-[13px] active:bg-slate-50 dark:active:bg-slate-800/50"><span class="w-[92px] shrink-0 tabular-nums">${new Date(e.at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' })} ${hhmm(Date.parse(e.at))}</span><b class="w-12 shrink-0 tabular-nums text-orange-600 dark:text-orange-400">${fmt(e.t, 0)} °C</b><span class="min-w-0 flex-1 truncate text-xs text-slate-500 dark:text-slate-400">${j ? `<span class="text-amber-600 dark:text-amber-400" title="${fmt(Math.abs(j.d), 0)}° ${j.d > 0 ? 'über' : 'unter'} dem vorherigen Wert (${fmt(j.prev.t, 0)} °C) – bitte prüfen">⚠️ ${j.d > 0 ? '+' : '−'}${fmt(Math.abs(j.d), 0)}°</span> ` : ''}${[Number.isFinite(e.out) ? 'außen ' + fmt(e.out, 0) + ' °C' : '', ((BT_CTX.find(c => c[0] === e.ctx) || [])[1] || '') + (e.ctxAuto ? ' (auto)' : ''), btTripTxt(e)].filter(Boolean).join(' · ')}</span><button type="button" data-btdel="${esc(e.id)}" aria-label="Eintrag löschen" class="shrink-0 px-1.5 text-slate-400 active:text-red-500">✕</button></div>`; }).join('')}</div></details>`;
   if (btOut.v == null && wxLoc() && Date.now() - btOut.t > 15 * 60000) btOutside().then(v => { const el = $('btq-out'); if (el) el.textContent = v != null ? 'Außen ' + fmt(v, 0) + ' °C · automatisch' : 'Außen nicht verfügbar'; });
   return h;
 }
@@ -8310,6 +8310,7 @@ $('rec-list').addEventListener('click', async (e) => {
   if (c) { btCtx = btCtx === c.dataset.btctx ? null : c.dataset.btctx; renderRecs(); return; }
   if (r) { btRange = r.dataset.btr; renderRecs(); return; }
   if (d) { if (!confirm('Diesen Eintrag löschen?')) return; const lab = getLab(); lab.bt = (lab.bt || []).filter(x => x.id !== d.dataset.btdel); setLab(lab); return; }
+  const ed = e.target.closest('[data-btedit]'); if (ed) { openBtSheet(ed.dataset.btedit); return; }
   if (!b) return; const a = b.dataset.bt;
   if (a === '1' || a === '-1') { btVal = Math.max(-30, Math.min(70, btVal + Number(a))); $('btq-val').textContent = btVal; btLastSaved = null; return; }
   if (a === 'save') {
@@ -8318,6 +8319,43 @@ $('rec-list').addEventListener('click', async (e) => {
     lab.bt = (lab.bt || []).concat(en); btLastSaved = en; btCtx = null; setLab(lab); return;
   }
   if (a === 'undo' && btLastSaved) { const lab = getLab(), id = btLastSaved.id; lab.bt = (lab.bt || []).filter(x => x.id !== id); btLastSaved = null; setLab(lab); }
+});
+/* Akku °C: Eintrag nachträglich bearbeiten (Datum, Uhrzeit, Akku, Außen, Anlass) */
+let btEdit = null, btEditCtx = null;
+var btListOpen = btListOpen || false;
+$('rec-list').addEventListener('toggle', (e) => { if (e.target.matches && e.target.matches('[data-btlist]')) btListOpen = e.target.open; }, true);
+function openBtSheet(id) {
+  const e = (getLab().bt || []).find(x => x.id === id); if (!e) return; btEdit = e.id; btEditCtx = e.ctx || null;
+  const d = new Date(e.at), pad = (n) => String(n).padStart(2, '0');
+  const pill = (k, l) => `<button type="button" data-btsctx="${k}" class="flex-1 rounded-full border py-2 text-xs font-semibold ${btEditCtx === k ? 'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300 border-transparent' : 'border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300'}">${l}</button>`;
+  $('rec-sheet-box').innerHTML = `<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div><p class="text-lg font-bold">Akku-Temperatur bearbeiten</p>
+    <div class="grid grid-cols-2 gap-2"><div class="min-w-0"><label for="bts-date" class="text-xs text-slate-500 dark:text-slate-400">Datum</label><input id="bts-date" type="date" value="${wxIso(d)}" class="${inCls}"></div><div class="min-w-0"><label for="bts-time" class="text-xs text-slate-500 dark:text-slate-400">Uhrzeit</label><input id="bts-time" type="time" value="${pad(d.getHours())}:${pad(d.getMinutes())}" class="${inCls}"></div>
+      ${fld('bts-t', 'Akku °C', e.t, '12', 'text')}${fld('bts-out', 'Außen °C', Number.isFinite(e.out) ? e.out : undefined, 'optional', 'text')}</div>
+    <div><p class="text-xs text-slate-500 dark:text-slate-400">Anlass${e.ctxAuto ? ' (automatisch aus dem Fahrtenbuch)' : ''}</p><div id="bts-ctx" class="mt-1 flex gap-1.5">${BT_CTX.map(([k, l]) => pill(k, l)).join('')}</div></div>
+    <p id="bts-msg" class="text-sm text-red-600 dark:text-red-400 text-left empty:hidden"></p>
+    <div class="grid grid-cols-2 gap-2.5"><button type="button" data-bts="del" class="h-12 rounded-2xl border border-slate-300 dark:border-slate-700 text-sm font-semibold text-red-600 dark:text-red-400">Löschen</button><button type="button" data-bts="save" class="h-12 rounded-2xl bg-emerald-600 text-white text-sm font-semibold">Speichern</button></div>
+    <button type="button" data-bts="close" class="h-11 w-full rounded-2xl text-sm font-semibold text-slate-500 dark:text-slate-400">Abbrechen</button>`;
+  $('rec-sheet').classList.remove('hidden');
+}
+$('rec-sheet').addEventListener('click', (ev) => {
+  const c = ev.target.closest('[data-btsctx]');
+  if (c) { btEditCtx = btEditCtx === c.dataset.btsctx ? null : c.dataset.btsctx; $('bts-ctx').querySelectorAll('[data-btsctx]').forEach(x => { const on = x.dataset.btsctx === btEditCtx;
+    ['bg-orange-100', 'text-orange-700', 'dark:bg-orange-950', 'dark:text-orange-300', 'border-transparent'].forEach(k => x.classList.toggle(k, on)); ['border-slate-300', 'dark:border-slate-700', 'text-slate-600', 'dark:text-slate-300'].forEach(k => x.classList.toggle(k, !on)); }); return; }
+  const b = ev.target.closest('[data-bts]'); if (!b) return; const act = b.dataset.bts, lab = getLab(); lab.bt = lab.bt || [];
+  if (act === 'del') { if (!confirm('Diesen Eintrag löschen?')) return; lab.bt = lab.bt.filter(x => x.id !== btEdit); setLab(lab); }
+  else if (act === 'save') {
+    const t = deDec($('bts-t').value), out = deDec($('bts-out').value), at = new Date(($('bts-date').value || '') + 'T' + ($('bts-time').value || '12:00'));
+    if (!Number.isFinite(t) || t < -30 || t > 70) { $('bts-msg').textContent = 'Bitte eine Akku-Temperatur zwischen −30 und 70 °C eintragen.'; return; }
+    if (isNaN(at)) { $('bts-msg').textContent = 'Bitte Datum und Uhrzeit prüfen.'; return; }
+    if ($('bts-out').value.trim() && !(Number.isFinite(out) && out > -40 && out < 50)) { $('bts-msg').textContent = 'Außentemperatur bitte als Zahl (oder leer lassen).'; return; }
+    lab.bt = lab.bt.map(x => { if (x.id !== btEdit) return x; const o = { ...x, t: Math.round(t * 10) / 10 };
+      if (Number.isFinite(out)) o.out = Math.round(out * 10) / 10; else delete o.out;
+      if (at.toISOString() !== new Date(x.at).toISOString().replace(/:\d\d\.\d+Z$/, ':00.000Z') && Math.abs(at - new Date(x.at)) >= 60000) { o.at = at.toISOString(); delete o.trip; if (o.ctxAuto) { delete o.ctx; delete o.ctxAuto; } }
+      if (btEditCtx !== (o.ctx || null)) { if (btEditCtx) o.ctx = btEditCtx; else delete o.ctx; delete o.ctxAuto; }
+      return o; });
+    setLab(lab); try { btFillTrips(); } catch (e) { } try { renderBtm(); } catch (e) { }
+  }
+  $('rec-sheet').classList.add('hidden');
 });
 /* Start: kleine Akku-Temperatur-Karte (links der Verbrauchs-Prognose im Wisch-Bereich). Speichert in dieselbe Liste wie Rekorde → Akku °C (lab.bt). */
 let btmVal = null, btmCtx = null, btmSaved = null, btmMsg = '';
