@@ -7,7 +7,9 @@
     "web-push": "^3.6.7"
   },
   "scripts": {
-    "css": "tailwindcss -c tailwind.config.cjs -i styles/tw-in.css -o app.css --minify"
+    "css": "tailwindcss -c tailwind.config.cjs -i styles/tw-in.css -o app.css --minify",
+    "js": "node tools/build-js.mjs",
+    "build": "npm run -s js && npm run -s css"
   },
   "devDependencies": {
     "tailwindcss": "3.4.19"

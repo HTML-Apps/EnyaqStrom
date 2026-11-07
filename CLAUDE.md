@@ -1,11 +1,14 @@
 # EnyaqStrom – Hinweise für die Arbeit am Code
 
-- Eine Datei: `index.html` (App), `sw.js` (Service Worker), `api/` (Vercel-Funktionen).
-- **Tailwind ist vorab gebaut** (kein CDN mehr): nach jeder Änderung an Klassen in `index.html`
-  `npm install` (einmalig) und `npm run css` ausführen und `app.css` mit einchecken.
-  Danach in `index.html` (`/app.css?v=…`) und `sw.js` (`SAME_ORIGIN_ASSETS`, `CACHE_VERSION`) die Version erhöhen.
+- Aufbau: `index.html` (HTML + kleine Früh-Skripte + Firebase-Modul), **App-Logik in `src/*.js`**, `sw.js` (Service Worker), `api/` + `lib/` (Vercel-Funktionen).
+- **`app.js` ist generiert**: `src/*.js` werden in Namensreihenfolge unverändert zu einem Skript zusammengehängt (`npm run js`).
+  Nie `app.js` direkt bearbeiten. Ein einziges Skript wie früher inline → Funktionen gelten dateiübergreifend, Reihenfolge = Dateiname.
+- **Tailwind ist vorab gebaut** (`npm run css`, scannt `index.html` und `src/**/*.js`) → `app.css`.
+- Nach Änderungen: `npm install` (einmalig), dann **`npm run build`** (js + css), `app.js`/`app.css` mit einchecken.
+  Danach in `index.html` (`/app.js?v=…`, `/app.css?v=…`) und `sw.js` (`SAME_ORIGIN_ASSETS`, `CACHE_VERSION`) die Version erhöhen.
 - Klassen nur als vollständige Wörter schreiben (nicht per String zusammensetzen), sonst findet Tailwind sie nicht.
 - `CACHE_VERSION` in `sw.js` bei jeder Auslieferung erhöhen.
 - Karussell-Bilder auf Start: vorab aufbereitet in `Bilder/hero/` (weißer Rand entfernt, zugeschnitten, WebP 1100 px).
-  Werte `aspect`/`extra` stehen in `HERO_IMGS` in `index.html`. Bei neuen Bildern beides neu erzeugen; Bild 1 steht zusätzlich direkt im HTML und wird vorgeladen.
+  Werte `aspect`/`extra` stehen in `HERO_IMGS` (src/05-startseite-banner.js). Bild 1 steht zusätzlich direkt im HTML und wird vorgeladen.
 - Maßbilder (Enyaq7–9, Originale in `Bilder/`): mit `python3 tools/hero_masse.py` freistellen und Bemaßung hell umfärben → `Bilder/hero/7–9.webp`.
+- Škoda-API-Schlüssel: in der App ersetzbar (verschlüsselt in `enyaqStrom/<uid>/settings/skoda`, siehe `lib/fs.js`, `lib/auth.js`); VIN/Freischaltung in `SKODA_ACCOUNTS`.

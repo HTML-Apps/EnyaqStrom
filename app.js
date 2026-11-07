@@ -1,0 +1,8062 @@
+// GENERIERT aus src/*.js – nicht direkt bearbeiten, sondern src/ ändern und `npm run js` ausführen.
+
+// ───── src/00-basis.js ─────
+/* =====================================================================
+   Konfiguration & Speicher
+   ===================================================================== */
+/* KI-Zählererkennung (Kamera + OpenAI): false = Karte unsichtbar, Kamera startet nicht. Zum Aktivieren auf true setzen. */
+const ENABLE_AI_SCAN = false;
+const KEY_READINGS = 'enyaq.readings';
+const KEY_SETTINGS = 'enyaq.settings';
+const KEY_COSTS = 'enyaq.costs';                // Kosten (lokal + Cloud-Sammlung enyaqStrom/<uid>/costs)
+const KEY_RECUR = 'enyaq.recurring';            // wiederkehrende Kosten (lokal + Cloud-Sammlung enyaqStrom/<uid>/recurring)
+const KEY_REMINDERS = 'enyaq.reminders';        // Erinnerungen (lokal + Cloud-Sammlung enyaqStrom/<uid>/reminders)
+const KEY_CATEGORIES = 'enyaq.categories';      // Kosten-Kategorien (lokal + Cloud-Dokument enyaqStrom/<uid>/settings/categories)
+const KEY_WXLOC = 'enyaq.wxLoc';                 // Wetter-Standort { lat, lon, label } (lokal + Cloud-Dokument enyaqStrom/<uid>/settings/prefs)
+const KEY_WXCACHE = 'enyaq.wxCache';             // letzte Regen-Vorhersage (30 Min. gültig, offline als Notlösung)
+const KEY_WRAP = 'enyaq.wrapSeen';               // Liste der Rückblick-IDs, die schon angesehen bzw. weggewischt wurden (nur lokal)
+const KEY_TEMPS = 'enyaq.temps';                 // Tagesmittel-Temperaturen { loc, days:{ 'JJJJ-MM-TT': °C } } vom Standort (nur lokal)
+const KEY_PROVIDERS = 'enyaq.providers';          // Ladeanbieter für "Unterwegs" (lokal + Cloud-Dokument enyaqStrom/<uid>/settings/providers)
+const PROXY_URL = '/api/read-meter';   // Vercel-Funktion; der Prompt und der OpenAI-Key liegen dort
+
+const $ = (id) => document.getElementById(id);
+const fmt = (n, d = 1) => Number(n).toLocaleString('de-DE', { minimumFractionDigits: d, maximumFractionDigits: d });
+const eur = (n) => Number(n).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+const parseNum = (s) => parseFloat(String(s).trim().replace(',', '.'));
+
+function load(key, fallback) {
+  try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : fallback; }
+  catch (e) { console.error('localStorage lesen fehlgeschlagen', e); return fallback; }
+}
+function save(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); return true; }
+  catch (e) { console.error('localStorage schreiben fehlgeschlagen', e); alert('Speichern im Browser nicht möglich (Speicher voll oder gesperrt).'); return false; }
+}
+const getReadings = () => load(KEY_READINGS, []);
+
+/* =====================================================================
+   Ladeorte: Zuhause (eigener Zähler) | Bosch | Unterwegs.
+   Einträge ohne Feld "place" gelten als Zuhause (alte Daten bleiben gültig).
+   Zuhause: totalReading/consumedSinceLast/cost kommen vom Zähler (Kette nur über Zuhause-Einträge).
+   Bosch/Unterwegs: kein Zähler. consumedSinceLast = geladene kWh (0 = unbekannt), cost = kWh x pricePerKwh (0 = unbekannt),
+   totalReading = letzter Zuhause-Stand (nur mitgeführt, damit ältere App-Versionen die Kette nicht zerlegen).
+   Km- und Akku-Kette (Verbrauch/100 km) läuft dagegen über ALLE Einträge, weil das Auto durchgehend ist.
+   ===================================================================== */
+const PLACES = { home: 'Zuhause', bosch: 'Bosch', away: 'Unterwegs' };
+const PLACE_KEYS = Object.keys(PLACES);
+const VIEWS = { ...PLACES, all: 'Gesamt' };                         // Auswahl in Dashboard/Bericht: die drei Orte + Gesamt (Mix aus allen)
+const inView = (r, p) => p === 'all' || placeOf(r) === p;           // gehört der Eintrag zur gewählten Ansicht?
+const whereTxt = (p) => p === 'home' || p === 'all' ? '' : ' bei „' + PLACES[p] + '“';
+const placeOf = (r) => PLACES[r?.place] ? r.place : 'home';
+const isHome = (r) => placeOf(r) === 'home';
+const prevHomeIdx = (rs, i) => { for (let j = i - 1; j >= 0; j--) if (isHome(rs[j])) return j; return -1; };   // Vorgänger am Zähler
+const lastHome = (rs = getReadings()) => { const j = prevHomeIdx(rs, rs.length); return j >= 0 ? rs[j] : null; };
+/** Erster Zuhause-Eintrag ohne Zähler-Reset = reiner Startwert ohne Ladung. */
+const isStartRow = (rs, i) => isHome(rs[i]) && prevHomeIdx(rs, i) < 0 && !rs[i].meterReset;
+/** Zählt der Eintrag als Ladung? Zuhause: geladene kWh > 0 (kein Startwert); Bosch/Unterwegs: jeder Eintrag. */
+const isCharge = (rs, i) => isHome(rs[i]) ? !isStartRow(rs, i) && rs[i].consumedSinceLast > 0 : true;
+/** Preis pro kWh dieses Eintrags: Zuhause aus den gespeicherten Werten (Einstellungen zum Zeitpunkt), sonst der eingetragene Preis (oder null). */
+/** Komfortenergie einer Ladung (Heizen/Kühlen am Kabel laut MyŠkoda-App) in kWh: kam vom Zähler, aber nicht in den Akku */
+const comfortOf = (r) => Number(r && r.comfort) > 0 ? Number(r.comfort) : 0;
+const unitOf = (r) => isHome(r) ? (r.consumedSinceLast > 0 ? r.cost / r.consumedSinceLast : getSettings().price) : (r.pricePerKwh ?? null);
+const PLACE_BADGE = { bosch: 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-200', away: 'bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-200' };
+const esc = (v) => String(v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));   // Namen von Hand eingegeben -> vor innerHTML maskieren
+const getProviders = () => { const l = load(KEY_PROVIDERS, []); return Array.isArray(l) ? l.filter(n => typeof n === 'string' && n.trim()) : []; };
+const providerOptions = (selected) => {              // <option>-Liste: leer + Anbieter (ein nicht mehr gelistetes, aber gespeichertes Ziel bleibt wählbar)
+  const list = getProviders(); if (selected && !list.includes(selected)) list.push(selected);
+  return '<option value="">–</option>' + list.map(n => `<option value="${esc(n)}" ${n === selected ? 'selected' : ''}>${esc(n)}</option>`).join('');
+};
+/* Kosten: { id, date, title, amount (negativ = Einnahme), category, note?, odometerKm?, guid? (aus früherem Import, wird nur mitgeführt) } */
+const DEFAULT_CATEGORIES = ['Service', 'Reparatur', 'TÜV', 'Wartung', 'Versicherung', 'Anmeldung', 'Fahrzeugwäsche', 'Parken', 'Maut', 'Strafzettel/Gebühren', 'Tuning', 'Sonstiges'];
+const getCosts = () => { const l = load(KEY_COSTS, []); return Array.isArray(l) ? l : []; };
+const getCategories = () => { const l = load(KEY_CATEGORIES, null); return Array.isArray(l) ? l.filter(n => typeof n === 'string' && n.trim()) : DEFAULT_CATEGORIES.slice(); };
+const costAmt = (c) => Number(c.amount) || 0;
+/* Checkheft-Arten: fest Service (planmäßig, Werkstatt), Reparatur (außerplanmäßig) und TÜV; erkannt am Namen der Kosten-Kategorie */
+const KEY_CHCATS = 'enyaq.chCats';
+const CH_TYPES = [
+  { k: 'service', n: 'Service', bg: 'bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300', txt: 'text-sky-700 dark:text-sky-300' },
+  { k: 'rep', n: 'Reparatur', bg: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300', txt: 'text-amber-700 dark:text-amber-300' },
+  { k: 'tuev', n: 'TÜV', bg: 'bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300', txt: 'text-violet-700 dark:text-violet-300' }];
+const chType = (cat) => { const c = String(cat || '').trim().toLowerCase(); return c === 'service' ? CH_TYPES[0] : c === 'reparatur' ? CH_TYPES[1] : (c === 'tüv' || c === 'tuev') ? CH_TYPES[2] : null; };
+const catOptions = (selected) => {                    // <option>-Liste der Kategorien (eine nicht mehr gelistete, aber gespeicherte bleibt wählbar)
+  const l = getCategories(); if (selected && !l.includes(selected)) l.push(selected);
+  return '<option value="">Ohne Kategorie</option>' + l.map(n => `<option value="${esc(n)}" ${n === selected ? 'selected' : ''}>${esc(n)}</option>`).join('');
+};
+/** Hebt in einer Segment-Auswahl den aktiven Button hervor (key = Name des data-Attributs). */
+function segPaintKey(sel, key, active) {
+  document.querySelectorAll(sel).forEach(b => {
+    const on = b.dataset[key] === active;
+    b.classList.toggle('bg-white', on); b.classList.toggle('dark:bg-slate-700', on); b.classList.toggle('shadow-sm', on);
+  });
+}
+let capPlace = 'home', dashPlace = 'home', repPlace = 'home', repMode = 'laden', histFilter = 'all';      // gewählter Ladeort in Erfassen / Dashboard / Bericht
+/** Hebt in einer Segment-Auswahl (Buttons mit data-place) den aktiven Ort hervor. */
+function segPaint(sel, active) {
+  document.querySelectorAll(sel).forEach(b => {
+    const on = b.dataset.place === active;
+    b.classList.toggle('bg-white', on); b.classList.toggle('dark:bg-slate-700', on); b.classList.toggle('shadow-sm', on);
+  });
+}
+const DEFAULT_BATTERY_KWH = 52;   // Standardwert (nutzbare Kapazität Enyaq iV 50); einstellbar unter Einstellungen
+const batteryKwh = () => { const v = Number(getSettings().battery); return v > 0 ? v : DEFAULT_BATTERY_KWH; };
+/** Vorbelegung: letzter bekannter km-Stand als grauer Hinweis (Platzhalter), Akku Ende standardmäßig 80 %. */
+/* =====================================================================
+   Erfassen-Optik: editierbare Segmentanzeige, Trommel-Kilometerzähler, Akku mit zwei Reglern.
+   Die versteckten Felder km-Input, soc0-input und soc1-input bleiben die Datenquelle für das Speichern.
+   ===================================================================== */
+const odoCols = [];
+(function buildOdo() {
+  for (let i = 0; i < 6; i++) {
+    const drum = document.createElement('div'), col = document.createElement('div');
+    drum.className = 'odo-drum'; col.className = 'odo-col';
+    col.innerHTML = [9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0].map(n => '<div>' + n + '</div>').join('');   // 9 vorn und 0 hinten: Nachbarziffer lugt an den Rändern hervor
+    drum.appendChild(col); $('odo').appendChild(drum); odoCols.push(col);
+  }
+})();
+
+/** Trommeln auf den km-Stand drehen (reset = erst auf 0 zurücksetzen, damit die Drehung sichtbar wird). */
+function paintOdo(reset) {
+  $('btn-odo').classList.toggle('hidden', !apiEnabled());                // Update-Button nur mit Škoda-Anbindung
+  const kmVal = optNum($('km-input').value), fromCar = kmVal != null && isFinite(kmVal);
+  const withKm = getReadings().filter(r => r.odometerKm != null), last = withKm[withKm.length - 1];
+  const shown = fromCar ? kmVal : (last ? last.odometerKm : 0);
+  $('odo').classList.toggle('odo-dim', !fromCar);
+  const manual = $('km-input').dataset.manual === $('km-input').value;                   // von Hand eingegeben (nicht vom Auto)
+  const warn = fromCar && last && kmVal < last.odometerKm;                                  // kleiner als der letzte gespeicherte Stand
+  $('odo-info').textContent = warn ? 'Kleiner als ' + fmt(last.odometerKm, 0) + ' – wird gespeichert'
+    : fromCar ? (manual ? 'Von Hand' : 'Stand vom Auto') + ' – wird gespeichert' : (last ? 'Letzter Stand – keine Sicherung' : 'Kein Stand vorhanden – keine Sicherung');
+  $('odo-info').classList.toggle('text-amber-600', !!warn); $('odo-info').classList.toggle('dark:text-amber-400', !!warn);
+  if (reset) { odoCols.forEach(c => { c.style.transition = 'none'; c.style.transform = 'translateY(0)'; }); void $('odo').offsetWidth; }
+  const t = String(Math.min(999999, Math.max(0, Math.round(shown)))).padStart(6, '0');
+  odoCols.forEach((c, i) => { c.style.transition = ''; c.style.transitionDelay = (i * 90) + 'ms'; c.style.transform = 'translateY(calc(-2.4rem * ' + t[i] + '))'; });
+}
+
+/** Kilometerstand von Hand eingeben (Antippen der Trommeln oder Button "Eingeben"). Leeres Feld = kein km-Stand speichern. */
+function openKmEdit() {
+  const withKm = getReadings().filter(r => r.odometerKm != null), last = withKm[withKm.length - 1];
+  $('km-edit').value = $('km-input').value !== '' ? $('km-input').value : (last ? Math.round(last.odometerKm) : '');
+  $('km-edit-row').classList.remove('hidden'); $('km-edit').focus(); $('km-edit').select();
+}
+function closeKmEdit() { $('km-edit-row').classList.add('hidden'); }
+function commitKmEdit() {
+  const raw = $('km-edit').value.trim();
+  if (raw === '') { $('km-input').value = ''; delete $('km-input').dataset.manual; delete $('km-input').dataset.live; closeKmEdit(); paintOdo(true); return; }
+  const v = parseFloat(raw.replace(/[.\s]/g, '').replace(',', '.'));      // "42.310" = 42310 (Punkt als Tausendertrenner), Komma = Dezimalstelle
+  if (!isFinite(v) || v < 0 || v > 999999) { $('odo-info').textContent = 'Ungültig – erlaubt: 0 bis 999999'; return; }
+  const km = Math.round(v);
+  $('km-input').value = km; $('km-input').dataset.manual = String(km); delete $('km-input').dataset.live;   // von Hand gesetzt: wird beim Verwerfen der Simulation nicht gelöscht
+  closeKmEdit(); paintOdo(true);
+}
+$('btn-km-edit').addEventListener('click', openKmEdit);
+$('odo').addEventListener('click', openKmEdit);
+$('km-edit-ok').addEventListener('click', commitKmEdit);
+$('km-edit-cancel').addEventListener('click', closeKmEdit);
+$('km-edit').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); commitKmEdit(); } else if (e.key === 'Escape') closeKmEdit(); });
+
+function paintReading() {
+  const raw = $('reading-input').value, v = parseNum(raw), ok = raw.trim() !== '' && isFinite(v) && v >= 0;
+  $('seg2-on').textContent = ok ? Math.min(v, 999999.9).toFixed(1).padStart(8, '0') : '';       // wie im Dashboard; leer = nur Geistersegmente
+  const last = lastHome(), calc = $('reading-calc');
+  const kwh = ok && last ? Math.round((v - last.totalReading) * 10) / 10 : null;
+  $('reading-last').textContent = last ? 'Letzter Stand ' + fmt(last.totalReading) + ' kWh' : '';         // steht neben der Überschrift (spart Höhe)
+  calc.className = 'text-sm text-right mt-1.5 ' + (kwh != null && kwh < 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-500 dark:text-slate-400');
+  calc.classList.toggle('hidden', kwh == null);                                   // Rechenzeile nur, wenn ein Wert eingegeben ist
+  calc.textContent = kwh == null ? ''
+    : kwh >= 0 ? '+' + fmt(kwh) + ' kWh seit letztem Eintrag · ' + eur(kwh * getSettings().price) : 'Kleiner als der letzte Stand (' + fmt(last.totalReading) + ')';
+}
+
+function paintBatt() {
+  const n0 = optNum($('soc0-input').value), n1 = optNum($('soc1-input').value);
+  const has0 = n0 != null && isFinite(n0), has1 = n1 != null && isFinite(n1), a = has0 ? n0 : 0, b = has1 ? n1 : a;
+  $('bt-a').style.width = a + '%';                                         // dunkelgrün: vorhandener Ladestand
+  $('bt-b').style.left = a + '%'; $('bt-b').style.width = Math.max(0, b - a) + '%';   // hellgrün: hinzukommende Ladung
+  $('bt-h0').style.left = a + '%'; $('bt-h1').style.left = b + '%';        // Griffe auf der Batterie
+  $('bt-h0').setAttribute('aria-valuenow', a); $('bt-h1').setAttribute('aria-valuenow', b);
+  const place = (id, pct) => { $(id).style.left = Math.min(88, Math.max(12, pct)) + '%'; };
+  place('bt-lab0', Math.min(a, 64)); place('bt-lab1', Math.max(b, Math.min(a, 64) + 28));   // einzeilige Beschriftungen nicht übereinander
+  $('bt-v0').textContent = has0 ? a + ' %' : '–'; $('bt-v1').textContent = has1 ? b + ' %' : '–';
+  $('s0-val').textContent = has0 ? a + ' %' : '–'; $('s1-val').textContent = has1 ? b + ' %' : '–';
+  const ad = $('batt-add'); ad.style.left = a + '%'; ad.style.width = Math.max(0, b - a) + '%';   // im hinzukommenden Teil der Batterie
+  ad.textContent = has0 && has1 && b - a >= 12 ? '+' + (b - a) + ' %' + (b - a >= 40 ? ' ≈ ' + fmt((b - a) / 100 * batteryKwh(), 1) + ' kWh' : '') : '';
+}
+function paintCapture() { paintReading(); paintBatt(); paintBattTemp(); }
+/* Akku-Temperatur (optional, Infotainment ab ME3.8): Stepper −/+ in 1-°C-Schritten. Leer zeigt grau den zuletzt gespeicherten Wert; Mitte antippen übernimmt ihn (bzw. leert), erster −/+ startet dort */
+const BT_MIN = -30, BT_MAX = 60;
+/** Zuletzt gespeicherte Akku-Temperatur: neuester Wert aus Ladungen (battTemp) und Rekorde → Akku °C */
+function lastBattTemp() {
+  let best = null; const take = (t, v) => { if (Number.isFinite(t) && Number.isFinite(v) && (!best || t > best.t)) best = { t, v }; };
+  try { getReadings().forEach(r => take(Date.parse(r.date), r.battTemp)); } catch (e) { }
+  try { const o = load(KEY_LAB, null); (o && o.bt || []).forEach(e => take(Date.parse(e.at), e.t)); } catch (e) { }
+  return best;
+}
+function paintBattTemp() {
+  const v = optNum($('bt-input').value), el = $('bt-val');
+  if (v != null && !Number.isNaN(v)) { el.textContent = String(v).replace('-', '−') + ' °C'; el.className = 'font-medium'; return; }
+  const l = lastBattTemp(); el.className = 'font-medium text-slate-400 dark:text-slate-500';
+  el.textContent = l ? 'zuletzt ' + String(Math.round(l.v)).replace('-', '−') + ' °C · ' + (new Date(l.t).toDateString() === new Date().toDateString() ? 'heute ' + hhmm(l.t) : new Date(l.t).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })) : '–';
+}
+(() => {
+  const step = (d) => { const v = optNum($('bt-input').value); const n = v == null || Number.isNaN(v) ? (lastBattTemp() ? Math.round(lastBattTemp().v) : 20) : Math.max(BT_MIN, Math.min(BT_MAX, v + d)); $('bt-input').value = String(n); paintBattTemp(); };
+  [['bt-minus', -1], ['bt-plus', 1]].forEach(([id, d]) => {
+    const b = $(id); let t1 = 0, t2 = 0; const stop = () => { clearTimeout(t1); clearInterval(t2); };
+    b.addEventListener('pointerdown', (e) => { e.preventDefault(); step(d); t1 = setTimeout(() => { t2 = setInterval(() => step(d), 110); }, 450); });
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => b.addEventListener(ev, stop)); b.addEventListener('contextmenu', e => e.preventDefault());
+  });
+  $('bt-clear').addEventListener('click', () => { const v = optNum($('bt-input').value), l = lastBattTemp(); $('bt-input').value = (v == null || Number.isNaN(v)) && l ? String(Math.round(l.v)) : ''; paintBattTemp(); });   // leer: letzten Wert übernehmen, sonst leeren
+})();
+
+$('reading-input').addEventListener('input', e => { delete e.target.dataset.live; paintReading(); });
+/* =====================================================================
+   Datenprüfung: findet auffällige Einträge. Ignorierte Hinweise werden lokal gemerkt (Eintrag-ID:Code).
+   ===================================================================== */
+const DQ_KEY = 'enyaq.dqIgnore';
+function dataChecks(rs) {
+  const out = [], add = (i, code, msg) => out.push({ i, code, id: rs[i].id, msg });
+  let maxKm = null;
+  rs.forEach((r, i) => {
+    const s = entryStats(rs, i), home = isHome(r);
+    if (home && !isStartRow(rs, i) && r.consumedSinceLast === 0) add(i, 'zero', 'Keine kWh seit dem letzten Eintrag – doppelt gespeichert oder der Zähler nicht abgelesen?');
+    if (r.consumedSinceLast > capOf(r) * 1.3) add(i, 'big', fmt(r.consumedSinceLast) + (home ? ' kWh sind mehr als die Batteriekapazität – Zähler zurückgesetzt, aber nicht markiert?' : ' kWh sind mehr als die Batteriekapazität – kWh-Angabe prüfen.'));
+    if (i > 0 && placeOf(r) === placeOf(rs[i - 1])) {
+      const gap = Date.parse(r.date) - Date.parse(rs[i - 1].date);
+      if (gap >= 0 && gap < 600000) add(i, 'dup', 'Weniger als 10 Minuten nach dem vorherigen Eintrag – doppelt erfasst?');
+    }
+    if (s.gap) add(i, 'gap', 'Akku-Start (' + r.socStart + ' %) liegt über dem Ende der letzten Ladung (' + rs[i - 1].socEnd + ' %) – dazwischen wurde vermutlich woanders geladen. Der Verbrauch dieser Strecke ist nicht berechenbar.');
+    if (s.kwh100 != null && (s.kwh100 < 5 || s.kwh100 > 50)) add(i, 'kwh100', 'Verbrauch ' + fmt(s.kwh100, 1) + ' kWh/100 km ist ungewöhnlich – km-Stand oder Zählerstand prüfen.');
+    if (s.loss != null && (s.loss < 0 || s.loss > 35)) add(i, 'loss', 'Ladeverlust ' + fmt(s.loss, 0) + ' % ist unplausibel – Akku-% oder Kapazität prüfen.');
+    if (r.odometerKm != null) {
+      if (maxKm != null && r.odometerKm < maxKm) add(i, 'km', 'Kilometerstand ist kleiner als bei einem früheren Eintrag (' + fmt(maxKm, 0) + ' km).');
+      maxKm = Math.max(maxKm ?? 0, r.odometerKm);
+    }
+    const ms = realMsOf(r);
+    if (home && ms && r.consumedSinceLast > 0) {
+      const kw = r.consumedSinceLast / (ms / 3600000), ref = chargePowerKw();
+      if (kw > ref * 1.3 || kw < ref * 0.6) add(i, 'power', 'Ø Leistung ' + fmt(kw, 1) + ' kW weicht stark von den eingestellten ' + fmt(ref, 1) + ' kW ab.');
+    }
+  });
+  return out;
+}
+function renderDataCheck() {
+  const rs = getReadings(), card = $('dq-card'), hide = editMode || rs.length < 2;
+  card.classList.toggle('hidden', hide);
+  if (hide) return;
+  const ign = new Set(load(DQ_KEY, [])), all = dataChecks(rs), shown = all.filter(f => !ign.has(f.id + ':' + f.code));
+  const hiddenCount = all.length - shown.length, sum = $('dq-summary');
+  sum.textContent = shown.length ? shown.length + (shown.length === 1 ? ' Hinweis' : ' Hinweise') + ' ▾' : 'alles unauffällig ✓';
+  sum.className = shown.length ? 'font-semibold text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400';
+  $('dq-list').innerHTML = shown.map(f => `<li><p><span class="font-medium">${fmtDate(rs[f.i].date)}:</span> ${f.msg}</p>
+      <div class="mt-1 flex gap-4 text-xs"><button type="button" data-act="goto" data-idx="${f.i}" class="underline text-sky-600 dark:text-sky-400">Anzeigen</button>
+      <button type="button" data-act="ign" data-key="${f.id}:${f.code}" class="underline text-slate-500">Ignorieren</button></div></li>`).join('')
+    + (hiddenCount ? `<li><button type="button" data-act="unign" class="underline text-xs text-slate-500">${hiddenCount} ignorierte wieder anzeigen</button></li>` : '');
+}
+$('dq-toggle').addEventListener('click', () => $('dq-list').classList.toggle('hidden'));
+$('dq-list').addEventListener('click', (e) => {
+  const act = e.target.dataset.act; if (!act) return;
+  if (act === 'goto') {
+    const li = document.querySelector('#history-list li[data-idx="' + e.target.dataset.idx + '"]');
+    if (li) { li.scrollIntoView({ behavior: 'smooth', block: 'center' }); li.classList.add('ring-2', 'ring-amber-500'); setTimeout(() => li.classList.remove('ring-2', 'ring-amber-500'), 2500); }
+  } else if (act === 'ign') { save(DQ_KEY, [...new Set([...load(DQ_KEY, []), e.target.dataset.key])]); renderDataCheck(); }
+  else if (act === 'unign') { save(DQ_KEY, []); renderDataCheck(); }
+});
+
+function nudgeReading(delta) {                                           // Zählerstand in 0,1-Schritten korrigieren
+  const raw = $('reading-input').value, v = parseNum(raw), last = lastHome();
+  const base = raw.trim() !== '' && isFinite(v) ? v : (last ? last.totalReading : 0);
+  $('reading-input').value = Math.max(0, Math.round((base + delta) * 10) / 10).toFixed(1);
+  delete $('reading-input').dataset.live; paintReading();
+}
+[['rd-plus', 0.1], ['rd-minus', -0.1]].forEach(([id, delta]) => {        // Antippen = 0,1; gedrückt halten = schneller Lauf
+  const btn = $(id); let t1 = null, t2 = null;
+  const stop = () => { clearTimeout(t1); clearInterval(t2); };
+  btn.addEventListener('pointerdown', e => { e.preventDefault(); nudgeReading(delta); t1 = setTimeout(() => { t2 = setInterval(() => nudgeReading(delta), 110); }, 450); });
+  ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => btn.addEventListener(ev, stop));
+  btn.addEventListener('contextmenu', e => e.preventDefault());
+});
+/** Akku-Start / -Ende setzen. Start bleibt unter dem Ende, Ende über dem Start (mind. 1 % Abstand). */
+function setSoc0(v) {
+  v = Math.min(99, Math.max(0, Math.round(v))); const f1 = $('soc1-input');
+  $('soc0-input').value = v; delete $('soc0-input').dataset.live;
+  if (f1.value !== '' && +f1.value <= v) f1.value = Math.min(100, v + 1);
+  paintBatt();
+}
+function setSoc1(v) {
+  v = Math.min(100, Math.max(1, Math.round(v))); const f0 = $('soc0-input');
+  $('soc1-input').value = v; delete $('soc1-input').dataset.live;
+  if (f0.value !== '' && +f0.value >= v) f0.value = Math.max(0, v - 1);
+  paintBatt();
+}
+const socNow = () => { const n0 = optNum($('soc0-input').value), n1 = optNum($('soc1-input').value); return [n0 != null && isFinite(n0) ? n0 : null, n1 != null && isFinite(n1) ? n1 : null]; };
+(function initBattControls() {
+  const track = $('bt-track'); let drag = null;                            // Griffe direkt auf der Batterie ziehen; Antippen der Batterie setzt den nächsten Griff dorthin
+  const pct = (e) => { const r = $('bt-bar').getBoundingClientRect(); return Math.round(Math.min(100, Math.max(0, (e.clientX - r.left) / r.width * 100))); };
+  const apply = (which, v) => which === 0 ? setSoc0(v) : setSoc1(v);
+  track.addEventListener('pointerdown', e => {
+    const [n0, n1] = socNow(), a = n0 ?? 0, p = pct(e);
+    if (n1 == null) drag = p > a ? 1 : 0;
+    else { const d0 = Math.abs(p - a), d1 = Math.abs(p - n1); drag = d0 < d1 || (d0 === d1 && p <= a) ? 0 : 1; }
+    if (track.setPointerCapture) track.setPointerCapture(e.pointerId);
+    apply(drag, p); e.preventDefault();
+  });
+  track.addEventListener('pointermove', e => { if (drag != null) apply(drag, pct(e)); });
+  ['pointerup', 'pointercancel'].forEach(ev => track.addEventListener(ev, () => { drag = null; }));
+  [0, 1].forEach(n => $('bt-h' + n).addEventListener('keydown', e => {   // Tastatur: Pfeiltasten = 1 %
+    const d = { ArrowLeft: -1, ArrowDown: -1, ArrowRight: 1, ArrowUp: 1 }[e.key]; if (!d) return;
+    e.preventDefault(); const [n0, n1] = socNow(); n === 0 ? setSoc0((n0 ?? 0) + d) : setSoc1((n1 ?? 80) + d);
+  }));
+  [[0, -1], [0, 1], [1, -1], [1, 1]].forEach(([n, delta]) => {            // − / +: Antippen = 1 %, gedrückt halten = schneller Lauf
+    const btn = $('s' + n + (delta < 0 ? '-minus' : '-plus')); let t1 = null, t2 = null;
+    const step = () => { const [n0, n1] = socNow(); n === 0 ? setSoc0((n0 ?? 0) + delta) : setSoc1((n1 ?? 80) + delta); };
+    const stop = () => { clearTimeout(t1); clearInterval(t2); };
+    btn.addEventListener('pointerdown', e => { e.preventDefault(); step(); t1 = setTimeout(() => { t2 = setInterval(step, 90); }, 450); });
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => btn.addEventListener(ev, stop));
+    btn.addEventListener('contextmenu', e => e.preventDefault());
+  });
+})();
+$('btn-odo').addEventListener('click', async () => {                      // km-Stand direkt vom Škoda-Server holen
+  const info = $('odo-info');
+  if (!apiEnabled()) { info.textContent = 'Keine Fahrzeugdaten eingerichtet'; return; }
+  info.textContent = 'Lade …'; info.title = '';
+  try {
+    const res = await fetch('/api/vehicle', { headers: await authHeaders() });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(d.error || 'HTTP ' + res.status);
+    if (d.odometerKm == null) throw new Error('Das Auto meldet keinen km-Stand');
+    odoNote(d); $('km-input').value = Math.round(d.odometerKm); paintOdo(true);
+  } catch (e) { info.textContent = 'Nicht verfügbar: ' + e.message; info.title = e.message; }
+});
+
+/* ↻ neben jedem km-Stand-Feld: aktuellen km-Stand vom Škoda-Server holen (30 s zwischengespeichert, damit mehrere Felder nicht mehrfach abfragen) */
+let carKmCache = null;
+async function fetchCarKm() {
+  if (carKmCache && Date.now() - carKmCache.t < 30000) return carKmCache;
+  const res = await fetch('/api/vehicle', { headers: await authHeaders() }), d = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(d.error || 'HTTP ' + res.status);
+  if (d.odometerKm == null) throw new Error('Das Auto meldet keinen km-Stand');
+  odoNote(d); carKmCache = { t: Date.now(), km: Math.round(d.odometerKm), at: d.capturedAt || null }; return carKmCache;
+}
+function kmFetchNote(inp, text, ok) {
+  const host = inp.parentElement; let n = host.querySelector(':scope > [data-kmnote]');
+  if (!n) { n = document.createElement('p'); n.dataset.kmnote = ''; host.appendChild(n); }
+  n.className = 'mt-1 text-[11px] leading-snug text-left ' + (ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'); n.textContent = text;
+  clearTimeout(n._t); n._t = setTimeout(() => n.remove(), ok ? 3000 : 6000);
+}
+document.addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-kmfetch]'); if (!b) return; e.preventDefault(); e.stopPropagation();
+  const inp = b.dataset.kmfor ? $(b.dataset.kmfor) : b.closest('[data-kmwrap]')?.querySelector('input'); if (!inp || b.disabled) return;
+  if (!apiEnabled()) { kmFetchNote(inp, 'Keine Fahrzeugdaten eingerichtet (Einstellungen → Konto & Cloud).', false); return; }
+  b.disabled = true; b.classList.add('animate-spin');
+  try {
+    const r = await fetchCarKm();
+    inp.value = String(r.km);                                    // ohne Tausenderpunkt (optNum liest „18.500“ sonst als 18,5)
+    inp.dispatchEvent(new Event('input', { bubbles: true })); inp.dispatchEvent(new Event('change', { bubbles: true }));
+    kmFetchNote(inp, '✓ vom Auto' + (r.at ? ' · Stand ' + new Date(r.at).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) + ' Uhr' : ''), true);
+  } catch (er) { kmFetchNote(inp, 'km-Stand nicht verfügbar: ' + ((er && er.message) || er), false); }
+  finally { b.disabled = false; b.classList.remove('animate-spin'); }
+}, true);
+function updateCaptureDefaults() {
+  const withKm = getReadings().filter(r => r.odometerKm != null), last = withKm[withKm.length - 1];
+  $('km-input').placeholder = last ? String(last.odometerKm) : 'optional';
+  if ($('soc1-input').value === '') $('soc1-input').value = '80';
+  const live = capPlace === 'home' ? getLive() : null;    // laufende/beendete Live-Ladung (nur Zuhause): Felder vorbelegen (Zählerstand bitte gegenlesen)
+  if (live?.kwhTarget != null) {
+    const kwh = liveKwh(live);
+    const done = kwh >= live.kwhTarget;
+    if ($('soc0-input').value === '') { $('soc0-input').value = live.socStart; $('soc0-input').dataset.live = '1'; }
+    if (['', '80'].includes($('soc1-input').value) || $('soc1-input').dataset.live) { $('soc1-input').value = done ? live.socTarget : Math.floor(live.socStart + kwh * live.eff / live.battery * 100); $('soc1-input').dataset.live = '1'; }   // fertig = Ziel-%
+    if (live.odometerKm != null && $('km-input').value === '') { $('km-input').value = Math.round(live.odometerKm); $('km-input').dataset.live = '1'; }                              // km-Stand beim Live-Start
+    if (done && $('reading-input').value === '') { $('reading-input').value = (live.baseReading + kwh).toFixed(1); $('reading-input').dataset.live = '1'; }   // erst nach Erreichen des Ziels (inkl. Ladeverluste), weiter editierbar
+  }
+  paintCapture(); paintOdo(true);                        // Anzeige (Segmente, Trommeln, Akku) an die Feldwerte angleichen
+}
+const LEGACY_CAPACITY_KWH = 50;                              // Kapazität für Einträge ohne gespeicherten Wert (ältere Ladungen)
+const capOf = (r) => r.capacityKwh ?? LEGACY_CAPACITY_KWH;   // Kapazität, die zum Zeitpunkt dieser Ladung galt
+const optNum = (s) => String(s).trim() === '' ? null : parseNum(s);      // leer -> null, ungültig -> NaN
+
+/** Wirkungsgrad (in der Batterie angekommen / am Zähler gemessen) aus allen Ladungen mit Start-/Ende-%; ohne Daten 90 %. Je Datensatz zwischengespeichert. */
+const effCache = new WeakMap();
+function avgEff(rs) {
+  if (effCache.has(rs)) return effCache.get(rs);
+  let chg = 0, st = 0;
+  rs.forEach(r => { const c = r.consumedSinceLast - comfortOf(r); if (isHome(r) && r.socStart != null && r.socEnd != null && r.socEnd > r.socStart && c > 0) { chg += c; st += (r.socEnd - r.socStart) / 100 * capOf(r); } });   // ohne Komfortenergie
+  const eff = chg > 0 ? Math.min(1, Math.max(0.6, st / chg)) : 0.9;
+  effCache.set(rs, eff); return eff;
+}
+
+/** Kennzahlen eines Eintrags.
+ *  Verbrauch/100 km (genau, method 'soc'): Energie, die zwischen zwei Ladungen aus dem Akku entnommen wurde = (Ende-% der letzten Ladung − Start-% dieser Ladung) x Kapazität,
+ *  geteilt durch den Wirkungsgrad = Verbrauch an der Steckdose. So spielt es keine Rolle, ob zuletzt auf 80 oder 90 % geladen wurde.
+ *  Vorgänger ist immer der direkt davor erfasste Eintrag, egal wo geladen wurde (Zuhause, Bosch, Unterwegs): das Auto ist durchgehend.
+ *  Fallback (method 'charge'): geladene kWh dieser Ladung / km – nur richtig, wenn jedes Mal auf denselben Stand geladen wird.
+ *  Preis (unit): Zuhause aus dem Eintrag (Einstellungen), Bosch/Unterwegs der im Eintrag hinterlegte Preis; ohne Preis kein €/100 km. */
+function entryStats(rs, i) {
+  const r = rs[i], prev = i > 0 ? rs[i - 1] : null, s = {}, home = isHome(r), kwh = r.consumedSinceLast;
+  const charge = home ? kwh > 0 : true;                                        // Zuhause zählt nur mit geladenen kWh; Bosch/Unterwegs ist jeder Eintrag eine Ladung
+  if (prev && r.odometerKm != null && prev.odometerKm != null && r.odometerKm > prev.odometerKm && charge) {
+    s.km = r.odometerKm - prev.odometerKm;
+    if (prev.socEnd != null && r.socStart != null) {
+      if (r.socStart <= prev.socEnd) {
+        s.method = 'soc';
+        s.usedBat = (prev.socEnd - r.socStart) / 100 * capOf(r);          // aus dem Akku entnommen
+        s.usedWall = s.usedBat / avgEff(rs);                              // entspricht an der Steckdose (Wirkungsgrad aus den Zuhause-Ladungen)
+        s.rough = s.usedBat < 3;                                          // 1 % Rundung ≈ 0,5 kWh -> bei kleinen Entnahmen ungenau
+      } else s.gap = true;                                                // Akku höher als nach der letzten Ladung: dazwischen wurde woanders geladen
+    } else if (kwh > 0) { s.method = 'charge'; s.usedWall = Math.max(0, kwh - comfortOf(r)); }
+    if (s.usedWall != null) {
+      s.kwh100 = s.usedWall / s.km * 100;
+      s.unit = unitOf(r);
+      s.cost100 = s.unit != null ? s.usedWall * s.unit / s.km * 100 : null;
+    }
+  }
+  s.comfort = comfortOf(r);
+  if (r.socStart != null && r.socEnd != null && r.socEnd > r.socStart && kwh - s.comfort > 0) {
+    s.stored = (r.socEnd - r.socStart) / 100 * capOf(r);            // tatsächlich in der Batterie angekommene Energie
+    s.loss = (1 - s.stored / (kwh - s.comfort)) * 100;              // Ladeverlust in % (Heizen am Kabel herausgerechnet)
+  }
+  return s;
+}
+
+/** Summiert den Verbrauch über Einträge: genaue Werte (Akku-%) werden bevorzugt, Näherungen nur, wenn es keine genauen gibt.
+ *  €/100 km nur aus Strecken mit bekanntem Preis (kmC). */
+function consumptionTotals(rs, idxs) {
+  const acc = { soc: { km: 0, kwh: 0, cost: 0, kmC: 0, n: 0 }, charge: { km: 0, kwh: 0, cost: 0, kmC: 0, n: 0 } };
+  idxs.forEach(i => {
+    const s = entryStats(rs, i); if (s.usedWall == null) return;
+    const a = acc[s.method]; a.km += s.km; a.kwh += s.usedWall; a.n++;
+    if (s.unit != null) { a.cost += s.usedWall * s.unit; a.kmC += s.km; }
+  });
+  const use = acc.soc.n ? acc.soc : acc.charge;
+  return { km: use.km, kwh: use.kwh, cost: use.cost, n: use.n, approx: !acc.soc.n && acc.charge.n > 0,
+           kwh100: use.km ? use.kwh / use.km * 100 : null, cost100: use.kmC ? use.cost / use.kmC * 100 : null };
+}
+
+/** Einziger Schreibweg für Zählerstände: lokaler Cache (localStorage) + Firestore (falls angemeldet, nur Änderungen). */
+function commitReadings(next) {
+  const prev = getReadings();
+  if (!save(KEY_READINGS, next)) return false;
+  renderReminderBadges();                                                          // km-Stand kann sich geändert haben
+  if (!window.cloud?.isSignedIn()) return Promise.resolve('local');             // nicht angemeldet -> nur lokal gespeichert
+  return window.cloud.push(prev, next).then(() => 'cloud').catch(e => {          // Promise = true; liefert 'cloud' | 'local' | 'error:<Meldung>'
+    console.error('Firestore-Schreibfehler', e);
+    window.onCloudStatus?.({ error: e.code || e.message });
+    return 'error:' + (e.code || e.message);
+  });
+}
+/** Schreibweg für Kosten: lokaler Cache + Firestore (nur Änderungen). Liefert false | Promise('local' | 'cloud' | 'error:…'). */
+function commitCosts(next) {
+  const prev = getCosts();
+  if (!save(KEY_COSTS, next)) return false;
+  renderReminderBadges();
+  if (!window.cloud?.isSignedIn()) return Promise.resolve('local');
+  return window.cloud.pushCosts(prev, next).then(() => 'cloud').catch(e => {
+    console.error('Firestore-Schreibfehler (Kosten)', e);
+    window.onCloudStatus?.({ error: e.code || e.message });
+    return 'error:' + (e.code || e.message);
+  });
+}
+/* Škoda-Fahrzeugdaten: Ob für das angemeldete Konto ein Schlüssel hinterlegt ist, sagt der Server (SKODA_ACCOUNTS in Vercel). */
+const KEY_VEHICLE = 'enyaq.vehicle';
+let vehicle = load(KEY_VEHICLE, null) || { uid: null, ok: false, expires: null };   // zuletzt bekannter Stand (auch offline nutzbar)
+let vehicleChecked = false;
+const apiEnabled = () => !!vehicle.ok;
+const keyExpiry = () => vehicle.expires ? String(vehicle.expires).slice(0, 10) : null;
+async function authHeaders() {                                                      // Firebase-Token für /api/*
+  const t = await window.cloud?.token?.();
+  if (!t) throw new Error('nicht angemeldet');
+  return { Authorization: 'Bearer ' + t };
+}
+function renderVehicleStatus() {
+  paintUserBoxes();                                                              // „· Škoda-API verbunden“ in den Konto-Zeilen
+  const el = $('vehicle-status'); if (!el) return;
+  el.textContent = !window.cloud?.isSignedIn?.() ? '' : vehicle.ok
+    ? 'Škoda-API verbunden' + (keyExpiry() ? ' · Schlüssel gültig bis ' + new Date(keyExpiry() + 'T12:00:00').toLocaleDateString('de-DE') : '')
+    : 'Fahrzeugdaten: für dieses Konto nicht eingerichtet (manuelle Eingabe)';
+  $('veh-key').classList.toggle('hidden', !(window.cloud?.isSignedIn?.() && vehicle.ok));
+}
+/* Neuen Škoda-API-Schlüssel direkt in der App hinterlegen: der Server prüft ihn beim Škoda-Server und speichert ihn verschlüsselt (kein Vercel, kein Deploy) */
+$('veh-key').addEventListener('click', () => {
+  $('au-sheet-box').innerHTML = `<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div><p class="text-lg font-bold">Škoda-Schlüssel ersetzen</p>
+    <ol class="list-decimal space-y-1 pl-5 text-left text-sm text-slate-600 dark:text-slate-300"><li>In der <b>MyŠkoda-App</b> einen neuen Schlüssel für die Schnittstelle erzeugen und kopieren.</li><li>Hier einfügen und auf „Prüfen &amp; speichern“ tippen.</li></ol>
+    <input id="sk-new" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Neuer Schlüssel" class="w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-3 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
+    <p id="sk-msg" class="min-h-[1.25rem] text-left text-sm"></p>
+    <p class="text-left text-xs text-slate-500 dark:text-slate-400">Der Schlüssel wird nur an deinen eigenen Server geschickt, dort beim Škoda-Server geprüft und verschlüsselt gespeichert. Die Gültigkeit übernimmt die App automatisch.</p>
+    <button type="button" data-sk="save" class="h-12 w-full rounded-2xl bg-emerald-600 text-sm font-semibold text-white active:scale-95 transition">Prüfen &amp; speichern</button>
+    <button type="button" data-cc="close" class="h-12 w-full rounded-2xl border border-slate-300 dark:border-slate-700 text-sm font-semibold">Abbrechen</button>`;
+  $('au-sheet').classList.remove('hidden'); setTimeout(() => $('sk-new')?.focus(), 80);
+});
+$('au-sheet').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-sk="save"]'); if (!b) return;
+  const k = ($('sk-new').value || '').trim(), msg = $('sk-msg'); if (!k) { msg.className = 'min-h-[1.25rem] text-left text-sm text-red-600 dark:text-red-400'; msg.textContent = 'Bitte den neuen Schlüssel einfügen.'; return; }
+  b.disabled = true; b.textContent = 'Prüfe beim Škoda-Server …'; msg.textContent = '';
+  try { const r = await fetch('/api/vehicle', { method: 'POST', headers: { ...(await authHeaders()), 'Content-Type': 'application/json' }, body: JSON.stringify({ newKey: k }) }), d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || 'HTTP ' + r.status);
+    if (d.expires) vehicle.expires = d.expires; save(KEY_VEHICLE, vehicle); renderVehicleStatus(); try { renderKeyWarning(); } catch (er) { }
+    $('au-sheet-box').innerHTML = `<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div><p class="text-lg font-bold">✓ Neuer Schlüssel aktiv</p><p class="text-left text-sm text-slate-600 dark:text-slate-300">Der Škoda-Server hat ihn akzeptiert.${d.expires ? ' Gültig bis <b>' + new Date(d.expires + 'T12:00:00').toLocaleDateString('de-DE') + '</b>.' : ''}</p><button type="button" data-cc="close" class="h-12 w-full rounded-2xl bg-emerald-600 text-sm font-semibold text-white">Fertig</button>`;
+  } catch (er) { msg.className = 'min-h-[1.25rem] text-left text-sm text-red-600 dark:text-red-400'; msg.textContent = er.message; b.disabled = false; b.textContent = 'Prüfen & speichern'; }
+});
+async function checkVehicle(uid) {                                                  // einmal nach der Anmeldung, ohne Škoda-Abfrage
+  if (vehicle.uid !== uid) vehicle = { uid, ok: false, expires: null };             // anderes Konto: nichts vom vorherigen übernehmen
+  try {
+    const res = await fetch('/api/vehicle?check=1', { headers: await authHeaders() });
+    const d = await res.json().catch(() => ({}));
+    if (res.ok) vehicle = { uid, ok: !!d.enabled, expires: d.keyExpires || null };
+  } catch (e) { console.warn('Fahrzeug-Check fehlgeschlagen (offline?):', e.message); }   // dann bleibt der zuletzt bekannte Stand
+  save(KEY_VEHICLE, vehicle); renderVehicleStatus(); refreshViews(); paintOdo(false);
+  if (vehicle.ok && currentView === 'dashboard') try { renderWxo(); } catch (e) { }   // Restakku in der Prognose
+}
+const DEFAULT_TITLE = 'Skoda Enyaq | Ladekosten NK';
+function applyTitle() { const t = getSettings().title || DEFAULT_TITLE; $('app-title').textContent = t.split('|')[0].trim() || t; document.title = t; }          // Start-Ansicht zeigt nur den Teil vor „|“
+function renderSetupHint() { $('setup-hint').classList.toggle('hidden', !!localStorage.getItem(KEY_SETTINGS)); }   // Hinweis, bis die Einstellungen einmal gespeichert wurden
+function renderKeyWarning() {                                   // Erinnerung ab 7 Tagen vor Ablauf, danach dauerhaft bis zur Erneuerung
+  const el = $('key-warn'), ex = keyExpiry();
+  if (!apiEnabled() || !ex) { el.classList.add('hidden'); return; }         // ohne Fahrzeugzugang keine Schlüssel-Erinnerung
+  const end = new Date(ex + 'T23:59:59');
+  const days = Math.ceil((end - Date.now()) / 86400000), date = end.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  el.classList.toggle('hidden', !(days <= 7));
+  if (days > 7) return;
+  const urgent = days <= 2;                                       // rot ab 2 Tagen vor Ablauf, davor gelb
+  el.className = 'rounded-2xl p-3 text-sm ' + (urgent ? 'bg-red-100 text-red-900 dark:bg-red-950 dark:text-red-200' : 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200');
+  el.textContent = (days < 0 ? 'Der Škoda-API-Schlüssel ist seit ' + date + ' abgelaufen.' : days === 0 ? 'Der Škoda-API-Schlüssel läuft heute ab (' + date + ').' : 'Der Škoda-API-Schlüssel läuft in ' + days + (days === 1 ? ' Tag' : ' Tagen') + ' ab (' + date + ').')
+    + ' Neuen Schlüssel in der MyŠkoda-App erzeugen und unter Einstellungen → Konto & Cloud → „Škoda-Schlüssel ersetzen“ einfügen.';
+}
+const getSettings = () => ({ price: 0.35, pin: '', ...load(KEY_SETTINGS, {}) });
+
+
+// ───── src/01-erfassen-einstellungen.js ─────
+/* =====================================================================
+   Navigation
+   ===================================================================== */
+let currentView = 'dashboard', histHeadVisible = true;
+function isDesk() { try { return matchMedia('(min-width: 1280px)').matches; } catch (e) { return false; } }
+function showView(name) {
+  if (name === 'reminders' && isDesk()) { renderReminders(); return; }      // PC: Erinnerungen stehen fest rechts
+  currentView = name; if (name === 'history') histHeadVisible = true;     // frisch geöffnet: Kopfzeile steht oben im Bild
+  document.querySelectorAll('.view').forEach(v => { if (v.id === 'view-reminders' && v.parentElement && v.parentElement.id === 'desk-rem') return; v.classList.toggle('hidden', v.id !== 'view-' + name); });
+  if (isDesk()) try { deskNavMark(name); } catch (e) { }
+  document.querySelectorAll('.nav-btn').forEach(b => {
+    const active = b.dataset.view === name;
+    b.classList.toggle('tab-active', active);
+    b.classList.toggle('text-slate-500', !active);
+  });
+  if (name === 'capture') { if (ENABLE_AI_SCAN) startCamera(); updateCaptureDefaults(); } else stopCamera();
+  if (name === 'dashboard') { renderDashboard(); try { renderBakBanner(); renderFrost(); renderWxo(); } catch (e) { } }
+  if (name === 'report') renderReport(); else reportYM = null;           // beim Verlassen zurück auf den Standardmonat
+  if (name === 'settings') { fillSettings(); try { renderBakInfo(); setSettingsSec(setSec); const nd = window.setNoDrawer; window.setNoDrawer = false; if (!nd) setTimeout(openSetDrawer, 60); } catch (e) { } } else { try { closeSetDrawer(); } catch (e) { } }
+  if (name === 'costs') renderCostsView();
+  if (name === 'reminders') renderReminders();
+  if (name === 'providers') renderProvidersView();
+  if (name === 'kb') renderKb();
+  if (name === 'badges') { try { renderBadges(); } catch (e) { } }
+  if (name === 'recs') { try { renderRecs(); } catch (e) { console.error(e); } }
+  if (name === 'wish') { try { renderWish(); } catch (e) { console.error(e); } }
+  if (name === 'route') { try { rtShow(); } catch (e) { console.error(e); } }
+  if (name === 'tires') { tireSet = 'aw'; tireSel = null; try { renderTires(); } catch (e) { console.error(e); } }   // beim Öffnen immer Allwetter
+  if (name !== 'history' && editMode) setEditMode(false);
+  if (name === 'history') renderHistory();
+  updateHistFab();
+  fitSeg();
+  renderReminderBadges();
+  try { renderWrapCard(); } catch (e) { /* Rückblick-Modul noch nicht initialisiert */ }
+  window.scrollTo(0, 0); document.documentElement.scrollTop = 0; document.body.scrollTop = 0;   // neue Ansicht immer oben beginnen (nach dem Rendern, sonst klemmt der Browser die Position)
+}
+document.querySelectorAll('.nav-btn').forEach(b => b.addEventListener('click', () => showView(b.dataset.view)));
+$('btn-profile').addEventListener('click', () => showView('settings'));          // Profil/Einstellungen: Icon neben dem Titel der Startseite
+$('btn-bell').addEventListener('click', () => showView('reminders'));            // Erinnerungen
+
+/* =====================================================================
+   Kamera (MediaDevices API)
+   ===================================================================== */
+let stream = null;
+let photoDataUrl = null;
+const video = $('video'), snap = $('snapshot'), camMsg = $('cam-msg');
+
+function camNotice(text) { camMsg.textContent = text; camMsg.classList.toggle('hidden', !text); }
+
+async function startCamera() {
+  if (stream || photoDataUrl) return;
+  if (!navigator.mediaDevices?.getUserMedia) {
+    camNotice('Kamerazugriff nicht verfügbar. Der Browser erlaubt ihn nur über https:// oder localhost – nutze alternativ „Bild aus Kamera-App wählen“.');
+    return;
+  }
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+    video.srcObject = stream; camNotice('');
+  } catch (err) {
+    console.error(err);
+    const denied = err.name === 'NotAllowedError';
+    camNotice(denied ? 'Kamerazugriff verweigert. Bitte im Browser freigeben oder „Bild aus Kamera-App wählen“ nutzen.'
+                     : 'Kamera konnte nicht gestartet werden (' + err.name + ').');
+  }
+}
+function stopCamera() { if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; } }
+
+/** Zeichnet ein Bild-Quellobjekt skaliert (max. 1280 px) ins Canvas und speichert es als Base64-JPEG. */
+function setPhoto(source, w, h) {
+  const scale = Math.min(1, 1280 / Math.max(w, h));
+  snap.width = Math.round(w * scale); snap.height = Math.round(h * scale);
+  snap.getContext('2d').drawImage(source, 0, 0, snap.width, snap.height);
+  photoDataUrl = snap.toDataURL('image/jpeg', 0.85);
+  snap.classList.remove('hidden'); video.classList.add('hidden');
+  $('btn-ocr').disabled = false; $('ocr-error').classList.add('hidden');
+}
+
+$('btn-shot').addEventListener('click', () => {
+  if (!stream || !video.videoWidth) { camNotice('Keine Kamera aktiv.'); return; }
+  setPhoto(video, video.videoWidth, video.videoHeight);
+});
+$('btn-retake').addEventListener('click', () => {
+  photoDataUrl = null; snap.classList.add('hidden'); video.classList.remove('hidden');
+  $('btn-ocr').disabled = true; startCamera();
+});
+$('file-input').addEventListener('change', (e) => {      // Fallback, z. B. bei file:// ohne Kamerazugriff
+  const file = e.target.files[0]; if (!file) return;
+  const img = new Image();
+  img.onload = () => { setPhoto(img, img.naturalWidth, img.naturalHeight); URL.revokeObjectURL(img.src); camNotice(''); };
+  img.onerror = () => showOcrError('Bild konnte nicht geladen werden.');
+  img.src = URL.createObjectURL(file);
+});
+
+/* =====================================================================
+   KI-Auslesen (OpenAI gpt-4o Vision)
+   ===================================================================== */
+function showOcrError(msg) { const el = $('ocr-error'); el.textContent = msg; el.classList.remove('hidden'); }
+
+$('btn-ocr').addEventListener('click', async () => {
+  if (!photoDataUrl) return;
+  if (!window.cloud?.isSignedIn?.()) { showOcrError('Bitte zuerst unter Einstellungen mit Google anmelden.'); return; }
+
+  $('ocr-error').classList.add('hidden');
+  $('btn-ocr').disabled = true; $('ocr-spinner').classList.remove('hidden'); $('ocr-label').textContent = 'Lese Zählerstand …';
+  try {
+    const res = await fetch(PROXY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+      body: JSON.stringify({ image: photoDataUrl })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401 || res.status === 403) throw new Error('Konto nicht berechtigt.');
+    if (!res.ok) throw new Error(data.error?.message || data.error || ('HTTP ' + res.status));
+    const text = data.choices?.[0]?.message?.content || '';
+    const match = text.replace(',', '.').match(/\d+(\.\d+)?/);
+    if (!match) throw new Error('Keine Zahl erkannt (Antwort: „' + text.slice(0, 40) + '“). Bitte neues Foto aufnehmen oder manuell eingeben.');
+    $('reading-input').value = parseFloat(match[0]).toFixed(1);   // eine Nachkommastelle
+    paintReading();
+  } catch (err) {
+    console.error(err);
+    showOcrError('KI-Auslesen fehlgeschlagen: ' + err.message);
+  } finally {
+    $('ocr-spinner').classList.add('hidden'); $('ocr-label').textContent = 'Zählerstand per KI auslesen'; $('btn-ocr').disabled = false;
+  }
+});
+
+/* =====================================================================
+   Speichern eines Zählerstands
+   ===================================================================== */
+function flash(el, text, ok) {
+  el.textContent = text; el.className = 'text-sm ' + (ok ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400');
+  setTimeout(() => el.classList.add('hidden'), 4000);
+}
+
+$('btn-save').addEventListener('click', () => {
+  const readings = getReadings(), place = capPlace, home = place === 'home';
+  const km = optNum($('km-input').value), s0 = optNum($('soc0-input').value), s1 = optNum($('soc1-input').value);
+  if ([km, s0, s1].some(Number.isNaN) || (km != null && km < 0) || [s0, s1].some(v => v != null && (v < 0 || v > 100)) || (s0 != null && s1 != null && s1 <= s0)) {
+    flash($('save-msg'), 'Bitte km-Stand und Akku-Prozente prüfen (0–100 %, Ende größer als Start).', false); return;
+  }
+
+  let entry, msg;
+  if (home) {
+    const value = Math.round(parseNum($('reading-input').value) * 10) / 10;
+    if (!isFinite(value) || value < 0) { flash($('save-msg'), 'Bitte einen gültigen Zählerstand eingeben.', false); return; }
+    const prev = lastHome(readings);                      // Vorgänger am Zähler (Bosch/Unterwegs-Einträge zählen nicht)
+    let reset = false;                                    // Zähler zurückgesetzt? Dann zählt die Ladung ab 0
+    if (prev && value < prev.totalReading) {
+      if (!confirm('Der Wert (' + fmt(value) + ') ist kleiner als der letzte Stand (' + fmt(prev.totalReading) + ').\n\nWurde der Zähler zurückgesetzt (Start bei 0)?\nOK = ja, die Ladung wird ab 0 gerechnet.\nAbbrechen = Eingabe prüfen.')) return;
+      reset = true;
+    }
+    const consumed = reset ? value : (prev ? Math.max(0, Math.round((value - prev.totalReading) * 10) / 10) : 0);   // Differenz zum Vorgänger
+    const cost = consumed * getSettings().price;
+    entry = { id: Date.now(), date: new Date().toISOString(), totalReading: value, consumedSinceLast: consumed, cost };
+    if (reset) entry.meterReset = true;
+    msg = 'Gespeichert: ' + fmt(consumed) + ' kWh, ' + eur(cost);
+  } else {
+    if (s0 == null || s1 == null) { flash($('save-msg'), 'Bitte Akku-Start und Akku-Ende angeben – sie verbinden diese Ladung mit der Verbrauchsrechnung.', false); return; }
+    const kwh = optNum($('kwh-input').value), price = optNum($('price-input').value), fee = optNum($('fee-input').value);
+    if ([kwh, price, fee].some(Number.isNaN) || [kwh, price, fee].some(v => v != null && v < 0)) { flash($('save-msg'), 'Bitte kWh, Preis und Gebühren prüfen (nicht negativ).', false); return; }
+    const prevH = lastHome(readings), cost = (kwh != null && price != null ? kwh * price : 0) + (fee ?? 0);      // Gebühren kommen additiv auf die Kosten
+    entry = { id: Date.now(), date: new Date().toISOString(), place, totalReading: prevH ? prevH.totalReading : 0, consumedSinceLast: kwh ?? 0, cost };
+    if (price != null) entry.pricePerKwh = price;
+    if (fee != null) entry.fee = fee;                                    // Servicegebühr (Bosch/Unterwegs), bereits in cost enthalten
+    if (place === 'away' && $('prov-input').value) entry.provider = $('prov-input').value;      // optional: Ladeanbieter (Auswertungen fassen weiter als "Unterwegs" zusammen)
+    msg = 'Gespeichert (' + (entry.provider || PLACES[place]) + '): ' + (kwh != null ? fmt(kwh) + ' kWh' : s0 + ' → ' + s1 + ' %') + (cost > 0 ? ', ' + eur(cost) : '');
+  }
+  if (km != null) entry.odometerKm = km;                // optionale Felder nur setzen, wenn vorhanden (Firestore verbietet undefined)
+  if (s0 != null) entry.socStart = s0;
+  entry.capacityKwh = batteryKwh();                      // Kapazität zum Zeitpunkt der Ladung festhalten
+  if (s1 != null) entry.socEnd = s1;
+  { const bt = optNum($('bt-input').value); if (bt != null && !Number.isNaN(bt)) entry.battTemp = bt; }   // Akku-Temperatur beim Anstecken (optional)
+  const live = home ? getLive() : null;                  // abgeschlossene Live-Ladung (nur Zuhause): echte Start-/Endzeit und Leistung festhalten
+  if (live && live.kwhTarget != null && liveKwh(live) >= live.kwhTarget) {
+    const end = Math.min(Date.now(), liveFinishAt(live));
+    if (end > live.startedAt) { entry.chargeStart = new Date(live.startedAt).toISOString(); entry.chargeEnd = new Date(end).toISOString(); }
+    const kws = (live.powerSamples || []).map(s => s[1]).filter(v => v > 0.5);
+    if (kws.length) entry.avgPowerKw = Math.round(kws.reduce((a, b) => a + b, 0) / kws.length * 10) / 10;
+  }
+  readings.push(entry);
+  const status = commitReadings(readings);
+  if (!status) return;
+  if (home) stopLive(false);                             // echter Wert erfasst -> Simulation beenden
+
+  flash($('save-msg'), msg + (window.cloud?.isSignedIn() ? ' · Cloud: wird übertragen …' : ' · nur lokal (nicht bei Google angemeldet)'), true);
+  setTimeout(() => checkBadges(false), 600);                              // neues Abzeichen? (Pop-up mit Konfetti)
+  status.then(s => {                                     // Ergebnis der Cloud-Übertragung sichtbar machen
+    if (s === 'cloud') flash($('save-msg'), msg + ' · Cloud ✓', true);
+    else if (s.startsWith('error:')) flash($('save-msg'), msg + ' · Cloud-Fehler: ' + s.slice(6), false);
+  });
+  $('save-msg').classList.remove('hidden');
+  ['reading-input', 'km-input', 'soc0-input', 'soc1-input', 'bt-input', 'kwh-input', 'price-input', 'prov-input', 'fee-input'].forEach(id => { $(id).value = ''; delete $(id).dataset.live; delete $(id).dataset.manual; delete $(id).dataset.auto; });
+  closeKmEdit(); setCapPlace('home');                    // nächste Erfassung startet wieder bei Zuhause
+});
+
+/** Ladeort in der Erfassen-Maske wählen: Zuhause = Zählerstand, Bosch/Unterwegs = optional kWh und Preis (kein Zähler). */
+function setCapPlace(p) {
+  capPlace = PLACES[p] ? p : 'home';
+  const home = capPlace === 'home';
+  segPaint('.cap-place-btn', capPlace);
+  $('cap-meter-card').classList.toggle('hidden', !home);
+  $('cap-away-card').classList.toggle('hidden', home);
+  const away = capPlace === 'away';                      // Anbieter-Auswahl nur bei "Unterwegs"
+  $('prov-wrap').classList.toggle('hidden', !away); $('fee-wrap').classList.toggle('hidden', home);   // Anbieter nur bei Unterwegs, Gebühren bei Bosch und Unterwegs
+  $('cap-away-grid').style.gridTemplateColumns = away ? '0.85fr 0.95fr 0.85fr 1.35fr' : 'repeat(3,minmax(0,1fr))';   // Unterwegs: vier Spalten, Anbieter am breitesten
+  if (away) {
+    const sel = $('prov-input'), keep = sel.value;
+    sel.innerHTML = providerOptions('');                 // aktuelle Liste aus den Einstellungen
+    if (keep && getProviders().includes(keep)) sel.value = keep;
+    else if (!keep || sel.dataset.auto) {                // zuletzt benutzten Anbieter vorschlagen
+      const last = getReadings().reverse().find(r => placeOf(r) === 'away' && r.provider && getProviders().includes(r.provider));
+      sel.value = last ? last.provider : ''; if (last) sel.dataset.auto = '1'; else delete sel.dataset.auto;
+    }
+  }
+  $('cap-title').textContent = home ? 'Zählerstand' : 'Ladung: ' + PLACES[capPlace];
+  if (!home) {
+    ['soc0-input', 'soc1-input', 'km-input'].forEach(id => { if ($(id).dataset.live) { $(id).value = ''; delete $(id).dataset.live; } });   // Live-Vorbelegung gilt nur für Zuhause
+    suggestCapPrice();
+  }
+  updateCaptureDefaults();
+}
+/** Preis vorbelegen (nur wenn das Feld leer ist oder selbst vorbelegt wurde):
+    Unterwegs mit Anbieter: eigener Preis aus „Ladeanbieter“ (DC vor AC) → letzte Ladung bei diesem Anbieter → Ø aus der Historie.
+    Bosch: Preis der Bosch-Karte (AC vor DC) → letzte Ladung bei Bosch. Ohne Anbieter: letzte Ladung an diesem Ort. */
+function suggestCapPrice() {
+  const pi = $('price-input'); if (capPlace === 'home' || !(pi.value === '' || pi.dataset.auto)) return;
+  const rs = getReadings().reverse(), prov = capPlace === 'away' ? $('prov-input').value : '';
+  let v = null, src = '';
+  if (capPlace === 'bosch') { const p = pvPrices('bosch'); v = p.ac ?? p.dc; if (v != null) src = 'Preis von ' + (pvBoschName() || 'Bosch') + ' (Ladeanbieter)'; }
+  else if (prov) {
+    const p = pvPrices(prov); v = p.dc ?? p.ac; if (v != null) src = 'Preis von ' + prov + ' (Ladeanbieter)';
+    if (v == null) { const l = rs.find(r => placeOf(r) === 'away' && r.provider === prov && r.pricePerKwh != null); if (l) { v = l.pricePerKwh; src = 'letzte Ladung bei ' + prov; } }
+    if (v == null && p.hist) { v = p.hist; src = 'Ø bei ' + prov; }
+  }
+  if (v == null) { const l = rs.find(r => placeOf(r) === capPlace && r.pricePerKwh != null); if (l) { v = l.pricePerKwh; src = 'letzte Ladung ' + (capPlace === 'bosch' ? 'bei Bosch' : 'unterwegs'); } }
+  pi.value = v != null ? String(v).replace('.', ',') : ''; pi.title = src ? 'Vorbelegt: ' + src : '';
+  if (v != null) pi.dataset.auto = '1'; else delete pi.dataset.auto;
+}
+document.querySelectorAll('.cap-place-btn').forEach(b => b.addEventListener('click', () => setCapPlace(b.dataset.place)));
+$('price-input').addEventListener('input', (e) => { delete e.target.dataset.auto; });
+$('prov-input').addEventListener('change', (e) => { delete e.target.dataset.auto; suggestCapPrice(); });   // anderer Anbieter: dessen Preis vorschlagen
+
+/* =====================================================================
+   Einstellungen
+   ===================================================================== */
+function fillSettings() {
+  try { renderVcStatus(); } catch (e) { }
+  try { fillWxoPrefs(); } catch (e) { }
+  renderProviders(); renderCategories(); renderTPlaceList(); renderTLabelSettings(); renderTripsLast();
+  const s = getSettings();
+  $('set-cmp-car').value = s.cmpCar || ''; $('set-cmp-l').value = s.cmpL ? String(s.cmpL).replace('.', ',') : ''; $('set-cmp-eur').value = s.cmpEur ? String(s.cmpEur).replace('.', ',') : ''; $('set-cmp-co2').value = s.cmpCo2 ? String(s.cmpCo2) : '';
+  $('set-price').value = String(s.price).replace('.', ',');
+  $('set-battery').value = String(batteryKwh()).replace('.', ',');
+  $('set-title').value = s.title || DEFAULT_TITLE;
+  $('set-brand').value = s.brand || ''; $('set-model').value = s.model || ''; $('set-plate').value = s.plate || ''; $('set-year').value = s.year || ''; $('set-vin').value = s.vin || '';
+  $('set-power').value = String(chargePowerKw()).replace('.', ',');
+  $('set-cert-ac').value = s.certAcKwh != null ? fmt(s.certAcKwh, 0) : ''; $('set-cert-dc').value = s.certDcKwh != null ? fmt(s.certDcKwh, 0) : ''; $('set-cert-km').value = s.certKm != null ? fmt(s.certKm, 0) : ''; certRatioHint();
+  $('set-ref-lo').value = s.refLo != null ? String(s.refLo).replace('.', ',') : ''; $('set-ref-hi').value = s.refHi != null ? String(s.refHi).replace('.', ',') : '';
+  renderDvInfo(); $('set-purchase').value = purchaseDay(); $('set-purchase-km').value = s.purchaseKm != null ? fmt(s.purchaseKm, 0) : ''; $('set-purchase-price').value = s.purchasePrice != null ? fmt(s.purchasePrice, 2) : ''; $('set-wltp').value = s.wltp ? String(s.wltp).replace('.', ',') : ''; $('set-wltp-net').value = s.wltpNet ? String(s.wltpNet).replace('.', ',') : ''; renderWxLoc();
+  $('set-rem-days').value = String(remWarn().days); $('set-rem-km').value = String(remWarn().km); $('set-next-hu').value = s.nextHu || ''; $('set-next-svc').value = s.nextService || '';
+}
+/** Ladeanbieter: speichern sofort (lokal und, wenn angemeldet, in der Cloud). Ältere Einträge behalten ihren Anbieter-Namen. */
+function renderProviders() {
+  const l = getProviders();
+  $('prov-list').innerHTML = l.length ? l.map((n, i) => `<span class="inline-flex items-center gap-1 pl-3 pr-1 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 text-sm max-w-full"><span class="truncate">${esc(n)}</span><button type="button" data-del="${i}" aria-label="${esc(n)} entfernen" class="w-6 h-6 shrink-0 rounded-lg text-slate-500 hover:text-red-600 active:scale-95">×</button></span>`).join('')
+                              : '<span class="text-xs text-slate-500 dark:text-slate-400">Noch keine Anbieter angelegt.</span>';
+}
+function setProviders(list) {
+  save(KEY_PROVIDERS, list); renderProviders();
+  if (capPlace === 'away') setCapPlace('away');           // Auswahl in der Erfassen-Maske aktualisieren
+  const msg = $('prov-msg');
+  if (!window.cloud?.isSignedIn()) { msg.textContent = 'Gespeichert (nur lokal, nicht angemeldet).'; return; }
+  msg.textContent = 'Gespeichert · Cloud: wird übertragen …';
+  window.cloud.setProviders(list).then(() => { msg.textContent = 'Gespeichert · Cloud ✓'; })
+    .catch(e => { msg.textContent = 'Lokal gespeichert, Cloud-Fehler: ' + (e.code || e.message) + (e.code === 'permission-denied' ? ' (Firestore-Regel für enyaqStrom/<uid>/settings ergänzen)' : ''); });
+}
+function addProvider() {
+  const inp = $('prov-new'), name = inp.value.trim().replace(/\s+/g, ' ').slice(0, 30), l = getProviders();
+  if (!name) return;
+  if (l.some(n => n.toLowerCase() === name.toLowerCase())) { $('prov-msg').textContent = '„' + name + '“ gibt es schon.'; return; }
+  if (l.length >= 20) { $('prov-msg').textContent = 'Maximal 20 Anbieter.'; return; }
+  inp.value = ''; setProviders(l.concat(name));
+}
+$('btn-prov-add').addEventListener('click', addProvider);
+$('prov-new').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addProvider(); } });
+$('prov-list').addEventListener('click', e => {
+  const i = e.target.dataset.del; if (i === undefined) return;
+  const l = getProviders(); l.splice(+i, 1); setProviders(l);
+});
+/** Cloud-Abgleich der Liste: beim ersten Abgleich werden lokale und Cloud-Anbieter zusammengeführt, danach gilt die Cloud (Löschen wirkt auf allen Geräten). */
+window.onCloudProviders = (list, first, uid) => {
+  if (first) checkCacheUid(uid);
+  const local = getProviders();
+  let next = Array.isArray(list) ? list.filter(n => typeof n === 'string' && n.trim()) : [];
+  if (first && (uploadCutoff(uid) === 0 || !Array.isArray(list))) { const merged = next.concat(local.filter(n => !next.some(m => m.toLowerCase() === n.toLowerCase()))); if (merged.length !== next.length || !Array.isArray(list)) { next = merged; if (next.length) window.cloud.setProviders(next).catch(() => {}); } }
+  if (JSON.stringify(next) !== JSON.stringify(local)) { save(KEY_PROVIDERS, next); renderProviders(); if (capPlace === 'away') setCapPlace('away'); }
+};
+$('set-year').addEventListener('input', (e) => {
+  const el = e.target, del = e.inputType && e.inputType.startsWith('delete'), raw = /^[1-9]\//.test(el.value) ? '0' + el.value : el.value;   // „1/“ → „01/“
+  let d = raw.replace(/\D/g, '').slice(0, 6);
+  if (d.length === 1 && +d > 1) d = '0' + d;                                          // „5“ → „05“
+  el.value = d.length > 2 || (d.length === 2 && !del) ? d.slice(0, 2) + '/' + d.slice(2) : d;
+});
+$('btn-save-settings').addEventListener('click', () => {
+  const price = parseNum($('set-price').value);
+  if (!isFinite(price) || price < 0) { alert('Bitte einen gültigen Strompreis eingeben (z. B. 0,307).'); return; }
+  const battery = parseNum($('set-battery').value);
+  if (!isFinite(battery) || battery < 10 || battery > 200) { alert('Bitte eine gültige Nettokapazität in kWh eingeben (z. B. 52).'); return; }
+  const power = parseNum($('set-power').value);
+  if (!isFinite(power) || power < 0.5 || power > 50) { alert('Bitte eine gültige Ladeleistung in kW eingeben (z. B. 7).'); return; }
+  const remDays = $('set-rem-days').value.trim() === '' ? 14 : parseNum($('set-rem-days').value), remKm = $('set-rem-km').value.trim() === '' ? 500 : parseNum($('set-rem-km').value);
+  const ym = (id) => { const v = $(id).value.trim(); return /^\d{4}-(0[1-9]|1[0-2])$/.test(v) ? v : undefined; }, nextHu = ym('set-next-hu'), nextService = ym('set-next-svc');
+  if (!Number.isInteger(remDays) || remDays < 0 || remDays > 365) { alert('Bitte die Vorwarnung in Tagen als ganze Zahl von 0 bis 365 eingeben.'); return; }
+  if (!Number.isInteger(remKm) || remKm < 0 || remKm > 20000) { alert('Bitte die Vorwarnung in km als ganze Zahl von 0 bis 20000 eingeben.'); return; }
+  const pd = $('set-purchase').value, purchase = /^\d{4}-\d{2}-\d{2}$/.test(pd) && !isNaN(Date.parse(pd)) ? pd : '2026-06-08';
+  const wl = $('set-wltp').value.trim() === '' ? undefined : parseFloat($('set-wltp').value.replace(',', '.'));
+  const wln = $('set-wltp-net').value.trim() === '' ? undefined : parseFloat($('set-wltp-net').value.replace(',', '.'));
+  const tnum = (id) => { const t = $(id).value.trim().replace('−', '-').replace(',', '.'); return t === '' ? undefined : Number(t); };
+  const rlo = tnum('set-ref-lo'), rhi = tnum('set-ref-hi');
+  if ([rlo, rhi].some(v => v !== undefined && !(Number.isFinite(v) && v >= -20 && v <= 45)) || (rlo !== undefined) !== (rhi !== undefined) || (rlo !== undefined && rhi - rlo < 2)) {
+    alert('Bitte beim Referenzbereich der Akku-Temperatur beide Werte eintragen (−20 bis 45 °C, „bis“ mindestens 2 °C über „von“) oder beide Felder leer lassen.'); return; }
+  const deNum = (v) => { const t = v.trim(); if (t === '') return undefined; return Number((/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(t) ? t.replace(/\./g, '') : t).replace(',', '.')); };   // 16.969 = sechzehntausend…, 32.500,50 = Euro mit Cent
+  const pk = deNum($('set-purchase-km').value), pp = deNum($('set-purchase-price').value);
+  const certAcKwh = deNum($('set-cert-ac').value), certDcKwh = deNum($('set-cert-dc').value), certKm = deNum($('set-cert-km').value);
+  if ([certAcKwh, certDcKwh].some(v => v !== undefined && !(Number.isFinite(v) && v >= 0 && v <= 1e6)) || (certAcKwh !== undefined) !== (certDcKwh !== undefined) || (certAcKwh !== undefined && certAcKwh + certDcKwh <= 0)) { alert('Bitte beim Akku-Zertifikat beide Werte (AC und DC in kWh) eintragen oder beide Felder leer lassen.'); return; }
+  if (certKm !== undefined && !(certKm >= 0 && certKm <= 2e6)) { alert('Bitte den km-Stand des Akku-Zertifikats als Zahl eingeben oder das Feld leer lassen.'); return; }
+  if (pk !== undefined && !(pk >= 0 && pk <= 2e6)) { alert('Bitte den Kilometerstand bei Kauf als Zahl eingeben (z. B. 16.969) oder das Feld leer lassen.'); return; }
+  if (pp !== undefined && !(pp >= 0 && pp <= 1e7)) { alert('Bitte den Kaufpreis in Euro als Zahl eingeben (z. B. 32.500) oder das Feld leer lassen.'); return; }
+  if (wl !== undefined && !(wl > 5 && wl < 40)) { alert('Bitte den WLTP-Verbrauch in kWh/100 km eingeben (z. B. 16,0) oder das Feld leer lassen.'); return; }
+  if (wln !== undefined && !(wln > 5 && wln < 40)) { alert('Bitte den WLTP-Verbrauch ohne Ladeverluste in kWh/100 km eingeben (z. B. 14,7) oder das Feld leer lassen.'); return; }
+  const vin = $('set-vin').value.trim().toUpperCase().replace(/\s+/g, ''), yr = $('set-year').value.trim();
+  if (vin && !/^[A-HJ-NPR-Z0-9]{17}$/.test(vin)) { alert('Die Fahrgestellnummer (FIN) hat 17 Zeichen aus Ziffern und Buchstaben (ohne I, O und Q). Bitte prüfen oder das Feld leer lassen.'); return; }
+  if (yr) {                                                                         // Baujahr immer als MM/JJJJ, nicht in der Zukunft
+    const m = /^(0[1-9]|1[0-2])\/(\d{4})$/.exec(yr), now = new Date();
+    if (!m) { alert('Bitte das Baujahr im Format MM/JJJJ eingeben (z. B. 11/2023) oder das Feld leer lassen.'); $('set-year').focus(); return; }
+    if (+m[2] < 1990 || +m[2] * 12 + +m[1] > now.getFullYear() * 12 + now.getMonth() + 1) { alert('Das Baujahr ' + yr + ' kann nicht stimmen: Es muss zwischen 01/1990 und ' + String(now.getMonth() + 1).padStart(2, '0') + '/' + now.getFullYear() + ' liegen.'); $('set-year').focus(); return; }
+  }
+  const txt = (id, n) => $(id).value.trim().replace(/\s+/g, ' ').slice(0, n) || undefined;
+  if (save(KEY_SETTINGS, { title: $('set-title').value.trim() || DEFAULT_TITLE, brand: txt('set-brand', 30), model: txt('set-model', 40), plate: (txt('set-plate', 15) || '').toUpperCase() || undefined, year: yr || undefined, vin: vin || undefined, price, battery, power, remDays, remKm, purchase, wltp: wl, wltpNet: wln !== undefined ? Math.round(wln * 100) / 100 : undefined, purchaseKm: pk !== undefined ? Math.round(pk) : undefined, purchasePrice: pp !== undefined ? Math.round(pp * 100) / 100 : undefined, commuteKm: getSettings().commuteKm || undefined, ccEnd: getSettings().ccEnd || undefined, gtMirror: getSettings().gtMirror || undefined, gtList: getSettings().gtList || undefined, rtLast: getSettings().rtLast || undefined, iceDep: getSettings().iceDep || undefined, iceWe: getSettings().iceWe || undefined, icePark: getSettings().icePark || undefined, iceMin: getSettings().iceMin || undefined, iceK: getSettings().iceK || undefined, nRep: getSettings().nRep || undefined, nTrips: getSettings().nTrips || undefined, nBakYm: getSettings().nBakYm || undefined, nBakAt: getSettings().nBakAt || undefined, nBakSnz: getSettings().nBakSnz || undefined, wxIcons: getSettings().wxIcons || undefined, carN: getSettings().carN ?? undefined, carSec: getSettings().carSec ?? undefined, wxoCut: getSettings().wxoCut ?? undefined, dashFirst: getSettings().dashFirst || undefined, refLo: rlo, refHi: rhi, nextHu, nextService, certAcKwh: certAcKwh !== undefined ? Math.round(certAcKwh * 10) / 10 : undefined, certDcKwh: certDcKwh !== undefined ? Math.round(certDcKwh * 10) / 10 : undefined, certKm: certKm !== undefined ? Math.round(certKm) : undefined })) {   // commuteKm: im Steuerhelfer (Berichte → Fahrten) gepflegt
+    renderReminderBadges(); renderHeroStats(); pushPrefs();
+    $('settings-msg').classList.remove('hidden'); setTimeout(() => $('settings-msg').classList.add('hidden'), 2500);
+  }
+});
+/* Alle Daten löschen: zweistufig. Stufe 1 = Dialog mit Erklärung, Stufe 2 = Wort LÖSCHEN eintippen. Erst dann wird der rote Button aktiv. */
+const WIPE_WORD = 'LÖSCHEN';
+$('btn-wipe').addEventListener('click', () => {
+  $('wipe-cloud').classList.toggle('hidden', !window.cloud?.isSignedIn());
+  $('wipe-input').value = ''; $('wipe-ok').disabled = true; $('wipe-dialog').classList.remove('hidden'); setTimeout(() => $('wipe-input').focus(), 50);
+});
+const closeWipe = () => { $('wipe-dialog').classList.add('hidden'); $('wipe-input').value = ''; $('wipe-ok').disabled = true; };
+$('wipe-cancel').addEventListener('click', closeWipe);
+$('wipe-dialog').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeWipe(); });
+$('wipe-input').addEventListener('input', (e) => { $('wipe-ok').disabled = e.target.value.trim().toUpperCase() !== WIPE_WORD; });
+$('wipe-ok').addEventListener('click', () => {
+  if ($('wipe-input').value.trim().toUpperCase() !== WIPE_WORD) return;     // doppelte Absicherung, falls der Button doch aktiv wäre
+  closeWipe();
+  {
+    commitReadings([]); commitCosts([]); commitReminders([]); commitRecurring([]); commitTrips([]); localStorage.removeItem(KEY_TRIPS_IMP); localStorage.removeItem(KEY_TLABELS); localStorage.removeItem(KEY_TRULES); localStorage.removeItem(KEY_TDEF); setTPlaces([]); localStorage.removeItem(KEY_SETTINGS); localStorage.removeItem(KEY_WXLOC); localStorage.removeItem(KEY_WXCACHE); localStorage.removeItem(KEY_TEMPS); localStorage.removeItem(KEY_WRAP); localStorage.removeItem(KEY_DRIVE); localStorage.removeItem(KEY_HERO); localStorage.removeItem(KEY_HERO_C); applyHeroColor(); pushPrefs(); setProviders([]); setCategories(DEFAULT_CATEGORIES.slice()); fillSettings(); alert('Alle Daten wurden gelöscht.');
+  }
+});
+
+
+// ───── src/02-start-live-trends.js ─────
+/* =====================================================================
+   Dashboard & Diagramme
+   ===================================================================== */
+let range = 'week', chart = null;
+const MONTHS = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+
+/** Erzeugt die Zeiträume (Buckets) für Woche (8), Monat (12) bzw. Jahr (ab erstem Eintrag). */
+function buildBuckets(kind, readings) {
+  const now = new Date(), out = [];
+  if (kind === 'week') {
+    const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
+    for (let i = 7; i >= 0; i--) {
+      const s = new Date(monday); s.setDate(s.getDate() - 7 * i);
+      const e = new Date(s); e.setDate(e.getDate() + 7);
+      out.push({ s, e, label: s.getDate() + '.' + (s.getMonth() + 1) + '.' });
+    }
+  } else if (kind === 'month') {
+    for (let i = 11; i >= 0; i--) {
+      const s = new Date(now.getFullYear(), now.getMonth() - i, 1), e = new Date(s.getFullYear(), s.getMonth() + 1, 1);
+      out.push({ s, e, label: MONTHS[s.getMonth()] + ' ' + String(s.getFullYear()).slice(2) });
+    }
+  } else {
+    const first = readings.length ? new Date(readings[0].date).getFullYear() : now.getFullYear();
+    for (let y = first; y <= now.getFullYear(); y++) out.push({ s: new Date(y, 0, 1), e: new Date(y + 1, 0, 1), label: String(y) });
+  }
+  return out.map(b => ({ ...b, kwh: 0, cost: 0 }));
+}
+
+const RANGE_TXT = { week: 'der letzten 8 Wochen (Wochenbeginn)', month: 'der letzten 12 Monate', year: 'pro Jahr' };
+function renderChart() {
+  const readings = getReadings().filter(r => inView(r, dashPlace)), home = dashPlace === 'home';
+  const buckets = buildBuckets(range, readings);
+  readings.forEach(r => {                                  // Zuhause: Verbrauch am Zähler; Bosch/Unterwegs: eingetragene kWh – jeweils dem Zeitraum des Datums zuordnen
+    const d = new Date(r.date), b = buckets.find(b => d >= b.s && d < b.e);
+    if (b) { b.kwh += r.consumedSinceLast; b.cost += r.cost; }
+  });
+  const hasData = buckets.some(b => b.kwh > 0);
+  $('chart-empty').textContent = home || dashPlace === 'all' ? 'Noch keine Daten. Erfasse mindestens zwei Zählerstände.' : 'Noch keine Ladungen mit kWh-Angabe bei „' + PLACES[dashPlace] + '“. Trage beim Erfassen die kWh laut Säule ein.';
+  $('chart-empty').classList.toggle('hidden', hasData);
+  $('chart').parentElement.classList.toggle('hidden', !hasData);
+  $('chart-title').textContent = home ? 'Verbrauch ' + RANGE_TXT[range] : VIEWS[dashPlace] + ' · geladen ' + RANGE_TXT[range];
+
+  document.querySelectorAll('.range-btn').forEach(b => {
+    const on = b.dataset.range === range;
+    b.classList.toggle('bg-white', on); b.classList.toggle('dark:bg-slate-700', on); b.classList.toggle('shadow-sm', on);
+  });
+  if (chart) chart.destroy();
+  if (!hasData) return;
+
+  const dark = matchMedia('(prefers-color-scheme: dark)').matches;
+  const text = dark ? '#cbd5e1' : '#475569', grid = dark ? 'rgba(148,163,184,.15)' : 'rgba(100,116,139,.15)';
+  chart = new Chart($('chart'), {
+    data: {
+      labels: buckets.map(b => b.label),
+      datasets: [
+        { type: 'bar',  label: 'kWh', data: buckets.map(b => +b.kwh.toFixed(1)), backgroundColor: '#10b981', borderRadius: 6, yAxisID: 'y' },
+        { type: 'line', label: '€',   data: buckets.map(b => +b.cost.toFixed(2)), borderColor: '#0ea5e9', backgroundColor: '#0ea5e9', tension: .3, yAxisID: 'y1' }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: text } } },
+      scales: {
+        x:  { ticks: { color: text }, grid: { display: false } },
+        y:  { beginAtZero: true, title: { display: true, text: 'kWh', color: text }, ticks: { color: text }, grid: { color: grid } },
+        y1: { beginAtZero: true, position: 'right', title: { display: true, text: '€', color: text }, ticks: { color: text }, grid: { drawOnChartArea: false } }
+      }
+    }
+  });
+}
+
+/* =====================================================================
+   Live-Modus (Simulation einer laufenden Ladung)
+   Gespeichert wird nur ein Zeitstempel: { startedAt, baseReading, price }.
+   Alle Live-Werte werden daraus berechnet -> stimmen auch nach Neuladen/Schließen der App.
+   ===================================================================== */
+const DEFAULT_CHARGE_POWER_KW = 7;                         // Standardwert; einstellbar unter Einstellungen
+const chargePowerKw = () => { const v = Number(getSettings().power); return v > 0 ? v : DEFAULT_CHARGE_POWER_KW; };
+const LIVE_POLL_MS = 6 * 60 * 1000;                        // Abgleich mit dem Auto alle 6 Minuten (Škoda-Limit: 20 Anfragen/Stunde)
+const LIVE_SPEED = 1;            // 1 = Echtzeit. Zum Testen z. B. 60 setzen (1 Minute entspricht 1 Stunde Laden)
+const KEY_LIVE = 'enyaq.live';
+let liveTimer = null;
+
+const getLive = () => load(KEY_LIVE, null);
+const fmtDate = (iso) => new Date(iso).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });   // 04.10.2026
+const pad2 = (n) => String(n).padStart(2, '0');
+
+const hhmm = (ms) => { const t = new Date(ms); return pad2(t.getHours()) + ':' + pad2(t.getMinutes()); };
+const fmtHM = (sec) => Math.floor(sec / 3600) + ':' + pad2(Math.floor(sec % 3600 / 60));
+/** Bisher geladene kWh am Zähler; bei gesetztem Ziel am Zielwert gedeckelt. */
+const livePower = (live) => live.power ?? chargePowerKw();            // beim Start eingefrorene Ladeleistung
+const liveKwh = (live, now = Date.now()) => {                         // Anker (Zeit, kWh) + Leistung x Zeit seit dem Anker
+  const raw = (live.anchorKwh ?? 0) + Math.max(0, now - (live.anchorT ?? live.startedAt)) / 3600000 * LIVE_SPEED * livePower(live);
+  return live.kwhTarget != null ? Math.min(raw, live.kwhTarget) : raw;
+};
+/** Ladewirkungsgrad aus der Historie (gespeicherte Energie / Zählerenergie); ohne Daten Standardwert 90 %. */
+function chargeEfficiency() {
+  const rs = getReadings(); let chg = 0, st = 0;
+  rs.forEach((r, i) => { const s = entryStats(rs, i); if (isHome(r) && s.stored !== undefined) { chg += r.consumedSinceLast; st += s.stored; } });
+  return chg > 0 ? { eff: Math.min(1, Math.max(0.5, st / chg)), hist: true } : { eff: 0.9, hist: false };
+}
+/** Prognose für Start- und Ziel-%: Zähler-kWh = Batterieenergie / Wirkungsgrad; Dauer = kWh / 7 kW. */
+function liveForecast(s0, s1) {
+  const { eff, hist } = chargeEfficiency(), kwh = (s1 - s0) / 100 * batteryKwh() / eff;
+  return { kwh, eff, hist, hours: kwh / chargePowerKw(), cost: kwh * getSettings().price };
+}
+
+function renderLive() {
+  const live = getLive(), on = !!live, hasT = on && live.kwhTarget != null;
+  const kwh = on ? liveKwh(live) : 0, done = hasT && kwh >= live.kwhTarget, charging = on && !done;
+  if (charging && hasT && apiEnabled() && !document.hidden && Date.now() - (live.lastPollAt ?? live.startedAt) >= LIVE_POLL_MS) pollLive();   // alle 6 Minuten mit dem Auto abgleichen
+  $('live-sync').textContent = hasT ? (live.syncNote || '') : '';
+  const btn = $('btn-live');
+  btn.classList.toggle('animate-pulse', charging);                                               // Button pulsiert nur während der Ladung
+  ['bg-red-600', 'text-white'].forEach(c => btn.classList.toggle(c, on));
+  ['bg-slate-200', 'dark:bg-slate-800'].forEach(c => btn.classList.toggle(c, !on));
+  $('live-dot').classList.toggle('bg-white', on); $('live-dot').classList.toggle('bg-slate-400', !on);
+  $('phase-leds').classList.toggle('live-on', charging);
+  $('live-battery').classList.toggle('hidden', !hasT);
+  $('dash-title').textContent = !on ? 'Aktueller Zählerstand' : done ? 'Ladung abgeschlossen' : 'Live-Simulation · ' + livePower(live) + ' kW';
+  $('live-info').classList.toggle('hidden', !on);
+  setLiveHero(on);                                                          // Live-Modus: statisches Ladebild statt Karussell
+  /* Wallbox-Wächter: letzte Leistung laut Auto (höchstens 15 Min. alt) gegen den üblichen Wert; nicht kurz vor Ende (Leistung sinkt dort normal) */
+  const smp = on && charging && live.powerSamples && live.powerSamples[live.powerSamples.length - 1], usual = smp ? wbUsualLive() : null;
+  const slow = !!smp && Date.now() - smp[0] < 15 * 60000 && usual != null && smp[1] > 0.3 && smp[1] < usual * WB_SLOW && !(hasT && live.socTarget > 90 && kwh > live.kwhTarget * 0.85);
+  $('live-warn').classList.toggle('hidden', !slow);
+  if (slow) $('live-warn-t').innerHTML = 'Jetzt ' + fmt(smp[1], 1) + ' kW statt üblich ' + fmt(usual, 1) + ' kW' + (smp[1] < usual * 0.45 ? ' – typisch für <b>nur eine Phase</b>' : '') + '. Prüfe Sicherung, Kabel und die Ladestrom-Einstellung im Auto.';
+  if (!on) return;
+
+  const finishAt = hasT ? (live.anchorT ?? live.startedAt) + (live.kwhTarget - (live.anchorKwh ?? 0)) / livePower(live) * 3600000 / LIVE_SPEED : null;
+  const elapsedMs = (done ? finishAt : Date.now()) - live.startedAt;
+  $('dash-reading').textContent = (live.baseReading + kwh).toFixed(1).padStart(8, '0');
+  $('dash-last-cost').textContent = eur(kwh * live.price);                                       // Kosten = kWh x Preis
+  $('dash-last-kwh').textContent = fmt(kwh, 2) + ' kWh';
+  $('dash-last-label').textContent = 'Kosten (' + fmtDate(live.startedAt) + ')';
+  $('live-info').textContent = 'Start ' + hhmm(live.startedAt) + ' Uhr · Dauer ' + fmtHM(elapsedMs / 1000) + ':' + pad2(Math.floor(elapsedMs / 1000) % 60);
+
+  if (hasT) {                                                                                    // Akku-Balken
+    const soc = Math.min(live.socTarget, live.socStart + kwh * live.eff / live.battery * 100);
+    $('batt-fill').style.width = soc + '%'; $('batt-target').style.left = live.socTarget + '%';
+    $('batt-text').textContent = Math.floor(soc) + ' %';
+    $('batt-note').textContent = done ? 'Ziel ' + live.socTarget + ' % erreicht um ' + hhmm(finishAt) + ' Uhr'
+      : 'Ziel ' + live.socTarget + ' % · fertig ca. ' + hhmm(finishAt) + ' Uhr · noch ' + fmtHM(Math.max(0, (finishAt - Date.now()) / 1000)) + ' h · ca. ' + eur(live.kwhTarget * live.price);
+  }
+}
+
+function tickLive() { renderLive(); if (!liveTimer) liveTimer = setInterval(renderLive, 1000); }
+
+function startLive(socStart, socTarget, odometerKm = null) {
+  const t0 = Date.now(), readings = getReadings(), last = lastHome(readings), f = liveForecast(socStart, socTarget);
+  const state = { startedAt: t0, power: chargePowerKw(), anchorT: t0, anchorKwh: 0, lastPollAt: t0, syncNote: '',
+                  lastCaptured: carData?.capturedAt ? (new Date(carData.capturedAt).getTime() || 0) : 0, baseReading: last ? last.totalReading : 0, price: getSettings().price,
+                  socStart, socTarget, odometerKm, kwhTarget: f.kwh, eff: f.eff, battery: batteryKwh() };       // alles Nötige beim Start einfrieren
+  if (save(KEY_LIVE, state)) { $('live-setup').classList.add('hidden'); tickLive(); }
+}
+/** Korrigiert die Simulation mit echten Autodaten. Der Ladestand ist ganzzahlig: liegt die Simulation innerhalb [Soc, Soc+1) bleibt sie unverändert. */
+function applyCarSync(live, d, now) {
+  if (d.soc == null) { live.syncNote = 'Abgleich ' + hhmm(now) + ' Uhr: Auto meldet keinen Ladestand'; return; }
+  const parsed = d.capturedAt ? new Date(d.capturedAt).getTime() : NaN, tc = isFinite(parsed) ? parsed : now;
+  if (tc <= (live.lastCaptured || 0)) { live.syncNote = 'Abgleich ' + hhmm(now) + ' Uhr: keine neuen Daten vom Auto (Stand ' + hhmm(tc) + ')'; return; }
+  if (now - tc > 20 * 60000) { live.syncNote = 'Abgleich ' + hhmm(now) + ' Uhr: Autodaten veraltet (Stand ' + hhmm(tc) + ')'; return; }
+  live.lastCaptured = tc;
+  if (d.chargePowerKw != null) (live.powerSamples = live.powerSamples || []).push([tc, d.chargePowerKw]);   // Leistungsprotokoll für die Historie
+  const kwhAt = liveKwh(live, tc);                                        // Simulation zum Zeitpunkt der Autodaten
+  const socSim = live.socStart + kwhAt * live.eff / live.battery * 100, r = d.soc;
+  const toKwh = (soc) => (soc - live.socStart) / 100 * live.battery / live.eff;     // Akku-% -> Zähler-kWh (inkl. Ladeverluste)
+  let kwhNew = kwhAt, corrected = false;
+  if (socSim < r) { kwhNew = toKwh(r); corrected = true; }
+  else if (socSim >= r + 1) { kwhNew = toKwh(r + 0.99); corrected = true; }
+  live.anchorT = tc; live.anchorKwh = Math.min(live.kwhTarget, Math.max(0, kwhNew));
+  live.syncNote = 'Abgleich ' + hhmm(now) + ' Uhr: Auto ' + r + ' %' + (d.chargePowerKw != null ? ', ' + fmt(d.chargePowerKw, 1) + ' kW' : '') + (corrected ? ' · Simulation angepasst' : ' · passt');
+}
+let livePolling = false;
+async function pollLive() {
+  const live = getLive();
+  if (!live || live.kwhTarget == null || livePolling) return;
+  livePolling = true;
+  const now = Date.now();
+  try {
+    if (!apiEnabled()) throw new Error('keine Fahrzeugdaten eingerichtet');
+    const res = await fetch('/api/vehicle', { headers: await authHeaders() });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(d.error || 'HTTP ' + res.status);
+    odoNote(d); applyCarSync(live, d, now);
+  } catch (e) { live.syncNote = 'Abgleich ' + hhmm(now) + ' Uhr fehlgeschlagen (' + e.message + ') – Simulation läuft weiter'; }
+  live.lastPollAt = now;                                                  // auch bei Fehlern: erst in 6 Minuten erneut versuchen
+  const cur = getLive();
+  if (cur && cur.startedAt === live.startedAt) save(KEY_LIVE, live);      // nur speichern, wenn die Live-Ladung nicht inzwischen beendet wurde
+  livePolling = false; renderLive();
+}
+const liveFinishAt = (live) => (live.anchorT ?? live.startedAt) + (live.kwhTarget - (live.anchorKwh ?? 0)) / livePower(live) * 3600000 / LIVE_SPEED;
+function stopLive(refresh = true) {
+  localStorage.removeItem(KEY_LIVE);
+  clearInterval(liveTimer); liveTimer = null;
+  setLiveHero(false);                                   // oben wieder das Karussell
+  if (refresh) {
+    ['reading-input', 'km-input', 'soc0-input', 'soc1-input'].forEach(id => { if ($(id).dataset.live) { $(id).value = ''; delete $(id).dataset.live; } });   // nur vom Auto übernommene Werte
+    updateCaptureDefaults();
+    renderDashboard();                                  // alten Zählerstand und echte Werte wieder anzeigen
+  }
+}
+const liveInputs = () => [optNum($('live-soc0').value), optNum($('live-soc1').value)];
+const liveValid = ([a, b]) => a != null && b != null && isFinite(a) && isFinite(b) && a >= 0 && b <= 100 && b > a;
+function updateLiveForecast() {
+  const v = liveInputs();
+  /* Kurzform, passt in eine Zeile: „~ 0:53 h · 6,2 kWh · ca. 1,91 € (η = 96 % historisch)“; η = Wirkungsgrad (Ersatzschriften, falls die Systemschrift kein η hat) */
+  const ETA = '<span style="font-family:system-ui,Roboto,\'Noto Sans\',\'Segoe UI\',\'DejaVu Sans\',\'Times New Roman\',serif" title="Wirkungsgrad">η</span>';
+  $('live-forecast').innerHTML = !liveValid(v) ? '' : (f => '~ ' + fmtHM(f.hours * 3600) + ' h · ' + fmt(f.kwh, 1) + ' kWh · ca. ' + eur(f.cost) +
+    ' (' + ETA + ' = ' + Math.round(f.eff * 100) + ' % ' + (f.hist ? 'historisch' : 'Standard') + ')')(liveForecast(v[0], v[1]));
+  const el = $('live-forecast'); el.style.whiteSpace = 'nowrap'; el.style.fontSize = '';                    // eine Zeile: bei Bedarf Schrift leicht verkleinern
+  for (const fs of [11.5, 11, 10.5, 10]) { if (el.scrollWidth <= el.clientWidth) break; el.style.fontSize = fs + 'px'; }
+  if (el.scrollWidth > el.clientWidth) { el.style.whiteSpace = ''; el.style.fontSize = ''; }               // sehr schmale Geräte: lieber umbrechen als abschneiden
+}
+/** Holt Akku-%, Ziel-% und km-Stand über die Vercel-Funktion /api/vehicle vom Škoda-Server und füllt das Live-Panel. */
+let carData = null;
+async function loadFromCar() {
+  const note = $('live-car-note');
+  carData = null;
+  if (!apiEnabled()) { note.textContent = 'Manuelle Eingabe (keine Fahrzeugdaten verbunden).'; return; }
+  note.textContent = 'Lade Fahrzeugdaten …';
+  try {
+    const res = await fetch('/api/vehicle', { headers: await authHeaders() });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(d.error || 'HTTP ' + res.status);
+    carData = d; odoNote(d);
+    const ex = d.keyExpiresAt ? new Date(d.keyExpiresAt) : null;                   // Ablaufdatum aus der Škoda-Antwort übernehmen
+    if (ex && !isNaN(ex) && ex.toISOString().slice(0, 10) !== keyExpiry()) { vehicle.expires = ex.toISOString().slice(0, 10); save(KEY_VEHICLE, vehicle); renderVehicleStatus(); }
+    if (d.soc != null) { $('soc0-input').value = Math.round(d.soc); $('soc0-input').dataset.live = '1'; }               // Erfassen: Akku-Start = aktueller Ladestand des Autos
+    if (d.odometerKm != null) { $('km-input').value = Math.round(d.odometerKm); $('km-input').dataset.live = '1'; }   // Erfassen: km-Trommeln
+    paintBatt(); paintOdo(true);
+    if (d.soc != null) $('live-soc0').value = Math.round(d.soc);
+    if (d.targetSoc != null) $('live-soc1').value = Math.round(d.targetSoc);
+    updateLiveForecast();
+    note.textContent = d.soc == null && d.targetSoc == null ? 'Das Auto hat keine Ladedaten gemeldet – bitte manuell eingeben.'
+      : 'Vom Auto: Akku ' + (d.soc ?? '?') + ' %, Ziel ' + (d.targetSoc ?? '?') + ' %' + (d.capturedAt ? ' (Stand ' + hhmm(new Date(d.capturedAt).getTime()) + ' Uhr)' : '');
+  } catch (e) {
+    note.textContent = 'Fahrzeugdaten nicht verfügbar (' + e.message + ') – bitte manuell eingeben.';
+  }
+}
+$('btn-live').addEventListener('click', () => {
+  if (getLive()) return stopLive();
+  const panel = $('live-setup'); panel.classList.toggle('hidden'); updateLiveForecast();
+  if (!panel.classList.contains('hidden')) loadFromCar();        // erst Start-/Ziel-% abfragen
+});
+$('live-cancel').addEventListener('click', () => $('live-setup').classList.add('hidden'));
+$('live-go').addEventListener('click', () => {
+  const v = liveInputs();
+  if (!liveValid(v)) { $('live-forecast').textContent = 'Bitte Start- und Ziel-% prüfen (0–100, Ziel größer als Start).'; return; }
+  startLive(v[0], v[1], carData?.odometerKm ?? null);
+});
+['live-soc0', 'live-soc1'].forEach(id => $(id).addEventListener('input', updateLiveForecast));
+document.addEventListener('visibilitychange', () => { if (!document.hidden && getLive()) renderLive(); });
+
+/* =====================================================================
+   Statistik: Anzahl der Ladungen
+   Eine Ladung = ein Eintrag mit geladenen kWh > 0 (der erste Eintrag ist nur der Startwert).
+   Woche/Monat: Durchschnitt = Ladungen / verstrichene Wochen bzw. Monate seit dem ersten Eintrag (mind. 1).
+   Jahr: Summe der Ladungen im laufenden Jahr, frühere Jahre als Hinweis.
+   ===================================================================== */
+let statRange = 'week';
+
+function renderStats() {
+  const readings = getReadings(), own = readings.filter(r => inView(r, dashPlace));
+  const charges = readings.filter((r, i) => inView(r, dashPlace) && isCharge(readings, i));
+  document.querySelectorAll('.stat-btn').forEach(b => {
+    const on = b.dataset.stat === statRange;
+    b.classList.toggle('bg-white', on); b.classList.toggle('dark:bg-slate-700', on); b.classList.toggle('shadow-sm', on);
+  });
+  const label = $('stat-label'), value = $('stat-value'), note = $('stat-note');
+  const names = { week: 'Woche', month: 'Monat' };
+  label.textContent = statRange === 'year' ? 'Ladungen im Jahr ' + new Date().getFullYear() + ' (gesamt)' : 'Ø Ladungen pro ' + names[statRange];
+
+  if (!charges.length) { value.textContent = '–'; note.textContent = 'Noch keine Ladungen' + whereTxt(dashPlace) + ' erfasst.'; return; }
+
+  if (statRange === 'year') {
+    const byYear = {};
+    charges.forEach(r => { const y = new Date(r.date).getFullYear(); byYear[y] = (byYear[y] || 0) + 1; });
+    const current = new Date().getFullYear();
+    value.textContent = byYear[current] || 0;
+    const earlier = Object.keys(byYear).filter(y => +y !== current).sort().reverse().map(y => y + ': ' + byYear[y]).join(' · ');
+    note.textContent = earlier ? 'Frühere Jahre – ' + earlier : '';
+  } else {
+    const start = new Date(own[0].date);
+    const days = (Date.now() - start.getTime()) / 86400000;
+    const unitDays = statRange === 'week' ? 7 : 365.25 / 12;
+    value.textContent = fmt(charges.length / Math.max(1, days / unitDays), 1);
+    note.textContent = charges.length + ' Ladungen seit ' + start.toLocaleDateString('de-DE') + ' (' + Math.max(1, Math.round(days)) + ' Tage)' +
+                       (days < unitDays ? ' – Zeitraum noch kürzer als ein' + (statRange === 'week' ? 'e Woche' : ' Monat') : '');
+  }
+}
+document.querySelectorAll('.stat-btn').forEach(b => b.addEventListener('click', () => { statRange = b.dataset.stat; renderStats(); }));
+
+function renderEfficiency() {                            // gewichteter Durchschnitt über die Einträge des gewählten Ladeorts
+  const rs = getReadings(), idxs = rs.map((_, i) => i).filter(i => inView(rs[i], dashPlace));
+  let chg = 0, stored = 0, nSoc = 0;
+  idxs.forEach(i => {
+    const s = entryStats(rs, i);
+    if (s.stored !== undefined) { chg += rs[i].consumedSinceLast; stored += s.stored; nSoc++; }
+  });
+  const t = consumptionTotals(rs, idxs), nKm = t.n;
+  $('eff-kwh').textContent = t.km ? fmt(t.kwh100, 1) : '–';
+  $('eff-cost').textContent = t.cost100 != null ? eur(t.cost100) : '–';
+  $('eff-loss').textContent = chg ? fmt(Math.max(0, (1 - stored / chg) * 100), 0) + ' %' : '–';
+  const hint = dashPlace === 'home' ? '' : ' · €/100 km nur mit Preis, Ladeverlust nur mit kWh';
+  $('eff-note').textContent = (nKm || nSoc) ? 'Basis: ' + nKm + ' Ladungen mit km-Stand' + (t.approx ? ' (grob, ohne Akku-%)' : '') + ', ' + nSoc + ' mit Akku-Stand' + hint
+                                              : 'Erfasse km-Stand und Akku-% bei den Ladungen, um Werte zu sehen.';
+}
+
+/* =====================================================================
+   Ladeverluste im Jahresverlauf: Zähler-kWh minus in der Batterie angekommene kWh (aus Akku-Start/-Ende x Nettokapazität).
+   Pro Monat aufsummiert; Sommer = Apr–Sep, Winter = Okt–Mär. Ladungen ohne Akku-Start/-Ende fließen nicht ein.
+   ===================================================================== */
+let lossChart = null;
+function renderLossChart() {
+  const rs = getReadings(), byMonth = {}, season = { summer: { chg: 0, st: 0 }, winter: { chg: 0, st: 0 } };
+  let chgAll = 0, stAll = 0, lossCost = 0, n = 0;
+  rs.forEach((r, i) => {
+    if (!inView(r, dashPlace)) return;
+    const s = entryStats(rs, i); if (s.stored === undefined) return;       // nur Ladungen mit Start-/Ende-% und kWh
+    const d = new Date(r.date), key = d.getFullYear() + '-' + d.getMonth(), m = (byMonth[key] = byMonth[key] || { chg: 0, st: 0 });
+    m.chg += r.consumedSinceLast; m.st += s.stored;
+    const sea = d.getMonth() >= 3 && d.getMonth() <= 8 ? season.summer : season.winter;
+    sea.chg += r.consumedSinceLast; sea.st += s.stored;
+    chgAll += r.consumedSinceLast; stAll += s.stored; n++;
+    lossCost += (r.consumedSinceLast - s.stored) * (unitOf(r) ?? 0);           // Verlust-kWh x Preis dieser Ladung (ohne Preis: 0)
+  });
+  const pct = (o) => o.chg > 0 ? fmt(Math.max(0, (1 - o.st / o.chg) * 100), 1) + ' %' : '–';
+  $('loss-summer').textContent = pct(season.summer); $('loss-winter').textContent = pct(season.winter);
+  $('loss-cost').textContent = n ? eur(Math.max(0, lossCost)) : '–';
+
+  const now = new Date(), labels = [], kwh = [], perc = [];
+  for (let k = 11; k >= 0; k--) {                                          // letzte 12 Monate
+    const d = new Date(now.getFullYear(), now.getMonth() - k, 1), m = byMonth[d.getFullYear() + '-' + d.getMonth()];
+    labels.push(MONTHS[d.getMonth()] + ' ' + String(d.getFullYear()).slice(2));
+    kwh.push(m ? +Math.max(0, m.chg - m.st).toFixed(1) : null);
+    perc.push(m && m.chg > 0 ? +Math.max(0, (1 - m.st / m.chg) * 100).toFixed(1) : null);
+  }
+  const has = kwh.some(v => v != null);
+  $('loss-chart').parentElement.classList.toggle('hidden', !has); $('loss-empty').classList.toggle('hidden', has);
+  $('loss-empty').textContent = dashPlace === 'home' || dashPlace === 'all' ? 'Noch keine Ladungen mit Akku-Start und -Ende erfasst.' : 'Noch keine Ladungen mit kWh und Akku-Start/-Ende bei „' + PLACES[dashPlace] + '“.';
+  $('loss-note').textContent = n ? 'Basis: ' + n + ' Ladungen · Kapazität je Ladung gespeichert · enthält u. a. Batterieheizung und Wandlerverluste' : '';
+  if (lossChart) lossChart.destroy();
+  if (!has) return;
+  const dark = matchMedia('(prefers-color-scheme: dark)').matches, text = dark ? '#cbd5e1' : '#475569', grid = dark ? 'rgba(148,163,184,.15)' : 'rgba(100,116,139,.15)';
+  lossChart = new Chart($('loss-chart'), {
+    data: { labels, datasets: [
+      { type: 'bar', label: 'Verlust (kWh)', data: kwh, backgroundColor: '#f59e0b', borderRadius: 6, yAxisID: 'y' },
+      { type: 'line', label: 'Verlust (%)', data: perc, borderColor: '#0ea5e9', backgroundColor: '#0ea5e9', tension: .3, spanGaps: true, yAxisID: 'y1' }
+    ] },
+    options: {
+      responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: text } } },
+      scales: {
+        x: { ticks: { color: text }, grid: { display: false } },
+        y: { beginAtZero: true, title: { display: true, text: 'kWh', color: text }, ticks: { color: text }, grid: { color: grid } },
+        y1: { beginAtZero: true, position: 'right', title: { display: true, text: '%', color: text }, ticks: { color: text }, grid: { drawOnChartArea: false } }
+      }
+    }
+  });
+}
+
+/* =====================================================================
+   Trends (Start): drei Karten zum Wischen – Laufleistung, Stromkosten, Gesamtkosten der letzten 8 Monate.
+   „Letzter Monat“ = letzter abgeschlossener Monat, Ø = Durchschnitt der abgeschlossenen Monate mit Daten, Änderung = letzter Monat gegenüber Ø.
+   Der laufende Monat steht hell rechts (Zwischenstand) und zählt nicht in Ø und Änderung.
+   ===================================================================== */
+const TREND_ICONS = { eff: '<path d="M5 19c0-8 6-14 14-14 0 8-6 14-14 14Z"/><path d="M5 19l7-7"/>', km: '<path d="M4 18a8 8 0 1 1 16 0"/><path d="M12 18l4-6"/>', strom: '<path d="M13 2L4 14h7l-1 8 9-12h-7l1-8Z"/>', ges: '<circle cx="12" cy="12" r="9"/><path d="M15.5 8.5A4.5 4.5 0 0 0 8 10m0 4a4.5 4.5 0 0 0 7.5 1.5M7 11h6M7 13h6"/>' };
+let trendIdx = 0;
+function renderTrends() {
+  const box = $('trends'); if (!box) return;
+  const n = new Date(), months = [];
+  for (let k = 7; k >= 0; k--) { const d = new Date(n.getFullYear(), n.getMonth() - k, 1); months.push({ y: d.getFullYear(), m: d.getMonth(), cur: k === 0 }); }
+  const defs = [
+    { key: 'km', title: 'Monatliche Laufleistung', unit: 'km', dec: 0, val: (y, m) => kmDrivenIn(y, m) || 0, goodDown: null },
+    { key: 'strom', title: 'Monatliche Kosten (Strom)', unit: '€', dec: 2, val: (y, m) => monthReport(y, m, 'all').cost || 0, goodDown: true },
+    { key: 'ges', title: 'Monatliche Kosten (Gesamt)', unit: '€', dec: 2, val: (y, m) => Math.max(0, costTotals(y, m).total || 0), goodDown: true },
+    { key: 'eff', title: 'Effizienz (ohne Ladeverluste)', unit: 'kWh/100 km', su: 'kWh/100', dec: 1, val: (y, m) => effM[y + '-' + m] || 0, goodDown: true, base: true,
+      note: 'ab Akku wie der Bordcomputer' }];
+  /* Effizienz je Monat: Σ Akku-kWh ÷ Σ km der genauen Strecken zwischen zwei Ladungen (ab 30 km im Monat) */
+  const effM = {}; (() => { const rs = getReadings(), acc = {}; try { tcSegments().forEach(x => { const d = new Date(rs[x.i].date), k = d.getFullYear() + '-' + d.getMonth(), o = acc[k] = acc[k] || { km: 0, bat: 0 }; o.km += x.km; o.bat += x.bat; }); } catch (e) { }
+    Object.keys(acc).forEach(k => { if (acc[k].km >= 30) effM[k] = acc[k].bat / acc[k].km * 100; }); })();
+  box.innerHTML = defs.map(d => {
+    const vals = months.map(mo => ({ ...mo, v: d.val(mo.y, mo.m) })), done = vals.filter(x => !x.cur && x.v > 0);
+    const last = vals[vals.length - 2], avg = done.length ? done.reduce((a, x) => a + x.v, 0) / done.length : 0;
+    const max0 = Math.max(...vals.map(x => x.v), avg, 1), pos = vals.filter(x => x.v > 0).map(x => x.v), lo = d.base && pos.length ? Math.max(0, Math.floor(Math.min(...pos) * 0.8)) : 0, max = (max0 - lo) * 1.12;   // Platz für die Werte über den Balken
+    const ch = avg > 0 && last.v > 0 ? (last.v - avg) / avg * 100 : null, hp = (v) => v > 0 ? Math.max(0, (v - lo) / (max || 1) * 100) : 0;
+    const chCls = ch == null || d.goodDown == null || Math.abs(ch) < 0.05 ? 'text-slate-700 dark:text-slate-200' : (ch < 0) === d.goodDown ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400';
+    const num = (v) => v > 0 ? fmt(v, d.dec) : '–', ul = '<span class="ml-1 text-xs font-medium text-slate-500 dark:text-slate-400">' + (d.su || d.unit) + '</span>';
+    const stat = (l, v, cls = '') => `<div><p class="text-xs text-slate-500 dark:text-slate-400">${l}</p><p class="text-lg font-semibold tabular-nums leading-tight whitespace-nowrap ${cls}">${v}</p></div>`;
+    const empty = !vals.some(x => x.v > 0);
+    return `<article class="snap-center snap-always shrink-0 w-full rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4" aria-label="${d.title}">
+      <p class="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-700 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300"><svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true">${TREND_ICONS[d.key]}</svg>${d.title}</p>
+      ${empty ? '<p class="py-12 text-center text-sm text-slate-500 dark:text-slate-400">Noch keine Daten in den letzten 8 Monaten.</p>' : `
+      <div class="mt-4 flex gap-3">
+        <div class="w-[31%] shrink-0 space-y-3">
+          ${stat(MONTHS_LONG[last.m], num(last.v) + (last.v > 0 ? ul : ''))}
+          ${stat('Durchschnitt', num(avg) + (avg > 0 ? ul : ''))}
+          ${stat('Änderung', ch == null ? '–' : (ch >= 0.05 ? '+' : '') + fmt(Math.abs(ch) < 0.05 ? 0 : ch, 1) + ' %', chCls)}
+        </div>
+        <div class="min-w-0 flex-1 flex flex-col">
+          <div class="relative flex-1 min-h-[150px] flex items-end gap-1">
+            ${avg > 0 ? `<div class="absolute inset-x-0 border-t-2 border-dashed border-emerald-500/70 pointer-events-none" style="bottom:${hp(avg).toFixed(1)}%" title="Durchschnitt ${num(avg)} ${d.unit}"></div>` : ''}
+            ${d.key === 'eff' ? (() => { try { return upList().filter(u => !u.base).map(u => { const t = new Date(u.inst + 'T12:00:00'), i = vals.findIndex(v => v.y === t.getFullYear() && v.m === t.getMonth()); if (i < 0) return '';
+              const left = (i + (t.getDate() - 1) / new Date(t.getFullYear(), t.getMonth() + 1, 0).getDate()) / vals.length * 100;
+              return `<button type="button" data-upmark="${esc(String(u.id))}" class="absolute top-0 bottom-0 z-10 w-4 -translate-x-1/2" style="left:${left.toFixed(1)}%" title="Software ${esc(u.ver || '')} – Vorher/Nachher"><span class="absolute inset-y-0 left-1/2 border-l-2 border-dashed border-sky-400"></span><span class="absolute bottom-1 ${left > 60 ? 'right-1/2 mr-0.5' : 'left-1/2 ml-0.5'} whitespace-nowrap rounded-md bg-white/90 dark:bg-slate-900/90 px-1 text-[10px] font-semibold text-sky-600 dark:text-sky-300">📡 ${esc(u.ver || '')}</span></button>`; }).join(''); } catch (e) { return ''; } })() : ''}
+            ${vals.map(x => `<div class="relative flex-1 h-full flex items-end" title="${MONTHS_LONG[x.m]} ${x.y}: ${num(x.v)} ${d.unit}${x.cur ? ' (Zwischenstand)' : ''}"><div class="relative w-full rounded-t ${x.cur ? 'bg-emerald-300/80 dark:bg-emerald-300/70' : 'bg-emerald-600 dark:bg-emerald-500/80'}" style="height:${x.v > 0 ? Math.max(3, hp(x.v)).toFixed(1) : 1.5}%">${x.v > 0 ? `<span class="absolute inset-x-[-4px] bottom-full mb-0.5 text-center text-[10px] font-semibold leading-none tabular-nums text-slate-600 dark:text-slate-300">${x.v >= 1000 ? fmt(x.v / 1000, 1) + 'k' : fmt(x.v, d.key === 'eff' ? 1 : 0)}</span>` : ''}</div></div>`).join('')}
+          </div>
+          <div class="mt-1.5 flex gap-1 text-[10px] text-slate-500 dark:text-slate-400">${vals.map(x => `<span class="flex-1 text-center">${MONTHS[x.m]}</span>`).join('')}</div>
+        </div>
+      </div>
+      <p class="mt-3 text-[11px] text-slate-500 dark:text-slate-400">Letzte 8 Monate · heller Balken = ${MONTHS_LONG[n.getMonth()]} (Zwischenstand) · gestrichelt = Ø${d.base && lo > 0 ? ' · Achse ab ' + lo : ''}${d.note ? ' · ' + d.note : ''}</p>`}
+    </article>`; }).join('');
+  $('trends-dots').innerHTML = defs.map((_, i) => `<span data-tdot="${i}" class="block h-2 rounded-full transition-all ${i === trendIdx ? 'w-5 bg-emerald-500' : 'w-2 bg-slate-500/60'}"></span>`).join('');
+  if (trendIdx) box.scrollLeft = trendIdx * (box.firstElementChild.offsetWidth + 16);
+}
+/* Desktop: Karussells mit der Maus ziehen (Touch scrollt nativ). Beim Loslassen rastet es auf die nächste Karte in Zugrichtung ein. */
+function mouseSwipe(tr, gap) {
+  let sx = 0, sl = 0, on = false, moved = false;
+  tr.addEventListener('pointerdown', (e) => { if (e.pointerType !== 'mouse' || e.button !== 0) return; on = true; moved = false; sx = e.clientX; sl = tr.scrollLeft; });
+  addEventListener('pointermove', (e) => { if (!on) return; const dx = e.clientX - sx; if (!moved && Math.abs(dx) < 6) return; if (!moved) { moved = true; tr.style.scrollSnapType = 'none'; tr.style.cursor = 'grabbing'; document.body.style.userSelect = 'none'; } tr.scrollLeft = sl - dx; });
+  addEventListener('pointerup', (e) => {
+    if (!on) return; on = false; if (!moved) return;
+    const w = (tr.firstElementChild?.offsetWidth || tr.clientWidth) + gap, dx = e.clientX - sx, n = Math.max(1, Math.round(tr.scrollWidth / w)), i0 = Math.round(sl / w);
+    const i = Math.max(0, Math.min(n - 1, Math.abs(dx) > 40 ? i0 + (dx < 0 ? 1 : -1) : i0));
+    tr.style.cursor = ''; document.body.style.userSelect = '';
+    tr.scrollTo({ left: i * w, behavior: 'smooth' }); setTimeout(() => { tr.style.scrollSnapType = ''; }, 450);
+    const stop = (ev) => { ev.stopPropagation(); ev.preventDefault(); }; tr.addEventListener('click', stop, { capture: true, once: true }); setTimeout(() => tr.removeEventListener('click', stop, { capture: true }), 0);
+  });
+  tr.addEventListener('dragstart', (e) => e.preventDefault());
+}
+mouseSwipe($('trends'), 16);
+$('trends').addEventListener('click', (e) => { const b = e.target.closest('[data-upmark]'); if (b) { e.stopPropagation(); openKb(b.dataset.upmark); } });
+$('trends-dots').addEventListener('click', (e) => { const d = e.target.closest('[data-tdot]'); if (!d) return; const box = $('trends'); box.scrollTo({ left: Number(d.dataset.tdot) * (box.firstElementChild.offsetWidth + 16), behavior: 'smooth' }); });
+$('trends').addEventListener('scroll', () => {
+  const box = $('trends'), w = box.firstElementChild ? box.firstElementChild.offsetWidth + 16 : 1, i = Math.round(box.scrollLeft / w);
+  if (i !== trendIdx) { trendIdx = i; [...$('trends-dots').children].forEach((d, k) => d.className = 'block h-2 rounded-full transition-all ' + (k === i ? 'w-5 bg-emerald-500' : 'w-2 bg-slate-500/60')); }
+}, { passive: true });
+function renderDashboard() {
+  try { renderAkkuBtn(); } catch (e) { }                                   // Start-Button „Akku“ (auch nach Cloud-Abgleich aktuell)
+  applyTitle(); renderSetupHint(); renderTrends();
+  const readings = getReadings(), last = lastHome(readings);                   // Zählerstand und letzte Ladung: immer vom Zähler zuhause
+  $('dash-reading').textContent = (last ? last.totalReading : 0).toFixed(1).padStart(8, '0');   // 6 Stellen + Komma + 1 Nachkommastelle
+  $('dash-last-cost').textContent = last ? eur(last.cost) : '–';
+  $('dash-last-kwh').textContent = last ? fmt(last.consumedSinceLast) + ' kWh' : '–';
+  $('dash-last-label').textContent = last ? 'Kosten (' + fmtDate(last.date) + ')' : 'Kosten';
+  segPaint('.dash-place-btn', dashPlace);
+  renderLive();                                          // überschreibt die Werte, falls der Live-Modus läuft
+  renderChart();
+  renderHeroStats();
+  renderStats();
+  renderEfficiency();
+  renderLossChart();
+  renderKeyWarning();
+  renderReportBanner(); renderTripsBanner();
+}
+document.querySelectorAll('.dash-place-btn').forEach(b => b.addEventListener('click', () => { dashPlace = b.dataset.place; renderDashboard(); }));
+document.querySelectorAll('.range-btn').forEach(b => b.addEventListener('click', () => { range = b.dataset.range; renderChart(); }));
+
+
+// ───── src/03-historie-export.js ─────
+/* =====================================================================
+   Historie: Liste aller Zählerstände, neueste zuerst
+   ===================================================================== */
+const WEEKDAYS = ['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
+let editMode = false;
+
+const INPUT_CLS = 'w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-2 py-2 text-center focus:outline-none focus:ring-2 focus:ring-emerald-500';
+const toLocalInput = (iso) => {                       // ISO-Datum -> Wert für <input type="datetime-local">
+  const d = new Date(iso), p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+};
+/** Ladedauer als hh:mm aus geladenen kWh und Ladeleistung (chargePowerKw()). */
+const fmtDuration = (kwh) => { const m = Math.round(kwh / chargePowerKw() * 60); return pad2(Math.floor(m / 60)) + ':' + pad2(m % 60); };
+const durHm = (ms) => { const m = Math.round(ms / 60000); return pad2(Math.floor(m / 60)) + ':' + pad2(m % 60); };
+const realMsOf = (r) => { const ms = r.chargeStart && r.chargeEnd ? Date.parse(r.chargeEnd) - Date.parse(r.chargeStart) : 0; return ms > 0 ? ms : 0; };   // gemessene Ladedauer
+/* ---- Wallbox-Wächter: Ø Leistung einer Ladung Zuhause (Zähler-kWh / gemessene Dauer, sonst Wert vom Auto) und üblicher Wert (Median der letzten 10) ---- */
+const WB_SLOW = 0.6;                                                    // Hinweis unter 60 % der üblichen Leistung
+const homePowerOf = (r) => { const ms = realMsOf(r); return ms && r.consumedSinceLast > 0 ? r.consumedSinceLast / (ms / 3600000) : (r.avgPowerKw > 0 ? r.avgPowerKw : null); };
+const wbMedian = (a) => { if (a.length < 3) return null; const x = a.slice().sort((p, q) => p - q), m = x.length >> 1; return x.length % 2 ? x[m] : (x[m - 1] + x[m]) / 2; };
+/** Je Eintrag (Index) die Leistung und den üblichen Wert der bis zu 10 vorherigen Ladungen Zuhause. */
+function wbFlags(rs) {
+  const out = new Map(), prev = [];
+  rs.forEach((r, i) => { if (!isHome(r)) return; const kw = homePowerOf(r); if (!(kw > 0.3)) return; const usual = wbMedian(prev.slice(-10)); out.set(i, { kw, usual, slow: usual != null && kw < usual * WB_SLOW }); prev.push(kw); });
+  return out;
+}
+/** Üblicher Wert vom Auto (für den Live-Vergleich mit der Leistung laut MyŠkoda), sonst aus dem Zähler. */
+function wbUsualLive() { const h = getReadings().filter(isHome), car = h.map(r => r.avgPowerKw).filter(v => v > 0.3).slice(-10); return wbMedian(car) ?? wbMedian(h.map(homePowerOf).filter(v => v > 0.3).slice(-10)); }
+const chargeDurationOf = (r) => realMsOf(r) ? durHm(realMsOf(r)) : isHome(r) ? fmtDuration(r.consumedSinceLast) : '–';
+const unitPriceOf = (r) => isHome(r) && r.consumedSinceLast > 0 ? r.cost / r.consumedSinceLast : getSettings().price;
+const cell = (i, f) => $('history-list').querySelector(`li[data-idx="${i}"] [data-f="${f}"]`);
+
+function setEditMode(on) {
+  editMode = on;
+  if (!on && deferredCosts) { save(KEY_COSTS, deferredCosts); deferredCosts = null; }
+  if (!on && deferredCloud) { applyCloud(deferredCloud); deferredCloud = null; }   // während des Bearbeitens eingegangene Cloud-Daten jetzt übernehmen
+  $('btn-edit').classList.toggle('hidden', on);
+  $('btn-edit-cancel').classList.toggle('hidden', !on);
+  $('btn-edit-save').classList.toggle('hidden', !on);
+  renderHistory();
+  updateHistFab();
+}
+
+function renderHistory() {
+  const readings = getReadings(), costs = getCosts();
+  $('btn-edit').classList.toggle('hidden', editMode || readings.length + costs.length === 0);
+  const lbl = 'text-xs text-slate-500 dark:text-slate-400';
+
+  const wbF = wbFlags(readings);
+  const rHtml = readings.map((r, i) => {
+    const d = new Date(r.date), place = placeOf(r), home = place === 'home';
+    const pj = prevHomeIdx(readings, i), oldVal = pj >= 0 ? readings[pj].totalReading : null;     // alter Stand = Wert des Vorgängers am Zähler (Bosch/Unterwegs zählen nicht)
+    const isStart = home && oldVal === null && !r.meterReset;        // reiner Startwert ohne Ladung (erster Zuhause-Eintrag ohne Zähler-Reset)
+
+    const st = entryStats(readings, i);
+    const row = (k, v) => `<div class="flex justify-between items-baseline mt-2"><span class="text-sm text-slate-500 dark:text-slate-400">${k}</span><span class="font-medium text-right">${v}</span></div>`;
+    const extra = (st.comfort > 0 ? row('↳ davon 🔥 Komfort', '<span class="text-amber-600 dark:text-amber-300">' + fmt(st.comfort, 1) + ' kWh' + (unitOf(r) != null ? ' · ' + eur(st.comfort * unitOf(r)) : '') + '</span>') : '') +
+      (r.odometerKm != null ? row('Kilometerstand', (st.km ? '<span class="text-xs font-normal text-slate-500">(+' + fmt(st.km, 0) + ' km)</span> ' : '') + fmt(r.odometerKm, 0) + ' km') : '') +
+      (r.battTemp != null ? row('Akku-Temperatur', String(r.battTemp).replace('-', '−') + ' °C') : '') +
+      (r.socStart != null && r.socEnd != null ? row('Ladestand', (st.loss != null && st.loss >= 0 && st.loss < 60 ? '<span class="text-xs font-normal text-slate-500">(Verlust ≈ ' + fmt(st.loss, 0) + ' %)</span> ' : '') + r.socStart + ' % → ' + r.socEnd + ' %') + row('Batteriekapazität', fmt(capOf(r), 1) + ' kWh') : '') +
+      (st.kwh100 != null ? row('Gesamtverbrauch/100 km', (st.method === 'charge' ? '≈ ' : '') + fmt(st.kwh100, 1) + ' kWh' + (st.cost100 != null ? ' · ' + eur(st.cost100) : ''))
+        + (st.method === 'charge' ? '<p class="text-xs text-slate-500 mt-1 text-right">grob: ohne Akku-% der letzten Ladung aus den geladenen kWh berechnet</p>' : st.rough ? '<p class="text-xs text-slate-500 mt-1 text-right">kleine Akku-Entnahme – Wert ungenau</p>' : '')
+        + (st.cost100 == null ? '<p class="text-xs text-slate-500 mt-1 text-right">Preis fehlt – €/100 km nicht berechenbar (im Bearbeiten-Modus eintragen)</p>' : '') : '') +
+      (st.gap ? row('Verbrauch/100 km', '–') + '<p class="text-xs text-slate-500 mt-1 text-right">Akku-Start liegt über dem Ende der letzten Ladung – dazwischen wurde woanders geladen</p>' : '');
+
+    const realMs = realMsOf(r), faint = 'text-xs font-normal text-slate-500';
+    const durRows = realMs && r.consumedSinceLast > 0
+      ? row('Ladedauer <span class="text-xs">(gemessen)</span>', durHm(realMs) + ' h') +
+        row('Ø Leistung am Zähler', (r.avgPowerKw != null ? '<span class="' + faint + '">(Auto: ' + fmt(r.avgPowerKw, 1) + ' kW)</span> ' : '') + fmt(r.consumedSinceLast / (realMs / 3600000), 1) + ' kW')
+        + (home && wbF.get(i)?.slow ? '<p class="text-xs text-amber-700 dark:text-amber-300 mt-1 text-right">Deutlich langsamer als üblich (' + fmt(wbF.get(i).usual, 1) + ' kW) – nur eine Phase? Sicherung, Kabel und Ladestrom im Auto prüfen.</p>' : '')
+      : `<div class="flex justify-between items-baseline mt-2">
+        <span class="text-sm text-slate-500 dark:text-slate-400">Ladedauer <span class="text-xs">(bei ${chargePowerKw()} kW)</span></span>
+        <span class="text-lg font-semibold">${isStart ? '–' : fmtDuration(r.consumedSinceLast) + ' h'}</span>
+      </div>`;
+
+    if (editMode) {
+      const gh = home ? '' : ' hidden', ga = home ? ' hidden' : '';       // Feldgruppen je nach gewähltem Ladeort ein-/ausblenden
+      return `<li data-idx="${i}" data-kind="laden" class="rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4 ring-2 ring-emerald-500/40">
+        <input type="datetime-local" data-f="date" value="${toLocalInput(r.date)}" class="${INPUT_CLS}">
+        <select data-f="place" aria-label="Ladeort" class="${INPUT_CLS} mt-3">${PLACE_KEYS.map(k => `<option value="${k}" ${k === place ? 'selected' : ''}>${PLACES[k]}</option>`).join('')}</select>
+        <div class="g-home${gh}">
+          <div class="grid grid-cols-3 gap-2 mt-3 text-center">
+            <div><p class="${lbl} mb-1">Alt</p>${oldVal === null ? '<p class="py-2">–</p>'
+              : `<input data-f="old" type="text" inputmode="decimal" value="${oldVal.toFixed(1)}" ${r.meterReset ? 'disabled' : ''} class="${INPUT_CLS} disabled:opacity-40">`}</div>
+            <div><p class="${lbl} mb-1">Neu</p><input data-f="new" type="text" inputmode="decimal" value="${r.totalReading.toFixed(1)}" class="${INPUT_CLS}"></div>
+            <div><p class="${lbl} mb-1">Geladen</p><p data-f="diff" class="py-2 font-semibold text-emerald-700 dark:text-emerald-300">–</p></div>
+          </div>
+          <div class="flex justify-between items-baseline mt-3 pt-3 border-t border-slate-200 dark:border-slate-800">
+            <span class="text-sm text-slate-500 dark:text-slate-400">Kosten</span>
+            <span data-f="cost" class="text-lg font-semibold">–</span>
+          </div>
+          <div class="flex justify-between items-baseline mt-2">
+            <span class="text-sm text-slate-500 dark:text-slate-400">Ladedauer</span>
+            <span data-f="dur" class="text-lg font-semibold">–</span>
+          </div>
+        </div>
+        <div class="g-away${ga}">
+          <div class="g-grid grid gap-1.5 mt-3 text-center" style="grid-template-columns:${place === 'away' ? '0.85fr 0.95fr 0.85fr 1.35fr' : 'repeat(3,minmax(0,1fr))'}">
+            <div class="min-w-0"><p class="${lbl} mb-1">kWh</p><input data-f="kwh" type="text" inputmode="decimal" value="${!home && r.consumedSinceLast > 0 ? String(r.consumedSinceLast).replace('.', ',') : ''}" class="${INPUT_CLS} text-sm"></div>
+            <div class="min-w-0"><p class="${lbl} mb-1">€/kWh</p><input data-f="price" type="text" inputmode="decimal" value="${!home && r.pricePerKwh != null ? String(r.pricePerKwh).replace('.', ',') : ''}" class="${INPUT_CLS} text-sm"></div>
+            <div class="min-w-0"><p class="${lbl} mb-1">Gebühr €</p><input data-f="fee" type="text" inputmode="decimal" value="${r.fee != null ? String(r.fee).replace('.', ',') : ''}" class="${INPUT_CLS} text-sm"></div>
+            <div class="g-prov min-w-0${place === 'away' ? '' : ' hidden'}"><p class="${lbl} mb-1">Anbieter</p><select data-f="prov" class="${INPUT_CLS} h-[42px] px-1 py-0 text-sm">${providerOptions(r.provider || '')}</select></div>
+          </div>
+          <div class="flex justify-between items-baseline mt-3 pt-3 border-t border-slate-200 dark:border-slate-800">
+            <span class="text-sm text-slate-500 dark:text-slate-400">Kosten</span>
+            <span data-f="acost" class="text-lg font-semibold">–</span>
+          </div>
+        </div>
+        <div class="grid grid-cols-3 gap-2 mt-3 text-center">
+          <div data-kmwrap><p class="flex items-center justify-center gap-1 text-xs text-slate-500 dark:text-slate-400 mb-1">km-Stand <button type="button" data-kmfetch title="Aktuellen km-Stand vom Auto holen" aria-label="Aktuellen km-Stand vom Auto holen" class="kmf relative inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[15px] font-bold leading-none text-emerald-600 dark:text-emerald-400 active:scale-90 transition after:absolute after:-inset-2.5">↻</button></p><input data-f="km" type="text" inputmode="decimal" value="${r.odometerKm ?? ''}" class="${INPUT_CLS}"></div>
+          <div><p class="text-xs text-slate-500 dark:text-slate-400 mb-1">Akku Start %</p><input data-f="s0" type="text" inputmode="decimal" value="${r.socStart ?? ''}" class="${INPUT_CLS}"></div>
+          <div><p class="text-xs text-slate-500 dark:text-slate-400 mb-1">Akku Ende %</p><input data-f="s1" type="text" inputmode="decimal" value="${r.socEnd ?? ''}" class="${INPUT_CLS}"></div>
+        </div>
+        <div class="mt-3 grid grid-cols-3 gap-2 text-center">
+          <div><p class="text-xs text-slate-500 dark:text-slate-400 mb-1">Kapazität kWh</p><input data-f="cap" type="text" inputmode="decimal" value="${capOf(r)}" class="${INPUT_CLS}"></div>
+          <div><p class="text-xs text-slate-500 dark:text-slate-400 mb-1">Akku °C</p><input data-f="bt" type="text" inputmode="text" value="${r.battTemp ?? ''}" placeholder="–" class="${INPUT_CLS}"></div>
+          <div><p class="text-xs text-slate-500 dark:text-slate-400 mb-1" title="Komfortenergie aus der MyŠkoda-App (Heizen/Kühlen am Kabel)">🔥 Komfort kWh</p><input data-f="cf" type="text" inputmode="decimal" value="${r.comfort > 0 ? String(r.comfort).replace('.', ',') : ''}" placeholder="–" class="${INPUT_CLS}"></div>
+        </div>
+        <p class="mt-1 text-right text-[11px] text-slate-500 dark:text-slate-400">🔥 Komfort: Wert aus der MyŠkoda-App</p>
+        <label class="g-home${gh} mt-3 flex items-center gap-2 text-sm"><input type="checkbox" data-f="reset" class="accent-emerald-500 w-4 h-4" ${r.meterReset ? 'checked' : ''}> Zähler wurde zurückgesetzt (Verbrauch = Zählerstand)</label>
+        <button data-f="delbtn" data-del="0" class="mt-3 w-full py-2 rounded-xl border border-red-500 text-red-600 dark:text-red-400 text-sm font-medium">Eintrag löschen</button>
+      </li>`;
+    }
+
+    const date = d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }) +
+                 ', ' + d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + ' Uhr';
+    const wf = home ? wbF.get(i) : null;
+    const head = `<div class="flex justify-between items-baseline">
+        <span class="font-semibold">${WEEKDAYS[d.getDay()]}${wf && wf.slow ? ` <span class="ml-1 rounded-lg bg-amber-100 dark:bg-amber-900/50 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-300" title="Deutlich langsamer als üblich (${fmt(wf.usual, 1)} kW)">⚠ ${fmt(wf.kw, 1)} kW</span>` : ''}</span>
+        <span class="text-sm text-slate-500 dark:text-slate-400">${date}</span>
+      </div>`;
+    if (!home) {                                       // Bosch / Unterwegs: gleiche Reihenfolge wie Zuhause (Kacheln -> Kosten -> km/Ladestand/Verbrauch), nur ohne Zähler
+      const hasKwh = r.consumedSinceLast > 0, hasPrice = r.pricePerKwh != null, hasFee = r.fee != null, hasCost = (hasKwh && hasPrice) || hasFee;
+      return `<li data-idx="${i}" data-kind="laden" class="rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
+      ${head}
+      <div class="grid grid-cols-3 gap-2 mt-3 text-center">
+        <div class="min-w-0"><p class="${lbl}">Ort</p><p class="mt-0.5"><span class="inline-block max-w-full truncate align-bottom text-xs px-2.5 py-1 rounded-lg ${PLACE_BADGE[place]}">${esc(r.provider || PLACES[place])}</span></p></div>
+        <div><p class="${lbl}">Preis</p><p class="font-medium">${hasPrice ? fmt(r.pricePerKwh, 3) + ' €' : '–'}</p></div>
+        <div class="rounded-xl bg-emerald-50 dark:bg-emerald-950/50 py-1"><p class="${lbl}">Geladen</p>
+          <p class="font-semibold text-emerald-700 dark:text-emerald-300">${hasKwh ? fmt(r.consumedSinceLast) + ' kWh' : '–'}</p></div>
+      </div>
+      <div class="flex justify-between items-baseline mt-3 pt-3 border-t border-slate-200 dark:border-slate-800">
+        <span class="text-sm text-slate-500 dark:text-slate-400">Kosten${hasPrice || hasFee ? ` <span class="text-xs">(${[hasPrice ? fmt(r.pricePerKwh, 3) + ' €/kWh' : '', hasFee ? '+ ' + eur(r.fee) + ' Gebühr' : ''].filter(Boolean).join(' ')})</span>` : ''}</span>
+        <span class="text-lg font-semibold">${hasCost ? eur(r.cost) : '–'}</span>
+      </div>
+      ${extra}
+    </li>`;
+    }
+    return `<li data-idx="${i}" data-kind="laden" class="rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
+      ${head}
+      <div class="grid grid-cols-3 gap-2 mt-3 text-center">
+        <div><p class="${lbl} text-center">Alt</p><p class="font-medium text-center">${r.meterReset ? 'Reset' : oldVal === null ? '–' : fmt(oldVal)}</p></div>
+        <div><p class="${lbl} text-center">Neu</p><p class="font-medium text-center">${fmt(r.totalReading)}</p></div>
+        <div class="rounded-xl bg-emerald-50 dark:bg-emerald-950/50 py-1"><p class="${lbl} text-center">Geladen</p>
+          <p class="text-center font-semibold text-emerald-700 dark:text-emerald-300">${isStart ? '–' : fmt(r.consumedSinceLast) + ' kWh'}</p></div>
+      </div>
+      <div class="flex justify-between items-baseline mt-3 pt-3 border-t border-slate-200 dark:border-slate-800">
+        <span class="text-sm text-slate-500 dark:text-slate-400">Kosten${!isStart && r.consumedSinceLast > 0 ? ` <span class="text-xs">(${fmt(unitPriceOf(r), 3)} €/kWh)</span>` : ''}</span>
+        <span class="text-lg font-semibold">${isStart ? '–' : eur(r.cost)}</span>
+      </div>
+      ${durRows}${extra}
+    </li>`;
+  });
+  const cHtml = costs.map((c, j) => {                     // Kosten-Karten (Ansicht und Bearbeiten)
+    const d = new Date(c.date), amt = costAmt(c), inc = amt < 0;
+    if (editMode) {
+      return `<li data-cidx="${j}" data-kind="kosten" data-cat="${esc((c.category || '').trim())}" class="rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4 ring-2 ring-emerald-500/40">
+        <input type="datetime-local" data-cf="date" value="${toLocalInput(c.date)}" class="${INPUT_CLS}">
+        <select data-cf="cat" aria-label="Kategorie" class="${INPUT_CLS} mt-3">${catOptions(c.category || '')}</select>
+        <input data-cf="title" type="text" maxlength="80" value="${esc(c.title || '')}" placeholder="Titel" class="${INPUT_CLS} mt-3 !text-left">
+        <div class="grid grid-cols-2 gap-2 mt-3 text-center">
+          <div><p class="${lbl} mb-1 text-center">Betrag € (Minus = Einnahme)</p><input data-cf="amount" type="text" inputmode="decimal" value="${String(amt).replace('.', ',')}" class="${INPUT_CLS}"></div>
+          <div data-kmwrap><p class="${lbl} mb-1 flex items-center justify-center gap-1">km-Stand <button type="button" data-kmfetch title="Aktuellen km-Stand vom Auto holen" aria-label="Aktuellen km-Stand vom Auto holen" class="kmf relative inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[15px] font-bold leading-none text-emerald-600 dark:text-emerald-400 active:scale-90 transition after:absolute after:-inset-2.5">↻</button></p><input data-cf="km" type="text" inputmode="decimal" value="${c.odometerKm ?? ''}" class="${INPUT_CLS}"></div>
+        </div>
+        <input data-cf="note" type="text" maxlength="300" value="${esc(c.note || '')}" placeholder="Notiz" class="${INPUT_CLS} mt-3 !text-left">
+ <div data-dv-block="c${c.id}" class="mt-3">${dvBlockInner('c' + c.id, c)}</div>
+        <button data-cf="cdel" data-del="0" class="mt-3 w-full py-2 rounded-xl border border-red-500 text-red-600 dark:text-red-400 text-sm font-medium">Eintrag löschen</button>
+      </li>`;
+    }
+    const date = d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ', ' + d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + ' Uhr';
+    return `<li data-cidx="${j}" data-kind="kosten" data-cat="${esc((c.category || '').trim())}" class="rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
+      <div class="flex justify-between items-baseline"><span class="font-semibold">${WEEKDAYS[d.getDay()]}</span><span class="text-sm text-slate-500 dark:text-slate-400">${date}</span></div>
+      <div class="flex justify-between items-start gap-3 mt-2">
+        <div class="min-w-0"><p class="font-medium break-words">${esc(c.title || 'Kosten')}</p>${c.category ? `<span class="inline-block mt-1 text-xs px-2.5 py-1 rounded-lg bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-200">${esc(c.category)}</span>` : ''}</div>
+        <span class="text-lg font-semibold whitespace-nowrap ${inc ? 'text-emerald-600 dark:text-emerald-400' : ''}">${inc ? '+' : ''}${eur(Math.abs(amt))}</span>
+      </div>
+      ${c.odometerKm ? `<div class="flex justify-between items-baseline mt-2"><span class="text-sm text-slate-500 dark:text-slate-400">Kilometerstand</span><span class="font-medium">${fmt(c.odometerKm, 0)} km</span></div>` : ''}
+      ${c.note ? `<p class="text-sm text-slate-500 dark:text-slate-400 mt-2 break-words">${esc(c.note)}</p>` : ''}
+      ${dvChips(c)}
+    </li>`;
+  });
+  const items = rHtml.map((html, i) => ({ t: Date.parse(readings[i].date), k: 0, html }))        // Ladungen und Kosten chronologisch gemischt, neueste zuerst
+    .concat(cHtml.map((html, j) => ({ t: Date.parse(costs[j].date), k: 1, html })));
+  items.sort((a, b) => b.t - a.t || a.k - b.k);
+  $('history-list').innerHTML = items.map(x => x.html).join('');
+  applyHistFilter();
+  if (editMode) updateDiffs();
+  renderDataCheck();
+}
+
+/** Historie → Kosten: Etiketten-Filter wie im Checkheft, mit allen Kategorien (auch ohne Einträge) und Anzahl */
+let histCat = 'all';
+function renderHistCats(show) {
+  const box = $('hist-cats'); box.classList.toggle('hidden', !show || !getCosts().length); if (!show) { $('hist-cat-sum').classList.add('hidden'); return; }
+  const cs = getCosts(), key = (c) => (c.category || '').trim(), names = getCategories().slice();
+  cs.forEach(c => { const k = key(c); if (k && !names.some(n => n.toLowerCase() === k.toLowerCase())) names.push(k); });
+  if (histCat !== 'all' && !names.some(n => n.toLowerCase() === histCat.toLowerCase())) histCat = 'all';
+  const cnt = (n) => cs.filter(c => key(c).toLowerCase() === n.toLowerCase()).length;
+  const chip = (k, label, cls) => '<button type="button" data-hcat="' + esc(k) + '" class="h-8 shrink-0 whitespace-nowrap rounded-full px-3 text-xs font-semibold ' + (histCat.toLowerCase() === k.toLowerCase() ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900' : 'border border-slate-300 dark:border-slate-700 ' + cls) + '">' + label + '</button>';
+  const sb = $('hist-cat-sum'), sel = histCat === 'all' ? [] : cs.filter(c => key(c).toLowerCase() === histCat.toLowerCase());   // Summe für das gewählte Etikett
+  sb.classList.toggle('hidden', histCat === 'all');
+  if (histCat !== 'all') {
+    const out = sel.reduce((a, c) => a + Math.max(0, costAmt(c)), 0), inc = sel.reduce((a, c) => a + Math.max(0, -costAmt(c)), 0), ts = sel.map(c => Date.parse(c.date)).filter(Number.isFinite);
+    const span = ts.length ? new Date(Math.min(...ts)).toLocaleDateString('de-DE', { month: '2-digit', year: 'numeric' }) + (ts.length > 1 ? ' – ' + new Date(Math.max(...ts)).toLocaleDateString('de-DE', { month: '2-digit', year: 'numeric' }) : '') : '';
+    const big = out > 0 || !inc ? '<span class="text-xl font-semibold tabular-nums">' + eur(out) + '</span>' : '<span class="text-xl font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">+' + eur(inc) + '</span>';
+    sb.innerHTML = '<div class="flex items-center justify-between gap-3 rounded-2xl bg-white dark:bg-slate-900 shadow-sm px-4 py-3"><span class="min-w-0"><span class="block truncate font-semibold">Summe ' + esc(histCat) + '</span><span class="block truncate text-xs text-slate-500 dark:text-slate-400">' + sel.length + (sel.length === 1 ? ' Eintrag' : ' Einträge') + (span ? ' · ' + span : '') + (out > 0 && inc > 0 ? ' · Einnahmen +' + eur(inc) : '') + '</span></span>' + big + '</div>';
+  }
+  box.innerHTML = chip('all', 'Alle', '') + names.map(n => { const t = chType(n); return chip(n, esc(n) + ' ' + cnt(n), t ? t.txt : 'text-slate-600 dark:text-slate-300'); }).join('');
+}
+$('hist-cats').addEventListener('click', (e) => { const b = e.target.closest('[data-hcat]'); if (!b) return; histCat = b.dataset.hcat; applyHistFilter(); });
+/** Filter Alle | Laden | Kosten: blendet nur aus (alles bleibt im Dokument, damit das Speichern im Bearbeiten-Modus vollständig ist). */
+function applyHistFilter() {
+  const nL = getReadings().length, nK = getCosts().length, trips = histFilter === 'fahrten';
+  if (trips && editMode) { setEditMode(false); return; }                       // setEditMode rendert die Historie neu und ruft diese Funktion erneut
+  $('trips-wrap').classList.toggle('hidden', !trips); $('history-list').classList.toggle('hidden', trips);
+  $('btn-edit').classList.toggle('hidden', trips || editMode || nL + nK === 0);
+  if (trips) { segPaintKey('.hist-filter-btn', 'filter', histFilter); $('history-empty').classList.add('hidden'); $('dq-card').classList.add('hidden'); renderTrips(); updateHistFab(); return; }
+  renderDataCheck();
+  const kost = histFilter === 'kosten'; renderHistCats(kost);
+  const catOk = (li) => !kost || histCat === 'all' || (li.dataset.cat || '').toLowerCase() === histCat.toLowerCase();
+  [...$('history-list').children].forEach(li => li.classList.toggle('hidden', (histFilter !== 'all' && li.dataset.kind !== histFilter) || !catOk(li)));
+  segPaintKey('.hist-filter-btn', 'filter', histFilter);
+  const nCat = kost && histCat !== 'all' ? getCosts().filter(c => (c.category || '').trim().toLowerCase() === histCat.toLowerCase()).length : nK;
+  const visible = histFilter === 'laden' ? nL : kost ? nCat : nL + nK;
+  $('history-empty').classList.toggle('hidden', visible > 0);
+  $('history-empty').textContent = nL + nK === 0 ? 'Noch nichts erfasst.' : histFilter === 'kosten' ? (histCat !== 'all' && nK ? 'Keine Kosten mit dem Etikett „' + histCat + '“.' : 'Noch keine Kosten erfasst.') : 'Noch keine Ladungen erfasst.';
+}
+document.querySelectorAll('.hist-filter-btn').forEach(b => b.addEventListener('click', () => { histFilter = b.dataset.filter; if (histFilter === 'fahrten') tripDays = 21; applyHistFilter(); }));
+const ccell = (j, f) => $('history-list').querySelector(`li[data-cidx="${j}"] [data-cf="${f}"]`);
+/** Ladeort der Karte i im Bearbeiten-Modus (so, wie er gerade im Auswahlfeld steht). */
+const domPlace = (i) => cell(i, 'place')?.value || 'home';
+function togglePlaceGroups(li, place) {
+  li.querySelectorAll('.g-home').forEach(el => el.classList.toggle('hidden', place !== 'home'));
+  li.querySelectorAll('.g-away').forEach(el => el.classList.toggle('hidden', place === 'home'));
+  li.querySelectorAll('.g-prov').forEach(el => el.classList.toggle('hidden', place !== 'away'));
+  li.querySelectorAll('.g-grid').forEach(el => { el.style.gridTemplateColumns = place === 'away' ? '0.85fr 0.95fr 0.85fr 1.35fr' : 'repeat(3,minmax(0,1fr))'; });
+}
+/** "Alt" eines Zuhause-Eintrags und "Neu" des vorherigen Zuhause-Eintrags sind derselbe Wert (Bosch/Unterwegs dazwischen zählen nicht). */
+function syncOlds() {
+  let prevNew = null;
+  getReadings().forEach((_, i) => {
+    if (domPlace(i) !== 'home') return;
+    if (prevNew != null && cell(i, 'old')) cell(i, 'old').value = prevNew;
+    prevNew = cell(i, 'new').value;
+  });
+}
+
+/** Berechnet im Bearbeitungsmodus live die geladenen kWh aus den Eingabefeldern. */
+function updateDiffs() {
+  const stored = getReadings();
+  let prevNew = null;                                    // letzter Zuhause-Stand in der Reihenfolge der Einträge
+  for (let i = 0; i < stored.length; i++) {
+    if (domPlace(i) === 'home') {
+      const neu = parseNum(cell(i, 'new').value), reset = cell(i, 'reset')?.checked === true;
+      const ok = isFinite(neu) && (reset || prevNew != null), kwh = ok ? (reset ? neu : Math.max(0, neu - prevNew)) : 0;
+      cell(i, 'diff').textContent = ok ? fmt(kwh) + ' kWh' : '–';
+      cell(i, 'cost').textContent = ok ? eur(kwh * unitPriceOf(stored[i])) : '–';
+      cell(i, 'dur').textContent = ok ? fmtDuration(kwh) + ' h' : '–';
+      if (isFinite(neu)) prevNew = neu;
+    } else {
+      const kwh = optNum(cell(i, 'kwh').value), price = optNum(cell(i, 'price').value);
+      const fee = optNum(cell(i, 'fee').value), e = n => n != null && isFinite(n);
+      cell(i, 'acost').textContent = (e(kwh) && e(price)) || e(fee) ? eur((e(kwh) && e(price) ? kwh * price : 0) + (e(fee) ? fee : 0)) : '–';
+    }
+  }
+}
+
+$('history-list').addEventListener('input', (e) => {
+  if (!editMode || !e.target.dataset.f) return;
+  const li = e.target.closest('li'), i = +li.dataset.idx, f = e.target.dataset.f;
+  if (f === 'new') syncOlds();
+  if (f === 'old') {                                     // "Alt" ändern = "Neu" des vorherigen Zuhause-Eintrags ändern
+    let j = i - 1; while (j >= 0 && domPlace(j) !== 'home') j--;
+    if (j >= 0) cell(j, 'new').value = e.target.value;
+    syncOlds();
+  }
+  if (f === 'reset' && cell(i, 'old')) cell(i, 'old').disabled = e.target.checked;
+  updateDiffs();
+});
+$('history-list').addEventListener('change', (e) => {   // Ladeort gewechselt: passende Felder zeigen
+  if (!editMode || e.target.dataset.f !== 'place') return;
+  togglePlaceGroups(e.target.closest('li'), e.target.value); syncOlds(); updateDiffs();
+});
+
+$('history-list').addEventListener('click', (e) => {      // "Eintrag löschen" markiert nur; gelöscht wird erst beim Speichern
+  if (e.target.dataset.f !== 'delbtn' && e.target.dataset.cf !== 'cdel') return;
+  const on = e.target.dataset.del !== '1', li = e.target.closest('li');
+  e.target.dataset.del = on ? '1' : '0';
+  e.target.textContent = on ? 'Löschen zurücknehmen' : 'Eintrag löschen';
+  li.classList.toggle('opacity-50', on); li.classList.toggle('ring-red-500', on);
+});
+/** Schwebende Buttons: sobald die Kopfzeile der Historie aus dem Bild gescrollt ist, erscheinen Bearbeiten bzw. Abbrechen/Speichern über der Navigation. */
+function updateHistFab() {
+  const has = getReadings().length + getCosts().length > 0, on = currentView === 'history' && !histHeadVisible && has && histFilter !== 'fahrten';
+  $('hist-fab').classList.toggle('hidden', !on);
+  $('fab-edit').classList.toggle('hidden', editMode);
+  $('fab-cancel').classList.toggle('hidden', !editMode); $('fab-save').classList.toggle('hidden', !editMode);
+}
+if ('IntersectionObserver' in window) {
+  new IntersectionObserver((entries) => { histHeadVisible = entries[entries.length - 1].isIntersecting; updateHistFab(); }).observe($('hist-head'));
+}
+$('fab-edit').addEventListener('click', () => $('btn-edit').click());
+$('fab-cancel').addEventListener('click', () => $('btn-edit-cancel').click());
+$('fab-save').addEventListener('click', () => $('btn-edit-save').click());
+$('btn-edit').addEventListener('click', () => setEditMode(true));
+$('btn-edit-cancel').addEventListener('click', () => setEditMode(false));
+$('btn-edit-save').addEventListener('click', () => {
+  const stored = getReadings(), currentPrice = getSettings().price;
+  const all = stored.map((r, i) => ({
+    r, date: new Date(cell(i, 'date').value), place: domPlace(i), neu: Math.round(parseNum(cell(i, 'new').value) * 10) / 10,
+    cap: parseNum(cell(i, 'cap').value), reset: cell(i, 'reset')?.checked === true, km: optNum(cell(i, 'km').value), s0: optNum(cell(i, 's0').value), s1: optNum(cell(i, 's1').value), bt: optNum((cell(i, 'bt')?.value ?? '').replace('−', '-')), cf: optNum(cell(i, 'cf')?.value ?? ''),
+    kwh: optNum(cell(i, 'kwh').value), price: optNum(cell(i, 'price').value), prov: cell(i, 'prov')?.value || '', fee: optNum(cell(i, 'fee')?.value ?? ''), del: cell(i, 'delbtn').dataset.del === '1'
+  }));
+  const live = all.filter(x => !x.del);
+  if (live.some(x => isNaN(x.date) || (x.place === 'home' && (!isFinite(x.neu) || x.neu < 0)))) { alert('Bitte gültige Datums- und Zählerstandswerte eingeben.'); return; }
+  if (live.some(x => x.place !== 'home' && ([x.kwh, x.price, x.fee].some(Number.isNaN) || [x.kwh, x.price, x.fee].some(v => v != null && v < 0)))) { alert('Bitte kWh, Preis und Gebühren prüfen (Zahl, nicht negativ).'); return; }
+  if (all.some(x => [x.km, x.s0, x.s1].some(Number.isNaN) || (x.km != null && x.km < 0) || [x.s0, x.s1].some(v => v != null && (v < 0 || v > 100)) || (x.s0 != null && x.s1 != null && x.s1 <= x.s0))) {
+    alert('Bitte km-Stand und Akku-Prozente prüfen (0–100 %, Ende größer als Start).'); return;
+  }
+  if (all.some(x => Number.isNaN(x.bt) || (x.bt != null && (x.bt < BT_MIN || x.bt > BT_MAX)))) { alert('Bitte die Akku-Temperatur prüfen (' + BT_MIN + ' bis ' + BT_MAX + ' °C) oder das Feld leer lassen.'); return; }
+  if (all.some(x => Number.isNaN(x.cf) || (x.cf != null && (x.cf < 0 || x.cf > 50)))) { alert('Bitte die Komfortenergie prüfen (0 bis 50 kWh) oder das Feld leer lassen.'); return; }
+  if (all.some(x => !isFinite(x.cap) || x.cap < 10 || x.cap > 200)) { alert('Bitte eine gültige Batteriekapazität in kWh eingeben (10 bis 200).'); return; }
+  const storedCosts = getCosts();                        // Kosten-Karten (dieselbe Bearbeiten-Ansicht)
+  const callC = storedCosts.map((c, j) => ({ c, date: new Date(ccell(j, 'date')?.value), cat: ccell(j, 'cat')?.value ?? c.category ?? '', title: (ccell(j, 'title')?.value ?? c.title ?? '').trim(),
+    amount: (v => String(v).trim() === '' ? 0 : parseNum(v))(ccell(j, 'amount')?.value ?? String(c.amount)), /* leer = 0 € */ km: optNum(ccell(j, 'km')?.value ?? ''), note: (ccell(j, 'note')?.value ?? c.note ?? '').trim(), del: ccell(j, 'cdel')?.dataset.del === '1' }));
+  const cLive = callC.filter(x => !x.del);
+  if (cLive.some(x => isNaN(x.date) || !isFinite(x.amount))) { alert('Bitte bei den Kosten ein gültiges Datum und einen gültigen Betrag eingeben (0 € ist erlaubt).'); return; }
+  if (cLive.some(x => Number.isNaN(x.km) || (x.km != null && (x.km < 0 || x.km > 999999)))) { alert('Bitte bei den Kosten einen gültigen km-Stand eingeben (0 bis 999999) oder das Feld leer lassen.'); return; }
+  const gone = all.filter(x => x.del).length + callC.filter(x => x.del).length;
+  if (gone && !confirm(gone + (gone === 1 ? ' Eintrag wird' : ' Einträge werden') + ' gelöscht (auch in der Cloud). Fortfahren?')) return;
+  const items = all.filter(x => !x.del);
+
+  items.sort((a, b) => a.date - b.date);                 // chronologisch, falls Datum geändert wurde
+  let chk = null;                                        // Zählerstand muss nur zwischen Zuhause-Einträgen steigen
+  const drop = items.some(x => { if (x.place !== 'home') return false; const bad = chk != null && x.neu < chk && !x.reset; chk = x.neu; return bad; });
+  if (drop && !confirm('Mindestens ein Zählerstand ist kleiner als der vorherige. Trotzdem speichern?')) return;
+
+  let prevHomeNew = null;                                // Zählerkette: nur Zuhause-Einträge
+  const result = items.map(x => {
+    const wasHome = isHome(x.r), common = { id: x.r.id, date: x.date.toISOString() };
+    let out;
+    if (x.place === 'home') {
+      // Preis pro kWh des Eintrags beibehalten (aus den gespeicherten Werten), sonst aktueller Preis
+      const unitPrice = wasHome && x.r.consumedSinceLast > 0 ? x.r.cost / x.r.consumedSinceLast : currentPrice;
+      const consumed = x.reset ? x.neu : (prevHomeNew != null ? Math.max(0, Math.round((x.neu - prevHomeNew) * 10) / 10) : 0);
+      out = { ...x.r, ...common, totalReading: x.neu, consumedSinceLast: consumed, cost: consumed * unitPrice };
+      delete out.place; delete out.pricePerKwh; delete out.provider; delete out.fee;
+      if (x.reset) out.meterReset = true; else delete out.meterReset;
+      prevHomeNew = x.neu;
+    } else {
+      out = { ...x.r, ...common, place: x.place, totalReading: prevHomeNew ?? 0, consumedSinceLast: x.kwh ?? 0, cost: (x.kwh != null && x.price != null ? x.kwh * x.price : 0) + (x.fee ?? 0) };
+      if (x.price != null) out.pricePerKwh = x.price; else delete out.pricePerKwh;
+      if (x.place === 'away' && x.prov) out.provider = x.prov; else delete out.provider;
+      if (x.fee != null) out.fee = x.fee; else delete out.fee;
+      delete out.meterReset; delete out.chargeStart; delete out.chargeEnd; delete out.avgPowerKw;     // Zähler-/Live-Daten gibt es nur zuhause
+    }
+    if (x.km != null) out.odometerKm = x.km; else delete out.odometerKm;       // geleerte Felder wirklich entfernen
+    if (x.s0 != null) out.socStart = x.s0; else delete out.socStart;
+    if (x.s1 != null) out.socEnd = x.s1; else delete out.socEnd;
+    if (x.bt != null) out.battTemp = Math.round(x.bt * 10) / 10; else delete out.battTemp;
+    if (x.cf > 0) out.comfort = Math.round(x.cf * 10) / 10; else delete out.comfort;
+    out.capacityKwh = x.cap;
+    return out;
+  });
+  const costResult = cLive.map(x => {
+    const out = { ...x.c, date: x.date.toISOString(), title: x.title || x.cat || 'Kosten', amount: Math.round(x.amount * 100) / 100, category: x.cat };
+    if (x.note) out.note = x.note; else delete out.note;                       // geleerte Felder wirklich entfernen (Firestore verbietet undefined)
+    if (x.km != null && x.km > 0) out.odometerKm = x.km; else delete out.odometerKm;
+    return out;
+  }).sort((a, b) => new Date(a.date) - new Date(b.date));
+  if (commitReadings(result)) {
+    if (JSON.stringify(costResult) !== JSON.stringify(storedCosts)) commitCosts(costResult);
+    deferredCloud = null; deferredCosts = null; setEditMode(false);
+  }
+});
+
+/* =====================================================================
+   7-Segment-Anzeige: Schriftgröße automatisch an die verfügbare Breite anpassen
+   ===================================================================== */
+function fitSeg() {                                       // Dashboard- und Erfassen-Anzeige jeweils an die Breite anpassen
+  [['seg-box', 'seg-wrap', 'seg-unit'], ['seg2-box', 'seg2-wrap', 'seg2-unit']].forEach(([bx, wr, un]) => {
+    const box = $(bx), wrap = $(wr);
+    if (!box || !box.clientWidth) return;                // View nicht sichtbar
+    const cs = getComputedStyle(box);
+    const avail = box.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - $(un).offsetWidth - 8;
+    wrap.style.fontSize = '100px';
+    const w = wrap.firstElementChild.getBoundingClientRect().width;     // Breite des "888888.8" bei 100 px
+    wrap.style.fontSize = Math.max(20, Math.min(56, Math.floor(100 * avail / w))) + 'px';
+  });
+}
+window.addEventListener('resize', fitSeg);
+if (document.fonts) document.fonts.ready.then(fitSeg);
+
+/* =====================================================================
+   Export / Import der Zählerstände
+   Dateiformat (JSON):
+   { "app": "enyaq-ladekosten", "version": 1, "exportedAt": "<ISO-Datum>", "chargePowerKw": 7,
+     "readings": [ { id, date, totalReading, consumedSinceLast, cost, chargeDuration ("hh:mm"), place ("bosch" | "away"; fehlt = Zuhause), pricePerKwh, provider (Ladeanbieter, nur bei "away"), fee (Servicegebühr in €, nur bei "bosch"/"away"; in cost enthalten) }, … ] }
+   Die Felder "app" und "version" dienen dem Wiedererkennen beim Import. Einstellungen werden nicht exportiert.
+   "chargeDuration" ist ein abgeleiteter Wert (kWh / Ladeleistung): Er wird exportiert und beim Import geprüft,
+   aber nicht gespeichert, sondern bei der Anzeige immer neu berechnet.
+   ===================================================================== */
+const EXPORT_APP_ID = 'enyaq-ladekosten';
+
+/** Inhalt der Datensicherung (Datei-Export und monatliche Sicherung in Google Drive). Einstellungen ohne PIN. */
+function buildBackup() {
+  const readings = getReadings(), st = { ...(load(KEY_SETTINGS, {}) || {}) }; delete st.pin;
+  return {
+    app: EXPORT_APP_ID, version: 1, exportedAt: new Date().toISOString(), chargePowerKw: chargePowerKw(),
+    readings: readings.map(r => ({ ...r, chargeDuration: isHome(r) ? chargeDurationOf(r) : undefined })),     // Ladedauer als hh:mm (nur Zuhause)
+    costs: getCosts(), categories: getCategories(), reminders: getReminders(), recurring: getRecurring(),
+    trips: getTrips(), tripPrefs: { places: getTPlaces(), labels: getTLabels(), rules: getTRules(), defLabel: defLabelId() },   // Fahrtenbuch (seit Version mit Fahrten)
+    settings: st, providers: getProviders(), provInfo: load(KEY_PROVINFO, null), kb: load('enyaq.kb', null), lab: load(KEY_LAB, null)          // seit Version mit Ladeanbietern
+  };
+}
+$('btn-export').addEventListener('click', () => {
+  const readings = getReadings(), costs = getCosts(), reminders = getReminders(), recurring = getRecurring(), trips = getTrips();
+  if (!readings.length && !costs.length && !reminders.length && !recurring.length && !trips.length) { flash($('io-msg'), 'Keine Daten zum Exportieren vorhanden.', false); return; }
+  const payload = buildBackup();
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
+  a.download = 'enyaq-ladekosten-' + new Date().toISOString().slice(0, 10) + '.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  flash($('io-msg'), readings.length + ' Ladungen, ' + costs.length + ' Kosten und ' + reminders.length + ' Erinnerungen exportiert.', true);
+});
+
+/** Ladeanbieter (ergänzen) und Einstellungen (nach Rückfrage) aus einer Sicherung übernehmen. */
+function importPrefsFromBackup(text) {
+  let d; try { d = JSON.parse(text); } catch { return; }
+  if (Array.isArray(d.providers)) { const cur = getProviders(), add = d.providers.filter(n => typeof n === 'string' && n.trim() && !cur.some(m => m.toLowerCase() === n.trim().toLowerCase())).map(n => n.trim().slice(0, 30));
+    if (add.length) setProviders(cur.concat(add).slice(0, 20)); }
+  if (d.provInfo && typeof d.provInfo === 'object') {                  // fehlende Angaben ergänzen, eigene bleiben
+    const cur = getProvInfo(), src = d.provInfo, out = { home: { ...(src.home || {}), ...cur.home }, bosch: { ...(src.bosch || {}), ...cur.bosch }, p: { ...(src.p || {}), ...cur.p } };
+    if (JSON.stringify(out) !== JSON.stringify(cur)) setProvInfo(JSON.parse(JSON.stringify(out)));
+  }
+  if (d.kb && Array.isArray(d.kb.items)) {                              // Wissen: fehlende Einträge und Kategorien ergänzen
+    const cur = getKb(), ids = new Set(cur.items.map(x => String(x.id))), add = d.kb.items.filter(x => x && x.title && !ids.has(String(x.id)));
+    const cats = cur.cats.concat((d.kb.cats || []).filter(c => typeof c === 'string' && !cur.cats.includes(c)));
+    if (add.length || cats.length !== cur.cats.length) setKb({ cats, items: cur.items.concat(add) });
+  }
+  if (d.lab && typeof d.lab === 'object') {                            // Ladekurven/Rekorde: fehlende ergänzen
+    const cur = load(KEY_LAB, null), base = getLab(), ids = new Set(base.curves.concat(base.recs).map(x => String(x.id)));
+    const ac = (d.lab.curves || []).filter(x => x && x.id && !ids.has(String(x.id))), ar = (d.lab.recs || []).filter(x => x && x.id && !ids.has(String(x.id)));
+    const sids = new Set(base.speeds.map(x => String(x.id))), as = (Array.isArray(d.lab.speeds) ? d.lab.speeds : []).filter(x => x && x.id && !sids.has(String(x.id)));
+    const rts = { ...(d.lab.routes && typeof d.lab.routes === 'object' ? d.lab.routes : {}), ...base.routes }, nr = Object.keys(rts).length !== Object.keys(base.routes).length;
+    const lids = new Set(base.lt.map(x => String(x.id))), al = (Array.isArray(d.lab.lt) ? d.lab.lt : []).filter(x => x && x.id && !lids.has(String(x.id)));
+    const bids = new Set(base.bt.map(x => String(x.id))), ab = (Array.isArray(d.lab.bt) ? d.lab.bt : []).filter(x => x && x.id && !bids.has(String(x.id)));
+    const tids = new Set(base.tires.map(x => String(x.id))), at = (Array.isArray(d.lab.tires) ? d.lab.tires : []).filter(x => x && x.id && x.v && !tids.has(String(x.id)));
+    const wids = new Set(base.wish.map(x => String(x.id))), aw = (Array.isArray(d.lab.wish) ? d.lab.wish : []).filter(x => x && x.id && x.title && !wids.has(String(x.id)));
+    const fids = new Set(base.fc.map(x => String(x.id))), af = (Array.isArray(d.lab.fc) ? d.lab.fc : []).filter(x => x && x.id && x.km > 0 && !fids.has(String(x.id)));
+    if (!cur || ac.length || ar.length || as.length || nr || al.length || ab.length || at.length || aw.length || af.length) setLab({ fc: base.fc.concat(af), curves: base.curves.concat(ac), recs: base.recs.concat(ar), speeds: base.speeds.concat(as), routes: rts, lt: base.lt.concat(al), bt: base.bt.concat(ab), tires: base.tires.concat(at), wish: base.wish.concat(aw) });
+  }
+  if (d.settings && typeof d.settings === 'object' && Object.keys(d.settings).length && confirm('Die Sicherung enthält auch Einstellungen (Strompreis, Akku, Fahrzeugdaten, Kauftag …).\n\nOK = Einstellungen aus der Sicherung übernehmen\nAbbrechen = aktuelle Einstellungen behalten')) {
+    const keep = load(KEY_SETTINGS, {}) || {}, n = { ...d.settings }; delete n.pin; if (keep.pin) n.pin = keep.pin;
+    if (!(Number(n.price) >= 0)) delete n.price;
+    save(KEY_SETTINGS, n); pushPrefs(); if (currentView === 'settings') fillSettings();
+  }
+}
+/** Prüft die Datei streng und gibt bereinigte Einträge (chronologisch) zurück oder wirft einen Fehler. */
+function parseImport(text) {
+  let data;
+  try { data = JSON.parse(text); } catch { throw new Error('Die Datei ist kein gültiges JSON.'); }
+  if (!data || data.app !== EXPORT_APP_ID || !Array.isArray(data.readings)) throw new Error('Das ist keine Export-Datei dieser App.');
+  if (typeof data.version !== 'number' || data.version > 1) throw new Error('Die Datei stammt aus einer neueren App-Version.');
+  const seen = new Set();
+  return data.readings.map((r, i) => {
+    const date = new Date(r?.date);
+    const nums = [r?.totalReading, r?.consumedSinceLast, r?.cost];
+    if (isNaN(date) || !nums.every(v => typeof v === 'number' && isFinite(v) && v >= 0)) throw new Error('Eintrag ' + (i + 1) + ' ist ungültig.');
+    if (r.chargeDuration !== undefined && !/^\d{2,}:[0-5]\d$/.test(r.chargeDuration)) throw new Error('Ladedauer in Eintrag ' + (i + 1) + ' ist ungültig (erwartet hh:mm).');
+    let id = Number(r.id);
+    if (!Number.isFinite(id) || seen.has(id)) id = Date.now() + i;      // IDs eindeutig halten
+    seen.add(id);
+    const out = { id, date: date.toISOString(), totalReading: r.totalReading, consumedSinceLast: r.consumedSinceLast, cost: r.cost };
+    if (r.place !== undefined && r.place !== null) {                                                // Ladeort: fehlt = Zuhause
+      if (!PLACES[r.place]) throw new Error('Ladeort in Eintrag ' + (i + 1) + ' ist ungültig.');
+      if (r.place !== 'home') out.place = r.place;
+    }
+    if (r.fee !== undefined && r.fee !== null) {                                                   // Servicegebühr nur bei Bosch/Unterwegs
+      if (typeof r.fee !== 'number' || !isFinite(r.fee) || r.fee < 0 || r.fee > 1000) throw new Error('Gebühr in Eintrag ' + (i + 1) + ' ist ungültig.');
+      if (out.place) out.fee = r.fee;                                                            // nur bei Bosch/Unterwegs
+    }
+    if (typeof r.provider === 'string' && r.provider.trim() && out.place === 'away') out.provider = r.provider.trim().slice(0, 30);   // Ladeanbieter nur bei "Unterwegs"
+    for (const k of ['odometerKm', 'socStart', 'socEnd', 'capacityKwh', 'avgPowerKw', 'pricePerKwh']) {            // optionale Felder prüfen und übernehmen
+      if (r[k] === undefined || r[k] === null) continue;
+      if (typeof r[k] !== 'number' || !isFinite(r[k]) || r[k] < 0 || (k === 'capacityKwh' ? (r[k] < 10 || r[k] > 200) : (k !== 'odometerKm' && r[k] > 100))) throw new Error('Feld ' + k + ' in Eintrag ' + (i + 1) + ' ist ungültig.');
+      out[k] = r[k];
+    }
+    if (r.battTemp != null) { if (typeof r.battTemp !== 'number' || !isFinite(r.battTemp) || r.battTemp < -30 || r.battTemp > 60) throw new Error('Feld battTemp in Eintrag ' + (i + 1) + ' ist ungültig.'); out.battTemp = r.battTemp; }
+    if (r.comfort != null) { if (typeof r.comfort !== 'number' || !isFinite(r.comfort) || r.comfort < 0 || r.comfort > 50) throw new Error('Feld comfort in Eintrag ' + (i + 1) + ' ist ungültig.'); if (r.comfort > 0) out.comfort = r.comfort; }
+    for (const k of ['chargeStart', 'chargeEnd']) {
+      if (r[k] == null) continue;
+      if (isNaN(Date.parse(r[k]))) throw new Error('Feld ' + k + ' in Eintrag ' + (i + 1) + ' ist ungültig.');
+      out[k] = new Date(r[k]).toISOString();
+    }
+    if (r.meterReset === true) out.meterReset = true;
+    return out;
+  }).sort((a, b) => new Date(a.date) - new Date(b.date));
+}
+
+/** Kosten und Kategorien aus einer Export-Datei (optional, ältere Dateien haben sie nicht). Wirft bei ungültigen Einträgen. */
+function parseImportCosts(text) {
+  const data = JSON.parse(text), out = { costs: [], categories: [] }, seen = new Set();
+  if (Array.isArray(data.categories)) out.categories = data.categories.filter(n => typeof n === 'string' && n.trim()).map(n => n.trim().slice(0, 30));
+  if (!Array.isArray(data.costs)) return out;
+  out.costs = data.costs.map((c, i) => {
+    const date = new Date(c?.date), amount = c?.amount;
+    if (isNaN(date) || typeof amount !== 'number' || !isFinite(amount) || Math.abs(amount) > 1e6) throw new Error('Kosten-Eintrag ' + (i + 1) + ' ist ungültig.');
+    let id = Number(c.id); if (!Number.isFinite(id) || seen.has(id)) id = Date.now() + i; seen.add(id);
+    const o = { id, date: date.toISOString(), title: String(c.title ?? '').trim().slice(0, 80) || 'Kosten', amount: Math.round(amount * 100) / 100, category: typeof c.category === 'string' ? c.category.trim().slice(0, 30) : '' };
+    if (typeof c.note === 'string' && c.note.trim()) o.note = c.note.trim().slice(0, 300);
+    if (typeof c.odometerKm === 'number' && c.odometerKm > 0 && c.odometerKm <= 999999) o.odometerKm = c.odometerKm;
+    if (typeof c.guid === 'string' && c.guid) o.guid = c.guid.slice(0, 64);
+    if (Number.isFinite(Number(c.recurId)) && c.recurId != null) o.recurId = Number(c.recurId);
+    return o;
+  }).sort((a, b) => new Date(a.date) - new Date(b.date));
+  return out;
+}
+$('btn-import').addEventListener('click', () => $('import-file').click());
+$('import-file').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';                                   // dieselbe Datei später erneut wählbar
+  if (!file) return;
+  try {
+    const text = await file.text(), imported = parseImport(text), ic = parseImportCosts(text), ir = parseImportReminders(text), irc = parseImportRecurring(text);
+    const current = getReadings(), curCosts = getCosts(), curRem = getReminders();
+    const fresh = imported.filter(i => !current.some(c => sameId(c, i)));          // nur wirklich neue Einträge
+    const merged = current.filter(c => !imported.some(i => sameId(c, i))).concat(imported).sort((a, b) => new Date(a.date) - new Date(b.date));
+    const freshC = ic.costs.filter(i => !curCosts.some(c => sameId(c, i)));
+    const mergedC = curCosts.filter(c => !ic.costs.some(i => sameId(c, i))).concat(ic.costs).sort((a, b) => new Date(a.date) - new Date(b.date));
+    const freshR = ir.filter(i => !curRem.some(c => sameId(c, i)));
+    const mergedR = curRem.filter(c => !ir.some(i => sameId(c, i))).concat(ir);
+    if ((current.length > 0 || curCosts.length > 0 || curRem.length > 0) && !confirm(imported.length + ' Ladungen (' + fresh.length + ' neu), ' + ic.costs.length + ' Kosten (' + freshC.length + ' neu) und ' + ir.length + ' Erinnerungen (' + freshR.length + ' neu) in der Datei. Mit den vorhandenen Daten zusammenführen?')) return;
+    if (!commitReadings(merged)) return;                 // Zusammenführen (gleiche ID: Datei gewinnt); wird bei Anmeldung auch in die Cloud geschrieben
+    if (ic.costs.length) commitCosts(mergedC);
+    if (ir.length) commitReminders(mergedR);
+    if (irc.length) { const curRc = getRecurring(); commitRecurring(curRc.filter(c => !irc.some(i => sameId(c, i))).concat(irc)); bookRecurring(); }
+    const newCats = ic.categories.filter(n => !getCategories().some(m => m.toLowerCase() === n.toLowerCase()));
+    if (newCats.length) setCategories(getCategories().concat(newCats));
+    const nT = importTripsFromBackup(text);                // Fahrten + Orte/Etiketten/Regeln (ältere Dateien haben sie nicht)
+    importPrefsFromBackup(text);                           // Ladeanbieter und Einstellungen (ältere Dateien haben sie nicht)
+    stopLive(false);                                     // Live-Basis wäre veraltet
+    flash($('io-msg'), fresh.length + ' neue Ladungen, ' + freshC.length + ' neue Kosten, ' + freshR.length + ' neue Erinnerungen' + (nT ? ' und ' + nT + ' neue Fahrten' : '') + ' importiert.', true);
+  } catch (err) {
+    flash($('io-msg'), 'Import fehlgeschlagen: ' + err.message, false);
+  }
+});
+
+
+
+// ───── src/04-kosten-erinnerungen.js ─────
+/* =====================================================================
+   Kosten: Kategorien (Einstellungen) und Erfassen
+   ===================================================================== */
+const catChipCls = (on) => 'grow inline-flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-[13px] border active:scale-95 transition ' + (on ? 'border-emerald-500 bg-emerald-500/15 text-emerald-800 dark:text-emerald-200 font-semibold' : 'border-transparent bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300');
+/** Kleines Symbol je Kategorie (nach Stichwort im Namen), sonst ein Etikett. */
+const CAT_ICONS = [[/service|wartung|werkstatt|inspektion|repar/i, '<path d="M14.7 6.3a4 4 0 0 0-5.4 5.2L4 16.8V20h3.2l5.3-5.3a4 4 0 0 0 5.2-5.4l-2.4 2.4-2.6-.6-.6-2.6Z"/>'],
+  [/versich/i, '<path d="M12 3l7 3v5c0 4.5-3 8.2-7 10-4-1.8-7-5.5-7-10V6Z"/>'], [/anmeld|steuer|zulass|tüv|\bhu\b/i, '<path d="M14 3H6v18h12V7Z"/><path d="M14 3v4h4M9 13h6M9 17h4"/>'],
+  [/wäsch|wasch|pflege/i, '<path d="M12 3c3 4 6 7.2 6 10.5A6 6 0 0 1 6 13.5C6 10.2 9 7 12 3Z"/>'], [/park/i, '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M10 16V8h3a2.5 2.5 0 0 1 0 5h-3"/>'],
+  [/maut|vignette/i, '<path d="M8 21l2-18M16 21l-2-18M12 7v2M12 13v2"/>'], [/straf|gebühr|bußg/i, '<path d="M4 7h16v4a2 2 0 0 0 0 4v4H4v-4a2 2 0 0 0 0-4Z"/><path d="M14 7v12"/>'],
+  [/tuning|zubehör/i, '<path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/>'], [/reifen|räder|rad/i, '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/>'], [/laden|strom/i, '<path d="M13 2L4 14h7l-1 8 9-12h-7l1-8Z"/>']];
+const catIcon = (n, cls = 'w-4 h-4') => { const m = CAT_ICONS.find(([re]) => re.test(n || '')); return '<svg class="' + cls + ' shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true">' + (m ? m[1] : '<path d="M3 12V4h8l9 9-8 8Z"/><circle cx="7.5" cy="7.5" r="1"/>') + '</svg>'; };
+function renderCategories() {
+  const l = getCategories();
+  $('cat-list').innerHTML = l.length ? l.map((n, i) => `<span class="inline-flex items-center gap-1 pl-3 pr-1 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 text-sm max-w-full"><span class="truncate">${esc(n)}</span><button type="button" data-del="${i}" aria-label="${esc(n)} entfernen" class="w-6 h-6 shrink-0 rounded-lg text-slate-500 hover:text-red-600 active:scale-95">×</button></span>`).join('')
+                                     : '<span class="text-xs text-slate-500 dark:text-slate-400">Keine Kategorien angelegt.</span>';
+}
+function setCategories(list) {
+  save(KEY_CATEGORIES, list); renderCategories();
+  if (!$('view-costs').classList.contains('hidden')) renderCostsView();
+  const msg = $('cat-msg');
+  if (!window.cloud?.isSignedIn()) { msg.textContent = 'Gespeichert (nur lokal, nicht angemeldet).'; return; }
+  msg.textContent = 'Gespeichert · Cloud: wird übertragen …';
+  window.cloud.setCategories(list).then(() => { msg.textContent = 'Gespeichert · Cloud ✓'; })
+    .catch(e => { msg.textContent = 'Lokal gespeichert, Cloud-Fehler: ' + (e.code || e.message) + (e.code === 'permission-denied' ? ' (Firestore-Regel für enyaqStrom/<uid>/settings ergänzen)' : ''); });
+}
+function addCategory() {
+  const inp = $('cat-new'), name = inp.value.trim().replace(/\s+/g, ' ').slice(0, 30), l = getCategories();
+  if (!name) return;
+  if (l.some(n => n.toLowerCase() === name.toLowerCase())) { $('cat-msg').textContent = '„' + name + '“ gibt es schon.'; return; }
+  if (l.length >= 40) { $('cat-msg').textContent = 'Maximal 40 Kategorien.'; return; }
+  inp.value = ''; setCategories(l.concat(name));
+}
+$('btn-cat-add').addEventListener('click', addCategory);
+$('cat-new').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addCategory(); } });
+$('cat-list').addEventListener('click', e => {
+  const i = e.target.dataset.del; if (i === undefined) return;
+  const l = getCategories(); l.splice(+i, 1); setCategories(l);          // bestehende Kosten behalten ihren Kategorie-Namen
+});
+/** Cloud-Abgleich der Kategorien: erster Abgleich führt zusammen (nur wenn lokal angepasst), danach gilt die Cloud. */
+window.onCloudCategories = (list, first, uid) => {
+  if (first) checkCacheUid(uid);
+  const customized = localStorage.getItem(KEY_CATEGORIES) !== null, local = getCategories();
+  let next = Array.isArray(list) ? list.filter(n => typeof n === 'string' && n.trim()) : null;
+  if (next === null) { if (customized && first) window.cloud.setCategories(local).catch(() => {}); return; }
+  if (first && customized && uploadCutoff(uid) === 0) { const merged = next.concat(local.filter(n => !next.some(m => m.toLowerCase() === n.toLowerCase()))); if (merged.length !== next.length) { next = merged; window.cloud.setCategories(next).catch(() => {}); } }
+  if (first && !localStorage.getItem(KEY_CHCATS)) {                         // Checkheft: Service, Reparatur und TÜV einmalig ergänzen, falls sie fehlen
+    const miss = CH_TYPES.map(t => t.n).filter(n => !next.some(m => chType(m) && chType(m).n === n)); localStorage.setItem(KEY_CHCATS, '1');
+    if (miss.length) { next = next.concat(miss); window.cloud.setCategories(next).catch(() => {}); }
+  }
+  if (!customized || JSON.stringify(next) !== JSON.stringify(local)) { save(KEY_CATEGORIES, next); renderCategories(); if (!$('view-costs').classList.contains('hidden')) renderCostsView(); }
+};
+
+/** Letzter bekannter km-Stand aus Ladungen und Kosten (nur als Platzhalter-Hinweis). */
+function lastKnownKm() {
+  const pts = getReadings().filter(r => r.odometerKm != null).map(r => [r.date, r.odometerKm])
+    .concat(getCosts().filter(c => c.odometerKm > 0).map(c => [c.date, c.odometerKm]));
+  if (!pts.length) return null;
+  pts.sort((a, b) => new Date(a[0]) - new Date(b[0])); return pts[pts.length - 1][1];
+}
+let costCat = '';
+function renderCostsView() {
+  const cats = getCategories();
+  if (costCat && !cats.includes(costCat)) costCat = '';
+  $('cost-cats').innerHTML = cats.length ? cats.map(n => `<button type="button" data-cat="${esc(n)}" class="cost-cat ${catChipCls(n === costCat)}">${catIcon(n)}${esc(n)}</button>`).join('')
+                                         : '<span class="text-xs text-slate-500 dark:text-slate-400">Keine Kategorien – lege welche in den Einstellungen an.</span>';
+  if (!$('cost-date').value) $('cost-date').value = toLocalInput(new Date().toISOString());
+  const km = lastKnownKm(); $('cost-km').placeholder = km != null ? 'zuletzt ' + fmt(km, 0) : '';
+  renderRecurring(); paintCostType(); renderCostRecent(); requestAnimationFrame(packCostCats);
+}
+/** Ausgabe / Einnahme: Umschalter steuert das (versteckte) Kästchen cost-income, Vorzeichen und Button-Text passen sich an. */
+function paintCostType() {
+  const inc = $('cost-income').checked;
+  document.querySelectorAll('#cost-type [data-ctype]').forEach(b => { const on = (b.dataset.ctype === 'in') === inc;
+    b.className = 'py-2 rounded-lg text-sm font-semibold transition ' + (on ? (inc ? 'bg-emerald-600 text-white shadow-sm' : 'bg-white dark:bg-slate-600 text-slate-900 dark:text-white shadow-sm') : 'text-slate-500 dark:text-slate-400'); b.setAttribute('aria-pressed', String(on)); });
+  $('cost-sign').textContent = inc ? '+' : '−'; $('cost-sign').className = 'font-barlow text-4xl font-bold ' + (inc ? 'text-emerald-500' : 'text-slate-400');
+  $('cost-amount').classList.toggle('text-emerald-500', inc); $('cost-save-label').textContent = inc ? 'Einnahme speichern' : 'Ausgabe speichern';
+}
+$('cost-type').addEventListener('click', (e) => { const b = e.target.closest('[data-ctype]'); if (!b) return; $('cost-income').checked = b.dataset.ctype === 'in'; paintCostType(); });
+/** Die letzten vier Kosten mit Symbol; Antippen öffnet die Historie (Filter Kosten). */
+function renderCostRecent() {
+  const l = getCosts().slice().sort((a, b) => Date.parse(b.date) - Date.parse(a.date)).slice(0, 4);
+  $('recent-card').classList.toggle('hidden', !l.length);
+  $('cost-recent').innerHTML = l.map(c => { const a = costAmt(c), inc = a < 0;
+    return `<li><button type="button" data-goh class="flex w-full items-center gap-3 py-2.5 text-left active:opacity-70"><span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${inc ? 'bg-emerald-500/15 text-emerald-500' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-300'}">${catIcon(c.category || c.title, 'w-[18px] h-[18px]')}</span>
+      <span class="min-w-0 flex-1"><span class="block truncate text-sm font-medium">${esc(c.title || 'Kosten')}</span><span class="block text-xs text-slate-500 dark:text-slate-400">${fmtDate(c.date)}${c.category ? ' · ' + esc(c.category) : ''}</span></span>
+      <span class="shrink-0 font-semibold tabular-nums ${inc ? 'text-emerald-500' : ''}">${inc ? '+' : ''}${eur(Math.abs(a))}</span></button></li>`; }).join('');
+}
+/** Kategorien platzsparend anordnen: Breiten messen, dann nach „First Fit Decreasing“ in möglichst wenige Zeilen packen.
+    Die Chips wachsen danach auf volle Zeilenbreite (grow), so entstehen bündige Reihen ohne Lücken am Ende. */
+function packCostCats() {
+  const box = $('cost-cats'), chips = [...box.querySelectorAll('.cost-cat')]; if (chips.length < 3 || !box.clientWidth) return;
+  const gap = 6, W = box.clientWidth; chips.forEach(c => { c.style.flexGrow = '0'; });
+  const items = chips.map(c => ({ c, w: Math.ceil(c.getBoundingClientRect().width) })).sort((a, b) => b.w - a.w), rows = [];
+  items.forEach(it => { const r = rows.find(r => r.w + gap + it.w <= W); if (r) { r.items.push(it); r.w += gap + it.w; } else rows.push({ w: it.w, items: [it] }); });
+  rows.forEach(r => r.items.forEach(it => { box.appendChild(it.c); it.c.style.flexGrow = ''; }));
+}
+window.addEventListener('resize', () => { if (!$('view-costs').classList.contains('hidden')) packCostCats(); });
+$('cost-recent').addEventListener('click', (e) => { if (e.target.closest('[data-goh]')) { histFilter = 'kosten'; showView('history'); } });
+$('cost-to-hist').addEventListener('click', () => { histFilter = 'kosten'; showView('history'); });
+$('cost-cats').addEventListener('click', e => {
+  const b = e.target.closest('[data-cat]'); if (!b) return;
+  costCat = costCat === b.dataset.cat ? '' : b.dataset.cat;                       // erneut tippen = Auswahl aufheben
+  renderCostsView();
+});
+$('btn-cost-save').addEventListener('click', () => {
+  const amtRaw = $('cost-amount').value.trim(), amount = amtRaw === '' ? 0 : parseNum(amtRaw), km = optNum($('cost-km').value), d = new Date($('cost-date').value), msg = $('cost-msg');   // leer = 0 € (kostenlose Info, z. B. mit Beleg)
+  if (!isFinite(amount) || amount < 0) { flash(msg, 'Bitte einen gültigen Betrag eingeben (0 € ist erlaubt).', false); return; }
+  if (amount === 0 && $('cost-recur').checked) { flash(msg, 'Wiederkehrende Kosten brauchen einen Betrag größer 0.', false); return; }
+  if (isNaN(d)) { flash(msg, 'Bitte ein gültiges Datum eingeben.', false); return; }
+  if (Number.isNaN(km) || (km != null && (km < 0 || km > 999999))) { flash(msg, 'Bitte einen gültigen km-Stand eingeben (0 bis 999999) oder das Feld leer lassen.', false); return; }
+  const income = $('cost-income').checked, note = $('cost-note').value.trim();
+  const entry = { id: Date.now(), date: d.toISOString(), title: $('cost-title').value.trim() || costCat || 'Kosten', amount: amount ? Math.round(amount * 100) / 100 * (income ? -1 : 1) : 0, category: costCat };
+  if (note) entry.note = note;                                                    // optionale Felder nur setzen, wenn vorhanden (Firestore verbietet undefined)
+  if (km != null) entry.odometerKm = km;
+  const files = (dvPend.get('form') || []).slice();                                // Belege: Tipp auf „Speichern“ öffnet bei Bedarf das Google-Fenster
+  if (files.length && !window.cloud?.isSignedIn()) { flash(msg, 'Belege brauchen die Anmeldung bei Google (Einstellungen). Bitte anmelden oder die Belege entfernen.', false); return; }
+  const tokP = files.length ? window.cloud.driveToken() : null; if (tokP) tokP.catch(() => { });
+  let tpl = null;
+  if ($('cost-recur').checked) {                                                  // Vorlage anlegen; die erste Buchung ist dieser Eintrag (Nummer 0)
+    const tid = Date.now(); entry.id = tid * 1000; entry.recurId = tid;
+    tpl = cleanRem({ id: tid, title: entry.title, amount: entry.amount, category: costCat || undefined, note: note || undefined, intervalMonths: Number($('cost-recur-int').value), startDate: entry.date, nextIdx: 1 });
+    const due = recurDueCount(tpl);
+    if (due > 0 && !confirm('Das Datum liegt in der Vergangenheit: ' + due + ' weitere Buchung' + (due === 1 ? '' : 'en') + ' bis heute werden zusätzlich angelegt. Fortfahren?')) return;
+  }
+  const costs = getCosts(); costs.push(entry); costs.sort((a, b) => new Date(a.date) - new Date(b.date));
+  const status = commitCosts(costs);
+  if (!status) return;
+  if (tpl) { commitRecurring(getRecurring().concat(tpl)); bookRecurring(); }
+  const text = 'Gespeichert: ' + entry.title + ', ' + (income ? '+' : '') + eur(Math.abs(entry.amount));
+  flash(msg, text + (window.cloud?.isSignedIn() ? ' · Cloud: wird übertragen …' : ' · nur lokal (nicht bei Google angemeldet)'), true);
+  status.then(r => { if (r === 'cloud') flash(msg, text + ' · Cloud ✓', true); else if (r.startsWith('error:')) flash(msg, text + ' · Cloud-Fehler: ' + r.slice(6), false); });
+  ['cost-title', 'cost-amount', 'cost-km', 'cost-note'].forEach(id => { $(id).value = ''; });
+  $('cost-income').checked = false; $('cost-recur').checked = false; $('cost-recur-opts').classList.add('hidden'); $('cost-date').value = '';                    // Datum für die nächste Erfassung wieder auf "jetzt"
+  renderCostsView();
+  if (files.length) { dvPend.set('form', []); dvRefreshForm(); dvAfterSave(entry, files, tokP, msg, text); }
+});
+
+/* CSV-Leser (wird vom Fahrtenbuch-Import genutzt) */
+function parseCsv(text) {                                // RFC-4180: Anführungszeichen, "" als Maskierung, Zeilenumbrüche in Feldern
+  text = text.replace(/^\uFEFF/, ''); const rows = []; let row = [], f = '', q = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (q) { if (ch === '"') { if (text[i + 1] === '"') { f += '"'; i++; } else q = false; } else f += ch; }
+    else if (ch === '"') q = true;
+    else if (ch === ',') { row.push(f); f = ''; }
+    else if (ch === '\n' || ch === '\r') { if (ch === '\r' && text[i + 1] === '\n') i++; row.push(f); f = ''; rows.push(row); row = []; }
+    else f += ch;
+  }
+  if (f !== '' || row.length) { row.push(f); rows.push(row); }
+  return rows.filter(r => !(r.length === 1 && r[0] === ''));
+}
+
+/* =====================================================================
+   Erinnerungen (Wartung, Service, Prüfungen) nach Datum und/oder km
+   Eintrag: { id, title, category?, note?, dueDate? ('JJJJ-MM-TT'), dueKm?, startDate ('JJJJ-MM-TT', Beginn des Fortschrittsbalkens), startKm?,
+              repeatMonths?, repeatDays? (täglich/wöchentlich, Wochen = 7 Tage), repeatUnit? ('d'|'w', nur Anzeige), repeatKm?, doneAt? (ISO, nur bei einmaligen), lastDoneAt?, lastDoneKm?, log? ([{ at, km?, cost? }] alle Erledigungen), guid? (aus früherem Import) }
+   Fortschritt: Anteil der Strecke von startDate/startKm bis dueDate/dueKm; gilt der größere der beiden Anteile (es zählt, was zuerst erreicht wird).
+   Wiederkehrende Erinnerungen werden mit „Erledigt“ ab dem Erledigt-Datum (und -km) neu angesetzt, einmalige wandern in die Liste „Erledigt“.
+   Den aktuellen km-Stand liefert lastKnownKm() (jüngster Wert aus Ladungen und Kosten).
+   ===================================================================== */
+const getReminders = () => { const l = load(KEY_REMINDERS, []); return Array.isArray(l) ? l : []; };
+const remWarn = () => {
+  const s = getSettings(), n = (v, d) => (v === undefined || v === null || v === '' || !Number.isFinite(Number(v))) ? d : Number(v);
+  return { days: n(s.remDays, 14), km: n(s.remKm, 500) };
+};
+/** Schreibweg für Erinnerungen: lokaler Cache + Firestore (nur Änderungen). Liefert false | Promise('local' | 'cloud' | 'error:…'). */
+function commitReminders(next) {
+  const prev = getReminders();
+  if (!save(KEY_REMINDERS, next)) return false;
+  renderReminderBadges();
+  if (isDesk()) try { renderReminders(); } catch (e) { }
+  try { if (!gtMirSkip) gtMirrorSoon(); } catch (e) { }
+  if (!window.cloud?.isSignedIn()) return Promise.resolve('local');
+  return window.cloud.pushReminders(prev, next).then(() => 'cloud').catch(e => {
+    console.error('Firestore-Schreibfehler (Erinnerungen)', e);
+    window.onCloudStatus?.({ error: e.code || e.message });
+    return 'error:' + (e.code || e.message);
+  });
+}
+/* Datums-Helfer: Tage immer lokal und auf 12:00 Uhr gerechnet, damit Zeitumstellungen nichts verschieben */
+const ymd = (d) => d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+const parseYMD = (s) => { const [y, m, d] = String(s).slice(0, 10).split('-').map(Number); return new Date(y, m - 1, d, 12); };
+const dayStart = (d = new Date()) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12);
+const todayYMD = () => ymd(new Date());
+const daysBetween = (a, b) => Math.round((a - b) / 86400000);
+const fmtYMD = (s) => parseYMD(s).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+function addMonths(d, n) {                                 // 31.01. + 1 Monat = 28./29.02. (Monatsende bleibt gültig)
+  const r = new Date(d.getFullYear(), d.getMonth() + n, 1, 12), last = new Date(r.getFullYear(), r.getMonth() + 1, 0).getDate();
+  r.setDate(Math.min(d.getDate(), last)); return r;
+}
+const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n, 12);
+const cleanRem = (o) => { Object.keys(o).forEach(k => { if (o[k] === undefined || o[k] === null || (typeof o[k] === 'number' && !isFinite(o[k]))) delete o[k]; }); return o; };
+const isRun = (r) => r && r.kind === 'run';                         // Laufzeit: „seit …“, optional mit Haltbarkeit (dueDate = Ablauf)
+const isRepeating = (r) => !isRun(r) && (r.repeatMonths > 0 || r.repeatDays > 0 || r.repeatKm > 0);
+/** Ablauf einer Laufzeit: Beginn + Haltbarkeit (Tage, Wochen, Monate) */
+const runDue = (since, n, u) => !(n > 0) || !since ? null : ymd(u === 'm' ? addMonths(parseYMD(since), n) : addDays(parseYMD(since), n * (u === 'w' ? 7 : 1)));
+const runLifeText = (r) => !(r.lifeN > 0) ? '' : r.lifeN + ' ' + (r.lifeUnit === 'm' ? (r.lifeN === 1 ? 'Monat' : 'Monate') : r.lifeUnit === 'd' ? (r.lifeN === 1 ? 'Tag' : 'Tage') : (r.lifeN === 1 ? 'Woche' : 'Wochen'));
+function agoText(days) {                                               // „vor 12 Tagen“, „vor 4 Monaten“
+  if (days <= 0) return 'heute'; if (days === 1) return 'gestern'; if (days < 14) return 'vor ' + days + ' Tagen';
+  if (days < 60) return 'vor ' + Math.round(days / 7) + ' Wochen'; if (days < 730) return 'vor ' + Math.round(days / 30.44) + ' Monaten';
+  const y = days / 365.25; return 'vor ' + fmt(Math.round(y * 10) / 10, 1).replace(/,0$/, '') + ' Jahren';
+}
+function leftText(days) {                                              // „noch ~2 Tage“, „noch ~20 Monate“
+  if (days < 14) return 'noch ' + days + (days === 1 ? ' Tag' : ' Tage'); if (days < 60) return 'noch ~' + Math.round(days / 7) + ' Wochen';
+  return 'noch ~' + Math.round(days / 30.44) + ' Monate';
+}
+const hasRepTime = (r) => r.repeatMonths > 0 || r.repeatDays > 0;
+/** Zeit-Intervall anwenden (n = +1 vor, −1 zurück): Monate oder Tage (wöchentlich = 7 Tage) */
+const remStep = (d, r, n = 1) => r.repeatMonths > 0 ? addMonths(d, n * r.repeatMonths) : addDays(d, n * r.repeatDays);
+function remEveryText(r) {
+  if (r.repeatMonths > 0) return r.repeatMonths === 1 ? 'monatlich' : 'alle ' + r.repeatMonths + ' Monate';
+  if (r.repeatDays > 0) { if (r.repeatUnit === 'w' || (r.repeatDays % 7 === 0 && r.repeatUnit !== 'd')) { const w = r.repeatDays / 7; return w === 1 ? 'wöchentlich' : 'alle ' + w + ' Wochen'; } return r.repeatDays === 1 ? 'täglich' : 'alle ' + r.repeatDays + ' Tage'; }
+  return '';
+}
+/** Verlauf aller Erledigungen einer Erinnerung, älteste zuerst: [{ at (ISO), km?, cost? }].
+    Ältere Einträge ohne Verlauf: der zuletzt gespeicherte Termin (lastDoneAt bzw. doneAt) gilt als erster Eintrag. */
+const REM_LOG_MAX = 100;
+function remLog(r) {
+  if (Array.isArray(r.log) && r.log.length) return r.log.filter(e => e && !isNaN(Date.parse(e.at))).sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+  const at = r.lastDoneAt || r.doneAt; if (!at) return [];
+  const e = { at }; if (r.lastDoneKm > 0) e.km = r.lastDoneKm; return [e];
+}
+/* Aufklappbarer Verlauf für die Karten (neueste Erledigung oben) */
+function remLogHtml(r) {
+  const l = remLog(r).slice().reverse(); if (!l.length) return '';
+  return `<details class="group"><summary class="flex cursor-pointer list-none items-center gap-1 text-xs font-medium text-slate-500 dark:text-slate-400 [&::-webkit-details-marker]:hidden">Verlauf (${l.length})<svg class="h-3.5 w-3.5 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></summary>
+    <ul class="mt-1.5 divide-y divide-slate-200 dark:divide-slate-800 rounded-xl bg-slate-100 dark:bg-slate-800/60 px-3">${l.map(e => `<li class="flex items-baseline justify-between gap-3 py-1.5 text-xs"><span class="tabular-nums">${fmtDate(e.at)}</span><span class="tabular-nums text-right text-slate-500 dark:text-slate-400">${[e.km > 0 ? fmt(e.km, 0) + ' km' : '', e.cost > 0 ? eur(e.cost) : ''].filter(Boolean).join(' · ') || '–'}</span></li>`).join('')}</ul></details>`;
+}
+
+/** Stand einer Erinnerung: { daysLeft, kmLeft, frac (0–1+, null = unbekannt), level 'ok' | 'soon' | 'over' }. */
+function remStatus(r, km = lastKnownKm(), today = dayStart()) {
+  const w = remWarn(), st = { daysLeft: null, kmLeft: null, frac: null, level: 'ok' }, fr = [];
+  if (r.dueDate) {
+    const due = parseYMD(r.dueDate), start = parseYMD(r.startDate || r.dueDate), total = daysBetween(due, start);
+    st.daysLeft = daysBetween(due, today);
+    fr.push(total > 0 ? Math.max(0, daysBetween(today, start)) / total : (st.daysLeft <= 0 ? 1 : 0));
+  }
+  if (r.dueKm > 0 && km != null) {
+    st.kmLeft = r.dueKm - km;
+    const sk = r.startKm != null ? r.startKm : (r.repeatKm > 0 ? r.dueKm - r.repeatKm : null);
+    if (sk != null && r.dueKm > sk) fr.push(Math.max(0, km - sk) / (r.dueKm - sk));
+    else if (st.kmLeft <= 0) fr.push(1);
+    else if (sk != null) fr.push(0);
+  }
+  st.frac = fr.length ? Math.max(...fr) : null;
+  const over = (st.daysLeft != null && st.daysLeft <= 0) || (st.kmLeft != null && st.kmLeft <= 0);
+  const runTot = isRun(r) && r.dueDate && r.startDate ? daysBetween(parseYMD(r.dueDate), parseYMD(r.startDate)) : 0;
+  const wd = r.repeatDays > 0 ? Math.min(w.days, Math.floor(r.repeatDays / 3)) : runTot > 0 ? Math.min(w.days, Math.floor(runTot / 3)) : w.days;
+  const soon = (st.daysLeft != null && st.daysLeft <= wd) || (st.kmLeft != null && st.kmLeft <= w.km);
+  st.level = over ? 'over' : soon ? 'soon' : 'ok';
+  return st;
+}
+const REM_RANK = { over: 0, soon: 1, ok: 2 };
+const sortedOpenReminders = (km = lastKnownKm()) => getReminders().filter(r => !r.doneAt && (!isRun(r) || r.dueDate)).map(r => ({ r, s: remStatus(r, km) }))
+  .sort((a, b) => remEta(a.s) - remEta(b.s) || a.r.title.localeCompare(b.r.title, 'de'));
+/** Chronologische Reihenfolge: Tage bis zur Fälligkeit; nur nach km fällige über den Ø km pro Tag in Tage umgerechnet (es zählt, was zuerst eintritt) */
+function remEta(s) {
+  let kd = 30; try { const h = wxoHabits(); if (h.kmDay > 3) kd = h.kmDay; } catch (e) { }
+  const t = [s.daysLeft, s.kmLeft != null ? s.kmLeft / kd : null].filter(v => v != null);
+  return t.length ? Math.min(...t) : 1e9;
+}
+
+/** Zähler an Glocke (Start-Seite) und am Start-Tab: Erinnerungen, die fällig, überfällig oder innerhalb der Vorwarnung sind. */
+function renderReminderBadges() {
+  const km = lastKnownKm(), st = getReminders().filter(r => !r.doneAt).map(r => remStatus(r, km));
+  const n = st.filter(s => s.level !== 'ok').length, over = st.some(s => s.level === 'over');
+  ['bell-badge', 'nav-badge'].forEach(id => {
+    const el = $(id); if (!el) return;
+    el.textContent = n > 99 ? '99+' : String(n);
+    el.classList.toggle('hidden', n === 0);                                                                              // immer grün (#10b981 wie die Balken)
+  });
+  renderHeroReminder(); renderRemBanner();
+  const b = $('btn-bell'); if (b) b.setAttribute('aria-label', n ? 'Erinnerungen, ' + n + (n === 1 ? ' fällig oder bald fällig' : ' fällig oder bald fällig') : 'Erinnerungen');
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { renderReminderBadges(); if (!$('view-reminders').classList.contains('hidden')) renderReminders(); } });   // Tageswechsel im Hintergrund
+
+const REM_LEVEL = {
+  over: { bar: 'bg-red-500', chip: 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200' },
+  soon: { bar: 'bg-amber-500', chip: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200' },
+  ok:   { bar: 'bg-emerald-500', chip: '' }
+};
+function remRepeatText(r) {
+  const p = []; if (hasRepTime(r)) p.push(remEveryText(r)); if (r.repeatKm > 0) p.push('alle ' + fmt(r.repeatKm, 0) + ' km');
+  return p.length ? 'wiederholt ' + p.join(' / ') : 'einmalig';
+}
+function remLines(r, s, km) {
+  const out = [];
+  if (r.dueDate) {
+    const d = s.daysLeft, when = fmtYMD(r.dueDate);
+    out.push(d < 0 ? (-d) + (d === -1 ? ' Tag' : ' Tage') + ' überfällig · seit ' + when : d === 0 ? 'Heute fällig · ' + when : d === 1 ? 'Morgen fällig · ' + when
+      : 'in ' + d + ' Tagen · ' + when + (d >= 60 ? ' (≈ ' + Math.round(d / 30.44) + ' Monate)' : ''));
+  }
+  if (r.dueKm > 0) {
+    out.push(km == null ? 'bei ' + fmt(r.dueKm, 0) + ' km (aktueller km-Stand unbekannt)'
+      : s.kmLeft < 0 ? fmt(-s.kmLeft, 0) + ' km überfällig (bei ' + fmt(r.dueKm, 0) + ' km)' : s.kmLeft === 0 ? 'Jetzt fällig (bei ' + fmt(r.dueKm, 0) + ' km)' : 'noch ' + fmt(s.kmLeft, 0) + ' km (bei ' + fmt(r.dueKm, 0) + ' km)');
+  }
+  return out;
+}
+const KEY_REMTAB = 'enyaq.remTab';
+let remTab = load(KEY_REMTAB, 'due') === 'run' ? 'run' : 'due';
+function renderReminders() {
+  const km = lastKnownKm(), all = sortedOpenReminders(km), open = all.filter(x => !isRun(x.r)), done = getReminders().filter(r => r.doneAt && !isRun(r)).sort((a, b) => new Date(b.doneAt) - new Date(a.doneAt));
+  const runs = getReminders().filter(r => isRun(r)).map(r => ({ r, s: remStatus(r, km) })).sort((a, b) => String(a.r.startDate || '9999').localeCompare(String(b.r.startDate || '9999')) || a.r.title.localeCompare(b.r.title, 'de'));   // am längsten laufend zuerst
+  const lv = all.filter(x => x.s.level !== 'ok'), n = lv.length, over = lv.filter(x => x.s.level === 'over').length;
+  $('rem-summary').textContent = open.length + runs.length ? (n ? over + ' fällig · ' + (n - over) + ' bald' : 'Alles im grünen Bereich') + ' · ' + open.length + (open.length === 1 ? ' Fälligkeit' : ' Fälligkeiten') + ' · ' + runs.length + (runs.length === 1 ? ' Laufzeit' : ' Laufzeiten') : '';
+  segPaintKey('.rem-tab', 'rtab', remTab);
+  document.querySelectorAll('.rem-tab').forEach(b => { b.textContent = (b.dataset.rtab === 'run' ? 'Laufzeit (' + runs.length + ')' : 'Fälligkeiten (' + open.length + ')'); });
+  const isDue = remTab === 'due', empty = isDue ? !open.length && !done.length : !runs.length;
+  $('rem-empty').classList.toggle('hidden', !empty);
+  $('rem-empty-h').textContent = isDue ? 'Noch keine Fälligkeiten' : 'Noch keine Laufzeiten';
+  $('rem-empty-t').textContent = isDue ? 'Lege mit „+ Neu“ eine an.' : 'Mit „+ Neu“ → Laufzeit hältst du fest, seit wann etwas läuft – z. B. Keramikbeschichtung oder Reifenglanz.';
+  $('rem-list').classList.toggle('hidden', !isDue); $('rem-run-list').classList.toggle('hidden', isDue); $('rem-ics-note').classList.toggle('hidden', !isDue);
+  $('rem-ics-all').classList.toggle('hidden', !isDue || !open.some(x => x.r.dueDate));
+  $('rem-run-list').innerHTML = runs.map(({ r, s }) => {
+    const ago = daysBetween(dayStart(), parseYMD(r.startDate || todayYMD())), has = !!r.dueDate, lvl = REM_LEVEL[s.level];
+    const pct = has ? Math.min(100, Math.round((s.frac || 0) * 100)) : 0, col = s.level === 'over' ? 'text-red-600 dark:text-red-400' : s.level === 'soon' ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400';
+    const left = !has ? '<span class="text-xs text-slate-500 dark:text-slate-400">ohne Ablauf</span>' : `<span class="text-xs font-semibold ${col}">${s.daysLeft < 0 ? 'abgelaufen seit ' + agoText(-s.daysLeft).replace(/^vor /, '') : s.daysLeft === 0 ? 'läuft heute ab' : leftText(s.daysLeft)}</span>`;
+    return `<li data-id="${esc(r.id)}" class="rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4 space-y-2">
+      <div class="flex items-start justify-between gap-3"><div class="min-w-0"><p class="font-medium break-words">${esc(r.title)}</p><p class="text-xs text-left text-slate-500 dark:text-slate-400">${[r.category ? esc(r.category) : '', has ? 'hält ca. ' + esc(runLifeText(r)) : ''].filter(Boolean).join(' · ') || 'Laufzeit'}</p></div>
+        <div class="shrink-0 text-right"><p class="text-[15px] font-bold leading-tight">${agoText(ago)}</p><p class="text-right text-[11px] text-slate-500 dark:text-slate-400">seit ${fmtYMD(r.startDate || todayYMD())}</p>${ago > 0 ? '<p class="text-right text-[11px] text-slate-500 dark:text-slate-400">' + fmt(ago, 0) + (ago === 1 ? ' Tag' : ' Tage') + '</p>' : ''}</div></div>
+      ${has ? `<div class="h-2.5 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><div class="h-full rounded-full ${lvl.bar}" style="width:${pct}%"></div></div>` : ''}
+      ${r.note ? `<p class="text-xs text-left text-slate-500 dark:text-slate-400 break-words">${esc(r.note)}</p>` : ''}
+      ${remLog(r).length > 1 ? remLogHtml(r) : ''}
+      <div class="flex items-center justify-between gap-2 pt-0.5"><span class="min-w-0 whitespace-nowrap">${left}</span><div class="flex shrink-0 gap-1.5"><button type="button" data-act="edit" class="whitespace-nowrap px-2.5 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 text-[13px] font-medium active:scale-95 transition">Bearbeiten</button><button type="button" data-act="renew" class="whitespace-nowrap px-2.5 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 text-[13px] font-semibold text-sky-700 dark:text-sky-300 active:scale-95 transition">↻ Erneuert</button></div></div></li>`;
+  }).join('');
+  $('rem-list').innerHTML = open.map(({ r, s }) => {
+    const lv = REM_LEVEL[s.level], pct = s.frac == null ? 0 : Math.min(100, Math.round(s.frac * 100));
+    const chip = s.level === 'ok' ? '' : `<span class="shrink-0 px-2 py-0.5 rounded-lg text-xs font-medium ${lv.chip}">${s.level === 'soon' ? 'Bald' : ((s.daysLeft != null && s.daysLeft < 0) || (s.kmLeft != null && s.kmLeft < 0)) ? 'Überfällig' : 'Fällig'}</span>`;
+    return `<li data-id="${esc(r.id)}" class="rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4 space-y-2">
+      <div class="flex items-start justify-between gap-2"><p class="font-medium min-w-0 break-words">${esc(r.title)}</p>${chip}</div>
+      <p class="text-xs text-slate-500 dark:text-slate-400">${r.category ? esc(r.category) + ' · ' : ''}${esc(remRepeatText(r))}</p>
+      <div class="space-y-0.5">${remLines(r, s, km).map(t => `<p class="text-sm">${esc(t)}</p>`).join('')}</div>
+      ${s.frac == null ? '' : `<div class="flex items-center gap-2"><div class="flex-1 h-2.5 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><div class="h-full rounded-full ${lv.bar}" style="width:${pct}%"></div></div><span class="w-10 text-right text-xs tabular-nums text-slate-500 dark:text-slate-400">${pct} %</span></div>`}
+      ${r.note ? `<p class="text-xs text-slate-500 dark:text-slate-400 break-words">${esc(r.note)}</p>` : ''}
+      ${r.lastDoneAt ? `<p class="text-xs text-slate-500 dark:text-slate-400">Zuletzt erledigt: ${fmtDate(r.lastDoneAt)}${r.lastDoneKm ? ' bei ' + fmt(r.lastDoneKm, 0) + ' km' : ''}</p>` : ''}
+      ${remLog(r).length > 1 ? remLogHtml(r) : ''}
+      <div class="grid grid-cols-3 gap-2 pt-1">
+        <button type="button" data-act="done" class="py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-semibold active:scale-95 transition">Erledigt</button>
+        <button type="button" data-act="edit" class="py-2.5 rounded-xl bg-slate-200 dark:bg-slate-800 text-sm font-medium active:scale-95 transition">Bearbeiten</button>
+        <button type="button" data-act="ics" class="py-2.5 rounded-xl bg-slate-200 dark:bg-slate-800 text-sm font-medium active:scale-95 transition">Kalender</button>
+      </div></li>`;
+  }).join('');
+  $('rem-done-wrap').classList.toggle('hidden', !done.length);
+  $('rem-done-label').textContent = 'Erledigt (' + done.length + ')';
+  $('rem-done-list').innerHTML = done.map(r => `<li data-id="${esc(r.id)}" class="rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-3 space-y-2">
+      <p class="text-sm font-medium break-words">${esc(r.title)}</p>
+      <p class="text-xs text-slate-500 dark:text-slate-400">erledigt am ${fmtDate(r.doneAt)}${r.lastDoneKm ? ' bei ' + fmt(r.lastDoneKm, 0) + ' km' : ''}</p>
+      ${remLog(r).length > 1 ? remLogHtml(r) : ''}
+      <div class="grid grid-cols-2 gap-2"><button type="button" data-act="reopen" class="py-2 rounded-xl bg-slate-200 dark:bg-slate-800 text-sm font-medium active:scale-95 transition">Wieder öffnen</button><button type="button" data-act="del" class="py-2 rounded-xl border border-red-500 text-red-600 dark:text-red-400 text-sm font-medium active:scale-95 transition">Löschen</button></div></li>`).join('');
+}
+$('rem-done-toggle').addEventListener('click', () => { const l = $('rem-done-list'); l.classList.toggle('hidden'); $('rem-done-arrow').textContent = l.classList.contains('hidden') ? '▾' : '▴'; });
+const remById = (id) => getReminders().find(r => String(r.id) === String(id));
+/** Laufzeit erneuert: läuft ab heute neu (Haltbarkeit bleibt), Eintrag im Verlauf */
+function remRenew(r) {
+  if (!confirm('„' + r.title + '“ heute erneuert? Die Laufzeit beginnt dann neu.')) return;
+  const t = todayYMD(), log = remLog(r).map(e => { const o = { at: e.at }; if (e.km > 0) o.km = e.km; if (e.cost > 0) o.cost = e.cost; return o; });
+  if (!log.length && r.startDate) log.push({ at: parseYMD(r.startDate).toISOString() });   // bisheriger Beginn als erster Verlaufseintrag
+  log.push({ at: new Date().toISOString() });
+  const upd = { ...r, startDate: t, dueDate: runDue(t, r.lifeN, r.lifeUnit) || undefined, log: log.slice(-REM_LOG_MAX) };
+  commitReminders(getReminders().map(x => String(x.id) === String(r.id) ? cleanRem(upd) : x)); renderReminders();
+}
+function remListClick(e) {
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  const li = b.closest('li[data-id]'), r = li && remById(li.dataset.id); if (!r) return;
+  const act = b.dataset.act;
+  if (act === 'renew') { remRenew(r); return; }
+  if (act === 'done') openDone(r); else if (act === 'edit') openRemDialog(r); else if (act === 'ics') downloadIcs([r]);
+  else if (act === 'reopen') { commitReminders(getReminders().map(x => String(x.id) === String(r.id) ? cleanRem({ ...x, doneAt: undefined }) : x)); renderReminders(); }
+  else if (act === 'del' && confirm('„' + r.title + '“ endgültig löschen?')) { commitReminders(getReminders().filter(x => String(x.id) !== String(r.id))); renderReminders(); }
+}
+$('rem-list').addEventListener('click', remListClick);
+$('rem-run-list').addEventListener('click', remListClick);
+$('rem-tabs').addEventListener('click', (e) => { const b = e.target.closest('[data-rtab]'); if (!b) return; remTab = b.dataset.rtab; save(KEY_REMTAB, remTab); renderReminders(); });
+segSwipe($('view-reminders'), $('rem-tabs'));                            // ganze Seite: seitlich wischen wechselt Fälligkeiten | Laufzeit
+$('rem-done-list').addEventListener('click', remListClick);
+
+/* ---- Anlegen / Bearbeiten ---- */
+let remEditId = null;
+function remMsg(id, text) { const el = $(id); el.textContent = text; el.className = 'text-sm text-red-600 dark:text-red-400'; }
+let remKind = 'due';
+function setRemKind(k) {
+  remKind = k === 'run' ? 'run' : 'due'; const run = remKind === 'run';
+  segPaintKey('.rem-kind', 'rkind', remKind);
+  $('rem-f-due').classList.toggle('hidden', run); $('rem-f-run').classList.toggle('hidden', !run);
+  $('rem-title').placeholder = run ? 'z. B. Keramikbeschichtung' : 'z. B. Reifendruck prüfen';
+  $('rem-note-l').textContent = run ? 'Produkt / Notiz (optional)' : 'Notiz (optional)';
+  $('rem-hint').textContent = run ? 'Ohne „Hält ca.“ zählt die Laufzeit nur hoch („vor 7 Tagen“). Mit Haltbarkeit erinnert dich die App, wenn sie abläuft.' : 'Datum und km können zusammen gelten: Es zählt, was zuerst erreicht wird.';
+  $('rem-dialog-msg').className = 'hidden text-sm';
+}
+$('rem-kind').addEventListener('click', (e) => { const b = e.target.closest('[data-rkind]'); if (b) setRemKind(b.dataset.rkind); });
+$('rem-since-today').addEventListener('click', () => { $('rem-since').value = todayYMD(); });
+function openRemDialog(r = null) {
+  remEditId = r ? r.id : null;
+  setRemKind(r ? (isRun(r) ? 'run' : 'due') : remTab);
+  $('rem-since').value = isRun(r) ? (r.startDate || todayYMD()) : todayYMD(); $('rem-life').value = isRun(r) && r.lifeN > 0 ? String(r.lifeN) : ''; $('rem-life-unit').value = isRun(r) && r.lifeUnit ? r.lifeUnit : 'w';
+  $('rem-dialog-title').textContent = r ? 'Erinnerung bearbeiten' : 'Neue Erinnerung';
+  $('rem-title').value = r?.title || ''; $('rem-cat').innerHTML = catOptions(r?.category || '');
+  $('rem-due').value = r && !isRun(r) ? r.dueDate || '' : ''; $('rem-due-km').value = r?.dueKm ? String(r.dueKm) : '';
+  const ru = r?.repeatMonths ? 'm' : r?.repeatDays ? (r.repeatUnit === 'w' || (r.repeatDays % 7 === 0 && r.repeatUnit !== 'd') ? 'w' : 'd') : 'm';
+  $('rem-rep-unit').value = ru; $('rem-rep-m').value = r?.repeatMonths ? String(r.repeatMonths) : r?.repeatDays ? String(ru === 'w' ? r.repeatDays / 7 : r.repeatDays) : ''; $('rem-rep-km').value = r?.repeatKm ? String(r.repeatKm) : '';
+  $('rem-note').value = r?.note || '';
+  $('rem-dialog-msg').className = 'hidden text-sm'; $('rem-delete').classList.toggle('hidden', !r);
+  $('rem-dialog').classList.remove('hidden');
+}
+const closeRemDialog = () => $('rem-dialog').classList.add('hidden');
+$('rem-add').addEventListener('click', () => openRemDialog());
+$('rem-cancel').addEventListener('click', closeRemDialog);
+$('rem-dialog').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeRemDialog(); });
+$('rem-delete').addEventListener('click', () => {
+  const r = remEditId != null && remById(remEditId); if (!r || !confirm('„' + r.title + '“ löschen?')) return;
+  commitReminders(getReminders().filter(x => String(x.id) !== String(r.id))); closeRemDialog(); renderReminders();
+});
+$('rem-save').addEventListener('click', () => {
+  const title = $('rem-title').value.trim().replace(/\s+/g, ' '), cat = $('rem-cat').value, note = $('rem-note').value.trim();
+  if (remKind === 'run') {                                              // Laufzeit: seit … (+ optional Haltbarkeit)
+    const since = $('rem-since').value, lifeN = optNum($('rem-life').value), lifeU = $('rem-life-unit').value;
+    if (!title) { remMsg('rem-dialog-msg', 'Bitte einen Titel eingeben.'); return; }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(since) || isNaN(parseYMD(since))) { remMsg('rem-dialog-msg', 'Bitte angeben, seit wann es läuft.'); return; }
+    if (since > todayYMD()) { remMsg('rem-dialog-msg', 'Das Datum liegt in der Zukunft – dafür bitte „Fälligkeit“ nutzen.'); return; }
+    if (Number.isNaN(lifeN) || (lifeN != null && (!Number.isInteger(lifeN) || lifeN < 1 || lifeN > 999))) { remMsg('rem-dialog-msg', 'Bitte die Haltbarkeit als ganze Zahl (1 bis 999) eingeben oder leer lassen.'); return; }
+    const list = getReminders(), old = remEditId != null ? list.find(x => String(x.id) === String(remEditId)) : null;
+    const r = { ...(old || { id: Date.now() }), kind: 'run', title, category: cat || undefined, note: note || undefined, startDate: since, lifeN: lifeN ?? undefined, lifeUnit: lifeN ? lifeU : undefined, dueDate: runDue(since, lifeN, lifeU) || undefined,
+      dueKm: undefined, startKm: undefined, repeatMonths: undefined, repeatDays: undefined, repeatUnit: undefined, repeatKm: undefined, doneAt: undefined };
+    commitReminders(old ? list.map(x => String(x.id) === String(old.id) ? cleanRem(r) : x) : list.concat(cleanRem(r)));
+    remTab = 'run'; save(KEY_REMTAB, remTab); closeRemDialog(); renderReminders(); return;
+  }
+  let due = $('rem-due').value;
+  const dueKm = optNum($('rem-due-km').value), repN = optNum($('rem-rep-m').value), repU = $('rem-rep-unit').value, repKm = optNum($('rem-rep-km').value), km = lastKnownKm();
+  const repMax = repU === 'd' ? 3650 : repU === 'w' ? 520 : 240;
+  if (!title) { remMsg('rem-dialog-msg', 'Bitte einen Titel eingeben.'); return; }
+  if (due && isNaN(parseYMD(due))) { remMsg('rem-dialog-msg', 'Bitte ein gültiges Datum eingeben.'); return; }
+  if ([dueKm, repN, repKm].some(Number.isNaN) || (dueKm != null && (dueKm <= 0 || dueKm > 999999)) || (repN != null && (!Number.isInteger(repN) || repN < 1 || repN > repMax))
+      || (repKm != null && (repKm <= 0 || repKm > 999999))) { remMsg('rem-dialog-msg', 'Bitte km (1 bis 999999) und das Intervall (ganze Zahl, 1 bis ' + repMax + ') prüfen.'); return; }
+  const repM = repN != null && repU === 'm' ? repN : null, repD = repN != null && repU !== 'm' ? repN * (repU === 'w' ? 7 : 1) : null, tmp = { repeatMonths: repM || 0, repeatDays: repD || 0 };
+  let dKm = dueKm;
+  if (!due && dKm == null) {                                            // nur Wiederholung angegeben: erste Fälligkeit ab heute
+    if (repM || repD) due = ymd(remStep(new Date(), tmp));
+    if (repKm && km != null) dKm = km + repKm;
+  }
+  if (!due && dKm == null) { remMsg('rem-dialog-msg', repKm && !repM && !repD ? 'Für die Wiederholung nach km fehlt ein bekannter km-Stand. Bitte „Fällig bei km“ eingeben.' : 'Bitte ein Datum oder einen km-Stand angeben, wann die Erinnerung fällig ist.'); return; }
+  const list = getReminders(), old = remEditId != null ? list.find(x => String(x.id) === String(remEditId)) : null;
+  const r = { ...(old || { id: Date.now() }), kind: undefined, lifeN: undefined, lifeUnit: undefined, title, category: cat || undefined, note: note || undefined, dueDate: due || undefined, dueKm: dKm ?? undefined, repeatMonths: repM ?? undefined, repeatDays: repD ?? undefined, repeatUnit: repD ? repU : undefined, repeatKm: repKm ?? undefined };
+  const today = new Date();
+  if (!old) {                                                           // Beginn des Fortschritts: bei Wiederholung der Beginn des aktuellen Zeitraums, sonst heute
+    const back = due && (repM || repD) ? remStep(parseYMD(due), tmp, -1) : null;
+    r.startDate = back && back < today ? ymd(back) : ymd(today);
+  } else if (due && parseYMD(due) <= parseYMD(r.startDate || due)) r.startDate = repM || repD ? ymd(remStep(parseYMD(due), tmp, -1)) : ymd(addDays(parseYMD(due), -30));
+  if (dKm != null) { const sk = km != null && km < dKm ? km : (repKm && dKm > repKm ? dKm - repKm : null); if (!old || old.startKm == null || old.startKm >= dKm) r.startKm = sk ?? undefined; }
+  else r.startKm = undefined;
+  if (old && isRun(old)) r.startDate = ymd(today);                      // aus einer Laufzeit wurde eine Fälligkeit
+  commitReminders(old ? list.map(x => String(x.id) === String(old.id) ? cleanRem(r) : x) : list.concat(cleanRem(r)));
+  remTab = 'due'; save(KEY_REMTAB, remTab); closeRemDialog(); renderReminders();
+});
+
+/* ---- Erledigt ---- */
+let doneId = null;
+function openDone(r) {
+  doneId = r.id; $('done-title').textContent = r.title; $('done-date').value = toLocalInput(new Date().toISOString());
+  const km = lastKnownKm(); $('done-km').value = ''; $('done-km').placeholder = km != null ? 'zuletzt ' + fmt(km, 0) : '';
+  $('done-cost').value = ''; $('done-msg').className = 'hidden text-sm'; updateDonePreview(); $('done-dialog').classList.remove('hidden');
+}
+/** Neuer Stand nach „Erledigt“ (ohne zu speichern): { doneAt, km, dueDate?, dueKm? } oder { error }. */
+function remNextAfterDone(r) {
+  const d = new Date($('done-date').value); if (isNaN(d)) return { error: 'Bitte ein gültiges Datum eingeben.' };
+  let km = optNum($('done-km').value); if (Number.isNaN(km) || (km != null && (km < 0 || km > 999999))) return { error: 'Bitte einen gültigen km-Stand eingeben oder das Feld leer lassen.' };
+  if (km == null) km = lastKnownKm();
+  const out = { doneAt: d, km };
+  if (isRepeating(r)) {
+    if (hasRepTime(r)) out.dueDate = ymd(remStep(d, r));
+    if (r.repeatKm > 0) { if (km == null) { if (!hasRepTime(r)) return { error: 'Für die nächste km-Fälligkeit bitte den km-Stand eingeben.' }; } else out.dueKm = km + r.repeatKm; }
+  }
+  return out;
+}
+function updateDonePreview() {
+  const r = remById(doneId), n = r ? remNextAfterDone(r) : null, el = $('done-next');
+  el.textContent = !r || n.error ? '' : !isRepeating(r) ? 'Einmalige Erinnerung: wird nach „Erledigt“ abgelegt.'
+    : 'Nächste Fälligkeit: ' + [n.dueDate ? fmtYMD(n.dueDate) : '', n.dueKm ? 'bei ' + fmt(n.dueKm, 0) + ' km' : ''].filter(Boolean).join(' oder ');
+}
+['done-date', 'done-km'].forEach(id => $(id).addEventListener('input', updateDonePreview));
+$('done-cancel').addEventListener('click', () => $('done-dialog').classList.add('hidden'));
+$('done-dialog').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden'); });
+$('done-ok').addEventListener('click', () => {
+  const r = remById(doneId); if (!r) return;
+  const n = remNextAfterDone(r), cost = optNum($('done-cost').value);
+  if (n.error) { remMsg('done-msg', n.error); return; }
+  if (Number.isNaN(cost) || (cost != null && (cost < 0 || cost > 1e6))) { remMsg('done-msg', 'Bitte einen gültigen Betrag eingeben oder das Feld leer lassen.'); return; }
+  const upd = { ...r, lastDoneAt: n.doneAt.toISOString(), lastDoneKm: n.km ?? undefined };
+  const le = { at: n.doneAt.toISOString() }; if (n.km > 0) le.km = Math.round(n.km); if (cost > 0) le.cost = Math.round(cost * 100) / 100;   // ohne undefined (Firestore)
+  upd.log = remLog(r).map(e => { const o = { at: e.at }; if (e.km > 0) o.km = e.km; if (e.cost > 0) o.cost = e.cost; return o; })
+    .concat(le).sort((a, b) => Date.parse(a.at) - Date.parse(b.at)).slice(-REM_LOG_MAX);
+  if (isRepeating(r)) {
+    upd.startDate = ymd(n.doneAt); upd.startKm = n.km ?? undefined;
+    if (hasRepTime(r)) upd.dueDate = n.dueDate;
+    if (r.repeatKm > 0) upd.dueKm = n.dueKm ?? r.dueKm;
+  } else upd.doneAt = n.doneAt.toISOString();
+  commitReminders(getReminders().map(x => String(x.id) === String(r.id) ? cleanRem(upd) : x));
+  if (cost != null && cost > 0) {                                       // optional gleich als Kosten buchen
+    const entry = { id: Date.now() + 1, date: n.doneAt.toISOString(), title: r.title.slice(0, 80), amount: Math.round(cost * 100) / 100, category: r.category || '' };
+    const kmTyped = optNum($('done-km').value); if (kmTyped != null && kmTyped > 0) entry.odometerKm = kmTyped;       // nur ein selbst eingegebener km-Stand, nicht der geschätzte
+    commitCosts(getCosts().concat(entry).sort((a, b) => new Date(a.date) - new Date(b.date)));
+  }
+  $('done-dialog').classList.add('hidden'); renderReminders();
+});
+
+/* ---- Kalender-Export (.ics, ganztägig am Fälligkeitstag, Hinweise 7 Tage und 1 Tag vorher) ---- */
+const icsEsc = (t) => String(t).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+function icsFold(line) {                                                // Zeilen auf höchstens 75 Byte kürzen (UTF-8, Umbruch nie mitten im Zeichen)
+  const enc = new TextEncoder(); if (enc.encode(line).length <= 75) return line;
+  const out = []; let cur = '', bytes = 0;
+  for (const ch of line) { const b = enc.encode(ch).length; if (bytes + b > 75) { out.push(cur); cur = ' ' + ch; bytes = 1 + b; } else { cur += ch; bytes += b; } }
+  out.push(cur); return out.join('\r\n');
+}
+function buildIcs(list) {
+  const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z'), compact = (s) => s.replace(/-/g, '');
+  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Enyaq Ladekosten//Erinnerungen//DE', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH'];
+  list.filter(r => r.dueDate).forEach(r => {
+    const desc = [r.note, r.dueKm ? 'Auch fällig bei ' + fmt(r.dueKm, 0) + ' km.' : '', isRepeating(r) ? 'Intervall: ' + remRepeatText(r).replace(/^wiederholt /, '') + '.' : '', 'Aus der App Enyaq Ladekosten.'].filter(Boolean).join('\n');
+    lines.push('BEGIN:VEVENT', 'UID:enyaq-rem-' + r.id + '@enyaq-ladekosten', 'DTSTAMP:' + stamp, 'DTSTART;VALUE=DATE:' + compact(r.dueDate), 'DTEND;VALUE=DATE:' + compact(ymd(addDays(parseYMD(r.dueDate), 1))),
+      'SUMMARY:' + icsEsc('Enyaq: ' + r.title), 'DESCRIPTION:' + icsEsc(desc), 'TRANSP:TRANSPARENT',
+      'BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:' + icsEsc(r.title), 'TRIGGER:-P6DT15H', 'END:VALARM',
+      'BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:' + icsEsc(r.title), 'TRIGGER:-PT15H', 'END:VALARM', 'END:VEVENT');
+  });
+  lines.push('END:VCALENDAR');
+  return lines.map(icsFold).join('\r\n') + '\r\n';
+}
+function downloadIcs(list) {
+  const withDate = list.filter(r => r.dueDate);
+  if (!withDate.length) { alert('Diese Erinnerung hat kein Fälligkeitsdatum (nur km) und kann nicht in den Kalender.'); return; }
+  const a = document.createElement('a'), name = withDate.length === 1 ? 'enyaq-' + withDate[0].title.toLowerCase().replace(/[^a-z0-9äöüß]+/g, '-').replace(/^-|-$/g, '').slice(0, 30) : 'enyaq-erinnerungen';
+  a.href = URL.createObjectURL(new Blob([buildIcs(withDate)], { type: 'text/calendar;charset=utf-8' })); a.download = (name || 'enyaq-erinnerung') + '.ics';
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+$('rem-ics-all').addEventListener('click', () => downloadIcs(sortedOpenReminders().filter(x => !isRun(x.r)).map(x => x.r)));
+
+/** Cloud-Abgleich der Erinnerungen (wie bei den Kosten): beim ersten Abgleich werden lokale, in der Cloud fehlende Einträge hochgeladen und behalten. */
+window.onCloudReminders = (cloud, isFirst, uid) => {
+  if (isFirst) checkCacheUid(uid);
+  if (isFirst) {
+    const missing = unsyncedLocal(getReminders(), cloud, uid);
+    if (missing.length) { window.cloud.pushReminders([], missing).catch(e => window.onCloudStatus({ error: 'Erinnerungen-Upload fehlgeschlagen: ' + (e.code || e.message) })); cloud = cloud.concat(missing); }
+  }
+  save(KEY_REMINDERS, cloud.sort((a, b) => Number(a.id) - Number(b.id)));
+  refreshViews(); touchSync();
+};
+
+
+/** Erinnerungen aus einer Export-Datei (optional, ältere Dateien haben sie nicht). Wirft bei ungültigen Einträgen. */
+function parseImportReminders(text) {
+  const data = JSON.parse(text); if (!Array.isArray(data.reminders)) return [];
+  const seen = new Set(), okYMD = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !isNaN(parseYMD(s));
+  return data.reminders.map((r, i) => {
+    const bad = () => new Error('Erinnerung ' + (i + 1) + ' ist ungültig.');
+    if (!r || typeof r.title !== 'string' || !r.title.trim()) throw bad();
+    if ((r.dueDate != null && !okYMD(r.dueDate)) || (r.startDate != null && !okYMD(r.startDate))) throw bad();
+    const num = (v, max) => v == null ? undefined : (typeof v === 'number' && isFinite(v) && v > 0 && v <= max ? v : (() => { throw bad(); })());
+    let id = Number(r.id); if (!Number.isFinite(id) || seen.has(id)) id = Date.now() + i; seen.add(id);
+    const o = { id, title: r.title.trim().slice(0, 80), startDate: r.startDate || r.dueDate || todayYMD(), dueDate: r.dueDate ?? undefined, dueKm: num(r.dueKm, 999999), startKm: typeof r.startKm === 'number' && r.startKm >= 0 && r.startKm <= 999999 ? r.startKm : undefined,
+      repeatMonths: num(r.repeatMonths, 240), repeatDays: num(r.repeatDays, 3650), repeatUnit: r.repeatUnit === 'w' || r.repeatUnit === 'd' ? r.repeatUnit : undefined, repeatKm: num(r.repeatKm, 999999) };
+    if (!o.dueDate && o.dueKm == null) throw bad();
+    if (typeof r.category === 'string' && r.category.trim()) o.category = r.category.trim().slice(0, 30);
+    if (typeof r.note === 'string' && r.note.trim()) o.note = r.note.trim().slice(0, 300);
+    for (const k of ['doneAt', 'lastDoneAt']) if (r[k] != null) { if (isNaN(Date.parse(r[k]))) throw bad(); o[k] = new Date(r[k]).toISOString(); }
+    if (typeof r.lastDoneKm === 'number' && r.lastDoneKm > 0 && r.lastDoneKm <= 999999) o.lastDoneKm = r.lastDoneKm;
+    if (typeof r.guid === 'string' && r.guid) o.guid = r.guid.slice(0, 64);
+    if (Array.isArray(r.log)) {
+      const l = r.log.filter(e => e && typeof e.at === 'string' && !isNaN(Date.parse(e.at))).slice(-REM_LOG_MAX).map(e => {
+        const x = { at: new Date(e.at).toISOString() };
+        if (typeof e.km === 'number' && e.km > 0 && e.km <= 999999) x.km = e.km;
+        if (typeof e.cost === 'number' && e.cost > 0 && e.cost <= 1e6) x.cost = e.cost;
+        return x; });
+      if (l.length) o.log = l;
+    }
+    return cleanRem(o);
+  });
+}
+
+
+/* =====================================================================
+   Wiederkehrende Kosten (Versicherung, Steuer, Abo …)
+   Vorlage: { id, title, amount (negativ = Einnahme), category?, note?, intervalMonths (1|3|6|12), startDate (ISO der ersten Buchung), nextIdx (nächste Buchung, 0-basiert) }
+   Buchungen entstehen beim Öffnen der App automatisch bis heute. Ihre ID ist fest (Vorlagen-ID × 1000 + Nummer): Öffnen zwei Geräte gleichzeitig,
+   überschreiben sie denselben Eintrag, statt doppelt zu buchen. Ein gelöschter Eintrag wird nicht neu gebucht, weil nextIdx nur vorwärts läuft.
+   ===================================================================== */
+const getRecurring = () => { const l = load(KEY_RECUR, []); return Array.isArray(l) ? l : []; };
+function commitRecurring(next) {
+  const prev = getRecurring();
+  if (!save(KEY_RECUR, next)) return false;
+  if (!window.cloud?.isSignedIn()) return Promise.resolve('local');
+  return window.cloud.pushRecurring(prev, next).then(() => 'cloud').catch(e => {
+    console.error('Firestore-Schreibfehler (wiederkehrende Kosten)', e);
+    window.onCloudStatus?.({ error: e.code || e.message });
+    return 'error:' + (e.code || e.message);
+  });
+}
+const RECUR_LABEL = { 1: 'monatlich', 3: 'vierteljährlich', 6: 'halbjährlich', 12: 'jährlich' };
+function recurDate(t, n) {
+  const s = new Date(t.startDate); if (n === 0) return s;
+  const d = addMonths(s, t.intervalMonths * n); d.setHours(s.getHours(), s.getMinutes(), 0, 0); return d;
+}
+function recurDueCount(t) { let n = t.nextIdx || 0, c = 0; const now = new Date(); while (n < 1000 && recurDate(t, n) <= now) { n++; c++; } return c; }
+/** Bucht fällige Wiederholungen nach. Liefert die Zahl neuer Kosten. */
+function bookRecurring() {
+  const tpls = getRecurring(); if (!tpls.length) return 0;
+  const now = new Date(), ids = new Set(getCosts().map(c => String(c.id))), add = []; let changed = false;
+  const next = tpls.map(t => {
+    let n = t.nextIdx || 0;
+    while (n < 1000 && recurDate(t, n) <= now) {
+      const id = Number(t.id) * 1000 + n;
+      if (!ids.has(String(id))) { add.push(cleanRem({ id, date: recurDate(t, n).toISOString(), title: t.title, amount: t.amount, category: t.category || '', note: t.note, recurId: t.id })); ids.add(String(id)); }
+      n++;
+    }
+    if (n === (t.nextIdx || 0)) return t;
+    changed = true; return { ...t, nextIdx: n };
+  });
+  if (add.length) commitCosts(getCosts().concat(add).sort((a, b) => new Date(a.date) - new Date(b.date)));
+  if (changed) commitRecurring(next);
+  if (changed || add.length) { if (!$('view-costs').classList.contains('hidden')) renderRecurring(); }
+  return add.length;
+}
+function renderRecurring() {
+  const l = getRecurring();
+  $('recur-card').classList.toggle('hidden', !l.length);
+  $('recur-list').innerHTML = l.map(t => `<li data-id="${esc(t.id)}" class="flex items-center justify-between gap-2 rounded-2xl bg-slate-100 dark:bg-slate-800 px-3 py-2">
+    <div class="min-w-0"><p class="text-sm font-medium truncate">${esc(t.title)} · ${t.amount < 0 ? '+' : ''}${esc(eur(Math.abs(t.amount)))}</p>
+    <p class="text-xs text-slate-500 dark:text-slate-400">${RECUR_LABEL[t.intervalMonths] || 'alle ' + t.intervalMonths + ' Monate'} · nächste Buchung ${fmtDate(recurDate(t, t.nextIdx || 0).toISOString())}</p></div>
+    <button type="button" data-end="${esc(t.id)}" class="shrink-0 px-3 py-1.5 rounded-xl border border-red-500 text-red-600 dark:text-red-400 text-xs font-medium active:scale-95 transition">Beenden</button></li>`).join('');
+}
+$('recur-list').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-end]'); if (!b) return;
+  const t = getRecurring().find(x => String(x.id) === b.dataset.end); if (!t) return;
+  if (!confirm('„' + t.title + '“ nicht mehr automatisch buchen? Bereits gebuchte Kosten bleiben erhalten.')) return;
+  commitRecurring(getRecurring().filter(x => String(x.id) !== String(t.id))); renderRecurring();
+});
+$('cost-recur').addEventListener('change', () => $('cost-recur-opts').classList.toggle('hidden', !$('cost-recur').checked));
+document.addEventListener('visibilitychange', () => { if (!document.hidden) bookRecurring(); });
+window.onCloudRecurring = (cloud, isFirst, uid) => {
+  if (isFirst) checkCacheUid(uid);
+  if (isFirst) {
+    const missing = unsyncedLocal(getRecurring(), cloud, uid);
+    if (missing.length) { window.cloud.pushRecurring([], missing).catch(e => window.onCloudStatus({ error: 'Upload fehlgeschlagen: ' + (e.code || e.message) })); cloud = cloud.concat(missing); }
+  }
+  save(KEY_RECUR, cloud.sort((a, b) => Number(a.id) - Number(b.id)));
+  if (!editMode) bookRecurring();
+  refreshViews(); touchSync();
+};
+function parseImportRecurring(text) {
+  const data = JSON.parse(text); if (!Array.isArray(data.recurring)) return [];
+  return data.recurring.map((t, i) => {
+    const bad = () => new Error('Wiederkehrende Kosten ' + (i + 1) + ' sind ungültig.');
+    if (!t || isNaN(new Date(t.startDate)) || typeof t.amount !== 'number' || !isFinite(t.amount) || t.amount === 0 || !RECUR_LABEL[t.intervalMonths] || !Number.isFinite(Number(t.id))) throw bad();
+    const o = { id: Number(t.id), title: String(t.title ?? '').trim().slice(0, 80) || 'Kosten', amount: Math.round(t.amount * 100) / 100, intervalMonths: t.intervalMonths, startDate: new Date(t.startDate).toISOString(),
+      nextIdx: Number.isInteger(t.nextIdx) && t.nextIdx >= 0 && t.nextIdx <= 1000 ? t.nextIdx : 0 };
+    if (typeof t.category === 'string' && t.category.trim()) o.category = t.category.trim().slice(0, 30);
+    if (typeof t.note === 'string' && t.note.trim()) o.note = t.note.trim().slice(0, 300);
+    return o;
+  });
+}
+
+
+
+// ───── src/05-startseite-banner.js ─────
+/* =====================================================================
+   Start-Ansicht: Kopfbereich mit Jahreswerten, Bilder-Karussell und nächster Erinnerung
+   Jahreswerte (laufendes Jahr): Kilometer aus den erfassten km-Ständen, Kosten = Laden + Kosten – Einnahmen (wie im Bericht), Geladen = alle Orte (Zuhause + Bosch + Unterwegs).
+   Karussell: Enyaq1 … Enyaq5 (.png, .webp, .jpg oder .jpeg) im Ordner „Bilder“; fehlt jedes, erscheint ein eingebettetes Ersatzbild.
+   ===================================================================== */
+const HERO_FALLBACK = 'data:image/webp;base64,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';
+const KEY_STATMODE = 'enyaq.statMode';                                  // 'year' | 'since' – zuletzt gewählte Ansicht der drei Werte
+let statMode = load(KEY_STATMODE, 'year') === 'since' ? 'since' : 'year', flipping = false;
+const purchaseLabel = () => new Date(purchaseMonth() + '-01T12:00:00').toLocaleDateString('de-DE', { month: 'short', year: 'numeric' });   // „Juni 2026“, „Sept. 2026“
+const purchaseDay = () => { const p = getSettings().purchase; if (/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(p)) return p; return /^\d{4}-(0[1-9]|1[0-2])$/.test(p) ? p + '-01' : '2026-06-08'; };   // Kauftag (JJJJ-MM-TT); ältere Einstellungen mit nur Monat gelten ab dem 1.
+const purchaseMonth = () => purchaseDay().slice(0, 7);   // die Rechnungen starten weiterhin im Monat des Kauftags
+/** Gefahrene km im Zeitraum [s0, e0): Stand vor dem Zeitraum, sonst der erste Stand darin, bis zum letzten Stand darin. */
+function rangeKm(s0, e0) {
+  const pts = getReadings().filter(r => r.odometerKm > 0).map(r => [Date.parse(r.date), r.odometerKm])
+    .concat(getCosts().filter(c => c.odometerKm > 0).map(c => [Date.parse(c.date), c.odometerKm])).sort((a, b) => a[0] - b[0]);
+  const inR = pts.filter(q => q[0] >= s0 && q[0] < e0); if (!inR.length) return null;
+  const before = pts.filter(q => q[0] < s0), b = before[before.length - 1];
+  const km = inR[inR.length - 1][1] - (b ? b[1] : inR[0][1]); return km > 0 ? km : null;
+}
+const yearKm = (y) => rangeKm(new Date(y, 0, 1).getTime(), new Date(y + 1, 0, 1).getTime());
+/** Die drei Werte für 'year' (laufendes Jahr) oder 'since' (ab Kaufmonat bis heute): Kilometer, Kosten (Laden + Kosten – Einnahmen), Geladen (alle Orte). */
+function heroVals(mode) {
+  const now = new Date(), cy = now.getFullYear(), [py, pm] = purchaseMonth().split('-').map(Number);
+  const from = mode === 'since' ? new Date(py, pm - 1, 1) : new Date(cy, 0, 1), end = new Date(cy, now.getMonth(), 1);
+  const inR = (d) => { const t = Date.parse(d); return t >= from.getTime(); };
+  const has = getReadings().some(r => inR(r.date)) || getCosts().some(c => inR(c.date));
+  let cost = 0, kwh = 0;
+  if (has) for (let y = from.getFullYear(), m = from.getMonth(); y < cy || (y === cy && m <= end.getMonth()); m++) { if (m > 11) { m = 0; y++; if (y > cy) break; } cost += costTotals(y, m).total; kwh += monthReport(y, m, 'all').kwh; }
+  const km = mode === 'since' ? rangeKm(from.getTime(), now.getTime() + 1) : yearKm(cy);
+  const lab = (name) => mode === 'since' ? 'seit ' + purchaseLabel() : name + ' ' + cy;                         // seit Kauf: nur „seit Juni 2026“ (Monat aus den Einstellungen), Jahr: „Kilometer 2026“
+  return [{ value: km != null ? fmt(km, 0) : '–', label: lab('Kilometer') }, { value: has ? fmt(cost, 0) : '–', label: lab('Kosten') }, { value: has ? fmt(kwh, 0) : '–', label: lab('Geladen') }];
+}
+const HS_IDS = [['hs-km', 'hs-km-l'], ['hs-cost', 'hs-cost-l'], ['hs-kwh', 'hs-kwh-l']];
+function applyStat(i, v) { $(HS_IDS[i][0]).textContent = v[i].value; $(HS_IDS[i][1]).textContent = v[i].label; }
+function statsAria() {
+  const since = statMode === 'since', d = new Date(purchaseMonth() + '-01T12:00:00').toLocaleDateString('de-DE', { month: 'long', year: 'numeric' });
+  $('hero-stats').setAttribute('aria-label', (since ? 'Werte seit ' + d : 'Werte ' + new Date().getFullYear()) + '. Tippen, um auf ' + (since ? 'das laufende Jahr' : 'seit Kauf') + ' zu wechseln');
+  $('hero-stats').title = since ? 'Seit ' + d : '';
+}
+function renderHeroStats() {
+  if (!$('hs-km')) return;
+  const v = heroVals(statMode); v.forEach((_, i) => applyStat(i, v)); statsAria();
+}
+/** Antippen: die drei Werte kippen nacheinander um die waagrechte Achse (Klappanzeige) und zeigen den anderen Zeitraum. */
+$('hero-stats').addEventListener('click', () => {
+  if (flipping) return;
+  statMode = statMode === 'year' ? 'since' : 'year'; save(KEY_STATMODE, statMode);
+  const v = heroVals(statMode), cells = [...$('hero-stats').querySelectorAll('.hs-cell')];
+  const still = matchMedia('(prefers-reduced-motion: reduce)').matches || !cells[0].animate;
+  if (still) { v.forEach((_, i) => applyStat(i, v)); statsAria(); return; }
+  flipping = true; let done = 0;
+  cells.forEach((c, i) => {
+    const out = c.animate([{ transform: 'rotateX(0deg)', opacity: 1 }, { transform: 'rotateX(90deg)', opacity: 0.15 }], { duration: 170, delay: i * 80, easing: 'ease-in', fill: 'forwards' });
+    out.onfinish = () => {
+      applyStat(i, v);
+      const inn = c.animate([{ transform: 'rotateX(-90deg)', opacity: 0.15 }, { transform: 'rotateX(0deg)', opacity: 1 }], { duration: 220, easing: 'ease-out' });
+      out.cancel();
+      inn.onfinish = () => { if (++done === cells.length) { flipping = false; statsAria(); } };
+    };
+  });
+});
+function renderHeroReminder() {
+  const el = $('hero-rem-sub'); if (!el) return;
+  const first = sortedOpenReminders().filter(x => !isRun(x.r) || x.s.level !== 'ok')[0];
+  if (!first) { el.textContent = getReminders().length ? 'Alles erledigt' : 'Noch keine Erinnerungen'; return; }
+  const { r, s } = first; let when;
+  if (isRun(r)) when = s.daysLeft < 0 ? 'abgelaufen' : s.daysLeft === 0 ? 'läuft heute ab' : 'läuft in ' + s.daysLeft + (s.daysLeft === 1 ? ' Tag' : ' Tagen') + ' ab';
+  else if (s.daysLeft != null) when = s.daysLeft < 0 ? 'seit ' + (-s.daysLeft) + (s.daysLeft === -1 ? ' Tag' : ' Tagen') + ' überfällig' : s.daysLeft === 0 ? 'heute fällig' : s.daysLeft === 1 ? 'morgen fällig' : 'in ' + s.daysLeft + ' Tagen';
+  else if (s.kmLeft != null) when = s.kmLeft <= 0 ? 'jetzt fällig' : 'in ' + fmt(s.kmLeft, 0) + ' km';
+  else when = 'bei ' + fmt(r.dueKm, 0) + ' km';
+  el.textContent = 'Als Nächstes: ' + r.title + ' · ' + when;
+}
+const probeImg = (src) => new Promise(res => { const i = new Image(); i.onload = () => res(src); i.onerror = () => res(null); i.src = src; });
+const HERO_VER = '7';                                    // bei neuen Bildern hochzählen (umgeht den Browser- und Service-Worker-Cache)
+async function findHeroImg(n) { for (const e of ['png', 'webp', 'jpg', 'jpeg']) { const ok = await probeImg('Bilder/Enyaq' + n + '.' + e + '?v=' + HERO_VER); if (ok) return ok; } return null; }
+/** Bereitet ein Karussell-Bild auf: (1) opaker weißer Rand wird transparent gemacht (nicht wirklich freigestellte Bilder), (2) transparenter Rand wird weggeschnitten,
+    damit das Auto den Bildbereich ausfüllt. Liefert { src, aspect, extra }: Seitenverhältnis des zugeschnittenen Bilds und den Anteil der Bildhöhe unterhalb der Aufstandslinie
+    der Reifen (Zeile mit deckenden Pixeln, Schatten darunter ist durchscheinend). Daraus richtet die Seite alle Bilder auf dieselbe Standlinie aus. */
+async function cutWhite(src) {
+  const img = await new Promise(res => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = src; });
+  if (!img) return { src, aspect: null, extra: 0 };
+  try {
+    const w = img.naturalWidth, h = img.naturalHeight, c = document.createElement('canvas'); c.width = w; c.height = h;
+    const ctx = c.getContext('2d', { willReadFrequently: true }); ctx.drawImage(img, 0, 0);
+    const d = ctx.getImageData(0, 0, w, h), px = d.data, light = (p) => px[p * 4 + 3] > 200 && px[p * 4] > 232 && px[p * 4 + 1] > 232 && px[p * 4 + 2] > 232;
+    let changed = false;
+    if ([0, w - 1, (h - 1) * w, h * w - 1].every(light)) {                                   // weißer, undurchsichtiger Hintergrund: von den Rändern aus entfernen
+      const seen = new Uint8Array(w * h), stack = [], push = (x, y) => { const p = y * w + x; if (!seen[p] && light(p)) { seen[p] = 1; stack.push(p); } };
+      for (let x = 0; x < w; x++) { push(x, 0); push(x, h - 1); }
+      for (let y = 0; y < h; y++) { push(0, y); push(w - 1, y); }
+      while (stack.length) { const p = stack.pop(), x = p % w, y = (p - x) / w; px[p * 4 + 3] = 0; if (x > 0) push(x - 1, y); if (x < w - 1) push(x + 1, y); if (y > 0) push(x, y - 1); if (y < h - 1) push(x, y + 1); }
+      ctx.putImageData(d, 0, 0); changed = true;
+    }
+    let x0 = w, y0 = h, x1 = -1, y1 = -1;                                                      // Rahmen um alles, was sichtbar ist (Alpha > 24)
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (px[(y * w + x) * 4 + 3] > 24) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    if (x1 < 0) return { src, aspect: w / h, extra: 0 };
+    const cw = x1 - x0 + 1, ch = y1 - y0 + 1, need = Math.max(4, Math.round(cw * 0.01));
+    let ground = y1;                                                                           // unterste Zeile mit deckenden Pixeln (Alpha ≥ 235): Aufstandslinie
+    for (let y = y1; y >= y0; y--) { let n = 0; for (let x = x0; x <= x1; x++) if (px[(y * w + x) * 4 + 3] >= 235) n++; if (n >= need) { ground = y; break; } }
+    const extra = (y1 - ground) / ch;
+    if (cw >= w * 0.97 && ch >= h * 0.97) return { src: changed ? c.toDataURL('image/png') : src, aspect: w / h, extra: (y1 - ground) / h };   // kaum Rand: nichts abschneiden
+    const o = document.createElement('canvas'); o.width = cw; o.height = ch;
+    o.getContext('2d').drawImage(c, x0, y0, cw, ch, 0, 0, cw, ch);
+    return { src: o.toDataURL('image/png'), aspect: cw / ch, extra };
+  } catch { return { src, aspect: null, extra: 0 }; }
+}
+/** Live-Modus: oben dauerhaft das Ladebild (Enyaq_live.webp) statt des Karussells; danach wieder Karussell mit Wechsel alle 30 Sekunden. */
+let liveHero = false;
+function setLiveHero(on) {
+  if (on === liveHero) return; liveHero = on;
+  $('car-live').classList.toggle('opacity-0', !on); $('car-live').setAttribute('aria-hidden', String(!on));
+  $('car-scroll').classList.toggle('opacity-0', on); $('car-scroll').classList.toggle('pointer-events-none', on);
+  $('car-dashes').classList.toggle('invisible', on);
+  $('view-dashboard').classList.toggle('live-mode', on);                 // Zählerkarte rückt nach oben
+}
+/* Live-Eingabe (Start-/Ziel-%) geöffnet: „Erinnerungen prüfen“ schon jetzt ausblenden, damit mehr Platz ist */
+new MutationObserver(() => $('view-dashboard').classList.toggle('live-setup-open', !$('live-setup').classList.contains('hidden')))
+  .observe($('live-setup'), { attributes: true, attributeFilter: ['class'] });
+let lbOpen = false;
+const CAR_NAMES = [1, 2, '_4', 3, 4, 5], CAR_DOTS = 3;
+/* Karussell-Bilder vorab aufbereitet (weißer Rand entfernt, zugeschnitten, 1100 px WebP) – vorher geschah das bei jedem Start per Canvas im Handy,
+   und Bild 1 erschien erst, wenn alle sechs fertig waren. aspect/extra wie cutWhite (Seitenverhältnis, Schattenanteil unter der Aufstandslinie).
+   Neue Bilder: Bilder/EnyaqN.* tauschen, dann Bilder/hero/ neu erzeugen (siehe CLAUDE.md). Bild 1 steht schon im HTML (lädt sofort). */
+const HERO_IMGS = [{ name: 1, src: '/Bilder/hero/1.webp', aspect: 1.7188, extra: 0.043 }, { name: 2, src: '/Bilder/hero/2.webp', aspect: 1.5625, extra: 0.0665 },
+  { name: '_4', src: '/Bilder/hero/akku.webp', aspect: 1.2966, extra: 0.098, cut: true }, { name: 3, src: '/Bilder/hero/3.webp', aspect: 1.8134, extra: 0.0631 },
+  { name: 4, src: '/Bilder/hero/4.webp', aspect: 1.1614, extra: 0.0053, tech: true }, { name: 5, src: '/Bilder/hero/5.webp', aspect: 2.3392, extra: 0.0058, tech: true },
+  { name: 7, src: '/Bilder/hero/7.webp', aspect: 1.9696, extra: 0, cut: true }, { name: 8, src: '/Bilder/hero/8.webp', aspect: 2.3983, extra: 0, cut: true },
+  { name: 9, src: '/Bilder/hero/9.webp', aspect: 2.067, extra: 0, cut: true, pad: true }];   // pad: etwas Abstand links/rechts   // Schnittbild mit Maßen: Bemaßung hell umgefärbt, Auto freigestellt (volle Breite, zum Lesen antippen → Vollbild)
+const carAutoN = () => { const v = Number(getSettings().carN); return Number.isInteger(v) && v >= 1 && v <= HERO_IMGS.length ? v : 6; };            // Einstellung: so viele Bilder wechseln automatisch
+const carAutoMs = () => { const v = Number(getSettings().carSec); return (Number.isFinite(v) && v >= 5 && v <= 600 ? v : 30) * 1000; };   // Bilder/Enyaq1, 2, _4 (Akku-Schnitt), 3, 4, 5 (unten bleiben 3 Punkte als Deko); automatischer Wechsel alle 30 Sekunden
+async function initCarousel() {
+  const box = $('car-scroll'), dash = $('car-dashes'); if (!box) return;
+  const imgs = HERO_IMGS.map(m => ({ ...m }));                                           // Bild 4/5 = Technik (Akku, Motor): mittig und etwas kleiner, ohne Standlinie
+  /* Die Bilder liegen übereinander; ein Wisch (oder Pfeiltaste) blendet per CSS-Übergang auf das nächste bzw. vorherige Bild über. Pro Wisch genau ein Bild.
+     Bewusst ohne mitlaufende Bewegung beim Wischen: Nur Deckkraft wird animiert (läuft ohne JavaScript pro Frame), dadurch ruckelt nichts.
+     Der Schatten unter dem Auto kommt aus den Bildern selbst. */
+  const tpl = (m, i) => `<div class="car-slide absolute inset-0 pointer-events-none" style="opacity:${i === 0 ? 1 : 0};transition:opacity .45s ease-in-out;will-change:opacity"><img src="${m.src}" decoding="async" alt="Skoda Enyaq, Bild ${i + 1} von ${imgs.length}" draggable="false" class="${m.pad ? 'absolute inset-x-6 top-[2%] bottom-[4%] w-[calc(100%-3rem)] h-[94%] object-contain object-center' : m.cut ? 'absolute inset-x-1 top-[1%] bottom-[3%] w-[calc(100%-0.5rem)] h-[96%] object-contain object-center' : m.tech ? 'absolute inset-x-8 top-[8%] bottom-[14%] w-[calc(100%-4rem)] h-[78%] object-contain object-center' : 'absolute inset-x-4 top-0 bottom-2.5 w-[calc(100%-2rem)] h-[calc(100%-0.625rem)] object-contain object-bottom'}"></div>`;
+  if (box.querySelector('.car-slide')) box.insertAdjacentHTML('beforeend', imgs.slice(1).map((m, i) => tpl(m, i + 1)).join(''));   // Bild 1 steht schon im HTML
+  else box.innerHTML = imgs.map(tpl).join('');
+  dash.innerHTML = imgs.length > 1 ? imgs.slice(0, CAR_DOTS).map(() => '<span class="select-none text-[22px] leading-none text-white">•</span>').join('') : '';    // Zeichen statt Formen (Dark-Mode des Browsers), alle gleich, ohne Hervorhebung
+  const slides = [...box.querySelectorAll('.car-slide')], els = [...box.querySelectorAll('img')]; let cur = 0, lock = false, sx = 0, sy = 0, tracking = false, autoT = 0;
+  /* Auf dieselbe Standlinie ausrichten: Bild 1 ist die Referenz. Bilder mit mehr Schatten unter den Reifen werden so weit nach unten gesetzt, dass die Reifen auf gleicher Höhe stehen. */
+  const align = () => {
+    if (imgs.length < 2) return;
+    const bw = box.clientWidth - 32, bh = box.clientHeight - 10; if (bw <= 0 || bh <= 0) return;
+    const over = imgs.map(m => m.aspect ? m.extra * Math.min(bh, bw / m.aspect) : 0);
+    els.forEach((el, i) => { el.style.transform = imgs[i].tech ? '' : 'translateY(' + (over[i] - over[0]).toFixed(1) + 'px)'; });
+  };
+  align(); window.addEventListener('resize', align);
+  const show = (n) => {
+    if (slides.length < 2) return; n = ((n % slides.length) + slides.length) % slides.length;   // Endlosschleife: nach Bild 3 wieder Bild 1, vor Bild 1 Bild 3
+    if (lock || n === cur) return;
+    lock = true; slides[cur].style.opacity = '0'; slides[n].style.opacity = '1'; cur = n; setTimeout(() => { lock = false; }, 450); schedule();
+  };
+  /* Automatisch weiterschalten (im Kreis), nur wenn die Start-Ansicht sichtbar ist; jede Bedienung startet die 30 Sekunden neu */
+  const schedule = () => { clearTimeout(autoT); if (Math.min(slides.length, carAutoN()) > 1) autoT = setTimeout(tick, carAutoMs()); };
+  window.carReschedule = schedule;
+  const tick = () => { if (!document.hidden && !liveHero && !lbOpen && !$('view-dashboard').classList.contains('hidden')) show(cur + 1 < Math.min(slides.length, carAutoN()) ? cur + 1 : 0); schedule(); };   // im Live-Modus pausiert
+  schedule();
+  box.addEventListener('pointerdown', (e) => { sx = e.clientX; sy = e.clientY; tracking = e.clientX >= 40; });   // vom linken Rand: öffnet das Schnellmenü, nicht das Karussell
+  box.addEventListener('pointerup', (e) => { if (!tracking) return; tracking = false; const dx = e.clientX - sx, dy = e.clientY - sy; if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.3) show(cur + (dx < 0 ? 1 : -1)); else if (Math.abs(dx) < 10 && Math.abs(dy) < 10 && !liveHero) lbShow(cur); });   // kurzer Tipp: Vollbild mit Zoom
+  box.addEventListener('pointercancel', () => { tracking = false; });
+  box.addEventListener('keydown', (e) => { if (e.key === 'ArrowLeft') show(cur - 1); else if (e.key === 'ArrowRight') show(cur + 1); else if (e.key === 'Enter') lbShow(cur); });
+
+  /* ---- Vollbild mit Zoom (Tipp aufs Bild): zwei Finger zoomen, ein Finger verschiebt, Doppeltipp 2,5×; ungezoomt wischen = nächstes Bild,
+     nach unten wischen, ✕ oder Zurück-Taste = schließen. Während es offen ist, wechselt das Karussell nicht. Gibt es Bilder/EnyaqN-hd.webp, wird es nachgeladen. */
+  const ov = document.createElement('div'); ov.id = 'car-lb'; ov.className = 'hidden fixed inset-0 z-[95] bg-black select-none'; ov.style.touchAction = 'none';
+  ov.innerHTML = '<img id="car-lb-img" alt="" draggable="false" class="absolute inset-0 h-full w-full object-contain will-change-transform" style="padding:max(56px,env(safe-area-inset-top)) 8px max(40px,env(safe-area-inset-bottom))">'
+    + '<span id="car-lb-n" class="absolute left-4 text-sm font-medium text-white/80 tabular-nums" style="top:max(18px,env(safe-area-inset-top))"></span>'
+    + '<button type="button" id="car-lb-x" aria-label="Schließen" class="absolute right-3 flex h-11 w-11 items-center justify-center rounded-full bg-white/15 text-white active:scale-95" style="top:max(8px,env(safe-area-inset-top))"><svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>';
+  document.body.appendChild(ov);
+  const li = ov.querySelector('#car-lb-img'), hd = {};
+  let lbi = 0, sc = 1, tx = 0, ty = 0, pts = new Map(), g = null, lastTap = 0, pushed = false;
+  const W = () => ov.clientWidth, H = () => ov.clientHeight;
+  const apply = (anim) => { li.style.transition = anim ? 'transform .25s ease-out, opacity .2s' : 'none'; li.style.transform = 'translate(' + tx + 'px,' + ty + 'px) scale(' + sc + ')'; };
+  const clampT = () => { const mx = (sc - 1) * W() / 2, my = (sc - 1) * H() / 2; tx = Math.max(-mx, Math.min(mx, tx)); ty = Math.max(-my, Math.min(my, ty)); };
+  const setImg = (i) => {
+    lbi = ((i % imgs.length) + imgs.length) % imgs.length; sc = 1; tx = 0; ty = 0; apply(false); li.style.opacity = '1';
+    li.src = hd[lbi] || imgs[lbi].src; ov.querySelector('#car-lb-n').textContent = imgs.length > 1 ? (lbi + 1) + ' / ' + imgs.length : '';
+    if (hd[lbi] === undefined) { const n = lbi, t = new Image(); hd[n] = null; t.onload = () => { hd[n] = t.src; if (lbi === n && lbOpen) li.src = t.src; }; t.src = 'Bilder/Enyaq' + (imgs[n].name != null ? imgs[n].name : n + 1) + '-hd.webp?v=' + HERO_VER; }
+  };
+  function lbShow(i) { if (lbOpen) return; lbOpen = true; setImg(i); ov.classList.remove('hidden'); document.body.style.overflow = 'hidden'; clearTimeout(autoT); try { history.pushState({ carLb: 1 }, ''); pushed = true; } catch (e) { pushed = false; } }
+  const lbClose = (fromPop) => {
+    if (!lbOpen) return; lbOpen = false; ov.classList.add('hidden'); document.body.style.overflow = ''; pts.clear(); g = null;
+    if (lbi !== cur) { lock = false; show(lbi); } schedule();
+    if (pushed && !fromPop) { pushed = false; try { history.back(); } catch (e) { } } else pushed = false;
+  };
+  window.addEventListener('popstate', () => { if (lbOpen) lbClose(true); });
+  ov.querySelector('#car-lb-x').addEventListener('click', (e) => { e.stopPropagation(); lbClose(false); });
+  document.addEventListener('keydown', (e) => { if (!lbOpen) return; if (e.key === 'Escape') lbClose(false); else if (e.key === 'ArrowRight') setImg(lbi + 1); else if (e.key === 'ArrowLeft') setImg(lbi - 1); });
+  const rel = (p) => ({ x: p.x - W() / 2, y: p.y - H() / 2 });
+  ov.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('#car-lb-x')) return; try { ov.setPointerCapture(e.pointerId); } catch (er) { }
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pts.size === 2) { const [a, b] = [...pts.values()]; g = { pinch: true, d0: Math.hypot(a.x - b.x, a.y - b.y) || 1, m0: rel({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }), s0: sc, tx0: tx, ty0: ty }; }
+    else if (pts.size === 1) g = { pinch: false, x0: e.clientX, y0: e.clientY, tx0: tx, ty0: ty, t0: Date.now(), moved: false };
+  });
+  ov.addEventListener('pointermove', (e) => {
+    if (!pts.has(e.pointerId) || !g) return; pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (g.pinch && pts.size >= 2) {
+      const [a, b] = [...pts.values()], d = Math.hypot(a.x - b.x, a.y - b.y), m = rel({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+      sc = Math.max(1, Math.min(5, g.s0 * d / g.d0)); const k = sc / g.s0;
+      tx = m.x - (g.m0.x - g.tx0) * k; ty = m.y - (g.m0.y - g.ty0) * k; clampT(); apply(false); return;
+    }
+    if (g.pinch) return;
+    const dx = e.clientX - g.x0, dy = e.clientY - g.y0; if (Math.abs(dx) > 8 || Math.abs(dy) > 8) g.moved = true;
+    if (sc > 1.01) { tx = g.tx0 + dx; ty = g.ty0 + dy; clampT(); apply(false); }
+    else if (Math.abs(dy) > Math.abs(dx) && dy > 0) { ty = dy; li.style.opacity = String(Math.max(0.3, 1 - dy / 400)); apply(false); }   // nach unten ziehen zum Schließen
+    else { tx = dx * 0.6; apply(false); }
+  });
+  const end = (e) => {
+    if (!pts.has(e.pointerId)) return; pts.delete(e.pointerId);
+    if (!g) return;
+    if (g.pinch) { if (pts.size === 0) { g = null; if (sc < 1.05) { sc = 1; tx = 0; ty = 0; apply(true); } } else { const [a] = [...pts.values()]; g = { pinch: false, x0: a.x, y0: a.y, tx0: tx, ty0: ty, t0: Date.now(), moved: true }; } return; }
+    const dx = e.clientX - g.x0, dy = e.clientY - g.y0, quick = Date.now() - g.t0 < 300; const gg = g; g = null;
+    if (!gg.moved && quick) {                                                   // Tipp: Doppeltipp zoomt an der Stelle (bzw. zurück)
+      const now = Date.now();
+      if (now - lastTap < 320) { lastTap = 0; if (sc > 1.01) { sc = 1; tx = 0; ty = 0; } else { const p = rel({ x: e.clientX, y: e.clientY }); sc = 2.5; tx = p.x * (1 - sc); ty = p.y * (1 - sc); clampT(); } apply(true); }
+      else lastTap = now;
+      return;
+    }
+    if (sc > 1.01) return;
+    if (dy > 110 && Math.abs(dy) > Math.abs(dx)) { lbClose(false); return; }
+    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) { setImg(lbi + (dx < 0 ? 1 : -1)); return; }
+    tx = 0; ty = 0; li.style.opacity = '1'; apply(true);
+  };
+  ov.addEventListener('pointerup', end); ov.addEventListener('pointercancel', end);
+}
+
+
+/* =====================================================================
+   Banner beim Start (Entwurf E): zeigt die dringendste fällige oder überfällige Erinnerung auf der Start-Ansicht.
+   Schließt sich nach 8 Sekunden von selbst (kommt beim nächsten Start wieder); Antippen hält ihn offen.
+   „Später“ blendet die Erinnerung bis morgen aus, „Erledigt“ öffnet den Erledigt-Dialog, „Ansehen“ die Erinnerungen.
+   ===================================================================== */
+const KEY_SNOOZE = 'enyaq.remSnooze';                                    // { <Erinnerungs-ID>: 'JJJJ-MM-TT' } – bis zu diesem Tag (ausschließlich) ausgeblendet
+const bannerDismissed = new Set();                                       // in dieser App-Sitzung bereits weggeklickt oder abgelaufen
+let bannerTimer = null, bannerKey = '';
+const getSnooze = () => { const o = load(KEY_SNOOZE, {}), t = todayYMD(), out = {}; if (o && typeof o === 'object') Object.keys(o).forEach(k => { if (typeof o[k] === 'string' && o[k] > t) out[k] = o[k]; }); return out; };
+function hideBanner() { clearTimeout(bannerTimer); bannerTimer = null; bannerKey = ''; $('rem-banner')?.classList.add('hidden'); }
+function renderRemBanner() {
+  const el = $('rem-banner'); if (!el) return;
+  const onDash = !$('view-dashboard').classList.contains('hidden'), snooze = getSnooze(), list = sortedOpenReminders();
+  const cand = list.find(x => x.s.level === 'over' && !bannerDismissed.has(String(x.r.id)) && !(snooze[x.r.id] > todayYMD()));
+  if (!onDash || !cand) { hideBanner(); return; }
+  const { r, s } = cand, others = list.filter(x => x.r.id !== r.id && x.s.level !== 'ok');
+  const overdue = (s.daysLeft != null && s.daysLeft < 0) || (s.kmLeft != null && s.kmLeft < 0);
+  const label = isRun(r) ? 'Abgelaufen' + (s.daysLeft < 0 ? ' · seit ' + (-s.daysLeft) + (s.daysLeft === -1 ? ' Tag' : ' Tagen') : '') : overdue ? 'Überfällig' + (s.daysLeft != null && s.daysLeft < 0 ? ' · seit ' + (-s.daysLeft) + (s.daysLeft === -1 ? ' Tag' : ' Tagen') : '') : s.daysLeft === 0 ? 'Heute fällig' : 'Jetzt fällig';
+  const rep = r.repeatMonths > 0 ? 'Wiederholt sich ' + (RECUR_LABEL[r.repeatMonths] || 'alle ' + r.repeatMonths + ' Monate') : r.repeatDays > 0 ? 'Wiederholt sich ' + remEveryText(r) : r.repeatKm > 0 ? 'Wiederholt sich alle ' + fmt(r.repeatKm, 0) + ' km' : 'Einmalige Erinnerung';
+  const more = others.length ? ' · ' + others.length + ' weitere ' + (others.length === 1 ? (others[0].s.level === 'over' ? 'fällig' : 'bald fällig') : 'fällig oder bald fällig') : '';
+  const color = overdue ? '#ef4444' : '#f59e0b';
+  el.dataset.id = r.id;
+  $('rb-label').textContent = label; $('rb-label').style.color = overdue ? '#fca5a5' : '#fbbf24';
+  $('rb-title').textContent = r.title; $('rb-sub').textContent = (isRun(r) ? 'Laufzeit seit ' + fmtYMD(r.startDate) + (r.lifeN ? ' · hält ca. ' + runLifeText(r) : '') : rep) + more;
+  const rbDone = document.querySelector('#rem-banner [data-bact="done"]'); if (rbDone) rbDone.textContent = isRun(r) ? '↻ Erneuert' : 'Erledigt';
+  $('rb-accent').style.background = color; $('rb-icon').style.background = overdue ? 'rgba(239,68,68,.18)' : 'rgba(245,158,11,.18)'; $('rb-icon').style.color = overdue ? '#f87171' : '#fbbf24'; $('rb-bar').style.background = color;
+  const key = r.id + '|' + label;
+  if (key === bannerKey) return;                                          // gleicher Inhalt: Anzeige und Timer nicht neu starten
+  bannerKey = key; clearTimeout(bannerTimer); el.classList.remove('hidden');
+  const bar = $('rb-bar'); bar.style.transition = 'none'; bar.style.width = '100%'; void bar.offsetWidth; bar.style.transition = 'width 8s linear'; bar.style.width = '0%';
+  bannerTimer = setTimeout(() => { bannerDismissed.add(String(r.id)); hideBanner(); }, 8000);
+}
+function bannerAct(act) {
+  const el = $('rem-banner'), id = el.dataset.id, r = remById(id); if (!r) { hideBanner(); return; }
+  if (act === 'close') { bannerDismissed.add(String(id)); hideBanner(); }
+  else if (act === 'later') { const o = getSnooze(); o[id] = ymd(addDays(new Date(), 1)); save(KEY_SNOOZE, o); hideBanner(); renderRemBanner(); }   // bis morgen; zeigt ggf. die nächste fällige
+  else if (act === 'view') { bannerDismissed.add(String(id)); hideBanner(); showView('reminders'); }
+  else if (act === 'done') { clearTimeout(bannerTimer); if (isRun(r)) { remRenew(r); hideBanner(); renderRemBanner(); } else openDone(r); }
+}
+$('rem-banner').addEventListener('click', (e) => { const b = e.target.closest('[data-bact]'); if (b) bannerAct(b.dataset.bact); });
+$('rem-banner').addEventListener('pointerdown', () => { clearTimeout(bannerTimer); const bar = $('rb-bar'); bar.style.transition = 'none'; bar.style.width = '100%'; });   // Antippen: Banner bleibt offen
+
+
+/** Hintergrundfarbe der Start-Seite (Farbverlauf hinter dem Enyaq): Auswahl in den Einstellungen, wirkt sofort und wird auf diesem Gerät gespeichert. */
+const KEY_HERO = 'enyaq.heroColor';
+const HERO_THEMES = {
+  blue:     { label: 'Blau',     mid: '#0b2f8a', glow: 'rgba(80,150,255,.40)',  glow0: 'rgba(80,150,255,0)',  stops: '#000 0,#000 28px,#030b24 70px,#061a52 160px,#0b2f8a 280px,#0a2466 370px,#050f2e 470px,#000 600px' },
+  green:    { label: 'Grün',     mid: '#0b6a4d', glow: 'rgba(52,211,153,.30)',  glow0: 'rgba(52,211,153,0)',  stops: '#000 0,#000 28px,#02150f 70px,#05301f 160px,#0b6a4d 280px,#0a4a37 370px,#03120e 470px,#000 600px' },
+  graphite: { label: 'Graphit',  mid: '#3b3f45', glow: 'rgba(255,255,255,.14)', glow0: 'rgba(255,255,255,0)', stops: '#000 0,#000 28px,#0c0d0e 70px,#1b1d20 160px,#3b3f45 280px,#26292d 370px,#0e0f10 470px,#000 600px' },
+  red:      { label: 'Bordeaux', mid: '#7a1427', glow: 'rgba(255,90,110,.30)',  glow0: 'rgba(255,90,110,0)',  stops: '#000 0,#000 28px,#1a0509 70px,#3a0b14 160px,#7a1427 280px,#4d0d19 370px,#1a0508 470px,#000 600px' }
+};
+const KEY_HERO_C = 'enyaq.heroCustom';                                        // selbst gemischte Farbe (#rrggbb), Auswahl „Eigene“
+const heroThemeKey = () => { const k = load(KEY_HERO, 'blue'); return HERO_THEMES[k] || (k === 'custom' && heroCustomHex()) ? k : 'blue'; };
+const heroCustomHex = () => { const c = load(KEY_HERO_C, null); return /^#[0-9a-f]{6}$/i.test(c || '') ? c.toLowerCase() : null; };
+/** Verlauf aus einer frei gewählten Farbe, aufgebaut wie die festen Themen: Kernfarbe gedimmt (Schrift bleibt lesbar), nach oben und unten in Schwarz */
+function heroCustomTheme(hex) {
+  let [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16)); const mx = Math.max(r, g, b, 1), k = mx > 150 ? 150 / mx : 1; [r, g, b] = [r, g, b].map(v => Math.round(v * k));
+  const mix = (f) => '#' + [r, g, b].map(v => Math.round(v * f).toString(16).padStart(2, '0')).join(''), lt = [r, g, b].map(v => Math.round(v + (255 - v) * 0.45));
+  return { label: 'Eigene', mid: mix(1), glow: 'rgba(' + lt.join(',') + ',.32)', glow0: 'rgba(' + lt.join(',') + ',0)', stops: '#000 0,#000 28px,' + mix(0.22) + ' 70px,' + mix(0.55) + ' 160px,' + mix(1) + ' 280px,' + mix(0.75) + ' 370px,' + mix(0.3) + ' 470px,#000 600px' };
+}
+function applyHeroColor() {
+  const k = heroThemeKey(), t = k === 'custom' ? heroCustomTheme(heroCustomHex()) : HERO_THEMES[k], bg = $('hero-bg');
+  const cs = $('hero-custom-sw'); if (cs) { const c = heroCustomHex(); cs.style.background = c ? 'linear-gradient(180deg,#000 0%,' + heroCustomTheme(c).mid + ' 55%,#000 100%)' : 'conic-gradient(from 90deg,#ef4444,#f59e0b,#10b981,#0ea5e9,#8b5cf6,#ef4444)'; }
+  const css = 'radial-gradient(ellipse 72% 190px at 50% 190px,' + t.glow + ',' + t.glow0 + ' 70%),linear-gradient(180deg,' + t.stops + ')';
+  if (bg) bg.style.background = css; try { localStorage.setItem('enyaq.heroBgCss', css); } catch (e) { }   // für den nächsten Start (Skript direkt nach #hero-bg)
+  document.querySelectorAll('[data-hero]').forEach(b => { const on = b.dataset.hero === k; b.setAttribute('aria-pressed', String(on)); b.classList.toggle('ring-2', on); b.classList.toggle('ring-emerald-500', on); b.classList.toggle('ring-offset-2', on); });
+}
+$('hero-swatches').innerHTML = Object.entries(HERO_THEMES).map(([k, t]) => `<button type="button" data-hero="${k}" aria-pressed="false" class="flex flex-col items-center gap-1.5 rounded-xl ring-offset-white dark:ring-offset-black active:scale-95 transition"><span class="block h-12 w-full rounded-xl border border-slate-300 dark:border-slate-700" style="background:linear-gradient(180deg,#000 0%,${t.mid} 55%,#000 100%)"></span><span class="text-xs text-slate-600 dark:text-slate-300">${t.label}</span></button>`).join('')
+  + `<label data-hero="custom" aria-pressed="false" class="relative flex cursor-pointer flex-col items-center gap-1.5 rounded-xl ring-offset-white dark:ring-offset-black active:scale-95 transition"><span id="hero-custom-sw" class="block h-12 w-full rounded-xl border border-slate-300 dark:border-slate-700"></span><span class="text-xs text-slate-600 dark:text-slate-300">Eigene</span><input id="hero-custom" type="color" value="${heroCustomHex() || '#0b2f8a'}" aria-label="Eigene Farbe mischen" class="absolute inset-0 h-full w-full cursor-pointer opacity-0"></label>`;
+$('hero-custom').addEventListener('input', (e) => { save(KEY_HERO_C, e.target.value); save(KEY_HERO, 'custom'); applyHeroColor(); });
+$('hero-custom').addEventListener('click', () => { if (heroCustomHex()) { save(KEY_HERO, 'custom'); applyHeroColor(); } });
+$('hero-swatches').addEventListener('click', (e) => { const b = e.target.closest('[data-hero]'); if (!b) return; save(KEY_HERO, b.dataset.hero); applyHeroColor(); });
+applyHeroColor();
+
+
+// ───── src/06-akku-berichte-abzeichen.js ─────
+/* =====================================================================
+   Netto-Akkukapazität (geschätzt) – Langzeitwert in den Berichten (Tab „Akku“)
+   Messgröße: Steckdosen-kWh je 100 % Akku, K = Σ kWh ÷ Σ (Akku-Hub/100). Summe über Summe statt Mittel der Einzelwerte, damit große Ladehübe stärker zählen
+   (der Rundungsfehler des Akku-% von ±0,5 je Ende wiegt bei 60 % Hub halb so schwer wie bei 30 %). Sinkt K bei gleichem Ladeverlust, fasst der Akku weniger.
+   Verwendet nur Wechselstrom-Ladungen Zuhause und Bosch (gleiche Ladetechnik, Zähler bzw. Wallbox), mit Akku-Start/-Ende, Hub ≥ 30 %, Ende < 99 %
+   (Zellausgleich und Ladekurve verfälschen die letzten Prozent) und gemessener kWh-Angabe. Ausreißer werden robust (MAD) ausgeschlossen.
+   Unsicherheit: größerer Wert aus (a) der tatsächlichen Streuung der Ladungen (Ratio-Schätzer) und (b) dem reinen Rundungsfehler; 95-%-Bereich mit t-Faktor.
+   Trend erst ab 12 Monaten und nur als Vergleich desselben Zeitraums im Vorjahr (Kälte senkt im Winter Wirkungsgrad und nutzbare Kapazität); „Hinweis“ nur,
+   wenn der Unterschied größer ist als die kombinierte 95-%-Unsicherheit. Absolutwert (nutzbare kWh) = K × Ladewirkungsgrad 93 %: grobe Umrechnung.
+   ===================================================================== */
+const BAT = { hub: 30, endMax: 98, minN: 10, minHub: 400, eta: 0.93, win: 91, day: 864e5 };
+let batChart = null;
+const median = (a) => { const s = a.slice().sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+const tCrit = (df) => df < 1 ? Infinity : df <= 15 ? [0, 12.71, 4.30, 3.18, 2.78, 2.57, 2.45, 2.36, 2.31, 2.26, 2.23, 2.20, 2.18, 2.16, 2.14, 2.13][df] : df <= 20 ? 2.09 : df <= 30 ? 2.04 : 1.96;
+function batRows() {
+  return getReadings().filter(r => (placeOf(r) === 'home' || placeOf(r) === 'bosch') && Number.isFinite(r.socStart) && Number.isFinite(r.socEnd) && r.socEnd - r.socStart >= BAT.hub && r.socEnd <= BAT.endMax && r.consumedSinceLast > 0)
+    .map(r => { const hub = r.socEnd - r.socStart; return { t: Date.parse(r.date), hub, e: r.consumedSinceLast, k: r.consumedSinceLast / (hub / 100), bt: Number.isFinite(r.battTemp) ? r.battTemp : null, km: Number(r.odometerKm) > 0 ? Number(r.odometerKm) : null }; })
+    .filter(x => Number.isFinite(x.t)).sort((a, b) => a.t - b.t);
+}
+function batFit(rows) {
+  if (rows.length < 3) return null;
+  let use = rows;
+  if (rows.length >= 8) { const med = median(rows.map(x => x.k)), mad = median(rows.map(x => Math.abs(x.k - med))), lim = Math.max(3 * 1.4826 * mad, 0.04 * med); use = rows.filter(x => Math.abs(x.k - med) <= lim); }
+  const n = use.length; if (n < 3) return null;
+  const sumE = use.reduce((a, x) => a + x.e, 0), sumD = use.reduce((a, x) => a + x.hub / 100, 0), K = sumE / sumD;
+  const ss = use.reduce((a, x) => a + Math.pow(x.e - K * x.hub / 100, 2), 0) * n / (n - 1);
+  const se = Math.max(Math.sqrt(ss) / sumD, K * 0.41 * Math.sqrt(n) / (sumD * 100));
+  return { n, out: rows.length - n, K, se, ci: tCrit(n - 1) * se, sumHub: sumD * 100, use, drop: rows.filter(x => !use.includes(x)) };
+}
+function batTrend(rows, now) {
+  const months = (now - rows[0].t) / (30.44 * BAT.day);
+  if (months < 12) return { state: 'short', months };
+  for (const w of [91, 182]) {
+    const a = batFit(rows.filter(x => x.t > now - w * BAT.day)), b = batFit(rows.filter(x => x.t > now - (365 + w) * BAT.day && x.t <= now - 365 * BAT.day));
+    if (a && b && a.n >= 8 && b.n >= 8) { const d = (a.K / b.K - 1) * 100, se = Math.sqrt(Math.pow(a.se / a.K, 2) + Math.pow(b.se / b.K, 2)) * 100; return { state: 'ok', w, d, se, crit: tCrit(Math.min(a.n, b.n) - 1), a, b }; }
+  }
+  return { state: 'few', months };
+}
+/* =====================================================================
+   Akku-Schonung-Score (Berichte → Akku): alle Ladungen der letzten 90 Tage mit Akku-Start und -Ende.
+   100 − 50 × Anteil Ladeende über 80 % − 40 × min(1, 3 × Anteil Start unter 10 %) − 10 × Anteil Vollladungen (≥ 98 %).
+   ===================================================================== */
+let careMode = '90';                                                     // '90' = letzte 90 Tage, 'kauf' = seit Kauf
+function batCare(now = Date.now(), mode = '90') {
+  const from = mode === 'kauf' ? Date.parse(purchaseDay() + 'T00:00:00') : now - 90 * 864e5;
+  const rs = getReadings().filter(r => Number.isFinite(r.socStart) && Number.isFinite(r.socEnd) && r.socEnd > r.socStart && Date.parse(r.date) >= from);
+  const n = rs.length; if (n < 5) return { n };
+  const hi = rs.filter(r => r.socEnd > 80).length, lo = rs.filter(r => r.socStart < 10).length, full = rs.filter(r => r.socEnd >= 98).length;
+  const score = Math.max(0, Math.min(100, Math.round(100 - 50 * hi / n - 40 * Math.min(1, 3 * lo / n) - 10 * full / n)));
+  const avg = (k) => rs.reduce((a, r) => a + r[k], 0) / n;
+  return { n, score, ok80: (n - hi) / n, lo, full, s0: avg('socStart'), s1: avg('socEnd') };
+}
+function renderCare() {
+  const c = batCare(Date.now(), careMode), el = $('care-body'); if (!el) return;
+  document.querySelectorAll('.care-btn').forEach(b => { const on = b.dataset.care === careMode; b.classList.toggle('bg-white', on); b.classList.toggle('dark:bg-slate-600', on); b.classList.toggle('shadow-sm', on); b.classList.toggle('text-slate-500', !on); });
+  const span = careMode === 'kauf' ? 'seit Kauf' : 'der letzten 90 Tage';
+  if (c.score == null) { el.innerHTML = '<p class="mt-1 text-xl font-semibold">Noch zu wenige Daten</p><p class="text-sm mt-1 text-slate-600 dark:text-slate-300">Die Bewertung braucht mindestens 5 Ladungen ' + span + ' mit Akku-Start und -Ende (bisher ' + c.n + ').</p>'; return; }
+  const lvl = c.score >= 90 ? ['Sehr gut', 'Dein Akku wird schonend behandelt.', '#10b981'] : c.score >= 75 ? ['Gut', 'Kleine Verbesserungen sind möglich.', '#22c55e'] : c.score >= 60 ? ['Okay', 'Mit zwei Gewohnheiten holst du mehr heraus.', '#f59e0b'] : ['Verbesserbar', 'Der Akku wird öfter stark gefordert.', '#ef4444'];
+  const len = 97.4, dash = (c.score / 100 * len).toFixed(1);
+  const tip = (1 - c.ok80) > 0.3 ? 'Lade im Alltag bis 80 % – 100 % nur vor langen Fahrten. Das spart Zellstress und kaum Reichweite.'
+    : c.lo ? 'Vermeide es, unter 10 % zu fahren – lieber etwas früher anstecken.'
+    : c.full ? 'Deine ' + (c.full === 1 ? 'Vollladung' : c.full + ' Vollladungen') + ' ' + (careMode === 'kauf' ? 'seit Kauf' : 'in den letzten 90 Tagen') + ' ' + (c.full === 1 ? 'ist' : 'sind') + ' in Ordnung, solange du danach bald losfährst.'
+    : 'Weiter so – zwischen 20 und 80 % fühlt sich der Akku am wohlsten.';
+  const bar = (w, col) => `<div class="mt-1 h-1.5 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden"><div class="h-full rounded-full" style="width:${Math.round(w * 100)}%;background:${col}"></div></div>`;
+  el.innerHTML = `<div class="mt-3 flex items-center gap-4">
+      <div class="relative h-24 w-24 shrink-0"><svg viewBox="0 0 36 36" class="h-24 w-24 -rotate-90" aria-hidden="true"><circle cx="18" cy="18" r="15.5" fill="none" stroke="currentColor" class="text-slate-200 dark:text-slate-800" stroke-width="3.5"/><circle cx="18" cy="18" r="15.5" fill="none" stroke="${lvl[2]}" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="${dash} ${len}"/></svg>
+        <div class="absolute inset-0 flex flex-col items-center justify-center"><span class="font-barlow text-[34px] font-bold leading-none">${c.score}</span><span class="text-[10px] text-slate-500 dark:text-slate-400">von 100</span></div></div>
+      <div><p class="text-lg font-semibold" style="color:${lvl[2]}">${lvl[0]}</p><p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">${lvl[1]}</p><p class="text-xs text-slate-500 dark:text-slate-400 mt-1">${c.n} Ladungen</p></div></div>
+    <div class="mt-4 space-y-2.5 text-sm">
+      <div><div class="flex justify-between"><span class="text-slate-600 dark:text-slate-300">Ladeende bis 80 %</span><span>${Math.round(c.ok80 * 100)} %</span></div>${bar(c.ok80, '#10b981')}</div>
+      <div><div class="flex justify-between"><span class="text-slate-600 dark:text-slate-300">Nicht unter 10 %</span><span>${c.lo ? c.lo + ' × darunter' : 'nie darunter'}</span></div>${bar(1 - Math.min(1, 3 * c.lo / c.n), c.lo ? '#f59e0b' : '#10b981')}</div>
+      ${(() => { const o = acdcSplit(careMode === 'kauf' ? Date.parse(purchaseDay() + 'T00:00:00') : Date.now() - 90 * 864e5); return o.dcP == null ? '' : `<div><div class="flex justify-between"><span class="text-slate-600 dark:text-slate-300">AC-Anteil (Energie)</span><span>${fmt(100 - o.dcP, 0)} % AC · ${fmt(o.dcP, 0)} % DC</span></div>${bar((100 - o.dcP) / 100, o.dcP > 40 ? '#f59e0b' : '#10b981')}</div>`; })()}
+      <div><div class="flex justify-between"><span class="text-slate-600 dark:text-slate-300">Ø Ladebereich</span><span>${Math.round(c.s0)} → ${Math.round(c.s1)} %</span></div><div class="relative mt-1 h-1.5 rounded-full bg-slate-200 dark:bg-slate-800"><div class="absolute h-full rounded-full bg-sky-500" style="left:${c.s0}%;width:${Math.max(2, c.s1 - c.s0)}%"></div></div></div>
+    </div>
+    <div class="mt-4 rounded-2xl bg-slate-100 dark:bg-slate-800/70 p-3 text-xs text-slate-600 dark:text-slate-300"><b class="text-slate-900 dark:text-white">Tipp:</b> ${tip}</div>`;
+}
+
+/* =====================================================================
+   AC/DC-Laden (Berichte → Akku): Energieanteil AC (Zuhause + Bosch) und DC (Unterwegs) – letzte 90 Tage, seit Kauf (je Monat) und seit Zulassung.
+   Seit Zulassung: geladene kWh AC/DC vor dem Kauf laut Akku-Zertifikat (Einstellungen → Laden & Akku) plus die eigenen Ladungen seit Kauf.
+   ===================================================================== */
+let acdcMode = '90';
+const ACDC_C = { ac: '#10b981', dc: '#f59e0b' };
+function acdcSplit(from, to = Infinity) {
+  const o = { ac: 0, dc: 0, nAc: 0, nDc: 0 };
+  getReadings().forEach(r => { const t = Date.parse(r.date), e = Number(r.consumedSinceLast) || 0; if (!(t >= from && t < to) || e <= 0) return; if (placeOf(r) === 'away') { o.dc += e; o.nDc++; } else { o.ac += e; o.nAc++; } });
+  o.tot = o.ac + o.dc; o.dcP = o.tot ? o.dc / o.tot * 100 : null; return o;
+}
+function acdcCert() {
+  const st = getSettings(), A = Number(st.certAcKwh), D = Number(st.certDcKwh); if (!(Number.isFinite(A) && Number.isFinite(D) && A + D > 0)) return null;
+  const km = Number(st.certKm) > 0 ? Number(st.certKm) : Number(st.purchaseKm) > 0 ? Number(st.purchaseKm) : null;
+  return { ac: A / (A + D) * 100, dcP: D / (A + D) * 100, acK: A, dcK: D, kwh: A + D, km };
+}
+const acdcLvl = (p) => p == null ? ['', ''] : p <= 20 ? ['Sehr schonend', '#10b981'] : p <= 40 ? ['Ausgewogen', '#22c55e'] : p <= 60 ? ['Viel Schnellladen', '#f59e0b'] : ['Überwiegend DC', '#ef4444'];
+function acdcBar(label, o, sub) {
+  const p = o.dcP == null ? 0 : o.dcP, a = 100 - p;
+  return `<div><div class="flex justify-between gap-2 text-sm"><span class="min-w-0 truncate text-slate-600 dark:text-slate-300">${label}</span><span class="shrink-0 tabular-nums"><b style="color:${ACDC_C.ac}">${fmt(a, 0)} %</b> · <b style="color:${ACDC_C.dc}">${fmt(p, 0)} %</b></span></div>
+    <div class="mt-1 flex h-3 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800"><div style="width:${a}%;background:${ACDC_C.ac}"></div><div style="width:${p}%;background:${ACDC_C.dc}"></div></div>${sub ? `<p class="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400 text-left">${sub}</p>` : ''}</div>`;
+}
+function renderAcdc() {
+  const el = $('acdc-body'); if (!el) return;
+  document.querySelectorAll('.acdc-btn').forEach(b => { const on = b.dataset.acdc === acdcMode; b.classList.toggle('bg-white', on); b.classList.toggle('dark:bg-slate-600', on); b.classList.toggle('shadow-sm', on); b.classList.toggle('text-slate-500', !on); });
+  const now = Date.now(), P0 = Date.parse(purchaseDay() + 'T00:00:00'), leg = `<div class="mt-3 flex gap-4 text-xs text-slate-500 dark:text-slate-400"><span class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm" style="background:${ACDC_C.ac}"></span>AC (Zuhause, Bosch)</span><span class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm" style="background:${ACDC_C.dc}"></span>DC (Unterwegs)</span></div>`;
+  const head = (p, sub) => { const l = acdcLvl(p); return `<div class="mt-2 flex items-end justify-between gap-3"><div><p class="font-barlow text-[40px] font-bold leading-none" style="color:${ACDC_C.dc}">${p == null ? '–' : fmt(p, 0) + ' %'}<span class="ml-1.5 font-sans text-sm font-medium text-slate-500 dark:text-slate-400">DC-Anteil</span></p><p class="mt-1 text-xs text-slate-500 dark:text-slate-400 text-left">${sub}</p></div>${l[0] ? `<span class="shrink-0 rounded-lg px-2 py-1 text-xs font-semibold" style="color:${l[1]};background:${l[1]}22">${l[0]}</span>` : ''}</div>`; };
+  if (acdcMode === 'zul') {
+    const c = acdcCert(), app = acdcSplit(P0);
+    if (!c) { el.innerHTML = `<p class="mt-2 text-sm text-slate-600 dark:text-slate-300 text-left">Für „Seit Zulassung“ fehlt das AC/DC-Verhältnis aus deinem Akku-Zertifikat.</p><button type="button" data-acdc-set class="mt-3 w-full rounded-xl border border-slate-300 dark:border-slate-700 py-2.5 text-sm font-semibold active:scale-95 transition">In den Einstellungen eintragen</button>`; return; }
+    const pre = { dcP: c.dcP, ac: c.acK, dc: c.dcK };
+    const tot = c.kwh ? { ac: pre.ac + app.ac, dc: pre.dc + app.dc } : null; if (tot) { tot.tot = tot.ac + tot.dc; tot.dcP = tot.tot ? tot.dc / tot.tot * 100 : null; }
+    el.innerHTML = head(tot ? tot.dcP : c.dcP, tot ? 'gesamt seit Zulassung · ' + fmt(tot.tot, 0) + ' kWh, davon ' + fmt(c.kwh, 0) + ' kWh vor dem Kauf laut Zertifikat' : '')
+      + `<div class="mt-4 space-y-3">${acdcBar('Vor dem Kauf (Zertifikat)', pre, 'AC ' + fmt(c.acK, 0) + ' kWh · DC ' + fmt(c.dcK, 0) + ' kWh' + (c.km ? ' bis ' + fmt(c.km, 0) + ' km' : ''))}${app.tot ? acdcBar('Seit Kauf (deine Ladungen)', app, fmt(app.tot, 0) + ' kWh in ' + (app.nAc + app.nDc) + ' Ladungen') : ''}${tot ? acdcBar('Gesamt seit Zulassung', tot, '') : ''}</div>` + leg
+      + (tot && app.dcP != null ? `<p class="mt-3 rounded-2xl bg-slate-100 dark:bg-slate-800/70 p-3 text-xs text-slate-600 dark:text-slate-300 text-left">${app.dcP < c.dcP - 2 ? 'Seit dem Kauf lädst du anteilig weniger per DC als der Vorbesitzer – gut für den Akku.' : app.dcP > c.dcP + 2 ? 'Seit dem Kauf lädst du anteilig mehr per DC als der Vorbesitzer. Gelegentliches Schnellladen ist unbedenklich, im Alltag ist AC schonender.' : 'Dein Ladeverhalten entspricht in etwa dem des Vorbesitzers.'}</p>` : '');
+    return;
+  }
+  const from = acdcMode === 'kauf' ? P0 : now - 90 * 864e5, o = acdcSplit(from);
+  if (!o.tot) { el.innerHTML = '<p class="mt-2 text-sm text-slate-600 dark:text-slate-300 text-left">Noch keine Ladungen mit kWh in diesem Zeitraum.</p>'; return; }
+  /* Monatsbalken (gestapelt, kWh) */
+  const d0 = new Date(from), months = []; for (let d = new Date(d0.getFullYear(), d0.getMonth(), 1); d.getTime() <= now; d.setMonth(d.getMonth() + 1)) { const a = Math.max(from, d.getTime()), e = new Date(d.getFullYear(), d.getMonth() + 1, 1).getTime(); months.push({ l: d.toLocaleDateString('de-DE', { month: 'short' }).replace('.', ''), ...acdcSplit(a, e) }); }
+  const mx = Math.max(1, ...months.map(m => m.tot));
+  const bars = `<div class="mt-4 flex items-end gap-1.5 h-28">${months.map(m => `<div class="flex min-w-0 flex-1 flex-col items-center gap-1"><div class="flex w-full max-w-[34px] flex-col justify-end overflow-hidden rounded-md" style="height:${Math.max(2, m.tot / mx * 92)}px" title="${m.l}: AC ${fmt(m.ac, 0)} kWh, DC ${fmt(m.dc, 0)} kWh"><div style="height:${m.tot ? m.dc / m.tot * 100 : 0}%;background:${ACDC_C.dc}"></div><div style="flex:1;background:${ACDC_C.ac}"></div></div><span class="text-[10px] text-slate-500 dark:text-slate-400">${m.l}</span></div>`).join('')}</div>`;
+  const c = acdcCert(), cmp = c ? `<p class="mt-3 text-xs text-slate-500 dark:text-slate-400 text-left">Zum Vergleich laut Akku-Zertifikat vor dem Kauf: ${fmt(c.dcP, 0)} % DC.</p>` : '';
+  el.innerHTML = head(o.dcP, fmt(o.tot, 0) + ' kWh · ' + o.nAc + ' × AC, ' + o.nDc + ' × DC') + bars + leg + cmp;
+}
+$('acdc-seg').addEventListener('click', (e) => { const b = e.target.closest('[data-acdc]'); if (b && b.dataset.acdc !== acdcMode) { acdcMode = b.dataset.acdc; renderAcdc(); } });
+$('acdc-body').addEventListener('click', (e) => { if (e.target.closest('[data-acdc-set]')) { openSettings('laden'); setTimeout(() => { const f = $('set-cert-ac'); f.scrollIntoView({ block: 'center' }); }, 200); } });
+function certRatioHint() { const n = (id) => { const t = $(id).value.trim(); if (!t) return NaN; return Number((/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(t) ? t.replace(/\./g, '') : t).replace(',', '.')); }, a = n('set-cert-ac'), d = n('set-cert-dc');
+  $('set-cert-ratio').textContent = Number.isFinite(a) && Number.isFinite(d) && a + d > 0 ? 'Verhältnis: ' + fmt(a / (a + d) * 100, 0) + ' % AC · ' + fmt(d / (a + d) * 100, 0) + ' % DC (' + fmt(a + d, 0) + ' kWh gesamt)' : ''; }
+['set-cert-ac', 'set-cert-dc'].forEach(id => $(id).addEventListener('input', certRatioHint));
+$('care-seg').addEventListener('click', (e) => { const b = e.target.closest('[data-care]'); if (b && b.dataset.care !== careMode) { careMode = b.dataset.care; renderCare(); } });
+/* =====================================================================
+   Akku-Temperatur (Berichte → Akku): Auswertung der optional erfassten Temperatur beim Anstecken (ab 10 Ladungen).
+   1) Strom an der Steckdose je 100 % Akku: warm (≥ 15 °C) gegen kalt (< 15 °C), je mind. 3 passende Ladungen. Kapazität und Verluste
+      lassen sich dabei nicht trennen – der Mehrbedarf bei Kälte ist v. a. Heizung/Verlust, deshalb wird er so (und nicht als Kapazität) beschriftet.  2) Ø Ladeverlust nach Temperaturbereich (Zuhause/Bosch)
+   ===================================================================== */
+const TEMP_MIN_N = 10, TEMP_SPLIT = 15;
+function renderTempCard() {
+  const rs = getReadings(), withT = rs.filter(r => Number.isFinite(r.battTemp)), el = $('temp-body'); if (!el) return;
+  if (withT.length < TEMP_MIN_N) {
+    el.innerHTML = `<p class="mt-1 text-xl font-semibold">Noch ${TEMP_MIN_N - withT.length} ${TEMP_MIN_N - withT.length === 1 ? 'Ladung' : 'Ladungen'} bis zur Auswertung</p>
+      <p class="text-sm mt-1 text-slate-600 dark:text-slate-300">Trage beim Erfassen einer Ladung die Akku-Temperatur ein, die das Infotainment beim Anstecken zeigt. Ab ${TEMP_MIN_N} Ladungen zeigt diese Karte, wie Kälte die nutzbare Kapazität und die Ladeverluste beeinflusst.</p>
+      <div class="mt-3"><p class="text-xs text-slate-500 dark:text-slate-400">${withT.length} von ${TEMP_MIN_N} Ladungen mit Temperatur</p><div class="mt-1 h-2 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden"><div class="h-2 rounded-full bg-emerald-500" style="width:${Math.round(withT.length / TEMP_MIN_N * 100)}%"></div></div></div>`;
+    return;
+  }
+  const rows = batRows().filter(x => x.bt != null), warm = batFit(rows.filter(x => x.bt >= TEMP_SPLIT)), cold = batFit(rows.filter(x => x.bt < TEMP_SPLIT));
+  let cap = '';
+  if (warm && cold) { const d = (cold.K / warm.K - 1) * 100; cap = `<p class="mt-3 text-sm font-medium">Strom je 100 % Akku nach Akku-Temperatur</p><div class="mt-2 grid grid-cols-2 gap-2 text-center">
+      <div class="rounded-2xl bg-slate-100 dark:bg-slate-800/70 p-2.5"><p class="text-xs text-slate-500 dark:text-slate-400">Akku ≥ ${TEMP_SPLIT} °C</p><p class="text-lg font-semibold tabular-nums">${fmt(warm.K, 1)} kWh</p><p class="text-[11px] text-slate-500 dark:text-slate-400">${warm.n} Ladungen</p></div>
+      <div class="rounded-2xl bg-slate-100 dark:bg-slate-800/70 p-2.5"><p class="text-xs text-slate-500 dark:text-slate-400">Akku &lt; ${TEMP_SPLIT} °C</p><p class="text-lg font-semibold tabular-nums">${fmt(cold.K, 1)} kWh</p><p class="text-[11px] text-slate-500 dark:text-slate-400">${cold.n} Ladungen</p></div></div>
+      <p class="mt-2 text-xs text-slate-500 dark:text-slate-400">Strom an der Steckdose je 100 % Akku. ${Math.abs(d) < 2 ? 'Kaum Unterschied zwischen warmem und kaltem Akku.' : d > 0 ? 'Mit kaltem Akku brauchst du ' + fmt(d, 1) + ' % mehr Strom für dieselbe Akkufüllung – das Auto heizt beim Laden mit. Das ist normal und kein Zeichen von Alterung.' : 'Mit kaltem Akku lädst du ' + fmt(-d, 1) + ' % weniger Strom je 100 % – kalte Zellen zeigen oft etwas weniger nutzbare Kapazität an; im Sommer gleicht sich das wieder aus.'}</p>`; }
+  else cap = `<p class="mt-2 text-xs text-slate-500 dark:text-slate-400">Für den Vergleich warm/kalt braucht es je mindestens 3 Ladungen mit Akku-Start und -Ende über 30 % Hub (bisher ${rows.filter(x => x.bt >= TEMP_SPLIT).length} warm, ${rows.filter(x => x.bt < TEMP_SPLIT).length} kalt).</p>`;
+  const bins = [['< 10 °C', -99, 10], ['10–20 °C', 10, 20], ['≥ 20 °C', 20, 99]].map(([l, a, b]) => { const v = []; rs.forEach((r, i) => { if (!Number.isFinite(r.battTemp) || r.battTemp < a || r.battTemp >= b) return; const st = entryStats(rs, i); if (st.loss != null && st.loss >= 0 && st.loss < 40) v.push(st.loss); }); return { l, n: v.length, m: v.length ? v.reduce((x, y) => x + y, 0) / v.length : null }; });
+  const mx = Math.max(10, ...bins.map(b => b.m || 0));
+  const loss = bins.some(b => b.n) ? `<p class="mt-4 text-sm font-medium">Ø Ladeverlust nach Akku-Temperatur</p><div class="mt-2 space-y-2">${bins.map(b => `<div class="flex items-center gap-2 text-sm"><span class="w-16 shrink-0 text-slate-600 dark:text-slate-300">${b.l}</span><div class="h-2.5 flex-1 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden"><div class="h-full rounded-full bg-sky-500" style="width:${b.m != null ? Math.round(b.m / mx * 100) : 0}%"></div></div><span class="w-20 shrink-0 text-right tabular-nums">${b.m != null ? fmt(b.m, 1) + ' %' : '–'}<span class="text-[11px] text-slate-500 dark:text-slate-400"> (${b.n})</span></span></div>`).join('')}</div><p class="mt-2 text-xs text-slate-500 dark:text-slate-400">Verlust aus Zähler-kWh und Akku-%; bei kaltem Akku heizt das Auto beim Laden mit.</p>` : '';
+  el.innerHTML = `<p class="mt-1 text-xs text-slate-500 dark:text-slate-400">${withT.length} Ladungen mit Temperatur · Ø ${fmt(withT.reduce((a, r) => a + r.battTemp, 0) / withT.length, 0)} °C</p>` + cap + loss;
+}
+/* =====================================================================
+   Mehrverbrauch nach Temperatur (Berichte → Akku): Fahrverbrauch je Strecke zwischen zwei Ladungen aus Akku-% × Kapazität (ohne Ladeverluste),
+   gruppiert nach der Akku-Temperatur beim Anstecken (Ende der Strecke) bzw. der Ø Außentemperatur der Tage dieser Strecke.
+   Referenz = einstellbarer Bereich (Standard 15 bis unter 22 °C); darunter und darüber 5-°C-Bereiche. Verbrauch je Bereich = Σ kWh ÷ Σ km.
+   Hochrechnung: km je Bereich × (Verbrauch − Referenz), in Steckdosen-kWh (÷ Ø Wirkungsgrad) und € (× Ø Strompreis).
+   ===================================================================== */
+let tcMode = 'akku', tcTok = 0;
+const TC_MIN_KM = 150, TC_MIN_REF = 3;
+function tcRange() { const s = getSettings(), lo = Number(s.refLo), hi = Number(s.refHi); return Number.isFinite(lo) && Number.isFinite(hi) && hi > lo ? [lo, hi] : [15, 22]; }
+function tcBins(lo, hi) {
+  const f = (v) => String(v).replace('-', '−');
+  return [{ k: 'h3', a: hi + 10, b: 99, l: '≥ ' + f(hi + 10) + ' °C' }, { k: 'h2', a: hi + 5, b: hi + 10, l: f(hi + 5) + '–' + f(hi + 10) + ' °C' }, { k: 'h1', a: hi, b: hi + 5, l: f(hi) + '–' + f(hi + 5) + ' °C' },
+    { k: 'ref', a: lo, b: hi, l: f(lo) + '–' + f(hi) + ' °C' },
+    { k: 'c1', a: lo - 5, b: lo, l: f(lo - 5) + '–' + f(lo) + ' °C' }, { k: 'c2', a: lo - 10, b: lo - 5, l: f(lo - 10) + '–' + f(lo - 5) + ' °C' }, { k: 'c3', a: lo - 15, b: lo - 10, l: f(lo - 15) + '–' + f(lo - 10) + ' °C' }, { k: 'c4', a: -99, b: lo - 15, l: '< ' + f(lo - 15) + ' °C' }];
+}
+function tcSegments() {
+  const rs = getReadings(), out = [];
+  rs.forEach((r, i) => { if (i < 1) return; const s = entryStats(rs, i); if (s.method !== 'soc' || s.rough || !(s.usedBat > 0) || !(s.km >= 10)) return; out.push({ i, km: s.km, bat: s.usedBat, bt: Number.isFinite(r.battTemp) ? r.battTemp : null, a: wxIso(new Date(rs[i - 1].date)), b: wxIso(new Date(r.date)) }); });
+  return out;
+}
+async function renderTcCard() {
+  const tok = ++tcTok, el = $('tc-body'); if (!el) return;
+  document.querySelectorAll('.tc-btn').forEach(b => { const on = b.dataset.tc === tcMode; b.classList.toggle('bg-white', on); b.classList.toggle('dark:bg-slate-600', on); b.classList.toggle('shadow-sm', on); b.classList.toggle('text-slate-500', !on); });
+  const [lo, hi] = tcRange(), bins = tcBins(lo, hi), segs = tcSegments(); let pts = [];
+  if (tcMode === 'akku') pts = segs.filter(x => x.bt != null).map(x => ({ ...x, t: x.bt }));
+  else {
+    const l = wxLoc(); if (!l) { el.innerHTML = '<p class="mt-2 text-sm text-slate-600 dark:text-slate-300">Für die Außentemperatur bitte in den Einstellungen unter „Wetter“ einen Standort eintragen.</p>'; return; }
+    if (!segs.length) { el.innerHTML = '<p class="mt-2 text-sm text-slate-600 dark:text-slate-300">Noch keine Strecken mit Akku-Start/-Ende und km-Stand.</p>'; return; }
+    el.innerHTML = '<p class="mt-2 text-sm text-slate-500 dark:text-slate-400">Temperaturen werden geladen …</p>';
+    let days = {}; try { days = await wxTemps(l, segs.reduce((m, x) => x.a < m ? x.a : m, segs[0].a), segs.reduce((m, x) => x.b > m ? x.b : m, segs[0].b)); } catch (e) { }
+    if (tok !== tcTok) return;
+    segs.forEach(x => { let sum = 0, n = 0; for (let t = Date.parse(x.a + 'T12:00:00'), e = Date.parse(x.b + 'T12:00:00'); t <= e; t += 864e5) { const v = days[wxIso(new Date(t))]; if (v != null) { sum += v; n++; } } if (n) pts.push({ ...x, t: sum / n }); });
+  }
+  bins.forEach(b => { b.km = 0; b.bat = 0; b.n = 0; });
+  pts.forEach(x => { const b = bins.find(y => x.t >= y.a && x.t < y.b); if (b) { b.km += x.km; b.bat += x.bat; b.n++; } });
+  bins.forEach(b => { b.rate = b.km > 0 ? b.bat / b.km * 100 : null; });
+  const ref = bins.find(b => b.k === 'ref'), src = tcMode === 'akku' ? 'Akku-Temperatur' : 'Außentemperatur';
+  if (ref.n < TC_MIN_REF) {
+    el.innerHTML = `<p class="mt-2 text-xl font-semibold">Noch zu wenige Referenz-Strecken</p><p class="text-sm mt-1 text-slate-600 dark:text-slate-300">Für die Referenz braucht es mindestens ${TC_MIN_REF} Strecken mit ${src} zwischen ${String(lo).replace('-', '−')} und ${String(hi).replace('-', '−')} °C (bisher ${ref.n}). Gezählt werden Strecken zwischen zwei Ladungen mit Akku-Start/-Ende und km-Stand${tcMode === 'akku' ? ' und eingetragener Akku-Temperatur' : ''}.</p>`;
+    return;
+  }
+  bins.forEach(b => { b.pct = b.rate != null && b.k !== 'ref' ? (b.rate / ref.rate - 1) * 100 : null; });
+  const span = Math.max(25, ...bins.filter(b => b.pct != null).map(b => Math.abs(b.pct)));
+  const eta = (v => v >= 0.75 && v <= 0.98 ? v : BAT.eta)(avgEff(getReadings())), rsAll = getReadings(); let e = 0, c = 0; rsAll.forEach(r => { if (r.consumedSinceLast > 0 && r.cost > 0) { e += r.consumedSinceLast; c += r.cost; } }); const price = e > 0 ? c / e : Number(getSettings().price) || 0;
+  const extra = (ks) => bins.filter(b => ks.includes(b.k[0]) && b.rate != null).reduce((a, b) => a + b.km * (b.rate - ref.rate) / 100, 0) / eta;
+  const xc = extra(['c']), xh = extra(['h']), fx = (v) => (v >= 0 ? '+' : '−') + fmt(Math.abs(v), 0) + ' kWh · ' + (v >= 0 ? '' : '−') + eur(Math.abs(v) * price).replace(/,\d\d\s?€/, ' €');
+  const row = (b) => {
+    if (b.k === 'ref') return `<div class="grid items-center gap-2 rounded-lg bg-emerald-50 dark:bg-emerald-600/10 py-0.5" style="grid-template-columns:64px 1fr 96px"><span class="pl-1 text-emerald-700 dark:text-emerald-300 font-semibold">${b.l}</span><div class="relative h-4"><div class="absolute left-1/2 top-0 bottom-0 w-0.5 bg-emerald-500"></div></div><span class="text-right text-emerald-700 dark:text-emerald-300 font-semibold">Referenz</span></div>`;
+    const weak = b.km < TC_MIN_KM, w = b.pct != null ? Math.min(50, Math.abs(b.pct) / span * 50) : 0, cold = b.k[0] === 'c', col = cold ? ['#7dd3fc', '#38bdf8', '#0ea5e9', '#0369a1'][+b.k[1] - 1] : ['#fdba74', '#fb923c', '#ea580c'][+b.k[1] - 1];
+    const bar = b.pct != null ? `<div class="absolute top-0.5 bottom-0.5 ${b.pct >= 0 ? 'rounded-r' : 'rounded-l'}" style="${b.pct >= 0 ? 'left:50%' : 'right:50%'};width:${w.toFixed(1)}%;background:${col};${weak ? 'opacity:.45' : ''}"></div>` : '';
+    return `<div class="grid items-center gap-2" style="grid-template-columns:64px 1fr 96px"><span class="pl-1 text-slate-600 dark:text-slate-300">${b.l}</span><div class="relative h-4"><div class="absolute left-1/2 top-0 bottom-0 w-px bg-slate-300 dark:bg-slate-600"></div>${bar}</div><span class="text-right tabular-nums">${b.pct != null ? (b.pct >= 0 ? '+' : '−') + fmt(Math.abs(b.pct), 0) + ' %' + (weak ? '*' : '') : '–'} <span class="text-[11px] text-slate-500 dark:text-slate-400">(${b.n})</span></span></div>`;
+  };
+  el.innerHTML = `<div class="mt-3 flex items-center justify-between rounded-2xl bg-emerald-50 dark:bg-emerald-600/15 p-3"><div><p class="text-xs font-semibold text-emerald-700 dark:text-emerald-300">Referenz · ${src.split('-')[0] === 'Akku' ? 'Akku' : 'außen'} ${ref.l}</p><p class="text-left text-[11px] text-slate-500 dark:text-slate-400">${ref.n} Strecken · ${fmt(ref.km, 0)} km · ohne Ladeverluste</p></div><p class="text-2xl font-bold tabular-nums">${fmt(ref.rate, 1)}<span class="text-xs font-medium text-slate-500 dark:text-slate-400"> kWh/100</span></p></div>
+    <div class="mt-3 space-y-1.5 text-[13px]">${bins.map(row).join('')}</div>
+    <p class="mt-2 text-left text-[11px] text-slate-500 dark:text-slate-400">(n) = Strecken · * unsicher, unter ${TC_MIN_KM} km Datenbasis · Balken nach rechts = Mehrverbrauch</p>
+    <div class="mt-3 grid grid-cols-2 gap-2 text-center"><div class="rounded-2xl bg-slate-100 dark:bg-slate-800/70 p-2.5"><p class="text-[11px] text-slate-500 dark:text-slate-400">Mehrverbrauch Kälte</p><p class="font-semibold tabular-nums">${fx(xc)}</p></div><div class="rounded-2xl bg-slate-100 dark:bg-slate-800/70 p-2.5"><p class="text-[11px] text-slate-500 dark:text-slate-400">Mehrverbrauch Hitze</p><p class="font-semibold tabular-nums">${fx(xh)}</p></div></div>
+    <p class="mt-2 text-[11px] text-slate-500 dark:text-slate-400">Hochrechnung über alle erfassten Strecken: km je Bereich × (Verbrauch − Referenz), an der Steckdose (Ø Wirkungsgrad ${fmt(eta * 100, 0)} %) × Ø Strompreis ${fmt(price, 3)} €/kWh. Referenzbereich änderbar unter Einstellungen → Laden &amp; Akku.</p>`;
+}
+$('tc-seg').addEventListener('click', (e) => { const b = e.target.closest('[data-tc]'); if (b && b.dataset.tc !== tcMode) { tcMode = b.dataset.tc; renderTcCard(); } });
+
+/* =====================================================================
+   Alterung im Vergleich (Berichte → Akku): Aviloo-Benchmark Enyaq iV (FLASH-Tests, n = 20.303), Median-SoH 95,14 % / 92,67 % / 91,04 %
+   bei 50.000 / 100.000 / 150.000 km. Bis 50.000 km Potenzkurve (Verlust ∝ km^0,6, früher Abfall), danach linear zwischen den Stützpunkten,
+   über 150.000 km mit der letzten Steigung fortgeschrieben. Eigener SoH = nutzbare kWh (K × η) ÷ Werksangabe 52 kWh netto.
+   ===================================================================== */
+const AVILOO = { n: 20303, nom: 52, pts: [[0, 100], [50000, 95.14], [100000, 92.67], [150000, 91.04]], warr: { yrs: 8, km: 160000, soh: 70 } };
+function avSoh(km) {
+  const P = AVILOO.pts; if (!(km > 0)) return 100;
+  if (km <= P[1][0]) return 100 - (100 - P[1][1]) * Math.pow(km / P[1][0], 0.6);
+  for (let i = 1; i < P.length - 1; i++) if (km <= P[i + 1][0]) return P[i][1] + (P[i + 1][1] - P[i][1]) * (km - P[i][0]) / (P[i + 1][0] - P[i][0]);
+  const a = P[P.length - 2], b = P[P.length - 1]; return b[1] + (b[1] - a[1]) * (km - b[0]) / (b[0] - a[0]);
+}
+function avPoints(rows) {                                                       // eigene Messpunkte je Quartal (mind. 6 Ladungen) + Gesamt
+  const out = [], by = new Map();
+  rows.forEach(x => { if (x.km == null) return; const d = new Date(x.t), q = d.getFullYear() + '-' + Math.floor(d.getMonth() / 3); if (!by.has(q)) by.set(q, []); by.get(q).push(x); });
+  [...by.values()].forEach(g => { const f = batFit(g); if (!f || f.n < 6) return; const kms = g.map(x => x.km).sort((a, b) => a - b); out.push({ km: kms[Math.floor(kms.length / 2)], soh: f.K * BAT.eta / AVILOO.nom * 100, ci: f.ci * BAT.eta / AVILOO.nom * 100, n: f.n }); });
+  return out.sort((a, b) => a.km - b.km);
+}
+function renderAviloo(rows, fit, ok) {
+  const el = $('av-body'); if (!el) return;
+  const km = lastKnownKm(), mySoh = ok ? fit.K * BAT.eta / AVILOO.nom * 100 : null, myCi = ok ? fit.ci * BAT.eta / AVILOO.nom * 100 : null, exp = km ? avSoh(km) : null;
+  const pts = avPoints(rows); if (ok && km && !pts.length) pts.push({ km, soh: mySoh, ci: myCi, n: fit.n });
+  /* Diagramm (SVG): x 0–160.000 km, y 86–100 % */
+  const W = 320, H = 170, L = 34, R = 10, T = 10, B = 26, X = (k) => L + k / 160000 * (W - L - R), Y = (v) => T + (100 - Math.max(86, Math.min(100, v))) / 14 * (H - T - B);
+  let curve = ''; for (let k = 0; k <= 160000; k += 4000) curve += (k ? ' L' : 'M') + X(k).toFixed(1) + ' ' + Y(avSoh(k)).toFixed(1);
+  const grid = [100, 96, 92, 88].map(v => `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" stroke="currentColor" class="text-slate-200 dark:text-slate-800" stroke-width="1"/><text x="${L - 5}" y="${Y(v) + 3.5}" text-anchor="end" font-size="10" fill="currentColor" class="text-slate-400">${v}</text>`).join('')
+    + [0, 50000, 100000, 150000].map(k => `<text x="${X(k)}" y="${H - 8}" text-anchor="middle" font-size="10" fill="currentColor" class="text-slate-400">${k ? k / 1000 + 'k' : '0'}</text>`).join('');
+  const bench = AVILOO.pts.slice(1).map(([k, v]) => `<circle cx="${X(k)}" cy="${Y(v)}" r="3.2" fill="#0ea5e9"/><text x="${X(k)}" y="${Y(v) - 7}" text-anchor="middle" font-size="9.5" fill="#0ea5e9">${fmt(v, 1)}</text>`).join('');
+  const mine = pts.map(p => `<line x1="${X(p.km)}" x2="${X(p.km)}" y1="${Y(p.soh + p.ci)}" y2="${Y(p.soh - p.ci)}" stroke="#10b981" stroke-width="1.5" opacity=".6"/><circle cx="${X(p.km)}" cy="${Y(p.soh)}" r="4" fill="#10b981" stroke="#0f172a" stroke-width="1.5"><title>${fmt(p.km, 0)} km: ${fmt(p.soh, 1)} % (± ${fmt(p.ci, 1)})</title></circle>`).join('');
+  const svg = `<svg viewBox="0 0 ${W} ${H}" class="mt-3 w-full" role="img" aria-label="Akkugesundheit über km: Aviloo-Median gegen deine Messung">${grid}<path d="${curve}" fill="none" stroke="#0ea5e9" stroke-width="2" stroke-dasharray="1 0"/>${bench}${mine}</svg>
+    <div class="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400"><span class="flex items-center gap-1.5"><span class="h-0.5 w-4 rounded bg-sky-500"></span>Aviloo-Median Enyaq iV</span><span class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-emerald-500"></span>Deine Schätzung (± Unsicherheit)</span></div>`;
+  const head = mySoh != null && exp != null ? `<div class="mt-2 grid grid-cols-2 gap-2 text-center">
+      <div class="rounded-2xl bg-slate-100 dark:bg-slate-800/70 p-2.5"><p class="text-xs text-center text-slate-500 dark:text-slate-400">Typisch bei ${fmt(km, 0)} km</p><p class="text-lg font-semibold tabular-nums text-sky-600 dark:text-sky-400">${fmt(exp, 1)} %</p></div>
+      <div class="rounded-2xl bg-slate-100 dark:bg-slate-800/70 p-2.5"><p class="text-xs text-center text-slate-500 dark:text-slate-400">Dein Akku (Schätzung)</p><p class="text-lg font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">${fmt(mySoh, 1)} %</p></div></div>`
+    : `<p class="mt-2 text-sm text-slate-600 dark:text-slate-300 text-left">${exp != null ? 'Typisch bei ' + fmt(km, 0) + ' km: ' + fmt(exp, 1) + ' %. ' : ''}Deine eigene Schätzung erscheint, sobald genug Ladungen vorliegen.</p>`;
+  /* Prognose (Median) in kWh und Reichweite */
+  let k100 = null; try { const rs = getReadings(), t = rs.length ? consumptionTotals(rs, rs.map((_, i) => i)) : null; k100 = t && t.km ? t.kwh100 * BAT.eta : null; } catch (e) { }
+  const prog = [50000, 100000, 150000].filter(k => !km || k > km - 5000).map(k => { const v = avSoh(k), kwh = v / 100 * AVILOO.nom; return `<tr class="border-t border-slate-200 dark:border-slate-800"><td class="py-1.5 text-left">${fmt(k, 0)} km</td><td class="py-1.5 text-right tabular-nums">${fmt(v, 1)} %</td><td class="py-1.5 text-right tabular-nums">${fmt(kwh, 1)} kWh</td><td class="py-1.5 text-right tabular-nums">${k100 ? 'ca. ' + fmt(Math.round(kwh / k100 * 100 / 5) * 5, 0) + ' km' : '–'}</td></tr>`; }).join('');
+  const w = AVILOO.warr, atW = avSoh(w.km);
+  el.innerHTML = head + svg
+    + `<p class="mt-4 text-sm font-medium text-left">Prognose (typischer Verlauf)</p><table class="mt-1 w-full text-sm"><thead><tr class="text-xs text-slate-500 dark:text-slate-400"><th class="text-left font-normal">bei</th><th class="text-right font-normal">SoH</th><th class="text-right font-normal">netto</th><th class="text-right font-normal">Reichweite</th></tr></thead><tbody>${prog}</tbody></table>`
+    + `<p class="mt-3 rounded-2xl bg-slate-100 dark:bg-slate-800/70 p-3 text-xs text-slate-600 dark:text-slate-300 text-left"><b class="text-slate-900 dark:text-white">Garantie:</b> ${w.yrs} Jahre bzw. ${fmt(w.km, 0)} km, Mindestkapazität laut Škoda-Garantiebedingungen (üblich ${w.soh} %). Ein typischer Enyaq liegt bei ${fmt(w.km, 0)} km noch bei etwa ${fmt(atW, 0)} %, also rund ${fmt(atW - w.soh, 0)} Punkte darüber.</p>`
+    + `<p class="mt-2 text-[11px] text-slate-500 dark:text-slate-400 text-left">Benchmark: Aviloo FLASH-Tests, ${fmt(AVILOO.n, 0)} Enyaq iV, Median ${AVILOO.pts.slice(1).map(p => fmt(p[1], 2) + ' % bei ' + fmt(p[0] / 1000, 0) + '.000 km').join(', ')}. Deine Schätzung = nutzbare kWh (η ${Math.round(BAT.eta * 100)} %) ÷ ${AVILOO.nom} kWh Werksangabe und deshalb nur grob vergleichbar. Aussagekräftiger ist, ob deine Punkte über die Jahre der Kurve folgen. Reichweite mit deinem Ø-Verbrauch.</p>`;
+}
+/* Berichte → Akku → mehr: Komfortenergie der laufenden Heizsaison (ab 1. Oktober): Summe, Kosten, je Vorheizen nach Außentemperatur,
+   Verbrauch/100 km nur Fahren (ab Akku ÷ Wirkungsgrad) gegen mit Vorheizen. */
+let cfTok = 0;
+async function renderCfCard() {
+  const el = $('cf-body'), tok = ++cfTok; if (!el) return;
+  const rs = getReadings(), now = new Date(), y0 = now.getMonth() >= 9 ? now.getFullYear() : now.getFullYear() - 1, from = new Date(y0, 9, 1), lab = 'Winter ' + y0 + '/' + String(y0 + 1).slice(2);
+  const idx = rs.map((r, i) => i).filter(i => new Date(rs[i].date) >= from), cf = idx.filter(i => comfortOf(rs[i]) > 0); $('cf-season').textContent = lab;
+  if (!cf.length) { el.innerHTML = `<p class="mt-2 text-sm text-left text-slate-600 dark:text-slate-300">Noch nichts eingetragen. Wenn du am Kabel vorheizt, trag die Komfortenergie aus der MyŠkoda-App in der Historie beim Bearbeiten der Ladung ein (Feld „🔥 Komfort kWh“).</p>`; return; }
+  const kwh = cf.reduce((a, i) => a + comfortOf(rs[i]), 0), eurS = cf.reduce((a, i) => a + comfortOf(rs[i]) * (unitOf(rs[i]) ?? getSettings().price), 0), days = new Set(cf.map(i => wxIso(new Date(rs[i].date)))).size;
+  let km = 0, wall = 0; idx.forEach(i => { const st = entryStats(rs, i); if (st.method === 'soc' && st.usedWall > 0) { km += st.km; wall += st.usedWall; } });
+  const big = (v, u, sub, cls = '') => `<div><p class="font-barlow text-[34px] font-bold leading-none ${cls}">${v}<span class="text-[15px]"> ${u}</span></p><p class="mt-1 text-left text-xs text-slate-500 dark:text-slate-400">${sub}</p></div>`;
+  const head = `<div class="mt-2 flex gap-6">${big(fmt(kwh, 1), 'kWh', 'an ' + days + (days === 1 ? ' Tag' : ' Tagen') + ' am Kabel geheizt', 'text-amber-600 dark:text-amber-300')}${big(fmt(eurS, 2), '€', 'Ø ' + eur(eurS / cf.length) + ' je Vorheizen')}</div>`;
+  const cons = km >= 50 ? `<p class="mt-3 rounded-xl bg-slate-100 dark:bg-slate-800/70 px-3 py-2 text-xs text-left text-slate-600 dark:text-slate-300">Verbrauch/100 km in dieser Saison: <b>Fahren ${fmt(wall / km * 100, 1)} kWh</b> · mit Vorheizen ${fmt((wall + kwh) / km * 100, 1)} kWh</p>` : '';
+  const note = '<p class="mt-2 text-[11px] text-left text-slate-500 dark:text-slate-400">Kosten bleiben in deinen Ladekosten enthalten. Ladeverlust, Wirkungsgrad und Prognose rechnen ohne Komfortenergie.</p>';
+  el.innerHTML = head + '<div id="cf-bars"></div>' + cons + note;
+  const l = wxLoc(); if (!l) return;
+  let t = {}; try { t = await wxTemps(l, wxIso(new Date(rs[cf[0]].date)), wxIso(new Date(rs[cf[cf.length - 1]].date))); } catch (e) { }
+  if (tok !== cfTok || !$('cf-bars')) return;
+  const bins = [['< −3°', -99, -3], ['−3–0°', -3, 0], ['0–3°', 0, 3], ['3–6°', 3, 6], ['≥ 6°', 6, 99]].map(([lb, a, b]) => { const v = cf.map(i => ({ T: t[wxIso(new Date(rs[i].date))], k: comfortOf(rs[i]) })).filter(x => Number.isFinite(x.T) && x.T >= a && x.T < b); return { lb, n: v.length, avg: v.length ? v.reduce((s2, x) => s2 + x.k, 0) / v.length : 0 }; }).filter(x => x.n);
+  if (!bins.length) return; const mx = Math.max(...bins.map(x => x.avg), 0.1);
+  $('cf-bars').innerHTML = `<div class="mt-4 flex h-[86px] items-end gap-1.5">${bins.map(x => `<div class="flex h-full flex-1 flex-col items-center justify-end gap-0.5"><span class="text-[10px] font-semibold tabular-nums text-slate-600 dark:text-slate-300">${fmt(x.avg, 1)}</span><span class="w-full rounded-t bg-amber-500" style="height:${Math.max(4, x.avg / mx * 60).toFixed(0)}px" title="${x.n}× · Ø ${fmt(x.avg, 1)} kWh"></span></div>`).join('')}</div>
+    <div class="mt-1 flex gap-1.5 text-[10px] text-slate-500 dark:text-slate-400">${bins.map(x => `<span class="flex-1 text-center">${x.lb}</span>`).join('')}</div><p class="mt-1 text-center text-[11px] text-slate-500 dark:text-slate-400">Ø kWh je Vorheizen nach Tagesmittel außen</p>`;
+}
+function renderBattery() {
+  try { renderCfCard(); } catch (e) { console.error(e); }
+  try { renderTcCard(); } catch (e) { console.error(e); }
+  try { renderTempCard(); } catch (e) { console.error(e); }
+  try { renderCare(); } catch (e) { console.error(e); }
+  try { renderAcdc(); } catch (e) { console.error(e); }
+  try { renderCurve(); } catch (e) { console.error(e); }
+  const rows = batRows(), fit = batFit(rows), now = Date.now(), ok = !!fit && fit.n >= BAT.minN && fit.sumHub >= BAT.minHub;
+  $('bat-value').classList.toggle('hidden', !ok); $('bat-few').classList.toggle('hidden', ok);
+  const hubSum = rows.reduce((a, x) => a + x.hub, 0);
+  $('bat-p1').style.width = Math.min(100, rows.length / BAT.minN * 100) + '%'; $('bat-p2').style.width = Math.min(100, hubSum / BAT.minHub * 100) + '%';
+  $('bat-p1t').textContent = rows.length + ' von ' + BAT.minN + ' passenden Ladungen'; $('bat-p2t').textContent = fmt(hubSum, 0) + ' von ' + BAT.minHub + ' %-Punkten Akku-Hub';
+  if (ok) {
+    $('bat-net').textContent = fmt(fit.K * BAT.eta, 1);
+    $('bat-k').textContent = fmt(fit.K, 1); $('bat-ci').textContent = '± ' + fmt(fit.ci, 1);
+    const eta = '<span style="font-family:system-ui,Roboto,\'Noto Sans\',\'Segoe UI\',\'DejaVu Sans\',\'Times New Roman\',serif" title="Ladewirkungsgrad">η</span>';
+    $('bat-c').innerHTML = 'bei ' + eta + ' = ' + Math.round(BAT.eta * 100) + ' %';
+    $('bat-basis').textContent = 'Basis: ' + fit.n + ' Ladungen Zuhause/Bosch · ' + fmtDate(new Date(fit.use[0].t).toISOString()) + ' bis ' + fmtDate(new Date(fit.use[fit.use.length - 1].t).toISOString()) + (fit.out ? ' · ' + fit.out + (fit.out === 1 ? ' Ausreißer' : ' Ausreißer') + ' ausgeschlossen' : '');
+  }
+  try { renderAviloo(rows, fit, ok); } catch (e) { console.error(e); }
+  /* Trend */
+  const tr = rows.length ? batTrend(rows, now) : { state: 'none' }, h = $('bat-trend-h'), t = $('bat-trend-t');
+  h.className = 'mt-1 text-xl font-semibold'; t.className = 'text-sm mt-1 text-slate-600 dark:text-slate-300';
+  if (!ok) { h.textContent = 'Noch nicht bewertbar'; t.textContent = 'Der Trend folgt, sobald genug Ladungen für einen Ausgangswert vorliegen und mindestens 12 Monate Daten vorhanden sind.'; }
+  else if (tr.state === 'short') { h.textContent = 'Ausgangswert festgehalten'; t.textContent = 'Ein Trend ist erst nach 12 Monaten sinnvoll, weil Kälte den Wert im Winter senkt (aktuell ' + fmt(tr.months, 1) + ' Monate Daten). Dein Ausgangswert: ' + fmt(fit.K, 1) + ' kWh je 100 %.'; }
+  else if (tr.state === 'few') { h.textContent = 'Zu wenige Vergleichsdaten'; t.textContent = 'Im selben Zeitraum vor einem Jahr liegen weniger als 8 passende Ladungen vor – ein Vergleich wäre nicht aussagekräftig.'; }
+  else {
+    const per = tr.w === 91 ? 'den letzten 3 Monaten' : 'den letzten 6 Monaten', sig = Math.abs(tr.d) > tr.crit * tr.se, val = (tr.d > 0 ? '+' : '−') + fmt(Math.abs(tr.d), 1) + ' % (± ' + fmt(tr.crit * tr.se, 1) + ' %)';
+    h.textContent = sig ? (tr.d < 0 ? 'Hinweis auf geringere Kapazität: ' : 'Höhere Werte: ') + val : 'Kein erkennbarer Unterschied: ' + val;
+    h.className += sig ? (tr.d < 0 ? ' text-amber-600 dark:text-amber-400' : ' text-sky-600 dark:text-sky-400') : ' text-emerald-600 dark:text-emerald-400';
+    t.textContent = 'Vergleich von ' + per + ' (' + fmt(tr.a.K, 1) + ' kWh je 100 %, ' + tr.a.n + ' Ladungen) mit demselben Zeitraum im Vorjahr (' + fmt(tr.b.K, 1) + ', ' + tr.b.n + ' Ladungen). '
+      + (sig ? (tr.d < 0 ? 'Der Unterschied ist größer als die Messunsicherheit. Er kann auf Akkualterung hindeuten, aber auch auf höhere Ladeverluste (Kabel, Wallbox, Heizung) – prüfe das mit einer Diagnose per OBD.' : 'Ein Anstieg ist bei einem Akku ungewöhnlich – prüfe Zählerstände, Akku-Angaben und Ladeverluste.') : 'Die Differenz liegt innerhalb der Messunsicherheit.');
+  }
+  /* Verlauf: Einzelwerte und gleitender Wert (letzte 3 Monate, ab 6 Ladungen) */
+  const draw = rows.length >= 3, day = BAT.day;
+  $('bat-chart-card').classList.toggle('hidden', !draw);
+  if (batChart) { batChart.destroy(); batChart = null; }
+  if (!draw) return;
+  const roll = [];
+  rows.forEach(r => { const w = rows.filter(x => x.t > r.t - BAT.win * day && x.t <= r.t); if (w.length >= 6) { const f = batFit(w); if (f) roll.push({ x: r.t, y: f.K }); } });
+  const use = fit ? fit.use : rows, drop = fit ? fit.drop : [], t0 = rows[0].t - 3 * day, t1 = Math.max(now, rows[rows.length - 1].t) + 3 * day;
+  const dark = matchMedia('(prefers-color-scheme: dark)').matches, text = dark ? '#cbd5e1' : '#475569', grid = dark ? 'rgba(148,163,184,.15)' : 'rgba(100,116,139,.15)', yrs = (t1 - t0) > 300 * day;
+  const ds = [{ type: 'scatter', label: 'Einzelne Ladung', data: use.map(x => ({ x: x.t, y: +x.k.toFixed(2) })), backgroundColor: '#94a3b8', pointRadius: 3.5 }];
+  if (drop.length) ds.push({ type: 'scatter', label: 'Ausreißer', data: drop.map(x => ({ x: x.t, y: +x.k.toFixed(2) })), backgroundColor: '#ef4444', pointRadius: 3.5 });
+  if (roll.length >= 2) ds.push({ type: 'line', label: 'Gleitend (3 Monate)', data: roll, borderColor: '#10b981', backgroundColor: '#10b981', pointRadius: 0, tension: .25, borderWidth: 2.5 });
+  if (ok) ds.push({ type: 'line', label: 'Gesamt ± 95 %', data: [{ x: t0, y: fit.K + fit.ci }, { x: t1, y: fit.K + fit.ci }], borderColor: '#0ea5e9', borderDash: [5, 4], pointRadius: 0, borderWidth: 1.2 }, { type: 'line', label: 'untere Grenze', data: [{ x: t0, y: fit.K - fit.ci }, { x: t1, y: fit.K - fit.ci }], borderColor: '#0ea5e9', borderDash: [5, 4], pointRadius: 0, borderWidth: 1.2 });
+  batChart = new Chart($('bat-chart'), {
+    data: { datasets: ds },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: text, filter: (i) => i.text !== 'untere Grenze' } }, tooltip: { callbacks: { label: (c) => c.dataset.label + ': ' + fmt(c.parsed.y, 1) + ' kWh · ' + new Date(c.parsed.x).toLocaleDateString('de-DE') } } },
+      scales: { x: { type: 'linear', min: t0, max: t1, ticks: { color: text, maxTicksLimit: 5, callback: (v) => new Date(v).toLocaleDateString('de-DE', yrs ? { month: 'short', year: '2-digit' } : { day: '2-digit', month: 'short' }) }, grid: { display: false } },
+        y: { title: { display: true, text: 'kWh je 100 % Akku', color: text }, ticks: { color: text }, grid: { color: grid } } } }
+  });
+  $('bat-chart-note').textContent = 'Jeder Punkt ist eine Ladung (Steckdosen-kWh ÷ Akku-Hub). Einzelwerte streuen durch die %-Rundung, Temperatur und Ladeleistung – deshalb zählt nur der gewichtete Gesamt- und Trendwert.';
+}
+
+/* =====================================================================
+   Statistik (Berichte → Tab „Statistik“, Einstieg auch über „Statistik ›“ auf der Start-Seite)
+   km: aus den erfassten km-Ständen (Stand vor dem Zeitraum bis letzter Stand darin). Verbrauch: wie auf Start inkl. Ladeverluste, Extremwerte je Ladung ohne grob geschätzte
+   (Akku-Entnahme unter 3 kWh). Kosten pro km, Tag und Monat beziehen sich auf die Ladekosten (Strom); Einnahmen und sonstige Kosten stehen im Kosten-Tab.
+   Ø pro Tag/Monat: Laufleistung vom ersten bis zum letzten km-Stand, Ladekosten vom ersten Eintrag bis heute.
+   ===================================================================== */
+/* =====================================================================
+   Abzeichen (eigene Seite über Start → „Abzeichen“ und das Schnellmenü; 36 Stück): werden aus den vorhandenen Daten berechnet. Freigeschaltet-Datum lokal in enyaq.badges = { <id>: ISO }.
+   Erster Lauf (noch nichts gespeichert): alle bereits verdienten still eintragen. Danach: neues Abzeichen → Pop-up mit Konfetti (eins nach dem anderen).
+   ===================================================================== */
+const KEY_BADGES = 'enyaq.badges';
+const ICE = { l100: 7.5, co2PerL: 2.37, eurPerL: 2.0, homeCo2: 0, gridCo2: 0.363 };   // Vergleichs-Benziner; Strom kg CO₂/kWh: Zuhause Ökostrom (0), Bosch/unterwegs Strommix 2024
+function bdgCtx() {
+  const rs = getReadings(), charges = rs.filter((r, i) => isCharge(rs, i)), kwh = charges.reduce((a, r) => a + (r.consumedSinceLast > 0 ? r.consumedSinceLast : 0), 0);
+  const pk = Number(getSettings().purchaseKm), od = rs.filter(r => r.odometerKm > 0), last = lastKnownKm(), base = pk > 0 ? pk : od.length ? od[0].odometerKm : null;
+  const km = last != null && base != null ? Math.max(0, last - base) : 0;
+  /* Monatswerte (mind. 300 km): bester Verbrauch und beste Kosten je 100 km */
+  const byM = {}; rs.forEach((r, i) => { const k = String(r.date).slice(0, 7); (byM[k] = byM[k] || []).push(i); });
+  let best100 = null, bestC100 = null;
+  Object.values(byM).forEach(idx => { try { const t = consumptionTotals(rs, idx); if (t && t.km >= 300) { if (t.kwh100 != null) best100 = Math.min(best100 ?? 99, t.kwh100); if (t.cost100 != null) bestC100 = Math.min(bestC100 ?? 99, t.cost100); } } catch (e) { } });
+  /* Winter: Ladungen im Dezember, Januar und Februar derselben Saison */
+  const seasons = {}; charges.forEach(r => { const d = new Date(r.date), m = d.getMonth(); if (m === 11 || m <= 1) { const k = m === 11 ? d.getFullYear() : d.getFullYear() - 1; (seasons[k] = seasons[k] || new Set()).add(m); } });
+  const winter = Object.values(seasons).some(x => x.size === 3), winterPart = Math.max(0, ...Object.values(seasons).map(x => x.size)) / 3;
+  const provs = new Set(rs.filter(r => placeOf(r) === 'away' && r.provider).map(r => r.provider.toLowerCase())); if (rs.some(r => placeOf(r) === 'bosch')) provs.add('bosch');
+  const [py, pm, pd] = purchaseDay().split('-').map(Number), years = (Date.now() - new Date(py, pm - 1, pd).getTime()) / (365.25 * 864e5);
+  let care = null; try { care = batCare().score ?? null; } catch (e) { }
+  let work = 0; try { const ys = taxYears(); work = Math.max(0, ...ys.map(y => taxData(y).days.length)); } catch (e) { }
+  /* Vergleich mit einem Benziner (Hyundai Tucson 1.6 T-GDi, real 7,5 l/100 km): 2,37 kg CO₂ je Liter → 178 g/km; Super 2,00 €/l.
+     Strom: Zuhause Ökostrom = 0 g/kWh, Bosch und unterwegs deutscher Strommix 2024 (UBA) 363 g/kWh */
+  const cost = charges.reduce((a, r) => a + (r.cost > 0 ? r.cost : 0), 0);
+  const evCo2 = charges.reduce((a, r) => a + (r.consumedSinceLast > 0 ? r.consumedSinceLast : 0) * (isHome(r) ? ICE.homeCo2 : ICE.gridCo2), 0);
+  const co2 = Math.max(0, km * ICE.l100 / 100 * ICE.co2PerL - evCo2), saved = km * ICE.l100 / 100 * ICE.eurPerL - cost;
+  /* Sommer: Ladungen im Juni, Juli und August desselben Jahres */
+  const summ = {}; charges.forEach(r => { const d = new Date(r.date), m = d.getMonth(); if (m >= 5 && m <= 7) (summ[d.getFullYear()] = summ[d.getFullYear()] || new Set()).add(m); });
+  const summer = Object.values(summ).some(x => x.size === 3), summerPart = Math.max(0, ...Object.values(summ).map(x => x.size)) / 3;
+  /* Anteil Zuhause (kWh) im besten Kalenderjahr mit mind. 1.000 kWh */
+  const yk = {}; charges.forEach(r => { const y = new Date(r.date).getFullYear(), o = yk[y] = yk[y] || { h: 0, t: 0 }, e = r.consumedSinceLast > 0 ? r.consumedSinceLast : 0; o.t += e; if (isHome(r)) o.h += e; });
+  const homeShare = Math.max(0, ...Object.values(yk).filter(o => o.t >= 1000).map(o => o.h / o.t));
+  const away = charges.filter(r => placeOf(r) === 'away').length;
+  let maint = 0; try { getReminders().forEach(r => { maint += remLog(r).length; }); } catch (e) { }
+  const maxTrip = getTrips().reduce((a, t) => Math.max(a, t.km || 0), 0);
+  return { n: charges.length, kwh, km, best100, bestC100, winter, winterPart, provs: provs.size, years, care, work, co2, saved, summer, summerPart, homeShare, away, maint, maxTrip };
+}
+const BADGES = [
+  { id: 'c1', e: '🔌', t: 'Erste Ladung', g: 'from-emerald-400 to-teal-600', v: c => c.n / 1, txt: 'Die erste Ladung ist erfasst.' },
+  { id: 'c10', e: '⚡', t: '10 Ladungen', g: 'from-amber-300 to-orange-500', v: c => c.n / 10, txt: '10 Ladungen erfasst.' },
+  { id: 'c50', e: '⚡', t: '50 Ladungen', g: 'from-amber-400 to-orange-600', v: c => c.n / 50, txt: '50 Ladungen erfasst.' },
+  { id: 'c100', e: '🔋', t: '100 Ladungen', g: 'from-orange-400 to-red-600', v: c => c.n / 100, txt: '100 Ladungen erfasst.' },
+  { id: 'c250', e: '🏆', t: '250 Ladungen', g: 'from-yellow-300 to-amber-600', v: c => c.n / 250, txt: '250 Ladungen erfasst.' },
+  { id: 'e1000', e: '🔆', t: '1 MWh geladen', g: 'from-lime-300 to-green-600', v: c => c.kwh / 1000, txt: '1.000 kWh geladen.' },
+  { id: 'k1000', e: '🚗', t: '1.000 km', g: 'from-sky-300 to-sky-600', v: c => c.km / 1000, txt: '1.000 km elektrisch gefahren.' },
+  { id: 'k5000', e: '🛣️', t: '5.000 km', g: 'from-sky-400 to-blue-600', v: c => c.km / 5000, txt: '5.000 km elektrisch gefahren.' },
+  { id: 'k10000', e: '🛣️', t: '10.000 km', g: 'from-emerald-400 to-teal-600', v: c => c.km / 10000, txt: '10.000 km elektrisch gefahren.', next: 'Nächstes Ziel: 25.000 km' },
+  { id: 'k25000', e: '🗺️', t: '25.000 km', g: 'from-teal-400 to-cyan-700', v: c => c.km / 25000, txt: '25.000 km elektrisch gefahren.', next: 'Nächstes Ziel: einmal um die Erde' },
+  { id: 'earth', e: '🌍', t: 'Erdumrundung', g: 'from-blue-400 to-indigo-700', v: c => c.km / 40075, txt: '40.075 km – einmal um den Äquator.' },
+  { id: 'winter', e: '❄️', t: 'Winterheld', g: 'from-sky-400 to-indigo-600', v: c => c.winter ? 1 : c.winterPart, txt: 'Einen ganzen Winter (Dez–Feb) elektrisch gefahren.' },
+  { id: 'eco', e: '🦊', t: '< 15 kWh/100km', g: 'from-fuchsia-400 to-purple-600', v: c => c.best100 == null ? 0 : c.best100 < 15 ? 1 : Math.max(0, Math.min(0.95, 15 / c.best100)), txt: 'Ein Monat unter 15 kWh/100 km (inkl. Ladeverluste).' },
+  { id: 'cheap', e: '💶', t: '< 5€/100km', g: 'from-green-300 to-emerald-700', v: c => c.bestC100 == null ? 0 : c.bestC100 < 5 ? 1 : Math.max(0, Math.min(0.95, 5 / c.bestC100)), txt: 'Ein Monat mit Ladekosten unter 5 € je 100 km.' },
+  { id: 'care', e: '🛡️', t: 'Akku-Profi 90+', g: 'from-emerald-300 to-green-700', v: c => c.care == null ? 0 : c.care >= 90 ? 1 : c.care / 90, txt: 'Akku-Pflege-Wert von 90 oder mehr.' },
+  { id: 'prov', e: '🧭', t: '3 Ladeanbieter', g: 'from-violet-400 to-indigo-600', v: c => c.provs / 3, txt: 'Bei drei verschiedenen Anbietern geladen.' },
+  { id: 'work', e: '💼', t: '100 Arbeitstage', g: 'from-slate-300 to-slate-600', v: c => c.work / 100, txt: '100 Arbeitstage in einem Jahr mit dem Enyaq.' },
+  { id: 'y1', e: '🎂', t: '1 Jahr', g: 'from-rose-400 to-red-600', v: c => c.years / 1, txt: 'Ein Jahr gemeinsam unterwegs.' },
+  /* ---- Langfristige Ziele ---- */
+  { id: 'c500', e: '🎖️', t: '500 Ladungen', g: 'from-amber-300 to-yellow-600', v: c => c.n / 500, txt: '500 Ladungen erfasst.' },
+  { id: 'e5000', e: '💡', t: '5 MWh geladen', g: 'from-lime-400 to-emerald-700', v: c => c.kwh / 5000, txt: '5.000 kWh geladen.' },
+  { id: 'e10000', e: '🌩️', t: '10 MWh geladen', g: 'from-yellow-300 to-lime-700', v: c => c.kwh / 10000, txt: '10.000 kWh geladen.' },
+  { id: 'k50000', e: '🏁', t: '50.000 km', g: 'from-cyan-400 to-blue-700', v: c => c.km / 50000, txt: '50.000 km elektrisch gefahren.', next: 'Nächstes Ziel: 2× Erdumrundung' },
+  { id: 'earth2', e: '🛰️', t: '2× Erdumrundung', g: 'from-indigo-400 to-violet-700', v: c => c.km / 80150, txt: '80.150 km – zweimal um den Äquator.' },
+  { id: 'k100000', e: '💯', t: '100.000 km', g: 'from-blue-500 to-indigo-800', v: c => c.km / 100000, txt: '100.000 km elektrisch gefahren.' },
+  { id: 'y3', e: '🎉', t: '3 Jahre', g: 'from-pink-400 to-rose-600', v: c => c.years / 3, txt: 'Drei Jahre gemeinsam unterwegs.' },
+  { id: 'y5', e: '🏅', t: '5 Jahre', g: 'from-amber-400 to-rose-600', v: c => c.years / 5, txt: 'Fünf Jahre gemeinsam unterwegs.' },
+  { id: 'co1', e: '🌳', t: '1 t CO₂ gespart', g: 'from-green-400 to-emerald-700', v: c => c.co2 / 1000, txt: '1 Tonne CO₂ weniger als mit einem Benziner (Tucson 1.6, 7,5 l/100 km; Zuhause Ökostrom, sonst Strommix 363 g/kWh).' },
+  { id: 'co5', e: '🌲', t: '5 t CO₂ gespart', g: 'from-emerald-500 to-green-800', v: c => c.co2 / 5000, txt: '5 Tonnen CO₂ weniger als mit einem Benziner.' },
+  { id: 'co10', e: '🏔️', t: '10 t CO₂ gespart', g: 'from-teal-500 to-slate-700', v: c => c.co2 / 10000, txt: '10 Tonnen CO₂ weniger als mit einem Benziner.' },
+  { id: 'eur1', e: '💰', t: '1.000 € gespart', g: 'from-yellow-300 to-amber-600', v: c => c.saved / 1000, txt: '1.000 € weniger als Tanken (Tucson 1.6, 7,5 l/100 km, 2,00 €/l) – Ladekosten abgezogen.' },
+  { id: 'eur5', e: '🤑', t: '5.000 € gespart', g: 'from-amber-400 to-orange-700', v: c => c.saved / 5000, txt: '5.000 € weniger als Tanken – Ladekosten abgezogen.' },
+  { id: 'summer', e: '🏖️', t: 'Sommerheld', g: 'from-yellow-300 to-orange-500', v: c => c.summer ? 1 : c.summerPart, txt: 'Einen ganzen Sommer (Jun–Aug) elektrisch gefahren.' },
+  { id: 'home90', e: '🏠', t: '90 % Zuhause', g: 'from-yellow-300 to-yellow-600', v: c => c.homeShare >= 0.9 ? 1 : c.homeShare / 0.9, txt: 'Ein Kalenderjahr mit mindestens 90 % der kWh an der eigenen Wallbox (ab 1.000 kWh im Jahr).' },
+  { id: 'away25', e: '🚀', t: '25× unterwegs', g: 'from-violet-400 to-fuchsia-700', v: c => c.away / 25, txt: '25 Ladungen unterwegs.' },
+  { id: 'maint10', e: '🔧', t: '10× Wartung', g: 'from-slate-400 to-zinc-700', v: c => c.maint / 10, txt: '10 erledigte Erinnerungen (Wartung, Service, Reifen …).' },
+  { id: 'trip300', e: '🧳', t: '≥ 300 km Fahrt', g: 'from-sky-400 to-cyan-700', v: c => c.maxTrip / 300, txt: 'Eine einzelne Fahrt mit mindestens 300 km im Fahrtenbuch.' }
+];
+let bdgQueue = [], bdgSel = null;
+function bdgState() { const c = bdgCtx(); return BADGES.map(b => { const v = Math.max(0, Math.min(1, b.v(c) || 0)); return { b, v, done: v >= 1 }; }); }
+function checkBadges(silent) {
+  let st; try { st = bdgState(); } catch (e) { console.error(e); return; }
+  const got = load(KEY_BADGES, null), first = !got || typeof got !== 'object', out = first ? {} : { ...got }, now = new Date().toISOString(), fresh = [];
+  st.forEach(x => { if (x.done && !out[x.b.id]) { out[x.b.id] = now; if (!first && !silent) fresh.push(x.b); } });
+  if (first || fresh.length || Object.keys(out).length !== Object.keys(got || {}).length) save(KEY_BADGES, out);
+  bdgQueue.push(...fresh); showNextBadge(); renderBadgesCount(st);
+}
+function renderBadgesCount(st = bdgState()) { const n = st.filter(x => x.done).length; $('go-badges-n').textContent = ' · ' + n + ' von ' + BADGES.length; }
+function showNextBadge() {
+  if (!bdgQueue.length || !$('bdg-ov').classList.contains('hidden') || !$('bd-ov').classList.contains('hidden') || !$('wr-ov').classList.contains('hidden')) return;
+  const b = bdgQueue.shift();
+  $('bdg-ov-icon').className = 'mx-auto mt-4 flex h-28 w-28 items-center justify-center rounded-[32px] text-6xl shadow-lg bg-gradient-to-br ' + b.g; $('bdg-ov-icon').textContent = b.e;
+  $('bdg-ov-h').textContent = b.t; $('bdg-ov-t').textContent = b.txt; $('bdg-ov-more').textContent = b.next || (bdgQueue.length ? 'Noch ' + bdgQueue.length + ' weitere' + (bdgQueue.length === 1 ? 's' : '') + ' …' : '');
+  const box = $('bdg-conf'), cols = ['#34d399', '#fbbf24', '#f472b6', '#38bdf8', '#a78bfa', '#fb7185']; box.textContent = '';
+  for (let i = 0; i < 40; i++) { const c = document.createElement('i'), r = Math.random; c.style.cssText = 'left:' + (r() * 100).toFixed(1) + '%;background:' + cols[i % cols.length] + ';--d:' + (4.5 + r() * 4).toFixed(2) + 's;--w:' + (-r() * 8).toFixed(2) + 's;--x:' + ((r() - 0.5) * 120).toFixed(0) + 'px;--r:' + ((r() < 0.5 ? -1 : 1) * (360 + r() * 540)).toFixed(0) + 'deg;--y:' + (r() * 30).toFixed(0) + '%;' + (r() < 0.3 ? 'width:9px;height:9px;border-radius:50%;' : ''); box.appendChild(c); }
+  $('bdg-ov').classList.remove('hidden'); document.body.style.overflow = 'hidden';
+}
+function hideBadgeOv() { $('bdg-ov').classList.add('hidden'); $('bdg-conf').textContent = ''; document.body.style.overflow = ''; setTimeout(showNextBadge, 350); }
+$('bdg-ov-ok').addEventListener('click', hideBadgeOv);
+$('bdg-ov').addEventListener('click', (e) => { if (e.target === e.currentTarget || e.target.parentElement === e.currentTarget) hideBadgeOv(); });
+function renderBadges() {
+  const st = bdgState(), got = load(KEY_BADGES, {}) || {}, n = st.filter(x => x.done).length;
+  $('bdg-count').textContent = n + ' von ' + BADGES.length;
+  const order = st.slice().sort((a, b) => (b.done - a.done) || (a.done ? String(got[a.b.id] || '').localeCompare(String(got[b.b.id] || '')) : b.v - a.v));
+  $('bdg-grid').innerHTML = order.map(x => x.done
+    ? `<button type="button" data-bdg="${x.b.id}" class="rounded-2xl bg-gradient-to-br ${x.b.g} px-1.5 py-2.5 text-white shadow-sm active:scale-95 transition"><p class="text-2xl leading-8">${x.b.e}</p><p class="bdg-l mt-1 whitespace-nowrap text-[11px] font-semibold leading-tight tracking-tight [text-shadow:0_1px_2px_rgba(0,0,0,.35)]">${esc(x.b.t)}</p></button>`
+    : `<button type="button" data-bdg="${x.b.id}" class="rounded-2xl bg-slate-100 dark:bg-slate-800 px-1.5 py-2.5 text-slate-500 dark:text-slate-400 active:scale-95 transition"><p class="text-2xl leading-8 grayscale opacity-40">${x.b.e}</p><p class="bdg-l mt-1 whitespace-nowrap text-[11px] font-semibold leading-tight tracking-tight">${esc(x.b.t)}</p><div class="mt-1.5 h-1 rounded-full bg-slate-300 dark:bg-slate-700"><div class="h-full rounded-full bg-slate-500 dark:bg-slate-400" style="width:${Math.round(x.v * 100)}%"></div></div></button>`).join('');
+  if (bdgSel) bdgInfo(bdgSel);
+  bdgFit();
+}
+/** Beschriftung der Abzeichen immer einzeilig: bei Bedarf schrittweise kleiner (bis 9 px). */
+function bdgFit() { requestAnimationFrame(() => document.querySelectorAll('#bdg-grid .bdg-l').forEach(l => { let f = 11; l.style.fontSize = ''; while (l.scrollWidth > l.clientWidth + 0.5 && f > 9) { f -= 0.5; l.style.fontSize = f + 'px'; } })); }
+window.addEventListener('resize', () => { if (!$('view-badges').classList.contains('hidden')) bdgFit(); });
+function bdgInfo(id) {
+  bdgSel = id; const x = bdgState().find(y => y.b.id === id), got = load(KEY_BADGES, {}) || {}; if (!x) return;
+  $('bdg-info').innerHTML = '<b class="text-slate-900 dark:text-white">' + esc(x.b.t) + '</b> · ' + esc(x.b.txt) + ' ' + (x.done ? (got[id] ? 'Erreicht am ' + fmtDate(got[id]) + '.' : 'Erreicht.') : 'Noch ' + (100 - Math.round(x.v * 100)) + ' % bis zum Ziel.');
+}
+$('bdg-grid').addEventListener('click', (e) => { const b = e.target.closest('[data-bdg]'); if (b) bdgInfo(b.dataset.bdg); });
+$('go-badges').addEventListener('click', () => showView('badges'));
+setTimeout(() => checkBadges(false), 2500);
+function renderStat() {
+  try { renderBadges(); } catch (e) { console.error(e); }
+  const rs = getReadings(), now = new Date(), cy = now.getFullYear(), cm = now.getMonth(), D = 864e5, MON = 30.4375;
+  const kmT = (v) => v != null ? fmt(v, 0) + ' km' : '–', pts = rs.filter(r => r.odometerKm > 0).map(r => [Date.parse(r.date), r.odometerKm])
+    .concat(getCosts().filter(c => c.odometerKm > 0).map(c => [Date.parse(c.date), c.odometerKm])).filter(q => Number.isFinite(q[0])).sort((a, b) => a[0] - b[0]);
+  const km = lastKnownKm(), t = (y, m) => new Date(y, m, 1).getTime();
+  $('st-odo').textContent = km != null ? fmt(km, 0) + ' km' : '–';
+  $('st-km-year').textContent = kmT(rangeKm(t(cy, 0), t(cy + 1, 0))); $('st-km-month').textContent = kmT(rangeKm(t(cy, cm), t(cy, cm + 1)));
+  $('st-km-lastyear').textContent = kmT(rangeKm(t(cy - 1, 0), t(cy, 0))); $('st-km-lastmonth').textContent = kmT(rangeKm(t(cy, cm - 1), t(cy, cm)));
+  let perDay = null;
+  if (pts.length > 1) { const days = (pts[pts.length - 1][0] - pts[0][0]) / D, dk = pts[pts.length - 1][1] - pts[0][1]; if (days >= 1 && dk > 0) perDay = dk / days; }
+  $('st-km-day').textContent = kmT(perDay); $('st-km-mon').textContent = kmT(perDay != null ? perDay * MON : null);
+  /* Verbrauch und Kosten pro km */
+  const idx = rs.map((_, i) => i), tot = consumptionTotals(rs, idx), per = idx.map(i => entryStats(rs, i)).filter(x => x.kwh100 != null && !x.rough);
+  const kw = per.map(x => x.kwh100), cp = per.filter(x => x.cost100 != null).map(x => x.cost100 / 100), mm = (a, f) => a.length ? f(...a) : null;
+  $('st-kwh').textContent = tot.km ? fmt(tot.kwh100, 1) + ' kWh/100 km' : '–';
+  $('st-kwh-min').textContent = kw.length ? fmt(mm(kw, Math.min), 1) + ' kWh/100 km' : '–'; $('st-kwh-max').textContent = kw.length ? fmt(mm(kw, Math.max), 1) + ' kWh/100 km' : '–';
+  $('st-cpk').textContent = tot.cost100 != null ? fmt(tot.cost100 / 100, 3) + ' €/km' : '–';
+  $('st-cpk-min').textContent = cp.length ? fmt(mm(cp, Math.min), 3) + ' €/km' : '–'; $('st-cpk-max').textContent = cp.length ? fmt(mm(cp, Math.max), 3) + ' €/km' : '–';
+  /* Ladungen und Strompreise */
+  const costs = rs.filter(r => r.cost > 0).map(r => r.cost), prices = rs.map(unitOf).filter(u => u != null && u > 0);
+  $('st-chg-min').textContent = costs.length ? eur(mm(costs, Math.min)) : '–'; $('st-chg-max').textContent = costs.length ? eur(mm(costs, Math.max)) : '–';
+  $('st-price-min').textContent = prices.length ? fmt(mm(prices, Math.min), 3) + ' €/kWh' : '–'; $('st-price-max').textContent = prices.length ? fmt(mm(prices, Math.max), 3) + ' €/kWh' : '–';
+  /* Ladekosten pro Tag und Monat: erster Eintrag bis heute */
+  const dts = rs.map(r => Date.parse(r.date)).filter(Number.isFinite), sum = costs.reduce((a, x) => a + x, 0), days = dts.length ? Math.max(1, (now.getTime() - Math.min(...dts)) / D) : 0;
+  $('st-cpd').textContent = sum > 0 && days ? eur(sum / days) : '–'; $('st-cpm').textContent = sum > 0 && days ? eur(sum / (days / MON)) : '–';
+  try { renderTempChart(); } catch (e) { /* Wetter-Modul noch nicht initialisiert */ }
+  try { renderWrapList(); } catch (e) { /* Rückblick-Modul noch nicht initialisiert */ }
+  try { renderHeat(); } catch (e) { /* Heatmap-Modul noch nicht initialisiert */ }
+  /* TCO (Laden + Kosten − Einnahmen, wie „Kosten“ auf Start): laufendes Jahr, Ø pro Monat im laufenden Jahr, seit Kaufmonat. Der Monatsschnitt rechnet ab Jahresbeginn bzw. Kaufmonat/erstem Eintrag (was später liegt), mindestens 1 Monat. */
+  const tcoSum = (from) => { let sum = 0; for (let y = from.getFullYear(), m = from.getMonth(); y < cy || (y === cy && m <= cm); m++) { if (m > 11) { m = 0; y++; if (y > cy) break; } sum += costTotals(y, m).total; } return sum; };
+  const allD = dts.concat(getCosts().map(c => Date.parse(c.date))).filter(Number.isFinite), [pY, pM] = purchaseMonth().split('-').map(Number);
+  const yFrom = new Date(cy, 0, 1), pFrom = new Date(pY, pM - 1, 1), inYear = allD.filter(x => x >= yFrom.getTime()), inSince = allD.filter(x => x >= pFrom.getTime());
+  $('st-tco-title').textContent = 'Total Cost of Ownership (TCO) ' + cy; $('st-tco-mon-l').textContent = 'Ø pro Monat ' + cy; $('st-tco-since-l').textContent = 'Seit Kauf (' + purchaseLabel() + ')';
+  const yTot = inYear.length ? tcoSum(yFrom) : null, avgFrom = inYear.length ? Math.min(Math.max(yFrom.getTime(), pFrom.getTime()), ...inYear) : 0;
+  $('st-tco-year').textContent = yTot != null ? eur(yTot) : '–';
+  $('st-tco-mon').textContent = yTot != null ? eur(yTot / Math.max(1, (now.getTime() - avgFrom) / D / MON)) : '–';
+  $('st-tco-since').textContent = inSince.length ? eur(tcoSum(pFrom)) : '–';
+  document.querySelectorAll('#rep-stat .st-v').forEach(el => {                                    // Einheit hinter der Zahl klein setzen
+    const txt = el.textContent, i = txt.search(/[ \u00a0\u202f]/); if (i < 1 || el.querySelector('span')) return;
+    el.textContent = txt.slice(0, i); const u = document.createElement('span'); u.className = 'st-u'; u.textContent = txt.slice(i + 1); el.appendChild(u);
+  });
+  $('st-note').textContent = 'Verbrauch inkl. Ladeverlusten (' + tot.n + ' Ladungen mit km-Stand' + (tot.approx ? ', grob ohne Akku-%' : '') + '). Kosten pro km, Tag und Monat sind reine Ladekosten – Einnahmen und sonstige Kosten findest du im Kosten-Tab.';
+}
+$('go-stat').addEventListener('click', () => { repMode = 'stat'; setDpTab('stat', false); showView('report'); });
+$('go-akku').addEventListener('click', () => { repMode = 'akku'; showView('report'); });
+/** Start-Button „Akku“: Netto-Kapazität (wie im Akku-Bericht) und Akku-Pflege der letzten 90 Tage, z. B. „Akku · 48,3 kWh (netto) · 73/100“. */
+function renderAkkuBtn() {
+  const parts = [];
+  try { const fit = batFit(batRows()); if (fit && fit.n >= BAT.minN && fit.sumHub >= BAT.minHub) parts.push(fmt(fit.K * BAT.eta, 1) + ' kWh (netto)'); } catch (e) { }
+  try { const c = batCare(); if (c.score != null) parts.push(c.score + '/100'); } catch (e) { }
+  $('go-akku-n').textContent = parts.length ? ' · ' + parts.join(' · ') : ' · Kapazität & Pflege';
+  /* Rückblick: laufender Zeitraum (wie die Vorschau), z. B. „08.06.2026 – heute“ */
+  try { const { runStart } = wrPeriods(); $('go-wrap-n').textContent = ' · ' + fmtDate(new Date(runStart).toISOString()) + ' – heute'; } catch (e) { $('go-wrap-n').textContent = ''; }
+  /* Ladeanbieter: Karten mit mindestens einer Ladung / alle Karten der Übersicht (Zuhause, Bosch, Anbieter-Liste) */
+  try {
+    const bn = pvBoschName(), keys = ['home', 'bosch'].concat(getProviders().filter(n => !pvSame(n, bn)));
+    $('go-prov-n').textContent = ' · ' + keys.filter(k => pvStats(k).n > 0).length + ' von ' + keys.length;
+  } catch (e) { $('go-prov-n').textContent = ''; }
+  /* Fahrtenbuch: Datum des letzten Imports, sonst Datum der letzten Fahrt */
+  try {
+    const imp = load(KEY_TRIPS_IMP, null), tr = getTrips(), last = tr.reduce((a, t) => (t.s > a ? t.s : a), '');
+    $('go-trips-n').textContent = imp && imp.at ? ' · Import ' + fmtDate(imp.at) : last ? ' · Fahrten bis ' + fmtDate(last) : ' · noch kein Import';
+  } catch (e) { $('go-trips-n').textContent = ''; }
+}          // Berichte → Akku
+$('go-trips').addEventListener('click', () => { histFilter = 'fahrten'; tripDays = 21; showView('history'); });   // Historie → Fahrten
+
+/* =====================================================================
+   Ladeanbieter (Start → „Ladeanbieter“): Liste aller Anbieter aus den Einstellungen plus Stromanbieter Zuhause.
+   Preise: aus der Historie (Ø €/kWh der Unterwegs-Ladungen mit diesem Anbieter, nach kWh gewichtet); eigene Angaben (AC, DC, Grundgebühr, Tarif)
+   haben Vorrang und werden in enyaq.provInfo gespeichert (+ Cloud-Dokument settings/prefs). Zuhause: Preis immer aus den Einstellungen.
+   provInfo = { home: { name }, bosch: { name?, tariff?, ac?, dc?, fee? }, p: { <Anbietername>: { tariff?, ac?, dc?, fee? } } }
+   Bosch: alle Ladungen am Ort „Bosch“ gehören zum dort hinterlegten Anbieter (z. B. Lichtblick); gibt es denselben Namen auch in der Anbieter-Liste,
+   zählen dessen Unterwegs-Ladungen mit und die Zeile erscheint nur einmal (als Bosch-Karte).
+   ===================================================================== */
+const KEY_PROVINFO = 'enyaq.provInfo';
+const PV_COLORS = ['#2563eb', '#0e7490', '#7c3aed', '#db2777', '#ea580c', '#059669', '#4f46e5', '#b45309', '#0891b2', '#be123c', '#65a30d', '#475569'];
+const getProvInfo = () => { const o = load(KEY_PROVINFO, {}); return { home: (o && o.home) || {}, bosch: (o && o.bosch) || {}, p: (o && o.p && typeof o.p === 'object') ? o.p : {} }; };
+const pvBoschName = () => (getProvInfo().bosch.name || '').trim();
+const pvSame = (a, b) => !!a && !!b && a.toLowerCase() === b.toLowerCase();
+function setProvInfo(o) { save(KEY_PROVINFO, o); pushPrefs(); }
+const pvHomeName = () => (getProvInfo().home.name || '').trim();
+const pvEur = (v) => fmt(v, v < 1 && Math.round(v * 1000) % 10 ? 3 : 2) + ' €';
+/** Kennzahlen aus der Historie: Zuhause (key 'home') oder ein Anbieter (Unterwegs). Gesamt und laufendes Jahr. */
+function pvStats(key) {
+  const rs = getReadings(), y0 = new Date(new Date().getFullYear(), 0, 1).getTime(), st = { n: 0, kwh: 0, cost: 0, yn: 0, ykwh: 0, ycost: 0, pk: 0, pc: 0, last: null };
+  rs.forEach((r, i) => {
+    const home = key === 'home', pl = placeOf(r);
+    if (home ? !(isHome(r) && isCharge(rs, i)) : key === 'bosch' ? !(pl === 'bosch' || (pl === 'away' && pvSame(r.provider, pvBoschName()))) : !(pl === 'away' && r.provider === key)) return;
+    const t = Date.parse(r.date), kwh = r.consumedSinceLast > 0 ? r.consumedSinceLast : 0, cost = r.cost > 0 ? r.cost : 0;
+    st.n++; st.kwh += kwh; st.cost += cost;
+    if (t >= y0) { st.yn++; st.ykwh += kwh; st.ycost += cost; }
+    const unit = home ? (kwh > 0 ? cost / kwh : null) : (r.pricePerKwh > 0 ? r.pricePerKwh : (kwh > 0 && cost > 0 ? (cost - (r.fee || 0)) / kwh : null));
+    if (unit > 0 && kwh > 0) { st.pk += kwh; st.pc += unit * kwh; }
+    if (!st.last || t > st.last.t) st.last = { t, unit };
+  });
+  st.avg = st.pk > 0 ? Math.round(st.pc / st.pk * 100) / 100 : null;   // Ø €/kWh, auf Cent gerundet
+  return st;
+}
+/** Preise eines Anbieters: eigene Angaben (ac/dc) vor Historie (hist). */
+function pvPrices(name) { const I = getProvInfo(), i = (name === 'bosch' ? I.bosch : I.p[name]) || {}, st = pvStats(name); return { ac: i.ac > 0 ? i.ac : null, dc: i.dc > 0 ? i.dc : null, fee: i.fee > 0 ? i.fee : null, tariff: i.tariff || '', hist: st.avg, st }; }
+const pvChip = (lbl, v, sub) => `<span class="whitespace-nowrap rounded-lg bg-slate-100 dark:bg-slate-800 px-2 py-1 text-xs text-slate-700 dark:text-slate-200">${lbl ? '<b>' + lbl + '</b> ' : ''}${pvEur(v)}${sub ? ' <span class="text-slate-500 dark:text-slate-400">' + sub + '</span>' : ''}</span>`;
+const pvBadge = (name, color, dark) => `<div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-lg font-bold ${dark ? 'text-slate-900' : 'text-white'}" style="background:${color}">${esc((name.trim()[0] || '?').toUpperCase())}</div>`;
+function renderProvidersView() {
+  const list = getProviders(), price = Number(getSettings().price) || 0, hn = pvHomeName();
+  const rows = [`<li><button type="button" data-pv="home" class="flex w-full items-center gap-3 rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-3.5 text-left active:scale-[0.99] transition">
+      ${pvBadge(hn || 'Z', '#facc15', true)}
+      <span class="min-w-0 flex-1"><span class="flex items-center gap-1.5"><span class="truncate font-semibold">${esc(hn || 'Stromanbieter')}</span><span class="shrink-0 rounded-md bg-emerald-100 dark:bg-emerald-900/60 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Zuhause</span></span><span class="block truncate text-xs text-slate-500 dark:text-slate-400">${hn ? 'Hausstrom · Wallbox' : 'Antippen, um den Namen einzutragen'}</span></span>
+      <span class="flex flex-col items-end gap-1">${pvChip('AC', price)}</span></button></li>`];
+  const bn = pvBoschName(), bp = pvPrices('bosch'), bchips = [];
+  if (bp.ac) bchips.push(pvChip('AC', bp.ac)); if (bp.dc) bchips.push(pvChip('DC', bp.dc));
+  if (!bchips.length && bp.hist) bchips.push(pvChip('', bp.hist, 'Ø'));
+  if (!bchips.length) bchips.push('<span class="whitespace-nowrap rounded-lg bg-amber-100 dark:bg-amber-900/40 px-2 py-1 text-xs font-medium text-amber-800 dark:text-amber-300">Preis eintragen</span>');
+  rows.push(`<li><button type="button" data-pv="bosch" class="flex w-full items-center gap-3 rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-3.5 text-left active:scale-[0.99] transition">
+      ${pvBadge(bn || 'B', '#0284c7')}
+      <span class="min-w-0 flex-1"><span class="flex items-center gap-1.5"><span class="truncate font-semibold">${esc(bn || 'Ladeanbieter')}</span><span class="shrink-0 rounded-md bg-sky-100 dark:bg-sky-900/60 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-700 dark:text-sky-300">Bosch</span></span><span class="block truncate text-xs text-slate-500 dark:text-slate-400">${esc(bn ? [bp.tariff, bp.fee ? pvEur(bp.fee) + '/Monat' : '', bp.st.n ? bp.st.n + (bp.st.n === 1 ? ' Ladung' : ' Ladungen') : 'noch keine Ladung'].filter(Boolean).join(' · ') : 'Antippen, um den Anbieter einzutragen')}</span></span>
+      <span class="flex flex-col items-end gap-1">${bchips.join('')}</span></button></li>`);
+  /* Reihenfolge: nach Preis (günstigster zuerst; eigener AC/DC-Preis, sonst Ø aus der Historie), Anbieter ohne Preis danach alphabetisch.
+     Die Farbe bleibt an der Position in der Anbieter-Liste (ändert sich also nicht durch das Sortieren). */
+  const sortKey = (n) => { const p = pvPrices(n), v = [p.ac, p.dc].filter(x => x > 0); return v.length ? Math.min(...v) : p.hist > 0 ? p.hist : null; };
+  list.map((n, i) => ({ n, i, k: sortKey(n) })).sort((a, b) => a.k != null && b.k != null ? a.k - b.k || a.n.localeCompare(b.n, 'de') : a.k != null ? -1 : b.k != null ? 1 : a.n.localeCompare(b.n, 'de', { sensitivity: 'base' }))
+    .forEach(({ n, i }) => {
+    if (pvSame(n, bn)) return;                                            // gleicher Anbieter wie bei Bosch: nur als Bosch-Karte
+    const p = pvPrices(n), chips = [];
+    if (p.ac) chips.push(pvChip('AC', p.ac)); if (p.dc) chips.push(pvChip('DC', p.dc));
+    if (!chips.length && p.hist) chips.push(pvChip('', p.hist, 'Ø'));
+    if (!chips.length) chips.push('<span class="whitespace-nowrap rounded-lg bg-amber-100 dark:bg-amber-900/40 px-2 py-1 text-xs font-medium text-amber-800 dark:text-amber-300">Preis eintragen</span>');
+    const sub = [p.tariff, p.fee ? pvEur(p.fee) + '/Monat' : '', p.st.n ? p.st.n + (p.st.n === 1 ? ' Ladung' : ' Ladungen') : 'noch keine Ladung'].filter(Boolean).join(' · ');
+    rows.push(`<li><button type="button" data-pv="${esc(n)}" class="flex w-full items-center gap-3 rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-3.5 text-left active:scale-[0.99] transition">
+      ${pvBadge(n, PV_COLORS[i % PV_COLORS.length])}
+      <span class="min-w-0 flex-1"><span class="block truncate font-semibold">${esc(n)}</span><span class="block truncate text-xs text-slate-500 dark:text-slate-400">${esc(sub)}</span></span>
+      <span class="flex flex-col items-end gap-1">${chips.join('')}</span></button></li>`);
+  });
+  if (!list.filter(n => !pvSame(n, bn)).length) rows.push('<li class="px-1 py-2 text-sm text-slate-500 dark:text-slate-400">Noch keine Ladeanbieter für unterwegs. Lege sie mit „+ Neu“ an.</li>');
+  $('pv-list').innerHTML = rows.join('');
+  /* Günstigste Karte unterwegs: AC und DC; ohne eigene Angaben zählt der Ø-Preis aus der Historie für beide */
+  const best = (k) => { let b = null; list.filter(n => !pvSame(n, bn)).forEach(n => { const p = pvPrices(n), v = p[k] ?? (p.ac == null && p.dc == null ? p.hist : null); if (v > 0 && (!b || v < b.v)) b = { n, v, h: p[k] == null }; }); return b; };
+  const bA = best('ac'), bD = best('dc'), tile = (lbl, b) => `<div class="rounded-2xl bg-slate-100 dark:bg-slate-800/70 p-2.5"><p class="text-xs text-slate-500 dark:text-slate-400">${lbl}</p><p class="truncate font-semibold">${b ? esc(b.n) : '–'}</p>${b ? '<p class="text-sm tabular-nums">' + pvEur(b.v) + '/kWh</p>' : ''}${b && b.h ? '<p class="text-[11px] text-slate-500 dark:text-slate-400">Ø aus Historie</p>' : ''}</div>`;
+  $('pv-best').classList.toggle('hidden', !bA && !bD);
+  $('pv-best-grid').innerHTML = tile('AC unterwegs', bA) + tile('DC unterwegs', bD);
+}
+/* ---- Detailkarte ---- */
+let pvCur = null;                                                         // 'home' | Anbietername | '' (neu)
+const pvNum = (id) => { const v = $(id).value.trim(); if (!v) return null; const n = parseNum(v); return isFinite(n) && n >= 0 && n < 100 ? n : NaN; };
+function pvCardHtml(name, color, dark, label, big, sub) {
+  return `<div class="flex items-start justify-between gap-2"><span class="min-w-0 truncate text-lg font-bold">${esc(name)}</span>${dark ? '<svg class="h-6 w-6 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>' : '<svg class="h-6 w-6 shrink-0 opacity-80" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8Z"/></svg>'}</div>
+    <div class="mt-auto"><p class="text-xs font-semibold uppercase tracking-wider ${dark ? 'text-slate-700' : 'text-white/75'}">${label}</p><p class="font-barlow text-[40px] font-bold leading-none">${big}</p>${sub ? `<p class="mt-1 text-xs ${dark ? 'text-slate-700' : 'text-white/75'}">${sub}</p>` : ''}</div>`;
+}
+function openProv(key) {
+  pvCur = key; const home = key === 'home', bosch = key === 'bosch', isNew = key === '', card = $('pv-card'), info = getProvInfo();
+  $('pv-msg').classList.add('hidden'); $('pv-edit').classList.toggle('hidden', home);
+  $('pv-name-wrap').classList.toggle('hidden', !home && !isNew && !bosch);
+  $('pv-name-l').textContent = home ? 'Stromanbieter Zuhause' : bosch ? 'Ladeanbieter bei Bosch' : 'Name des Ladeanbieters';
+  $('pv-name').placeholder = home ? 'z. B. Vattenfall' : bosch ? 'z. B. Lichtblick' : 'z. B. EnBW mobility+';
+  $('pv-name').value = home ? pvHomeName() : bosch ? pvBoschName() : '';
+  const dl = (rows) => rows.filter(Boolean).map(([k, v, cls]) => `<div class="flex items-baseline justify-between gap-3 py-2"><dt class="text-slate-500 dark:text-slate-400">${k}</dt><dd class="text-right tabular-nums ${cls || ''}">${v}</dd></div>`).join('');
+  const yr = new Date().getFullYear();
+  if (home) {
+    const price = Number(getSettings().price) || 0, st = pvStats('home');
+    card.style.background = 'linear-gradient(135deg,#fde047,#eab308)'; card.className = card.className.replace(/text-\S+/g, '') + ' text-slate-900';
+    card.innerHTML = pvCardHtml(pvHomeName() || 'Stromanbieter', '', true, 'Zuhause · AC', fmt(price, 3) + ' <span class="text-lg">€/kWh</span>', 'Strompreis aus den Einstellungen');
+    $('pv-stats').innerHTML = dl([['Preis AC', pvEur(price) + '/kWh'], ['Genutzt ' + yr, st.yn + ' × · ' + fmt(st.ykwh, 0) + ' kWh'], ['Kosten ' + yr, eur(st.ycost), 'font-semibold text-emerald-600 dark:text-emerald-400'], ['Gesamt', st.n + ' × · ' + fmt(st.kwh, 0) + ' kWh · ' + eur(st.cost)]]);
+  } else if (isNew) {
+    card.style.background = 'linear-gradient(135deg,#334155,#0f172a)'; card.className = card.className.replace(/text-\S+/g, '') + ' text-white';
+    card.innerHTML = pvCardHtml('Neue Ladekarte', '', false, 'Unterwegs', '– <span class="text-lg">€/kWh</span>', '');
+    $('pv-stats').innerHTML = ''; ['pv-tariff', 'pv-ac', 'pv-dc', 'pv-fee'].forEach(id => { $(id).value = ''; });
+    $('pv-hint').textContent = 'Preise sind optional. Ohne Angabe nimmt die App den Ø-Preis aus deinen Ladungen mit diesem Anbieter.';
+  } else {
+    const i = getProviders().indexOf(key), c = bosch ? '#0284c7' : PV_COLORS[(i < 0 ? 0 : i) % PV_COLORS.length], p = pvPrices(key), st = p.st, v = p.dc ?? p.ac ?? p.hist;
+    card.style.background = 'linear-gradient(135deg,' + c + ',#0f172a)'; card.className = card.className.replace(/text-\S+/g, '') + ' text-white';
+    const wo = bosch ? 'Bosch' : 'Unterwegs', lab = p.dc != null ? wo + ' · DC' : p.ac != null ? wo + ' · AC' : p.hist ? wo + ' · Ø aus Historie' : wo;
+    card.innerHTML = pvCardHtml(bosch ? (pvBoschName() || 'Ladeanbieter Bosch') : key, c, false, lab, (v ? fmt(v, 2) : '–') + ' <span class="text-lg">€/kWh</span>', [p.tariff, p.fee ? pvEur(p.fee) + '/Monat' : ''].filter(Boolean).join(' · '));
+    $('pv-stats').innerHTML = dl([p.ac != null ? ['Preis AC', pvEur(p.ac) + '/kWh'] : null, p.dc != null ? ['Preis DC', pvEur(p.dc) + '/kWh'] : null, ['Ø Preis aus Historie', p.hist ? pvEur(p.hist) + '/kWh' : 'noch keine Daten'],
+      st.last ? ['Letzte Ladung', fmtDate(new Date(st.last.t).toISOString()) + (st.last.unit ? ' · ' + pvEur(st.last.unit) + '/kWh' : '')] : null,
+      ['Genutzt ' + yr, st.yn + ' × · ' + fmt(st.ykwh, 0) + ' kWh'], ['Kosten ' + yr, eur(st.ycost), 'font-semibold text-emerald-600 dark:text-emerald-400'], st.n > st.yn ? ['Gesamt', st.n + ' × · ' + fmt(st.kwh, 0) + ' kWh · ' + eur(st.cost)] : null]);
+    const inf = (bosch ? info.bosch : info.p[key]) || {}, f = (x) => x > 0 ? String(x).replace('.', ',') : '';
+    $('pv-tariff').value = inf.tariff || ''; $('pv-ac').value = f(inf.ac); $('pv-dc').value = f(inf.dc); $('pv-fee').value = f(inf.fee);
+    if (bosch) $('pv-hint').textContent = 'Alle Ladungen am Ort „Bosch“ zählen zu diesem Anbieter – auch die bisherigen. ' + (p.hist ? 'Leere Preisfelder: Ø-Preis aus deinen Ladungen (' + pvEur(p.hist) + '/kWh).' : '');
+    else $('pv-hint').textContent = p.hist ? 'Leere Preisfelder: Die App nimmt den Ø-Preis aus deinen Ladungen (' + pvEur(p.hist) + '/kWh).' : 'Noch keine Ladung mit Preis bei diesem Anbieter – trage die Preise hier ein.';
+  }
+  $('pv-dialog').classList.remove('hidden');
+}
+function pvErr(t) { $('pv-msg').textContent = t; $('pv-msg').classList.remove('hidden'); }
+$('pv-save').addEventListener('click', () => {
+  const info = getProvInfo();
+  if (pvCur === 'home') { const n = $('pv-name').value.trim().replace(/\s+/g, ' ').slice(0, 30); info.home = n ? { name: n } : {}; setProvInfo(info); }
+  else {
+    const ac = pvNum('pv-ac'), dc = pvNum('pv-dc'), fee = pvNum('pv-fee');
+    if ([ac, dc, fee].some(Number.isNaN)) { pvErr('Bitte die Preise prüfen (z. B. 0,59).'); return; }
+    let name = pvCur;
+    if (pvCur === 'bosch') {
+      const bnm = $('pv-name').value.trim().replace(/\s+/g, ' ').slice(0, 30), o = { ...(bnm ? { name: bnm } : {}) }, tariff = $('pv-tariff').value.trim().replace(/\s+/g, ' ').slice(0, 30);
+      if (tariff) o.tariff = tariff; if (ac > 0) o.ac = ac; if (dc > 0) o.dc = dc; if (fee > 0) o.fee = fee;
+      info.bosch = o; setProvInfo(info); $('pv-dialog').classList.add('hidden'); renderProvidersView(); return;
+    }
+    if (pvCur === '') {
+      name = $('pv-name').value.trim().replace(/\s+/g, ' ').slice(0, 30); const l = getProviders();
+      if (!name) { pvErr('Bitte einen Namen eingeben.'); return; }
+      if (l.some(n => n.toLowerCase() === name.toLowerCase())) { pvErr('„' + name + '“ gibt es schon.'); return; }
+      if (l.length >= 20) { pvErr('Maximal 20 Anbieter.'); return; }
+      setProviders(l.concat(name));
+    }
+    const o = {}, tariff = $('pv-tariff').value.trim().replace(/\s+/g, ' ').slice(0, 30);
+    if (tariff) o.tariff = tariff; if (ac > 0) o.ac = ac; if (dc > 0) o.dc = dc; if (fee > 0) o.fee = fee;
+    if (Object.keys(o).length) info.p[name] = o; else delete info.p[name];
+    setProvInfo(info);
+  }
+  $('pv-dialog').classList.add('hidden'); renderProvidersView();
+});
+$('pv-cancel').addEventListener('click', () => $('pv-dialog').classList.add('hidden'));
+$('pv-dialog').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden'); });
+$('pv-list').addEventListener('click', (e) => { const b = e.target.closest('[data-pv]'); if (b) openProv(b.dataset.pv); });
+$('pv-add').addEventListener('click', () => openProv(''));
+$('go-prov').addEventListener('click', () => showView('providers'));
+
+// ───── src/07-wissen.js ─────
+/* =====================================================================
+   Wissen (Start → „Wissen“): eigene Einträge mit Titel, Kategorie, Notiz, Links und Belegen (Google Drive), optional auf Start angeheftet.
+   Speicher: enyaq.kb = { cats: [Name], items: [{ id, title, cat, text?, links?: [{ url, label? }], files?: [{ id, name, mime }], pin?, at }] }
+   Cloud: im Dokument settings/prefs (Feld kb), Datensicherung: Feld kb.
+   ===================================================================== */
+const KEY_KB = 'enyaq.kb', KB_MG = 'Mängel', KB_UP = 'Updates', KB_DEF_CATS = ['Mängel', 'Updates', 'Handbuch', 'Tipps', 'Werkstatt', 'Verträge', 'Sonstiges'];
+/* Software-Updates = feste Wissen-Kategorie „Updates“: ver, how 'ota'|'werkstatt', inst 'JJJJ-MM-TT', km, base (Ausgangsstand, kein Vergleich), done (Auswertung gemeldet).
+   Vergleich je 30 Tage vor/nach der Installation (vorher höchstens bis zum vorigen Update). */
+const UP_DAYS = 30, isUp = (x) => x && x.cat === KB_UP;
+const upList = (kb) => (kb || getKb()).items.filter(x => isUp(x) && x.inst).sort((a, b) => a.inst.localeCompare(b.inst));
+const upCur = (kb) => { const l = upList(kb); return l.length ? l[l.length - 1] : null; };
+const upAge = (x) => Math.floor((Date.now() - Date.parse(x.inst + 'T00:00:00')) / 864e5);
+const upTag = (x) => { const [t, c] = x.base ? ['Ausgangsstand', 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200'] : upAge(x) < UP_DAYS ? ['Vergleich läuft', 'bg-sky-100 text-sky-800 dark:bg-sky-900/60 dark:text-sky-200'] : ['✓ ausgewertet', 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-200']; return `<span class="shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${c}">${t}</span>`; };
+const upIcon = (x) => x.base ? '🏁' : x.how === 'werkstatt' ? '🔧' : '📡';
+const upMeta = (x) => [x.inst ? mgDate(x.inst) : '', x.km ? fmt(x.km, 0) + ' km' : '', x.base ? '' : x.how === 'werkstatt' ? 'Werkstatt' : 'OTA'].filter(Boolean).join(' · ');
+/* Mängel-Tagebuch = feste Wissen-Kategorie „Mängel“. Zusatzfelder je Eintrag: st 'offen'|'gemeldet'|'erledigt', art (Art des Mangels), seen 'JJJJ-MM-TT', km, occ [ISO] (wieder aufgetreten). */
+const MG_ST = { offen: ['offen', 'bg-rose-100 text-rose-700 dark:bg-rose-900/60 dark:text-rose-200'], gemeldet: ['gemeldet', 'bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200'], erledigt: ['erledigt', 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-200'] };
+const MG_ART = [['geraeusch', '🔊', 'Geräusch'], ['software', '💻', 'Software'], ['elektrik', '⚡', 'Elektrik'], ['karosserie', '🚪', 'Karosserie'], ['laden', '🔌', 'Laden'], ['sonst', '🛠️', 'Sonstiges']];
+const isMg = (x) => x && x.cat === KB_MG, mgSt = (x) => MG_ST[x.st] ? x.st : 'offen', mgArt = (x) => MG_ART.find(a => a[0] === x.art) || MG_ART[5];
+const mgTag = (x) => `<span class="shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${MG_ST[mgSt(x)][1]}">${MG_ST[mgSt(x)][0]}</span>`;
+const mgDate = (d) => d ? new Date(d.length === 10 ? d + 'T12:00:00' : d).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
+const mgMeta = (x) => [x.seen ? 'seit ' + mgDate(x.seen).slice(0, 6) : '', x.km ? fmt(x.km, 0) + ' km' : '', x.files && x.files.length ? '📷 ' + x.files.length : '', (x.occ || []).length ? (x.occ.length + 1) + '× aufgetreten' : ''].filter(Boolean).join(' · ') || MG_ART.find(a => a[0] === x.art)?.[2] || KB_MG;
+const mgOpen = (kb) => kb.items.filter(x => isMg(x) && mgSt(x) === 'offen').length;
+const KB_ICON = (c) => c === KB_MG ? '🛠️' : c === KB_UP ? '🔄' : /hand|anleit|manual/i.test(c) ? '📘' : /tipp|trick|info/i.test(c) ? '💡' : /werk|service|wart/i.test(c) ? '🔧' : /vertr|versich|doku|unterl/i.test(c) ? '📄' : /lade|strom|wallbox/i.test(c) ? '⚡' : /kontakt|tel/i.test(c) ? '📞' : '🗂️';
+const KB_TINT = (c) => c === KB_MG ? 'bg-rose-100 dark:bg-rose-600/25' : c === KB_UP ? 'bg-sky-100 dark:bg-sky-600/25' : ({ '📘': 'bg-sky-100 dark:bg-sky-600/25', '💡': 'bg-amber-100 dark:bg-amber-600/25', '🔧': 'bg-violet-100 dark:bg-violet-600/25', '📄': 'bg-emerald-100 dark:bg-emerald-600/25', '⚡': 'bg-lime-100 dark:bg-lime-600/25', '📞': 'bg-rose-100 dark:bg-rose-600/25' }[KB_ICON(c)] || 'bg-slate-100 dark:bg-slate-700/60');
+function getKb() { const o = load(KEY_KB, null), cats = o && Array.isArray(o.cats) && o.cats.length ? o.cats.slice() : KB_DEF_CATS.slice(); if (!cats.includes(KB_UP)) cats.unshift(KB_UP); if (!cats.includes(KB_MG)) cats.unshift(KB_MG);   // „Mängel“ und „Updates“ sind fest dabei
+  return { cats, items: o && Array.isArray(o.items) ? o.items : [] }; }
+function setKb(o) { save(KEY_KB, JSON.parse(JSON.stringify(o))); pushPrefs(); renderKbStart(); if (currentView === 'kb') renderKb(); }
+let kbCat = '', kbCur = null, kbPend = [];
+const kbSub = (x) => [x.links && x.links.length ? (x.links.length === 1 ? 'Link' : x.links.length + ' Links') : '', x.files && x.files.length ? (x.files.length === 1 ? '1 Beleg' : x.files.length + ' Belege') : '', x.text ? x.text.split('\n')[0].slice(0, 60) : ''].filter(Boolean).join(' · ') || x.cat;
+function renderKb() {
+  const kb = getKb(), q = $('kb-q').value.trim().toLowerCase();
+  const n = (c) => kb.items.filter(x => x.cat === c).length;
+  const nOpen = mgOpen(kb);
+  $('kb-cats').innerHTML = [['', 'Alle (' + kb.items.length + ')']].concat(kb.cats.filter(c => n(c) || c === KB_MG || c === KB_UP).map(c => [c, KB_ICON(c) + ' ' + c + (c === KB_MG ? '' : ' (' + n(c) + ')')]))
+    .map(([k, l]) => `<button type="button" data-kbc="${esc(k)}" class="shrink-0 rounded-lg px-2.5 py-1.5 ${k === kbCat ? 'bg-emerald-600/20 text-emerald-700 dark:text-emerald-300 font-semibold' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300'}">${esc(l)}${k === KB_MG && nOpen ? ` <span class="ml-0.5 rounded-md bg-rose-600 px-1.5 text-[10px] font-bold text-white">${nOpen}</span>` : ''}</button>`).join('');
+  const mgs = kb.items.filter(isMg), cnt = (st) => mgs.filter(x => mgSt(x) === st).length;
+  const uc = upCur(kb);
+  $('kb-mg-bar').classList.toggle('hidden', kbCat !== KB_MG && !(kbCat === KB_UP && uc));
+  $('kb-mg-sum').innerHTML = kbCat === KB_UP ? (uc ? 'Aktuell: <b class="text-slate-800 dark:text-slate-100">' + esc(uc.ver || '?') + '</b> seit ' + mgDate(uc.inst) : '') : esc(mgs.length ? cnt('offen') + ' offen · ' + cnt('gemeldet') + ' gemeldet · ' + cnt('erledigt') + ' erledigt' : 'Noch keine Mängel notiert');
+  $('kb-mg-share').classList.toggle('hidden', kbCat !== KB_MG || !(cnt('offen') + cnt('gemeldet')));
+  $('kb-up-start').classList.toggle('hidden', !(kbCat === KB_UP && !uc));
+  const hit = (x) => (!kbCat || x.cat === kbCat) && (!q || [x.title, x.text, x.cat].concat((x.links || []).map(l => l.url + ' ' + (l.label || ''))).join(' ').toLowerCase().includes(q));
+  const ord = { offen: 0, gemeldet: 1, erledigt: 2 }, list = kb.items.filter(hit).sort((a, b) => kbCat === KB_MG ? (ord[mgSt(a)] - ord[mgSt(b)]) || String(b.seen || b.at || '').localeCompare(String(a.seen || a.at || '')) : kbCat === KB_UP ? String(b.inst || '').localeCompare(String(a.inst || '')) : a.title.localeCompare(b.title, 'de')), pins = list.filter(x => x.pin), rest = list.filter(x => !x.pin);
+  $('kb-pin-wrap').classList.toggle('hidden', !pins.length);
+  $('kb-pins').innerHTML = pins.map(x => `<button type="button" data-kb="${esc(x.id)}" class="flex h-14 min-w-0 items-center gap-2.5 rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm px-2.5 text-left active:scale-[0.98] transition">
+      <span class="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] ${KB_TINT(x.cat)}">${KB_ICON(x.cat)}</span>
+      <span class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold leading-5">${esc(x.title)}</span><span class="block truncate text-[11px] leading-4 ${x.links && x.links.length ? 'text-sky-600 dark:text-sky-300' : 'text-slate-500 dark:text-slate-400'}">${x.links && x.links.length ? '↗ Link öffnen' : esc(kbSub(x))}</span></span>
+      <svg class="h-3.5 w-3.5 shrink-0 text-slate-400" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3l7 7-3 1-4 4 1 5-2 1-4-5-5 5-1-1 5-5-5-4 1-2 5 1 4-4z"/></svg></button>`).join('');
+  $('kb-list-wrap').classList.toggle('hidden', !rest.length);
+  $('kb-list').innerHTML = rest.map(x => `<li><button type="button" data-kb="${esc(x.id)}" class="flex w-full items-center gap-3 px-3.5 py-3 text-left active:bg-slate-100 dark:active:bg-slate-800">
+      <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${KB_TINT(x.cat)}">${isMg(x) ? mgArt(x)[1] : isUp(x) ? upIcon(x) : KB_ICON(x.cat)}</span>
+      <span class="min-w-0 flex-1"><span class="block truncate font-medium">${esc(x.title)}</span><span class="block truncate text-xs text-slate-500 dark:text-slate-400">${esc(isMg(x) ? mgMeta(x) : isUp(x) ? upMeta(x) : kbSub(x))}</span></span>${isMg(x) ? mgTag(x) : isUp(x) ? upTag(x) : '<span class="text-slate-400">›</span>'}</button></li>`).join('');
+  $('kb-empty').classList.toggle('hidden', list.length > 0);
+  $('kb-empty').textContent = kbCat === KB_UP && !q ? 'Noch keine Software-Version eingetragen. Trag zuerst die Version ein, die jetzt auf dem Auto ist (Ausgangsstand) – jedes spätere Update wird dann mit der Zeit davor verglichen.' : kbCat === KB_MG && !q ? 'Noch keine Mängel. Mit „+ Neu“ notierst du z. B. ein Klappern oder einen Software-Fehler – mit Datum, km vom Auto und Fotos.' : kb.items.length ? 'Keine Treffer.' : 'Noch nichts gespeichert. Lege mit „+ Neu“ zum Beispiel den Link zum Handbuch, Reifendruck-Werte oder die Nummer deiner Werkstatt an.';
+}
+/* Start: Button-Zusatz und angeheftete Einträge als Chips (Link-Einträge öffnen direkt) */
+function renderKbStart() {
+  const kb = getKb(), n = kb.items.length, pins = kb.items.filter(x => x.pin).sort((a, b) => a.title.localeCompare(b.title, 'de'));
+  try { upCheckDone(); } catch (e) { }
+  const mo = mgOpen(kb); $('go-kb-n').textContent = ' · ' + (mo ? mo + (mo === 1 ? ' offener Mangel' : ' offene Mängel') : n ? n + (n === 1 ? ' Eintrag' : ' Einträge') : 'Handbuch, Tipps & mehr');
+  $('kb-start-pins').classList.toggle('hidden', !pins.length);
+  /* Angepinnte Einträge als Unterzeilen von „Wissen“ (Baumlinie); mit Link öffnet ein Tipp direkt den Link, sonst den Eintrag */
+  const ico = '<svg class="h-4 w-4 shrink-0 text-emerald-500" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4"/></svg>';
+  const ext = '<svg class="h-4 w-4 shrink-0 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-label="öffnet Link"><path d="M7 17L17 7M9 7h8v8"/></svg>';
+  const chev = '<svg class="h-4 w-4 shrink-0 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>';
+  const cls = (i) => 'relative flex w-full items-center gap-2.5 pl-[18px] py-2.5 text-left text-[15px] active:opacity-70' + (i ? ' border-t border-slate-200 dark:border-slate-800' : '');
+  const twig = '<span class="absolute left-0 top-1/2 h-0.5 w-3 -translate-y-1/2 bg-slate-200 dark:bg-slate-800" aria-hidden="true"></span>';
+  $('kb-start-pins').innerHTML = pins.length ? '<span class="absolute left-[27px] top-0 bottom-[23px] w-0.5 bg-slate-200 dark:bg-slate-800" aria-hidden="true"></span>' + pins.map((x, i) => x.links && x.links.length
+    ? `<a href="${esc(x.links[0].url)}" target="_blank" rel="noopener" class="${cls(i)}">${twig}${ico}<span class="min-w-0 flex-1 truncate">${esc(x.title)}</span>${ext}</a>`
+    : `<button type="button" data-kb="${esc(x.id)}" class="${cls(i)}">${twig}${ico}<span class="min-w-0 flex-1 truncate">${esc(x.title)}</span>${chev}</button>`).join('') : '';
+}
+const kbLinkify = (t) => esc(t).replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener" class="underline text-sky-600 dark:text-sky-300 break-all">$1</a>');
+function openKb(id) {
+  const x = getKb().items.find(y => String(y.id) === String(id)); if (!x) return;
+  kbCur = x.id; $('kb-edit').classList.add('hidden'); $('kb-view').classList.remove('hidden');
+  const host = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (e) { return u; } };
+  $('kb-view').innerHTML = `<div class="flex items-center gap-3"><span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-xl ${KB_TINT(x.cat)}">${KB_ICON(x.cat)}</span><div class="min-w-0"><p class="text-lg font-bold leading-tight break-words">${esc(x.title)}</p><p class="text-xs text-slate-500 dark:text-slate-400">${esc(x.cat)}${x.at ? ' · zuletzt geändert ' + fmtDate(x.at) : ''}</p></div></div>
+    ${(x.links || []).map(l => `<a href="${esc(l.url)}" target="_blank" rel="noopener" class="flex items-center justify-between gap-3 rounded-2xl bg-sky-50 dark:bg-sky-600/15 px-3.5 py-3 text-sky-800 dark:text-sky-200"><span class="min-w-0"><span class="block truncate text-sm font-semibold">${esc(l.label || 'Link öffnen')}</span><span class="block truncate text-xs opacity-80">${esc(host(l.url))}</span></span><span aria-hidden="true">↗</span></a>`).join('')}
+    ${isMg(x) ? `<div class="rounded-2xl bg-rose-50 dark:bg-rose-950/30 p-3 text-sm"><div class="flex items-center justify-between gap-2"><span class="font-semibold">${mgArt(x)[1]} ${mgArt(x)[2]}</span>${mgTag(x)}</div>
+      <p class="mt-1.5 text-left text-slate-600 dark:text-slate-300">${x.seen ? 'Bemerkt am ' + mgDate(x.seen) : 'Bemerkt: –'}${x.km ? ' · ' + fmt(x.km, 0) + ' km' : ''}</p>
+      ${(x.occ || []).length ? `<p class="mt-1 text-left text-xs text-slate-500 dark:text-slate-400">Wieder aufgetreten: ${x.occ.map(o => mgDate(o).slice(0, 6)).join(', ')} · insgesamt ${x.occ.length + 1}×</p>` : ''}
+      <div class="mt-2.5 grid grid-cols-2 gap-1.5"><button type="button" data-kbact="again" class="rounded-xl bg-white dark:bg-slate-800 py-2 text-xs font-semibold active:scale-95 transition">＋ wieder aufgetreten</button>
+        ${mgSt(x) === 'offen' ? '<button type="button" data-kbact="st-gemeldet" class="rounded-xl bg-white dark:bg-slate-800 py-2 text-xs font-semibold active:scale-95 transition">→ gemeldet</button>' : mgSt(x) === 'gemeldet' ? '<button type="button" data-kbact="st-erledigt" class="rounded-xl bg-white dark:bg-slate-800 py-2 text-xs font-semibold active:scale-95 transition">✓ erledigt</button>' : '<button type="button" data-kbact="st-offen" class="rounded-xl bg-white dark:bg-slate-800 py-2 text-xs font-semibold active:scale-95 transition">↺ wieder offen</button>'}</div></div>` : ''}
+    ${isUp(x) ? `<div class="rounded-2xl bg-sky-50 dark:bg-sky-950/30 p-3 text-sm"><div class="flex items-center justify-between gap-2"><span class="font-semibold">${upIcon(x)} Version ${esc(x.ver || '?')}</span>${upTag(x)}</div><p class="mt-1 text-left text-slate-600 dark:text-slate-300">${esc(upMeta(x))}</p>
+      ${x.base ? '<p class="mt-2 text-left text-xs text-slate-500 dark:text-slate-400">Ausgangsstand: ab hier wird jedes neue Update mit der Zeit davor verglichen.</p>' : '<div id="kb-up-cmp" class="mt-2"><p class="text-xs text-slate-500 dark:text-slate-400">Vergleich wird berechnet …</p></div>'}</div>` : ''}
+    ${x.text ? `<div class="rounded-2xl bg-slate-100 dark:bg-slate-800/60 p-3 text-sm leading-6 whitespace-pre-wrap break-words">${kbLinkify(x.text)}</div>` : ''}
+    ${x.files && x.files.length ? `<div><p class="mb-1.5 text-xs text-slate-500 dark:text-slate-400">Belege</p><div class="flex flex-wrap gap-1.5">${x.files.map(f => `<a href="${dvLink(f.id)}" target="_blank" rel="noopener" class="inline-flex max-w-full items-center gap-1 rounded-lg bg-slate-100 dark:bg-slate-800 px-2.5 py-1.5 text-xs"><span aria-hidden="true">📎</span><span class="truncate">${esc(f.name)}</span></a>`).join('')}</div></div>` : ''}
+    <div class="grid grid-cols-3 gap-2 pt-1"><button type="button" data-kbact="edit" class="py-2.5 rounded-xl bg-slate-200 dark:bg-slate-800 text-sm font-medium active:scale-95 transition">Bearbeiten</button><button type="button" data-kbact="share" class="py-2.5 rounded-xl bg-slate-200 dark:bg-slate-800 text-sm font-medium active:scale-95 transition">Teilen</button><button type="button" data-kbact="del" class="py-2.5 rounded-xl bg-slate-200 dark:bg-slate-800 text-sm font-medium text-red-600 dark:text-red-300 active:scale-95 transition">Löschen</button></div>
+    <button type="button" data-kbact="close" class="w-full py-3 rounded-2xl bg-emerald-600 text-white font-semibold active:scale-95 transition">Schließen</button>`;
+  $('kb-dialog').classList.remove('hidden');
+  if (isUp(x) && !x.base) upCompare(x).then(h => { if (kbCur === x.id && $('kb-up-cmp')) $('kb-up-cmp').innerHTML = h; }).catch(e => { console.error(e); if ($('kb-up-cmp')) $('kb-up-cmp').innerHTML = '<p class="text-xs text-red-600">Vergleich nicht möglich.</p>'; });
+}
+/* Vorher/Nachher-Vergleich eines Updates → HTML. Verbrauch ab Akku je Strecke zwischen zwei Ladungen; temperaturbereinigt über die Abweichung vom eigenen Wettermodell. */
+async function upCompare(x) {
+  const t0 = Date.parse(x.inst + 'T00:00:00'), prev = upList().filter(y => y.inst < x.inst).pop(), D = 864e5;
+  const bA = Math.max(t0 - UP_DAYS * D, prev ? Date.parse(prev.inst + 'T00:00:00') : 0), aB = Math.min(t0 + UP_DAYS * D, Date.now() + D), age = Math.min(UP_DAYS, Math.max(0, upAge(x)));
+  const rs = getReadings(), inB = (t) => t >= bA && t < t0, inA = (t) => t >= t0 && t < aB;
+  const seg = []; rs.forEach((r, i) => { if (i < 1) return; const s2 = entryStats(rs, i), a = Date.parse(rs[i - 1].date), b = Date.parse(r.date); if (s2.method !== 'soc' || s2.rough || !(s2.km >= 10) || !(s2.usedBat > 0)) return; seg.push({ a, b, km: s2.km, bat: s2.usedBat }); });
+  const sB = seg.filter(z => inB(z.b) && z.a >= bA), sA = seg.filter(z => inA(z.b) && z.a >= t0 - D);
+  const k100 = (l) => { const km = l.reduce((q, z) => q + z.km, 0); return km ? l.reduce((q, z) => q + z.bat, 0) / km * 100 : null; };
+  let adj = null; const l = wxLoc();
+  if (l && sB.length && sA.length) { try { const all = sB.concat(sA), m = await wxoModel(l), days = await wxTemps(l, wxIso(new Date(Math.min(...all.map(z => z.a)))), wxIso(new Date(Math.max(...all.map(z => z.b))))), tc = load(KEY_TEMPS, {}) || {}, rain = tc.rain || {}, hum = tc.hum || {};
+      const res = (z) => { let st = 0, n = 0, wet = 0, nr = 0, hu = 0, nh = 0; for (let t = z.a; t <= z.b + 1; t += D) { const d = wxIso(new Date(t)); if (days[d] != null) { st += days[d]; n++; } if (rain[d] != null) { nr++; if (rain[d] >= 1) wet++; } if (hum[d] != null) { nh++; hu += hum[d]; } }
+        return n ? z.bat / z.km * 100 - wxoPredX(m, wxoX(st / n, nr ? wet / nr : 0, nh ? hu / nh : 0)) : null; };
+      const avgR = (L2) => { const v = L2.map(z => ({ r: res(z), km: z.km })).filter(o => o.r != null), km = v.reduce((q, o) => q + o.km, 0); return km ? v.reduce((q, o) => q + o.r * o.km, 0) / km : null; };
+      const rB = avgR(sB), rA = avgR(sA); if (rB != null && rA != null) adj = (rA - rB) / (k100(sB) || 16) * 100; } catch (e) { } }
+  const cv = getLab().curves.filter(c => c.date && c.pts), cvT = (c) => Date.parse(c.date + 'T12:00:00'), p2060 = (c) => { let q = 0, n = 0; for (let p = Math.max(20, c.s0); p <= Math.min(60, c.s1); p += 5) { q += cvPow(c, p); n++; } return n >= 3 ? q / n : null; };
+  const cB = cv.filter(c => cvT(c) < t0 && cvT(c) >= t0 - 120 * D && (!prev || cvT(c) >= Date.parse(prev.inst + 'T00:00:00'))).sort((a, b) => cvT(b) - cvT(a))[0], cA = cv.filter(c => cvT(c) >= t0).sort((a, b) => cvT(a) - cvT(b))[0];
+  const lossOf = (f) => { const v = rs.map((r, i) => ({ r, s2: entryStats(rs, i) })).filter(o => isHome(o.r) && f(Date.parse(o.r.date)) && o.s2.loss != null && o.s2.loss >= 0 && o.s2.loss < 40).map(o => o.s2.loss); return v.length ? v.reduce((q, y) => q + y, 0) / v.length : null; };
+  const cfOf = (f) => { const v = rs.filter(r => comfortOf(r) > 0 && f(Date.parse(r.date))).map(comfortOf); return v.length ? v.reduce((q, y) => q + y, 0) / v.length : null; };
+  const rows = [], good = [], bad = [];
+  const row = (lab, a, b, u, dec, lowGood, note, dOverride, pkt) => { if (a == null && b == null) return; const d = dOverride != null ? dOverride : a != null && b != null ? (pkt ? b - a : (b - a) / a * 100) : null, ok = d == null || Math.abs(d) < (pkt ? 0.5 : 1.5) ? null : (d < 0) === lowGood;
+    if (ok === true) good.push(lab); if (ok === false) bad.push(lab);
+    rows.push(`<div class="grid grid-cols-[1.3fr_.8fr_.8fr_.7fr] items-baseline gap-1 border-t border-slate-200 dark:border-slate-800 py-1.5 text-[13px]"><span class="text-left text-slate-600 dark:text-slate-300">${lab}</span><span class="text-right tabular-nums">${a != null ? fmt(a, dec) + u : '–'}</span><span class="text-right font-semibold tabular-nums">${b != null ? fmt(b, dec) + u : '–'}</span><span class="text-right font-semibold tabular-nums ${ok === true ? 'text-emerald-600 dark:text-emerald-400' : ok === false ? 'text-rose-600 dark:text-rose-400' : 'text-slate-500'}">${d != null ? (d > 0 ? '+' : '−') + (pkt ? fmt(Math.abs(d), 1) + ' Pkt' : fmt(Math.abs(d), 0) + ' %') : ''}</span></div>`
+      + (note ? `<p class="-mt-1 pb-1 text-left text-[10.5px] text-slate-500 dark:text-slate-400">${note}</p>` : '')); };
+  row('Verbrauch ab Akku', k100(sB), k100(sA), '', 1, true, adj != null ? 'Δ temperaturbereinigt mit deinem Wettermodell' : sB.length && sA.length ? 'ohne Temperatur-Bereinigung' : '', adj);
+  row('DC 20–60 %', cB ? p2060(cB) : null, cA ? p2060(cA) : null, ' kW', 0, false);
+  row('Ladeverlust zuhause', lossOf(inB), lossOf(inA), ' %', 1, true, '', null, true);
+  row('Komfort je Vorheizen', cfOf(inB), cfOf(inA), ' kWh', 1, true);
+  const kmA = sA.reduce((q, z) => q + z.km, 0), nA = rs.filter(r => inA(Date.parse(r.date))).length;
+  const head = `<p class="text-left text-xs text-slate-500 dark:text-slate-400">Vorher / nachher · je ${UP_DAYS} Tage</p><div class="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800"><div class="h-full bg-sky-500" style="width:${(age / UP_DAYS * 100).toFixed(0)}%"></div></div>
+    <p class="mt-1 text-left text-[11px] text-slate-500 dark:text-slate-400">nachher: ${age} von ${UP_DAYS} Tagen · ${nA} ${nA === 1 ? 'Ladung' : 'Ladungen'} · ${fmt(kmA, 0)} km</p>`;
+  if (!rows.length) return head + '<p class="mt-2 text-left text-xs text-slate-500 dark:text-slate-400">Noch keine vergleichbaren Daten. Ladungen mit Akku-% und km-Stand vor und nach dem Update füllen den Vergleich.</p>';
+  const fz = good.length || bad.length ? (good.length ? 'besser: ' + good.join(', ') : '') + (good.length && bad.length ? ' · ' : '') + (bad.length ? 'schlechter: ' + bad.join(', ') : '') : 'bisher kein deutlicher Unterschied';
+  return head + `<div class="mt-2 grid grid-cols-[1.3fr_.8fr_.8fr_.7fr] gap-1 text-[10px] uppercase tracking-wide text-slate-500"><span></span><span class="text-right">vorher</span><span class="text-right">nachher</span><span class="text-right">Δ</span></div>` + rows.join('')
+    + `<p class="mt-2 rounded-xl bg-sky-100/70 dark:bg-sky-900/40 px-3 py-2 text-left text-xs text-sky-900 dark:text-sky-100">${age < UP_DAYS ? 'Zwischenstand' : 'Ergebnis'}: ${esc(fz)}.${age < UP_DAYS ? ' Endgültig nach ' + UP_DAYS + ' Tagen.' : ''}</p>`;
+}
+/* Nach 30 Tagen: Auswertung einmal melden (Benachrichtigung, falls erlaubt) */
+function upCheckDone() {
+  const kb = getKb(), due = kb.items.filter(x => isUp(x) && !x.base && !x.done && x.inst && upAge(x) >= UP_DAYS); if (!due.length) return;
+  save(KEY_KB, { ...kb, items: kb.items.map(x => due.includes(x) ? { ...x, done: true } : x) }); try { pushPrefs(); } catch (e) { }
+  try { if ('Notification' in window && Notification.permission === 'granted' && navigator.serviceWorker) navigator.serviceWorker.ready.then(r => due.forEach(x => r.showNotification('Update ' + (x.ver || '') + ' ausgewertet', { body: 'Der Vorher/Nachher-Vergleich ist fertig – Wissen → Updates.', tag: 'upd-' + x.id, icon: '/Bilder/car-v4-192.png' }))); } catch (e) { }
+}
+function kbLinkRow(u = '', l = '') { return `<div class="kb-lrow flex gap-1.5"><input type="url" inputmode="url" autocomplete="off" placeholder="https://…" value="${esc(u)}" aria-label="Adresse" class="kb-lu min-w-0 flex-[3] rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"><input type="text" autocomplete="off" placeholder="Name" value="${esc(l)}" aria-label="Name des Links" class="kb-ll min-w-0 flex-[2] rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"><button type="button" data-kbrm="1" aria-label="Link entfernen" class="w-9 shrink-0 rounded-xl text-slate-500">✕</button></div>`; }
+function kbFilesHtml(files) { return files.map((f, i) => `<span class="inline-flex max-w-full items-center gap-1 rounded-lg bg-slate-100 dark:bg-slate-800 pl-2.5 pr-1 py-1 text-xs"><span class="truncate">📎 ${esc(f.name)}${f.pending ? ' · wird hochgeladen' : ''}</span><button type="button" data-kbf="${i}" aria-label="Beleg entfernen" class="px-1.5 text-slate-500">✕</button></span>`).join('') + '<button type="button" id="kb-file-add" class="rounded-lg border border-dashed border-slate-400 dark:border-slate-600 px-2.5 py-1 text-xs text-slate-500 dark:text-slate-400">+ Beleg</button>'; }
+let kbFiles = [];
+function editKb(id) {
+  const kb = getKb(), x = id != null ? kb.items.find(y => String(y.id) === String(id)) : null;
+  kbCur = x ? x.id : null; kbPend = []; kbFiles = x && x.files ? x.files.slice() : [];
+  $('kb-edit-h').textContent = x ? 'Eintrag bearbeiten' : 'Neuer Eintrag';
+  $('kb-title').value = x ? x.title : ''; $('kb-text').value = x ? x.text || '' : ''; $('kb-pin').checked = !!(x && x.pin);
+  $('kb-cat').innerHTML = kb.cats.map(c => `<option value="${esc(c)}">${KB_ICON(c)} ${esc(c)}</option>`).join('') + '<option value="__new">+ Neue Kategorie …</option>';
+  $('kb-cat').value = x ? x.cat : (kbCat || kb.cats.find(c => c !== KB_MG) || kb.cats[0]);
+  kbMg = { st: x ? mgSt(x) : 'offen', art: x && x.art ? x.art : '' }; $('kb-mg-date').value = x && x.seen ? x.seen : wxIso(new Date()); $('kb-mg-date').max = wxIso(new Date());
+  $('kb-mg-km').value = x && x.km ? String(x.km) : (() => { try { const c = ltmCarKm(); if (c && c.km) return String(c.km); const k = lastKnownKm(); return k ? String(Math.round(k)) : ''; } catch (e) { return ''; } })();
+  kbUp = { how: x && x.how === 'werkstatt' ? 'werkstatt' : 'ota' }; $('kb-up-ver').value = x && x.ver ? x.ver : ''; $('kb-up-date').value = x && x.inst ? x.inst : wxIso(new Date()); $('kb-up-date').max = wxIso(new Date());
+  $('kb-up-km').value = x && x.km ? String(x.km) : $('kb-mg-km').value; $('kb-up-base').checked = !!(x ? x.base : kbUpBaseNext); kbUpBaseNext = false;
+  kbMgPaint();
+  $('kb-links').innerHTML = (x && x.links && x.links.length ? x.links : [{ url: '' }]).map(l => kbLinkRow(l.url, l.label)).join('');
+  $('kb-files').innerHTML = kbFilesHtml(kbFiles); $('kb-msg').classList.add('hidden');
+  $('kb-view').classList.add('hidden'); $('kb-edit').classList.remove('hidden'); $('kb-dialog').classList.remove('hidden');
+  if (!x) setTimeout(() => $('kb-title').focus(), 50);
+}
+const kbErr = (t) => { $('kb-msg').textContent = t; $('kb-msg').classList.remove('hidden'); };
+$('kb-cat').addEventListener('change', (e) => {
+  if (e.target.value !== '__new') return;
+  const n = (prompt('Name der neuen Kategorie:') || '').trim().replace(/\s+/g, ' ').slice(0, 24), kb = getKb();
+  if (!n) { e.target.value = kb.cats[0]; return; }
+  if (!kb.cats.some(c => c.toLowerCase() === n.toLowerCase())) { kb.cats.push(n); save(KEY_KB, kb); }
+  e.target.innerHTML = getKb().cats.map(c => `<option value="${esc(c)}">${KB_ICON(c)} ${esc(c)}</option>`).join('') + '<option value="__new">+ Neue Kategorie …</option>';
+  e.target.value = getKb().cats.find(c => c.toLowerCase() === n.toLowerCase());
+});
+$('kb-link-add').addEventListener('click', () => { $('kb-links').insertAdjacentHTML('beforeend', kbLinkRow()); });
+$('kb-links').addEventListener('click', (e) => { if (e.target.closest('[data-kbrm]')) e.target.closest('.kb-lrow').remove(); });
+$('kb-files').addEventListener('click', (e) => {
+  if (e.target.id === 'kb-file-add') { if (!window.cloud?.isSignedIn()) { kbErr('Belege brauchen die Anmeldung bei Google (Einstellungen → Konto & Cloud).'); return; } $('kb-file-in').click(); return; }
+  const b = e.target.closest('[data-kbf]'); if (!b) return; const f = kbFiles[+b.dataset.kbf];
+  if (f.pending) kbPend = kbPend.filter(p => p !== f.file); kbFiles.splice(+b.dataset.kbf, 1); $('kb-files').innerHTML = kbFilesHtml(kbFiles);
+});
+$('kb-file-in').addEventListener('change', (e) => { [...e.target.files].forEach(f => { kbPend.push(f); kbFiles.push({ name: f.name, pending: true, file: f }); }); e.target.value = ''; $('kb-files').innerHTML = kbFilesHtml(kbFiles); });
+async function kbUpload(item, files, tokP) {
+  const tok = await (tokP || window.cloud.driveToken()), folder = await dvFolder(tok), out = [];
+  for (let i = 0; i < files.length; i++) {
+    const pr = await dvPrepare(files[i]); if (pr.blob.size > DV_MAX) throw new Error('„' + files[i].name + '“ ist größer als 15 MB.');
+    const name = ('Wissen_' + item.title + (files.length > 1 || (item.files || []).length ? '_' + ((item.files || []).length + i + 1) : '')).replace(/[\\/:*?"<>|]+/g, '-').slice(0, 110) + '.' + pr.ext;
+    const body = new FormData(); body.append('metadata', new Blob([JSON.stringify({ name, parents: [folder], mimeType: pr.mime, appProperties: { kbId: String(item.id) } })], { type: 'application/json' })); body.append('file', pr.blob);
+    const j = await (await dvFetch(tok, 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType', { method: 'POST', body })).json();
+    out.push({ id: j.id, name: j.name, mime: j.mimeType || pr.mime });
+  }
+  return out;
+}
+$('kb-save').addEventListener('click', async () => {
+  const title = $('kb-title').value.trim().replace(/\s+/g, ' ').slice(0, 80), cat = $('kb-cat').value === '__new' ? getKb().cats[0] : $('kb-cat').value;
+  const upVer = $('kb-up-ver').value.trim().slice(0, 24);
+  if (cat === KB_UP && !upVer) { kbErr('Bitte die Software-Version eintragen (z. B. 3.7).'); return; }
+  if (cat === KB_UP && !$('kb-up-date').value) { kbErr('Bitte das Datum der Installation eintragen.'); return; }
+  if (!title && cat !== KB_UP) { kbErr('Bitte einen Titel eingeben.'); return; }
+  const links = []; for (const r of document.querySelectorAll('#kb-links .kb-lrow')) {
+    let u = r.querySelector('.kb-lu').value.trim(); const l = r.querySelector('.kb-ll').value.trim().slice(0, 60); if (!u) continue;
+    if (!/^[a-z][a-z0-9+.-]*:/i.test(u)) u = 'https://' + u;
+    try { const p = new URL(u); if (!/^(https?|tel|mailto):$/.test(p.protocol)) throw 0; } catch (e) { kbErr('Ungültiger Link: ' + u); return; }
+    const o = { url: u }; if (l) o.label = l; links.push(o);
+  }
+  const kb = getKb(), old = kb.items.find(y => String(y.id) === String(kbCur)), item = { id: old ? old.id : Date.now(), title: title || ('Software ' + upVer), cat, at: new Date().toISOString() };
+  const text = $('kb-text').value.trim().slice(0, 4000); if (text) item.text = text; if (links.length) item.links = links; if ($('kb-pin').checked) item.pin = true;
+  if (cat === KB_UP) { const km = $('kb-up-km').value.trim() ? Number($('kb-up-km').value.replace(/\D/g, '')) : null; if (km != null && !(km >= 0 && km < 2e6)) { kbErr('Bitte einen gültigen km-Stand eingeben oder das Feld leer lassen.'); return; }
+    item.ver = upVer; item.how = kbUp.how; item.inst = $('kb-up-date').value; if (km) item.km = km; if ($('kb-up-base').checked) item.base = true; if (old && old.done && old.inst === item.inst) item.done = true; }
+  if (cat === KB_MG) { const km = $('kb-mg-km').value.trim() ? Number($('kb-mg-km').value.replace(/\D/g, '')) : null; if (km != null && !(km >= 0 && km < 2e6)) { kbErr('Bitte einen gültigen km-Stand eingeben oder das Feld leer lassen.'); return; }
+    item.st = kbMg.st; if (kbMg.art) item.art = kbMg.art; if ($('kb-mg-date').value) item.seen = $('kb-mg-date').value; if (km) item.km = km; if (old && old.occ && old.occ.length) item.occ = old.occ; if (old && old.stAt && old.st === kbMg.st) item.stAt = old.stAt; else if (kbMg.st !== 'offen') item.stAt = new Date().toISOString(); }
+  const kept = kbFiles.filter(f => !f.pending).map(f => ({ id: f.id, name: f.name, mime: f.mime })); if (kept.length) item.files = kept;
+  const pend = kbPend.slice(), tokP = pend.length ? window.cloud.driveToken() : null; if (tokP) tokP.catch(() => { });   // Google-Fenster direkt nach dem Tipp
+  setKb({ cats: kb.cats, items: old ? kb.items.map(y => String(y.id) === String(old.id) ? item : y) : kb.items.concat(item) });
+  $('kb-dialog').classList.add('hidden');
+  if (pend.length) {
+    try { const up = await kbUpload(item, pend, tokP), k2 = getKb(); setKb({ cats: k2.cats, items: k2.items.map(y => String(y.id) === String(item.id) ? { ...y, files: (y.files || []).concat(up) } : y) }); }
+    catch (e) { if (e && e.status === 401) window.cloud.driveForget(); alert('Beleg-Upload fehlgeschlagen: ' + dvErrText(e)); }
+  }
+});
+/* Mängel: Felder im Bearbeiten-Dialog */
+let kbMg = { st: 'offen', art: '' };
+let kbUp = { how: 'ota' }, kbUpBaseNext = false;
+function kbMgPaint() {
+  $('kb-mg').classList.toggle('hidden', $('kb-cat').value !== KB_MG);
+  $('kb-up').classList.toggle('hidden', $('kb-cat').value !== KB_UP);
+  $('kb-up-how').innerHTML = [['ota', 'OTA'], ['werkstatt', 'Werkstatt']].map(([k, l]) => `<button type="button" data-uphow="${k}" class="whitespace-nowrap rounded-xl text-[13px] ${kbUp.how === k ? 'bg-sky-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300'}">${l}</button>`).join('');
+  $('kb-title').placeholder = $('kb-cat').value === KB_UP ? 'leer = „Software ‹Version›“' : 'z. B. Bedienungsanleitung';
+  $('kb-mg-st').innerHTML = Object.keys(MG_ST).map(k => `<button type="button" data-mgst="${k}" class="rounded-xl py-2 ${kbMg.st === k ? MG_ST[k][1] + ' ring-2 ring-current/30' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300'}">${MG_ST[k][0]}</button>`).join('');
+  $('kb-mg-art').innerHTML = MG_ART.map(([k, i, l]) => `<button type="button" data-mgart="${k}" class="rounded-lg px-2 py-1.5 ${kbMg.art === k ? 'bg-emerald-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300'}">${i} ${l}</button>`).join('');
+  $('kb-text').placeholder = $('kb-cat').value === KB_MG ? 'Wann tritt es auf? Temperatur, Straße, Geschwindigkeit … – hilft der Werkstatt beim Nachstellen' : 'Text, Werte, Schritte …';
+}
+$('kb-cat').addEventListener('change', kbMgPaint);
+$('kb-up').addEventListener('click', async (e) => {
+  const h = e.target.closest('[data-uphow]'); if (h) { kbUp.how = h.dataset.uphow; kbMgPaint(); return; }
+  if (e.target.id === 'kb-up-kmf') { e.preventDefault(); const b = e.target; b.textContent = '…'; try { $('kb-up-km').value = String((await fetchCarKm()).km); } catch (er) { kbErr('km-Stand vom Auto nicht verfügbar.'); } b.textContent = '↻'; }
+});
+$('kb-up-start').addEventListener('click', () => { kbUpBaseNext = true; editKb(null); setTimeout(() => $('kb-up-ver').focus(), 60); });
+$('kb-mg').addEventListener('click', async (e) => {
+  const s2 = e.target.closest('[data-mgst]'), a = e.target.closest('[data-mgart]');
+  if (s2) { kbMg.st = s2.dataset.mgst; kbMgPaint(); return; }
+  if (a) { kbMg.art = kbMg.art === a.dataset.mgart ? '' : a.dataset.mgart; kbMgPaint(); return; }
+  if (e.target.id === 'kb-mg-kmf') { e.preventDefault(); const b = e.target; b.textContent = '…'; try { $('kb-mg-km').value = String((await fetchCarKm()).km); } catch (er) { kbErr('km-Stand vom Auto nicht verfügbar.'); } b.textContent = '↻'; }
+});
+/* Werkstatt-Liste: offene und gemeldete Mängel als Text zum Teilen (WhatsApp, Mail …) */
+$('kb-mg-share').addEventListener('click', async (e) => {
+  const kb = getKb(), l = kb.items.filter(x => isMg(x) && mgSt(x) !== 'erledigt').sort((a, b) => String(a.seen || '').localeCompare(String(b.seen || '')));
+  let km = null; try { const c = ltmCarKm(); km = c && c.km; } catch (er) { }
+  const t = 'Škoda Enyaq – Mängelliste' + (km ? ' (km ' + fmt(km, 0) + ')' : '') + ', Stand ' + mgDate(wxIso(new Date())) + '\n\n' + l.map((x, i) => [(i + 1) + '. ' + x.title + ' (' + mgArt(x)[2] + (mgSt(x) === 'gemeldet' ? ', bereits gemeldet' : '') + ')',
+    '   seit ' + (x.seen ? mgDate(x.seen) : '–') + (x.km ? ' / ' + fmt(x.km, 0) + ' km' : '') + ((x.occ || []).length ? ' · ' + (x.occ.length + 1) + '× aufgetreten' : ''),
+    x.text ? '   ' + x.text.replace(/\n+/g, ' ').slice(0, 300) : '', (x.files || []).map(f => '   Foto: ' + dvLink(f.id)).join('\n')].filter(Boolean).join('\n')).join('\n\n');
+  try { if (navigator.share) await navigator.share({ title: 'Mängelliste Enyaq', text: t }); else { await navigator.clipboard.writeText(t); e.target.textContent = 'Kopiert ✓'; setTimeout(() => { e.target.textContent = '📋 Werkstatt-Liste'; }, 1800); } } catch (er) { }
+});
+$('kb-cancel').addEventListener('click', () => { if (kbCur != null && getKb().items.some(y => String(y.id) === String(kbCur))) openKb(kbCur); else $('kb-dialog').classList.add('hidden'); });
+$('kb-dialog').addEventListener('click', async (e) => {
+  if (e.target === e.currentTarget) { e.currentTarget.classList.add('hidden'); return; }
+  const b = e.target.closest('[data-kbact]'); if (!b) return; const act = b.dataset.kbact, kb = getKb(), x = kb.items.find(y => String(y.id) === String(kbCur));
+  if (act === 'close' || !x) { $('kb-dialog').classList.add('hidden'); return; }
+  if (act === 'edit') editKb(x.id);
+  else if (act === 'again') { setKb({ cats: kb.cats, items: kb.items.map(y => y === x ? { ...y, occ: (y.occ || []).concat(new Date().toISOString()), at: new Date().toISOString() } : y) }); openKb(x.id); }
+  else if (act.startsWith('st-')) { const st = act.slice(3); setKb({ cats: kb.cats, items: kb.items.map(y => y === x ? { ...y, st, stAt: new Date().toISOString(), at: new Date().toISOString() } : y) }); openKb(x.id); }
+  else if (act === 'del') { if (confirm('„' + x.title + '“ löschen?' + (x.files && x.files.length ? ' Die Belege bleiben in Google Drive.' : ''))) { setKb({ cats: kb.cats, items: kb.items.filter(y => y !== x) }); $('kb-dialog').classList.add('hidden'); } }
+  else if (act === 'share') {
+    const t = [x.title, x.text || ''].concat((x.links || []).map(l => (l.label ? l.label + ': ' : '') + l.url)).filter(Boolean).join('\n');
+    try { if (navigator.share) await navigator.share({ title: x.title, text: t }); else { await navigator.clipboard.writeText(t); b.textContent = 'Kopiert ✓'; } } catch (err) { }
+  }
+});
+$('kb-add').addEventListener('click', () => editKb(null));
+$('kb-q').addEventListener('input', renderKb);
+$('kb-cats').addEventListener('click', (e) => { const b = e.target.closest('[data-kbc]'); if (b) { kbCat = b.dataset.kbc; renderKb(); } });
+$('kb-pins').addEventListener('click', (e) => { const b = e.target.closest('[data-kb]'); if (b) openKb(b.dataset.kb); });
+$('kb-list').addEventListener('click', (e) => { const b = e.target.closest('[data-kb]'); if (b) openKb(b.dataset.kb); });
+$('kb-start-pins').addEventListener('click', (e) => { const b = e.target.closest('button[data-kb]'); if (b) openKb(b.dataset.kb); });
+$('go-kb').addEventListener('click', () => showView('kb'));
+renderKbStart();
+
+/** Bild oben auf der Statistik-Seite: Statistik.png/.webp/.jpg/.jpeg im Ordner „Bilder“ (freigestellt, auf dem Kartenhintergrund der App); fehlt es, bleibt die Karte weg. */
+const STAT_IMG_VER = '2';                                 // bei neuem Bild hochzählen (umgeht Browser- und Service-Worker-Cache); v2 = bei Canva freigestelltes PNG
+async function initStatImg() {
+  let src = null;
+  for (const e of ['png', 'webp', 'jpg', 'jpeg']) { src = await probeImg('Bilder/Statistik.' + e + '?v=' + STAT_IMG_VER); if (src) break; }
+  if (!src) return;
+  const m = await cutWhite(src); $('st-img').src = m.src; $('st-img-card').classList.remove('hidden');
+}
+
+
+// ───── src/08-sync-monatsbericht.js ─────
+/* =====================================================================
+   Cloud-Sync: Firestore ist die Quelle der Wahrheit, localStorage der schnelle Cache (auch offline).
+   Pfad: enyaqStrom/{uid}/readings/{id}. Einstellungen und Live-Daten bleiben bewusst lokal.
+   Das Firebase-Modul unten ruft diese beiden Funktionen auf.
+   ===================================================================== */
+let deferredCloud = null, cloudEmail = null;
+
+function applyCloud(list) { save(KEY_READINGS, list); refreshViews(); }
+function refreshViews() {
+  const v = [...document.querySelectorAll('.view')].find(el => !el.classList.contains('hidden'));
+  if (v?.id === 'view-dashboard') renderDashboard();
+  if (v?.id === 'view-history') renderHistory();
+  if (v?.id === 'view-report') renderReport();
+  if (v?.id === 'view-costs') renderCostsView();
+  if (v?.id === 'view-reminders') renderReminders();
+  renderReminderBadges();
+}
+const sameId = (a, b) => String(a.id) === String(b.id);
+/* Alte Zwischenspeicher dürfen nichts wieder hochladen, was inzwischen woanders gelöscht wurde (z. B. nach einer Wiederherstellung):
+   Lokale Einträge, die in der Cloud fehlen, werden nur hochgeladen, wenn dieses Gerät sie nach dem letzten Abgleich angelegt hat (die ID ist ein Zeitstempel)
+   oder wenn es noch nie mit diesem Konto abgeglichen war (erste Anmeldung mit vorhandenen lokalen Daten). Offline angelegte Einträge hält zusätzlich die Firestore-Warteschlange. */
+const LAST_SYNC_AT = Number(localStorage.getItem('enyaq.lastSync')) || 0, CACHE_UID_AT_BOOT = localStorage.getItem('enyaq.cacheUid');
+function touchSync() { try { localStorage.setItem('enyaq.lastSync', String(Date.now())); } catch {} }
+function uploadCutoff(uid) { return LAST_SYNC_AT > 0 ? LAST_SYNC_AT : (CACHE_UID_AT_BOOT === uid ? Infinity : 0); }       // 0 = alles hochladen, Infinity = nichts
+const unsyncedLocal = (local, cloud, uid) => { const cut = uploadCutoff(uid); return local.filter(x => !cloud.some(c => sameId(c, x)) && (cut === 0 || Number(x.id) > cut)); };
+const KEY_CACHE_UID = 'enyaq.cacheUid';                   // Konto (UID), zu dem der lokale Cache gehört
+
+/** Schutz: Daten eines anderen Kontos nie in dieses Konto hochladen (gilt für Zählerstände, Kosten, Listen). */
+function checkCacheUid(uid) {
+  if (!uid) return;
+  const prev = localStorage.getItem(KEY_CACHE_UID);
+  if (prev && prev !== uid) { save(KEY_READINGS, []); save(KEY_COSTS, []); save(KEY_REMINDERS, []); save(KEY_RECUR, []); localStorage.removeItem(KEY_PROVIDERS); localStorage.removeItem(KEY_PROVINFO); localStorage.removeItem(KEY_DVBAK); localStorage.removeItem('enyaq.kb'); localStorage.removeItem(KEY_CATEGORIES); localStorage.removeItem(KEY_WXLOC); localStorage.removeItem(KEY_WXCACHE); localStorage.removeItem(KEY_TEMPS); localStorage.removeItem(KEY_WRAP); save(KEY_TRIPS, []); localStorage.removeItem(KEY_TPLACES); localStorage.removeItem(KEY_TRIPS_IMP); localStorage.removeItem(KEY_TLABELS); localStorage.removeItem(KEY_TRULES); localStorage.removeItem(KEY_TDEF); const st = load(KEY_SETTINGS, null); if (st && st.wltp !== undefined) { delete st.wltp; save(KEY_SETTINGS, st); } stopLive(false); }
+  localStorage.setItem(KEY_CACHE_UID, uid);
+}
+let deferredCosts = null;
+window.onCloudCosts = (cloud, isFirst, uid) => {
+  if (isFirst) checkCacheUid(uid);
+  cloud = cloud.sort((a, b) => new Date(a.date) - new Date(b.date));
+  if (isFirst) {                                         // lokale Kosten, die in der Cloud fehlen, automatisch hochladen und behalten
+    const missing = unsyncedLocal(getCosts(), cloud, uid);
+    if (missing.length) {
+      window.cloud.pushCosts([], missing).catch(e => window.onCloudStatus({ error: 'Kosten-Upload fehlgeschlagen: ' + (e.code || e.message) }));
+      cloud = cloud.concat(missing).sort((a, b) => new Date(a.date) - new Date(b.date));
+    }
+  }
+  if (editMode) deferredCosts = cloud; else { save(KEY_COSTS, cloud); refreshViews(); bookRecurring(); }
+  touchSync();
+};
+window.onCloudReadings = (cloud, isFirst, uid) => {
+  if (isFirst) checkCacheUid(uid);
+  cloud = cloud.sort((a, b) => new Date(a.date) - new Date(b.date));
+  if (isFirst) {                                         // beim ersten Abgleich: lokale Einträge, die in der Cloud fehlen
+    const missing = unsyncedLocal(getReadings(), cloud, uid);
+    if (missing.length) {                                // automatisch hochladen und lokal behalten – es geht nichts verloren
+      window.cloud.push([], missing)
+        .then(() => window.onCloudStatus({ email: cloudEmail, note: missing.length + ' lokale Einträge in die Cloud übertragen' }))
+        .catch(e => window.onCloudStatus({ error: 'Upload fehlgeschlagen: ' + (e.code || e.message) }));
+      cloud = cloud.concat(missing).sort((a, b) => new Date(a.date) - new Date(b.date));
+    }
+  }
+  if (editMode) deferredCloud = cloud; else applyCloud(cloud);
+  touchSync();
+};
+
+window.onCloudStatus = (s) => {
+  if (s === null) { vehicle = { uid: null, ok: false, expires: null }; vehicleChecked = false; save(KEY_VEHICLE, vehicle); renderVehicleStatus(); refreshViews(); }
+  else if (s.uid && !vehicleChecked) { vehicleChecked = true; checkVehicle(s.uid); }              // beim Start im Hintergrund prüfen
+  const el = $('cloud-status'), btn = $('btn-cloud');
+  if (!s?.error) cloudEmail = s?.email || null;
+  if (s?.error) { el.textContent = 'Fehler: ' + s.error; el.className = 'text-sm text-red-600 dark:text-red-400'; }
+  else if (cloudEmail) { el.textContent = 'Angemeldet als ' + cloudEmail + ' – Synchronisation aktiv.' + (s?.note ? ' ' + s.note + '.' : ''); el.className = 'text-sm text-emerald-700 dark:text-emerald-400'; }
+  else { el.textContent = 'Nicht angemeldet – Daten nur auf diesem Gerät.'; el.className = 'text-sm text-slate-500 dark:text-slate-400'; }
+  btn.textContent = cloudEmail ? 'Abmelden' : 'Mit Google anmelden';
+  paintUserBoxes();
+};
+/* Anmeldung kommt erst nach dem Start (Firebase): Konto-Zeilen in Schnellmenü und Einstellungs-Menü dann nachziehen – sonst bleibt am PC „Nicht angemeldet“ stehen */
+function paintUserBoxes() { try { renderNavUser(); } catch (e) { } try { renderDrawerUser(); } catch (e) { } }
+$('btn-help').addEventListener('click', () => $('help-dialog').classList.remove('hidden'));
+$('help-close').addEventListener('click', () => $('help-dialog').classList.add('hidden'));
+$('help-dialog').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden'); });   // Tippen neben das Fenster schließt
+$('btn-cloud').addEventListener('click', async () => {
+  if (!window.cloud) { alert('Firebase konnte nicht geladen werden (offline?).'); return; }
+  try { cloudEmail ? await window.cloud.logout() : await window.cloud.login(); }
+  catch (e) { window.onCloudStatus({ error: e.code || e.message }); }
+});
+setTimeout(() => { if (!window.cloud) $('cloud-status').textContent = 'Cloud-Sync nicht verfügbar (Firebase nicht geladen).'; }, 4000);
+
+/* Service Worker registrieren (funktioniert nur über https:// oder localhost, nicht über file://) */
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(err => console.warn('Service Worker:', err)));
+}
+
+/* =====================================================================
+   Monatsbericht (Tab "Berichte")
+   Alle Zahlen kommen aus monthReport(jahr, monat) – die Ansicht rechnet nichts selbst.
+   Zuordnung der Ladungen nach Ablesedatum (wie im Verbrauchs-Diagramm).
+   ===================================================================== */
+const MONTHS_LONG = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+const KEY_REPORT_SEEN = 'enyaq.reportSeen';
+let reportYM = null;                                      // { y, m } des angezeigten Monats; null = Standardmonat beim nächsten Öffnen
+const ymKey = (y, m) => y + '-' + pad2(m + 1);
+/* Hinweis-Status geräteübergreifend: in den Einstellungen (Cloud-Dokument) gespeichert, damit „gesehen/erledigt“ auf allen Geräten gilt.
+   nRep = Monatsbericht gesehen (JJJJ-MM), nTrips = Fahrtenbuch-Hinweis ausgeblendet (JJJJ-MM), nBakYm/nBakAt = letzte Sicherung, nBakSnz = Sicherung heute ausgeblendet */
+function nagSet(obj) { const st = load(KEY_SETTINGS, {}) || {}; Object.assign(st, obj); save(KEY_SETTINGS, st); try { pushPrefs(); } catch (e) { } }
+const maxStr = (...a) => a.filter(Boolean).sort().pop() || '';
+const sgn = (n, d = 1) => (n > 0.0001 ? '+' : n < -0.0001 ? '−' : '±') + fmt(Math.abs(n), d);
+const isoWeek = (d) => {                                  // ISO-Kalenderwoche
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())), day = t.getUTCDay() || 7;
+  t.setUTCDate(t.getUTCDate() + 4 - day);
+  return Math.ceil(((t - Date.UTC(t.getUTCFullYear(), 0, 1)) / 86400000 + 1) / 7);
+};
+
+function monthReport(y, m, place = 'home') {
+  const rs = getReadings(), s = new Date(y, m, 1), e = new Date(y, m + 1, 1), wk = new Map();
+  for (let d = new Date(s); d < e; d.setDate(d.getDate() + 1)) { const k = isoWeek(d); if (!wk.has(k)) wk.set(k, 0); }
+  const o = { y, m, place, charges: [], kwh: 0, cost: 0, km: 0, kwhKm: 0, costKm: 0, nKm: 0, chg: 0, stored: 0, nSoc: 0, lossCost: 0, kwhP: 0, costP: 0 }, idx = [];
+  rs.forEach((r, i) => {
+    const d = new Date(r.date);
+    if (!inView(r, place) || isStartRow(rs, i) || !(d >= s && d < e)) return;   // der erste Zuhause-Eintrag (ohne Reset) ist nur der Startwert
+    const st = entryStats(rs, i), c = r.consumedSinceLast, u = unitOf(r);
+    o.kwh += c; o.cost += r.cost;
+    wk.set(isoWeek(d), (wk.get(isoWeek(d)) || 0) + c);
+    if (isCharge(rs, i)) o.charges.push({ r, d, st });
+    if (u != null && c > 0) { o.kwhP += c; o.costP += c * u; }                      // Ø Preis nur aus Ladungen mit kWh und Preis
+    idx.push(i);
+    if (st.stored !== undefined) { o.chg += c; o.stored += st.stored; o.nSoc++; o.lossCost += (c - st.stored) * (u ?? 0); }
+  });
+  o.weeks = [...wk].map(([kw, kwh]) => ({ kw, kwh }));
+  const t = consumptionTotals(rs, idx);                   // Verbrauch aus der Akku-Entnahme (falls Akku-% erfasst), sonst grob
+  o.km = t.km; o.kwhKm = t.kwh; o.costKm = t.cost; o.nKm = t.n; o.approx = t.approx;
+  o.kwh100 = t.km ? t.kwh100 : null;
+  o.cost100 = t.cost100;
+  o.loss = o.chg > 0 ? Math.max(0, (1 - o.stored / o.chg) * 100) : null;
+  o.lossCost = Math.max(0, o.lossCost);
+  o.price = o.kwhP > 0 ? o.costP / o.kwhP : null;
+  return o;
+}
+/** Hat der Monat bei irgendeinem Ladeort Ladungen? (für Hinweiskarte und Standardmonat) */
+const costsIn = (y, m) => getCosts().filter(c => { const d = new Date(c.date); return d.getFullYear() === y && d.getMonth() === m; });
+const monthHasCharges = (y, m) => PLACE_KEYS.some(k => monthReport(y, m, k).charges.length > 0) || costsIn(y, m).length > 0;
+
+const prevMonthOf = (d = new Date()) => new Date(d.getFullYear(), d.getMonth() - 1, 1);
+function defaultReportMonth() {                           // Standard: laufender Monat, wenn er Ladungen hat; sonst der Vormonat
+  const n = new Date(), p = prevMonthOf(n), cur = { y: n.getFullYear(), m: n.getMonth() };
+  if (monthHasCharges(cur.y, cur.m)) return cur;
+  return monthHasCharges(p.getFullYear(), p.getMonth()) ? { y: p.getFullYear(), m: p.getMonth() } : cur;
+}
+function markReportSeen(y, m) {
+  const p = prevMonthOf();
+  if (y === p.getFullYear() && m === p.getMonth()) { save(KEY_REPORT_SEEN, ymKey(y, m)); if (getSettings().nRep !== ymKey(y, m)) nagSet({ nRep: ymKey(y, m) }); }
+}
+
+/** Hinweiskarte auf dem Dashboard, solange der Bericht des Vormonats noch nicht angesehen wurde. */
+function renderReportBanner() {
+  const el = $('report-banner'), p = prevMonthOf(), key = ymKey(p.getFullYear(), p.getMonth());
+  const show = maxStr(load(KEY_REPORT_SEEN, ''), getSettings().nRep) < key && monthHasCharges(p.getFullYear(), p.getMonth());
+  el.classList.toggle('hidden', !show);
+  if (show) $('report-banner-text').textContent = 'Dein Bericht für ' + MONTHS_LONG[p.getMonth()] + ' ist fertig';
+}
+/** Import-Erinnerung Fahrtenbuch: ab dem 1. eines Monats, solange die neueste Fahrt älter als die letzten 3 Tage des Vormonats ist
+    (= Vormonat noch nicht importiert). Nur wenn das Fahrtenbuch schon genutzt wird; „×“ blendet sie für den laufenden Monat aus. */
+const KEY_TRIPS_NAG = 'enyaq.tripsNagHidden';
+function renderTripsBanner() {
+  const el = $('trips-banner'); if (!el || typeof getTrips !== 'function') return;
+  const n = new Date(), mKey = ymKey(n.getFullYear(), n.getMonth()), trips = getTrips();
+  const newest = trips.reduce((a, t) => Math.max(a, Date.parse(t.e) || 0), 0), cut = new Date(n.getFullYear(), n.getMonth(), 1).getTime() - 3 * 864e5;
+  const show = trips.length > 0 && newest < cut && maxStr(load(KEY_TRIPS_NAG, ''), getSettings().nTrips) < mKey;
+  el.classList.toggle('hidden', !show);
+  if (show) { const p = prevMonthOf(); $('trips-banner-text').textContent = 'Fahrtenbuch für ' + MONTHS_LONG[p.getMonth()] + ' importieren'; }
+}
+$('trips-banner-go').addEventListener('click', () => { openSettings('fahrten'); setTimeout(() => $('btn-trips').scrollIntoView({ behavior: 'smooth', block: 'center' }), 80); });
+$('trips-banner-x').addEventListener('click', () => { const n = new Date(), k = ymKey(n.getFullYear(), n.getMonth()); save(KEY_TRIPS_NAG, k); nagSet({ nTrips: k }); renderTripsBanner(); });
+$('report-banner').addEventListener('click', () => { const p = prevMonthOf(); reportYM = { y: p.getFullYear(), m: p.getMonth() }; showView('report'); });
+
+/** km, die im Monat gefahren wurden: aus den km-Ständen von Ladungen und Kosten (letzter Stand im Monat minus letzter Stand davor). */
+function kmDrivenIn(y, m) {
+  const pts = getReadings().filter(r => r.odometerKm > 0).map(r => [Date.parse(r.date), r.odometerKm])
+    .concat(getCosts().filter(c => c.odometerKm > 0).map(c => [Date.parse(c.date), c.odometerKm])).sort((a, b) => a[0] - b[0]);
+  const s0 = new Date(y, m, 1).getTime(), e0 = new Date(y, m + 1, 1).getTime();
+  const inM = pts.filter(q => q[0] >= s0 && q[0] < e0); if (!inM.length) return null;
+  const before = pts.filter(q => q[0] < s0), b = before[before.length - 1];
+  const base = b && s0 - b[0] < 45 * 86400000 ? b[1] : inM[0][1];                       // Stand vor dem Monat nur, wenn er nicht zu alt ist
+  const km = inM[inM.length - 1][1] - base; return km > 0 ? km : null;
+}
+/** Gesamtkosten eines Monats: Laden (alle Orte) + Kosten − Einnahmen. */
+function costTotals(y, m) {
+  const laden = monthReport(y, m, 'all').cost, cs = costsIn(y, m);
+  const other = cs.reduce((a, c) => a + Math.max(0, costAmt(c)), 0), income = -cs.reduce((a, c) => a + Math.min(0, costAmt(c)), 0);
+  return { laden, other, income, total: laden + other - income, cs };
+}
+function renderCostReport(y, m, cur) {
+  const t = costTotals(y, m), py = m === 0 ? y - 1 : y, pm = m === 0 ? 11 : m - 1, p = costTotals(py, pm);
+  const nCharges = monthReport(y, m, 'all').charges.length, empty = !nCharges && !t.cs.length;
+  $('rk-empty').classList.toggle('hidden', !empty); $('rk-body').classList.toggle('hidden', empty);
+  if (empty) return;
+  $('rk-total').textContent = fmt(t.total, 2);
+  const dl = $('rk-delta');
+  if (cur) { dl.textContent = 'Zwischenstand bis heute'; dl.className = 'text-sm mt-2 text-slate-500 dark:text-slate-400'; }
+  else if (p.total > 0) {
+    const d = t.total - p.total, pct = Math.abs(d) / p.total * 100;
+    dl.textContent = (d <= 0 ? '▼ ' : '▲ ') + eur(Math.abs(d)) + ' (' + fmt(pct, 0) + ' %) ' + (d <= 0 ? 'weniger' : 'mehr') + ' als ' + MONTHS_LONG[pm];
+    dl.className = 'text-sm mt-2 ' + (d <= 0 ? GOOD : BAD);
+  } else { dl.textContent = ''; }
+  $('rk-laden').textContent = eur(t.laden); $('rk-other').textContent = eur(t.other); $('rk-income').textContent = t.income > 0 ? '+' + eur(t.income) : '–';
+
+  const rows = [], byCat = new Map();                                                    // Verteilung: Laden + Kategorien (nur Ausgaben)
+  t.cs.forEach(c => { const a = costAmt(c); if (a > 0) byCat.set(c.category || 'Ohne Kategorie', (byCat.get(c.category || 'Ohne Kategorie') || 0) + a); });
+  if (t.laden > 0) rows.push({ n: 'Laden', v: t.laden, cls: 'bg-emerald-500' });
+  [...byCat].forEach(([n, v]) => rows.push({ n, v, cls: 'bg-sky-500' }));
+  rows.sort((a, b) => b.v - a.v);
+  const sum = rows.reduce((a, r) => a + r.v, 0), max = rows[0]?.v || 1;
+  $('rk-cats').innerHTML = rows.length ? rows.map(r => `<div class="py-1.5"><div class="flex justify-between items-baseline text-sm gap-3"><span class="truncate">${esc(r.n)}</span><span class="font-medium whitespace-nowrap">${eur(r.v)} <span class="text-xs font-normal text-slate-500 dark:text-slate-400">${fmt(r.v / sum * 100, 0)} %</span></span></div><div class="h-2 mt-1 rounded bg-slate-100 dark:bg-slate-800 overflow-hidden"><div class="h-full rounded ${r.cls}" style="width:${(r.v / max * 100).toFixed(1)}%"></div></div></div>`).join('')
+                                       : '<p class="text-sm text-slate-500 dark:text-slate-400">Keine Ausgaben in diesem Monat.</p>';
+
+  const km = kmDrivenIn(y, m);                                                            // pro 100 km (Einnahmen sind abgezogen)
+  $('rk-km').textContent = km ? fmt(km, 0) : '–';
+  $('rk-100').textContent = km ? eur(t.total / km * 100) : '–';
+  $('rk-100o').textContent = km ? eur((t.total - t.laden) / km * 100) : '–';
+  $('rk-km-note').textContent = km ? 'km aus den erfassten km-Ständen von Ladungen und Kosten. Einnahmen sind abgezogen.' : 'Für diesen Monat fehlen km-Stände (bei Ladungen oder Kosten eintragen).';
+
+  let ytd = 0, ytdLaden = 0, ytdOther = 0;                                                // Jahr bisher
+  for (let mm = 0; mm <= m; mm++) { const q = costTotals(y, mm); ytd += q.total; ytdLaden += q.laden; ytdOther += q.other - q.income; }
+  $('rk-ytd').innerHTML = repRow('Gesamtkosten ' + y, eur(ytd)) + repRow('davon Laden', eur(ytdLaden)) + repRow('davon Kosten (netto)', eur(ytdOther)) + repRow('Ø pro Monat', eur(ytd / (m + 1)));
+
+  const list = t.cs.slice().sort((a, b) => new Date(b.date) - new Date(a.date));
+  $('rk-list').innerHTML = list.length ? list.map(c => { const a = costAmt(c), d = new Date(c.date);
+    return `<div class="flex justify-between items-baseline gap-3 text-sm py-1.5 border-t first:border-t-0 border-slate-200 dark:border-slate-800"><span class="min-w-0"><span class="text-slate-500 dark:text-slate-400">${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.</span> <span class="break-words">${esc(c.title || 'Kosten')}</span>${c.category ? ` <span class="text-xs text-slate-500 dark:text-slate-400">· ${esc(c.category)}</span>` : ''}</span><span class="font-medium whitespace-nowrap ${a < 0 ? GOOD : ''}">${a < 0 ? '+' : ''}${eur(Math.abs(a))}</span></div>`; }).join('')
+    : '<p class="text-sm text-slate-500 dark:text-slate-400">Keine Kosten außer Laden.</p>';
+}
+document.querySelectorAll('.rep-mode-btn').forEach(b => b.addEventListener('click', () => { repMode = b.dataset.mode; renderReport(); }));
+
+const repRow = (k, v, cls = '') => `<div class="flex justify-between items-baseline gap-3 text-sm py-1.5 border-t first:border-t-0 border-slate-200 dark:border-slate-800"><span class="text-slate-500 dark:text-slate-400">${k}</span><span class="font-medium text-right ${cls}">${v}</span></div>`;
+const GOOD = 'text-emerald-600 dark:text-emerald-400', BAD = 'text-amber-600 dark:text-amber-400';
+
+function renderReport() {
+  if (!reportYM) reportYM = defaultReportMonth();
+  const { y, m } = reportYM, rs = getReadings(), n = new Date(), cur = y === n.getFullYear() && m === n.getMonth();
+  const r = monthReport(y, m, repPlace), py = m === 0 ? y - 1 : y, pm = m === 0 ? 11 : m - 1, p = monthReport(py, pm, repPlace);
+  const dates = rs.map(x => Date.parse(x.date)).concat(getCosts().map(c => Date.parse(c.date)), getTrips().map(t => Date.parse(t.s))).filter(Number.isFinite);
+  const first = dates.length ? new Date(Math.min(...dates)) : n;                     // frühester Eintrag (Ladung oder Kosten)
+  $('rep-prev').disabled = !(y > first.getFullYear() || (y === first.getFullYear() && m > first.getMonth()));
+  $('rep-next').disabled = cur;
+  $('rep-title').textContent = MONTHS_LONG[m] + ' ' + y;
+  $('rep-sub').textContent = (cur ? 'Zwischenstand bis heute' : 'Monatsbericht') + ' · ' + VIEWS[repPlace];
+  segPaint('.rep-place-btn', repPlace);
+  $('rep-print-app').textContent = getSettings().title || DEFAULT_TITLE;
+  markReportSeen(y, m);
+  segPaintKey('.rep-mode-btn', 'mode', repMode);
+  $('rep-laden').classList.toggle('hidden', repMode !== 'laden'); $('rep-kosten').classList.toggle('hidden', repMode !== 'kosten'); $('rep-fahrten').classList.toggle('hidden', repMode !== 'fahrten');
+  $('rep-head').classList.toggle('hidden', repMode === 'akku' || repMode === 'stat'); $('rep-akku').classList.toggle('hidden', repMode !== 'akku'); $('rep-stat').classList.toggle('hidden', repMode !== 'stat');
+  if (repMode === 'stat') { renderStat(); return; }
+  if (repMode === 'fahrten') { renderTripReport(y, m); return; }
+  if (repMode === 'akku') { renderBattery(); return; }
+  if (repMode === 'kosten') { $('rep-sub').textContent = (cur ? 'Zwischenstand bis heute' : 'Kostenbericht') + ' · Laden + Kosten'; renderCostReport(y, m, cur); return; }
+
+  const empty = !r.charges.length;
+  $('rep-empty-t').textContent = 'Keine Ladungen' + whereTxt(repPlace) + ' in diesem Monat';
+  $('rep-empty-s').textContent = repPlace === 'home' || repPlace === 'all' ? 'Sobald du eine Ladung erfasst, erscheint hier der Bericht.' : 'Sobald du eine Ladung bei „' + PLACES[repPlace] + '“ erfasst, erscheint hier der Bericht.';
+  $('rep-empty').classList.toggle('hidden', !empty); $('rep-body').classList.toggle('hidden', empty);
+  if (empty) return;
+
+  /* Kopf: Kosten und Vergleich bzw. Hochrechnung */
+  const dim = new Date(y, m + 1, 0).getDate(), days = Math.max(1, (Date.now() - new Date(y, m, 1)) / 86400000), proj = r.cost / days * dim;
+  $('rep-cost').textContent = fmt(r.cost, 2);
+  const dl = $('rep-delta');
+  if (cur) { dl.textContent = 'Hochrechnung bis Monatsende: ca. ' + eur(proj); dl.className = 'text-sm mt-2 text-slate-500 dark:text-slate-400'; }
+  else if (p.cost > 0) {
+    const pct = (r.cost / p.cost - 1) * 100;
+    dl.textContent = (pct <= 0 ? '↓ ' + fmt(-pct, 0) + ' % günstiger' : '↑ ' + fmt(pct, 0) + ' % teurer') + ' als im ' + MONTHS_LONG[pm] + ' (' + eur(p.cost) + ')';
+    dl.className = 'text-sm mt-2 ' + (pct <= 0 ? GOOD : BAD);
+  } else { dl.textContent = 'Kein Vormonat zum Vergleich'; dl.className = 'text-sm mt-2 text-slate-500 dark:text-slate-400'; }
+
+  $('rep-kwh').textContent = fmt(r.kwh, 1);
+  const nk = r.charges.filter(c => c.r.consumedSinceLast > 0).length;               // Bosch/Unterwegs: kWh sind optional
+  $('rep-n').textContent = r.charges.length; $('rep-n-sub').textContent = nk ? 'Ø ' + fmt(r.kwh / nk, 1) + ' kWh' : 'ohne kWh-Angabe';
+  $('rep-price').textContent = r.price != null ? fmt(r.price, 3) : '–';
+
+  /* Wochenverlauf */
+  const max = Math.max(1, ...r.weeks.map(w => w.kwh)), top = Math.max(...r.weeks.map(w => w.kwh));
+  $('rep-weeks').innerHTML = `<div class="flex items-end gap-2 h-[120px]">${r.weeks.map(w => `<div class="flex-1 text-center"><div class="text-xs ${w.kwh === top ? 'font-semibold' : 'text-slate-500 dark:text-slate-400'}">${w.kwh > 0 ? fmt(w.kwh, 1) : '–'}</div><div class="rounded" style="height:${Math.max(2, Math.round(w.kwh / max * 90))}px;background:${w.kwh === top ? '#1D9E75' : '#5DCAA5'}"></div></div>`).join('')}</div>`
+    + `<div class="flex gap-2 mt-1">${r.weeks.map(w => `<span class="flex-1 text-center text-xs text-slate-500 dark:text-slate-400">KW ${w.kw}</span>`).join('')}</div>`;
+
+  /* Effizienz */
+  $('rep-kwh100').textContent = r.kwh100 != null ? fmt(r.kwh100, 1) : '–';
+  $('rep-cost100').textContent = r.cost100 != null ? fmt(r.cost100, 2) : '–';
+  $('rep-loss').textContent = r.loss != null ? fmt(r.loss, 0) + ' %' : '–';
+  $('rep-eff-note').textContent = (r.km ? fmt(r.km, 0) + ' km gefahren' : 'Kein km-Stand erfasst') + (r.approx ? ' · Verbrauch grob (ohne Akku-%)' : '') + (r.loss != null ? ' · Verlust kostete ca. ' + eur(r.lossCost) : '');
+
+  /* Vergleich + Jahr */
+  let ytdCost = 0, ytdKwh = 0, ytdMonths = 0;
+  for (let mm = 0; mm <= m; mm++) { const q = monthReport(y, mm, repPlace); if (q.charges.length) { ytdCost += q.cost; ytdKwh += q.kwh; ytdMonths++; } }
+  const rows = [];
+  if (p.charges.length && cur) {
+    rows.push(repRow('Kosten ' + MONTHS_LONG[pm] + ' (gesamt)', eur(p.cost)), repRow('kWh ' + MONTHS_LONG[pm] + ' (gesamt)', fmt(p.kwh, 1) + ' kWh'), repRow('Hochrechnung dieser Monat', 'ca. ' + eur(proj)));
+  } else if (p.charges.length) {
+    rows.push(repRow('Kosten zum Vormonat', sgn(r.cost - p.cost, 2) + ' € (' + sgn((r.cost / p.cost - 1) * 100, 0) + ' %)', r.cost <= p.cost ? GOOD : BAD),
+              repRow('kWh zum Vormonat', sgn(r.kwh - p.kwh, 1) + ' kWh', r.kwh <= p.kwh ? GOOD : BAD));
+    if (r.kwh100 != null && p.kwh100 != null) rows.push(repRow('Verbrauch zum Vormonat', sgn(r.kwh100 - p.kwh100, 1) + ' kWh/100 km', r.kwh100 <= p.kwh100 ? GOOD : BAD));
+  } else rows.push(repRow('Vormonat', 'keine Daten'));
+  rows.push(repRow('Ø Monatskosten ' + y, eur(ytdCost / ytdMonths)));
+  $('rep-compare').innerHTML = rows.join('');
+
+  /* Highlights */
+  const big = r.charges.reduce((a, b) => b.r.consumedSinceLast > a.r.consumedSinceLast ? b : a);
+  const wd = [0, 0, 0, 0, 0, 0, 0]; r.charges.forEach(c => wd[c.d.getDay()]++);
+  const wdTop = wd.indexOf(Math.max(...wd));
+  const hc = r.charges.filter(c => isHome(c.r));                                  // Ladedauer gibt es nur für Zähler-Ladungen zuhause
+  const avgMin = hc.reduce((s, c) => s + (realMsOf(c.r) ? realMsOf(c.r) / 60000 : c.r.consumedSinceLast / chargePowerKw() * 60), 0) / (hc.length || 1);
+  $('rep-high').innerHTML = (big.r.consumedSinceLast > 0 ? repRow('Größte Ladung', fmt(big.r.consumedSinceLast, 1) + ' kWh' + (big.r.cost > 0 ? ' · ' + eur(big.r.cost) : '') + ' (KW ' + isoWeek(big.d) + ')') : '')
+    + repRow('Häufigster Ladetag', WEEKDAYS[wdTop] + ' (' + wd[wdTop] + ' von ' + r.charges.length + ')')
+    + (hc.length ? repRow('Ø Ladedauer' + (repPlace === 'all' ? ' (Zuhause)' : ''), durHm(avgMin * 60000) + ' h') : '')
+    + repRow('Jahr bisher', eur(ytdCost) + ' · ' + fmt(ytdKwh, 0) + ' kWh');
+
+  /* Hinweise zur Datenbasis */
+  const msgs = [], nc = r.charges.length;
+  if (r.nKm === 0) msgs.push('Kein km-Stand erfasst – Verbrauch pro 100 km nicht berechenbar.');
+  else if (r.nKm < nc) msgs.push('Bei ' + (nc - r.nKm) + ' von ' + nc + ' Ladungen fehlt der km-Stand, der Verbrauch beruht auf ' + r.nKm + ' Ladungen.');
+  if (r.nSoc > 0 && r.nSoc < nc) msgs.push('Der Ladeverlust beruht auf ' + r.nSoc + ' von ' + nc + ' Ladungen.');
+  const noKwh = r.charges.filter(c => !isHome(c.r) && !(c.r.consumedSinceLast > 0)).length;
+  if (noKwh) msgs.push(noKwh + (noKwh === 1 ? ' Ladung' : ' Ladungen') + ' bei Bosch/Unterwegs ohne kWh-Angabe: nicht in kWh und Kosten enthalten.');
+  const ign = new Set(load(DQ_KEY, [])), s0 = new Date(y, m, 1), e0 = new Date(y, m + 1, 1);
+  const dq = rs.length > 1 ? dataChecks(rs).filter(f => { const d = new Date(rs[f.i].date); return !ign.has(f.id + ':' + f.code) && d >= s0 && d < e0; }).length : 0;
+  if (dq) msgs.push(dq + (dq === 1 ? ' Hinweis' : ' Hinweise') + ' aus der Datenprüfung offen.');
+  $('rep-hint').textContent = msgs.join(' '); $('rep-hint').classList.toggle('hidden', !msgs.length);
+
+  /* Ladeliste (nur im PDF/Druck sichtbar) */
+  const th = 'text-left font-medium py-1 border-b border-slate-300', td = 'py-1 border-b border-slate-200';
+  $('rep-list').innerHTML = `<p class="text-sm mb-2">Alle Ladungen im ${MONTHS_LONG[m]} ${y}</p><table class="w-full text-xs"><thead><tr><th class="${th}">Datum</th>${repPlace === 'all' ? `<th class="${th}">Ort</th>` : ''}<th class="${th} text-right">kWh</th><th class="${th} text-right">Kosten</th><th class="${th} text-right">Dauer</th><th class="${th} text-right">km</th></tr></thead><tbody>`
+    + r.charges.map(c => `<tr><td class="${td}">${c.d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}, ${c.d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}</td>${repPlace === 'all' ? `<td class="${td}">${PLACES[placeOf(c.r)]}</td>` : ''}<td class="${td} text-right">${c.r.consumedSinceLast > 0 ? fmt(c.r.consumedSinceLast, 1) : '–'}</td><td class="${td} text-right">${isHome(c.r) || c.r.cost > 0 || (c.r.consumedSinceLast > 0 && c.r.pricePerKwh != null) ? eur(c.r.cost) : '–'}</td><td class="${td} text-right">${isHome(c.r) ? chargeDurationOf(c.r) : '–'}</td><td class="${td} text-right">${c.st.km ? fmt(c.st.km, 0) : '–'}</td></tr>`).join('')
+    + `<tr class="font-semibold"><td class="py-1">Summe</td>${repPlace === 'all' ? '<td></td>' : ''}<td class="py-1 text-right">${fmt(r.kwh, 1)}</td><td class="py-1 text-right">${eur(r.cost)}</td><td></td><td class="py-1 text-right">${r.km ? fmt(r.km, 0) : '–'}</td></tr></tbody></table>`;
+}
+document.querySelectorAll('.rep-place-btn').forEach(b => b.addEventListener('click', () => { repPlace = b.dataset.place; renderReport(); }));
+$('rep-prev').addEventListener('click', () => { const d = new Date(reportYM.y, reportYM.m - 1, 1); reportYM = { y: d.getFullYear(), m: d.getMonth() }; renderReport(); });
+$('rep-next').addEventListener('click', () => { const d = new Date(reportYM.y, reportYM.m + 1, 1); reportYM = { y: d.getFullYear(), m: d.getMonth() }; renderReport(); });
+
+/* PDF: Druckdialog des Geräts (dort „Als PDF sichern“); Dateiname = Dokumenttitel */
+$('rep-pdf').addEventListener('click', async () => {
+  document.body.classList.remove('print-akte'); const old = document.title; document.title = 'Ladebericht ' + $('rep-title').textContent;
+  const swaps = [...document.querySelectorAll('#view-report canvas')].filter(c => c.offsetWidth > 0 && c.width > 0).map(c => { const im = new Image(); im.src = c.toDataURL('image/png'); im.className = 'cv-print'; im.style.cssText = 'width:100%;height:auto;max-width:100%'; im.alt = c.getAttribute('aria-label') || 'Diagramm'; c.classList.add('cv-src'); c.after(im); return im; });   // Diagramme als Bilder drucken (Canvas bleibt sonst gern leer)
+  await Promise.all(swaps.map(i => i.decode ? i.decode().catch(() => { }) : Promise.resolve())); await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+  window.addEventListener('afterprint', () => { document.title = old; swaps.forEach(i => i.remove()); document.querySelectorAll('#view-report .cv-src').forEach(c => c.classList.remove('cv-src')); }, { once: true });
+  window.print();
+});
+
+/* Bild: Zusammenfassung auf Canvas zeichnen, per Teilen-Dialog senden (sonst als PNG herunterladen) */
+$('rep-img').addEventListener('click', () => {
+  const W = 1080, H = 1420, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const g = cv.getContext('2d'), F = 'system-ui, -apple-system, "Segoe UI", sans-serif', txt = (id) => $(id).textContent;
+  const box = (x, y, w, h, col, r = 32) => { g.fillStyle = col; g.beginPath(); g.roundRect ? g.roundRect(x, y, w, h, r) : g.rect(x, y, w, h); g.fill(); };
+  const t = (s, x, y, size, col, wt = 400, al = 'left', font = F) => { g.font = wt + ' ' + size + 'px ' + font; g.fillStyle = col; g.textAlign = al; g.fillText(s, x, y); };
+  box(0, 0, W, H, '#f1f5f9', 0);
+  t(txt('rep-title'), 60, 100, 60, '#0f172a', 600); t((getSettings().title || DEFAULT_TITLE) + ' · ' + txt('rep-sub'), 60, 150, 30, '#64748b');
+  box(60, 190, 960, 290, '#fff'); t('Ladekosten im Monat', 100, 250, 30, '#64748b');
+  t(txt('rep-cost') + ' €', 100, 365, 110, '#059669', 600);
+  t(txt('rep-delta'), 100, 445, 30, /↓/.test(txt('rep-delta')) ? '#059669' : /↑/.test(txt('rep-delta')) ? '#d97706' : '#64748b');
+  [['Geladen', 'rep-kwh', 'kWh'], ['Ladungen', 'rep-n', txt('rep-n-sub')], ['Ø Preis', 'rep-price', '€/kWh']].forEach(([l, id, sub], i) => {
+    const x = 60 + i * 330; box(x, 510, 300, 190, '#fff', 28); t(l, x + 28, 560, 26, '#64748b'); t(txt(id), x + 28, 630, 54, '#0f172a', 600); t(sub, x + 28, 674, 24, '#64748b');
+  });
+  box(60, 730, 960, 250, '#fff'); t('Effizienz', 100, 790, 30, '#64748b');
+  [['kWh/100 km', 'rep-kwh100', '#ecfdf5', '#047857'], ['€/100 km', 'rep-cost100', '#f0f9ff', '#0369a1'], ['Ladeverlust', 'rep-loss', '#fffbeb', '#b45309']].forEach(([l, id, bg, fg], i) => {
+    const x = 100 + i * 300; box(x, 815, 270, 105, bg, 20); t(l, x + 135, 850, 24, '#64748b', 400, 'center'); t(txt(id), x + 135, 900, 44, fg, 600, 'center');
+  });
+  t(txt('rep-eff-note'), 100, 955, 26, '#64748b');
+  const cmp = [...$('rep-compare').children].map(el => [el.children[0].textContent, el.children[1].textContent]).slice(0, 4), h = 90 + cmp.length * 62;
+  box(60, 1010, 960, h, '#fff'); t('Vergleich', 100, 1070, 30, '#64748b');
+  cmp.forEach(([k, v], i) => { t(k, 100, 1130 + i * 62, 30, '#475569'); t(v, 980, 1130 + i * 62, 30, '#0f172a', 500, 'right'); });
+  t('Erstellt mit ' + (getSettings().title || DEFAULT_TITLE), W / 2, H - 40, 24, '#94a3b8', 400, 'center');
+  cv.toBlob(async (blob) => {
+    if (!blob) { flash($('rep-msg'), 'Bild konnte nicht erstellt werden.', false); $('rep-msg').classList.remove('hidden'); return; }
+    const name = 'ladebericht-' + ymKey(reportYM.y, reportYM.m) + '.png', file = new File([blob], name, { type: 'image/png' });
+    try {
+      if (navigator.canShare?.({ files: [file] })) { await navigator.share({ files: [file], title: 'Ladebericht ' + txt('rep-title') }); return; }
+    } catch (e) { if (e.name === 'AbortError') return; }                       // abgebrochen = nichts tun, sonst Download
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    flash($('rep-msg'), 'Bild gespeichert.', true); $('rep-msg').classList.remove('hidden');
+  }, 'image/png');
+});
+
+if (getLive()) tickLive();                              // Live-Modus nach Neuladen fortsetzen
+$('scan-card').classList.toggle('hidden', !ENABLE_AI_SCAN);
+setCapPlace(capPlace);                                   // Reiter "Zuhause" gleich beim Start hervorheben
+bookRecurring();                                         // fällige wiederkehrende Kosten nachbuchen
+initCarousel();                                          // Enyaq1–5 laden (asynchron)
+
+/* =====================================================================
+   Jahrestag des Kaufs: Festkarte mit Konfetti. Erscheint am Jahrestag des Kauftags (ab dem 1. Jahr)
+   bei jedem Öffnen der App und wenn die App nach mindestens 5 Minuten wieder in den Vordergrund kommt.
+   Wurde sie am Jahrestag nicht gesehen, erscheint sie innerhalb von 7 Tagen einmal nachträglich.
+   Kauf am 29.02.: in Nicht-Schaltjahren am 28.02. Fahrzeugalter monatsgenau ab Baujahr (MM/JJJJ).
+   ===================================================================== */
+const BD_LATE = 7, KEY_BDSEEN = 'enyaq.bdSeen';            // Frist für die nachträgliche Gratulation (Tage)
+const BD_ORD = ['ersten', 'zweiten', 'dritten', 'vierten', 'fünften', 'sechsten', 'siebten', 'achten', 'neunten', 'zehnten'];
+function bdInfo(today = new Date()) {
+  const [py, pm, pd] = purchaseDay().split('-').map(Number), t0 = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const ann = (y) => new Date(y, pm - 1, Math.min(pd, new Date(y, pm, 0).getDate()));   // Jahrestag im Jahr y (29.02. → 28.02.)
+  let y = today.getFullYear(), A = ann(y); if (A > t0) { y--; A = ann(y); }               // letzter Jahrestag bis heute
+  const years = y - py, late = Math.round((t0 - A) / 864e5);
+  if (years < 1 || late > BD_LATE) return null;
+  const key = y + '-' + pm;
+  if (late > 0 && load(KEY_BDSEEN, '') === key) return null;                              // nachträglich nur einmal
+  const ym = /^(0[1-9]|1[0-2])\/(\d{4})$/.exec((getSettings().year || '').trim());
+  const ageM = ym ? (y * 12 + pm) - (+ym[2] * 12 + +ym[1]) : null;
+  return { years, py, pm, pd, ym: ym ? ym[0] : null, ageM, late, key, day: A, from: ann(y - 1).getTime(), to: A.getTime() };
+}
+const bdUnit = (n, one, many) => n + ' <span class="text-xl">' + (n === 1 ? one : many) + '</span>';
+let bdShown = 0, bdHidden = 0;
+async function showBirthday() {
+  const b = bdInfo(); if (!b || !$('wr-ov').classList.contains('hidden')) return;
+  const set = getSettings(), name = (set.model || '').trim() || 'Enyaq';
+  $('bd-name').textContent = name.split(/\s+/)[0] || 'Enyaq';
+  $('bd-date').textContent = (b.late ? 'Nachträglich · ' : '') + b.day.toLocaleDateString('de-DE', { day: 'numeric', month: 'long', year: 'numeric' });
+  save(KEY_BDSEEN, b.key);
+  $('bd-own').innerHTML = bdUnit(b.years, 'Jahr', 'Jahre');
+  $('bd-own-s').textContent = 'seit ' + String(b.pd).padStart(2, '0') + '.' + String(b.pm).padStart(2, '0') + '.' + b.py;
+  const hasAge = b.ageM != null && b.ageM >= 0;
+  $('bd-age-tile').classList.toggle('hidden', !hasAge); $('bd-tiles').classList.toggle('grid-cols-2', hasAge);
+  if (hasAge) {
+    const J = Math.floor(b.ageM / 12), M = b.ageM % 12;
+    $('bd-age').innerHTML = J && M ? J + ' <span class="text-xl">J.</span> ' + M + ' <span class="text-xl">Mon.</span>' : J ? bdUnit(J, 'Jahr', 'Jahre') : bdUnit(M, 'Monat', 'Monate');
+    $('bd-age-s').textContent = 'Baujahr ' + b.ym;
+  }
+  /* Bilanz des zurückliegenden Jahres: Kilometer und Ladungen */
+  const km = rangeKm(b.from, b.to), rs = getReadings();
+  let n = 0; rs.forEach((r, i) => { const t = Date.parse(r.date); if (t >= b.from && t < b.to && isCharge(rs, i)) n++; });
+  const parts = []; if (km) parts.push('<b class="text-white">' + fmt(km, 0) + ' km</b>'); if (n) parts.push('<b class="text-white">' + n + (n === 1 ? ' Ladung' : ' Ladungen') + '</b>');
+  $('bd-stats').innerHTML = parts.length ? 'Im ' + (BD_ORD[b.years - 1] ? BD_ORD[b.years - 1] + ' ' : b.years + '. ') + 'gemeinsamen Jahr:<br>' + parts.join(' · ') : '';
+  $('bd-stats').classList.toggle('hidden', !parts.length);
+  /* Konfetti */
+  const box = $('bd-conf'), cols = ['#34d399', '#fbbf24', '#f472b6', '#38bdf8', '#a78bfa', '#fb7185'];
+  box.textContent = '';
+  for (let i = 0; i < 46; i++) {
+    const c = document.createElement('i'), r = Math.random;
+    c.style.cssText = 'left:' + (r() * 100).toFixed(1) + '%;background:' + cols[i % cols.length] + ';--d:' + (4.5 + r() * 4).toFixed(2) + 's;--w:' + (-r() * 8).toFixed(2) + 's;--x:' + ((r() - 0.5) * 120).toFixed(0) + 'px;--r:' + ((r() < 0.5 ? -1 : 1) * (360 + r() * 540)).toFixed(0) + 'deg;--y:' + (r() * 30).toFixed(0) + '%;' + (r() < 0.3 ? 'width:9px;height:9px;border-radius:50%;' : '');
+    box.appendChild(c);
+  }
+  $('bd-ov').classList.remove('hidden'); document.body.style.overflow = 'hidden'; bdShown = Date.now();
+  const img = $('bd-img'); if (!img.src) { const src = await findHeroImg(1); if (src) { img.src = (await cutWhite(src)).src; img.alt = 'Dein ' + name; img.classList.remove('hidden'); } }
+}
+function hideBirthday() { $('bd-ov').classList.add('hidden'); $('bd-conf').textContent = ''; document.body.style.overflow = ''; setTimeout(() => { try { showNextBadge(); } catch (e) { } }, 350); }
+$('bd-close').addEventListener('click', hideBirthday);
+$('bd-ov').addEventListener('click', (e) => { if (e.target === e.currentTarget || e.target.parentElement === e.currentTarget) hideBirthday(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('bd-ov').classList.contains('hidden')) hideBirthday(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { bdHidden = Date.now(); return; }
+  if (bdHidden && Date.now() - bdHidden >= 5 * 60 * 1000 && $('bd-ov').classList.contains('hidden')) showBirthday();
+});
+setTimeout(showBirthday, 700);                           // nach dem Start, damit Daten und Bild bereitstehen
+
+// ───── src/09-wetter-eis-prognose.js ─────
+/* =====================================================================
+   Wetter-Pop-up: Klick auf die Überschrift zeigt, an welchen der nächsten 7 Tage (ab morgen)
+   die Regenwahrscheinlichkeit unter 10 % liegt. Daten und Ortssuche: Open-Meteo (kostenlos, ohne Anmeldung).
+   ===================================================================== */
+const WX_DRY = 10, WX_SECONDS = 10, WX_TTL = 30 * 60 * 1000;                        // Grenze in %, Anzeigedauer, Cache-Dauer
+const WD_S = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'], WD_L = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
+const wxLoc = () => load(KEY_WXLOC, null);
+const wxIso = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+const wxDay = (iso) => { const [y, m, d] = iso.split('-').map(Number), x = new Date(y, m - 1, d); return { wd: WD_S[x.getDay()], long: WD_L[x.getDay()], dm: String(d).padStart(2, '0') + '.' + String(m).padStart(2, '0') + '.' }; };
+function renderWxLoc() { const l = wxLoc(); $('wx-msg').textContent = l ? 'Gespeichert: ' + l.label : 'Noch kein Standort gespeichert. Ort oder PLZ eingeben, suchen und das passende Ergebnis antippen.'; }
+
+/** Ortssuche über die Open-Meteo-Geocoding-API; eine 5-stellige PLZ wird zuerst als Postleitzahl (DE) gesucht, danach als Ortsname. */
+async function wxSearch() {
+  const q = $('wx-q').value.trim(), box = $('wx-results'); box.textContent = '';
+  if (q.length < 2) { $('wx-msg').textContent = 'Bitte einen Ort oder eine Postleitzahl eingeben.'; return; }
+  const plz = (q.match(/\b\d{5}\b/) || [])[0], city = q.replace(/\b\d{5}\b/, '').replace(/,?\s*(Deutschland|Germany)\s*$/i, '').replace(/^[\s,]+|[\s,]+$/g, '');
+  const get = async (name, cc) => { const r = await fetch('https://geocoding-api.open-meteo.com/v1/search?count=10&language=de&format=json&name=' + encodeURIComponent(name) + (cc ? '&countryCode=' + cc : '')); if (!r.ok) throw new Error(r.status); return (await r.json()).results || []; };
+  $('wx-msg').textContent = 'Suche …';
+  try {
+    let res = plz ? await get(plz, 'DE') : [];
+    if (!res.length && city.length >= 2) res = await get(city, plz ? 'DE' : '');
+    if (city) { const hit = (r) => String(r.name).toLowerCase().includes(city.toLowerCase()) ? 0 : 1; res.sort((a, b) => hit(a) - hit(b)); }
+    if (!res.length) { $('wx-msg').textContent = 'Nichts gefunden. Versuche es mit dem Ortsnamen oder einer anderen Schreibweise.'; return; }
+    $('wx-msg').textContent = 'Passendes Ergebnis antippen:';
+    res.forEach(r => {
+      const b = document.createElement('button'); b.type = 'button';
+      b.className = 'text-left rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-2.5 text-sm active:scale-[0.99] transition';
+      b.textContent = [r.name, r.admin2 && r.admin2 !== r.name ? r.admin2 : '', r.admin1, r.country].filter(Boolean).join(', ') + (r.postcodes && r.postcodes[0] ? ' · ' + r.postcodes[0] : '');
+      b.addEventListener('click', () => {
+        const label = [r.name, r.admin1, r.country].filter(Boolean).join(', ');
+        if (save(KEY_WXLOC, { lat: r.latitude, lon: r.longitude, label })) { localStorage.removeItem(KEY_WXCACHE); box.textContent = ''; renderWxLoc(); pushPrefs(); }
+      });
+      box.appendChild(b);
+    });
+  } catch (e) { $('wx-msg').textContent = 'Die Suche ist gerade nicht erreichbar. Bitte Internetverbindung prüfen.'; }
+}
+$('wx-search').addEventListener('click', wxSearch);
+$('wx-q').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); wxSearch(); } });
+
+/** Vorhersage: tägliche maximale Niederschlagswahrscheinlichkeit; 30 Min. zwischengespeichert, bei fehlender Verbindung der letzte Stand. */
+async function wxForecast(l) {
+  const c = load(KEY_WXCACHE, null), same = c && c.lat === l.lat && c.lon === l.lon;
+  if (same && Date.now() - c.t < WX_TTL) return c;
+  try {
+    const r = await fetch('https://api.open-meteo.com/v1/forecast?latitude=' + l.lat + '&longitude=' + l.lon + '&daily=precipitation_probability_max&timezone=auto&forecast_days=8');
+    if (!r.ok) throw new Error(r.status);
+    const j = await r.json(), out = { lat: l.lat, lon: l.lon, t: Date.now(), days: j.daily.time.map((d, i) => ({ d, p: j.daily.precipitation_probability_max[i] })) };
+    save(KEY_WXCACHE, out); return out;
+  } catch (e) { if (same) return { ...c, stale: true }; throw e; }
+}
+
+/* =====================================================================
+   Frost-Hinweis (Start, ab 16 Uhr): Tiefstwert morgen zwischen 5 und 9 Uhr am Wetter-Standort unter 0 °C.
+   Reichweite: Netto-Akku ÷ (Ø Verbrauch inkl. Ladeverluste × 0,93); Winter-Abschlag als Faustwert 10 % + 1,5 % je Grad unter 0 (max. 35 %).
+   Vorhersage stündlich (Open-Meteo), 1 Stunde zwischengespeichert. × blendet bis zum nächsten Tag aus.
+   ===================================================================== */
+const KEY_FROST = 'enyaq.frost';                 // { lat, lon, t, day ('JJJJ-MM-TT' = morgen), min } + snooze
+async function frostMin() {
+  const l = wxLoc(); if (!l) return null;
+  const tm = new Date(Date.now() + 864e5), day = wxIso(tm), c = load(KEY_FROST, null);
+  if (c && c.lat === l.lat && c.lon === l.lon && c.day === day && Date.now() - c.t < 3600e3) return c.min;
+  const r = await fetch('https://api.open-meteo.com/v1/forecast?latitude=' + l.lat + '&longitude=' + l.lon + '&hourly=temperature_2m&timezone=auto&forecast_days=3');
+  if (!r.ok) return c && c.day === day ? c.min : null;
+  const j = await r.json(), v = j.hourly.time.map((t, i) => [t, j.hourly.temperature_2m[i]]).filter(([t]) => t.slice(0, 10) === day && +t.slice(11, 13) >= 5 && +t.slice(11, 13) <= 9).map(x => x[1]).filter(Number.isFinite);
+  const min = v.length ? Math.min(...v) : null;
+  save(KEY_FROST, { ...(c || {}), lat: l.lat, lon: l.lon, t: Date.now(), day, min }); return min;
+}
+async function renderFrost() {
+  const el = $('frost-banner'); if (!el) return;
+  const now = new Date(), h = now.getHours(), fc = load(KEY_FROST, {}) || {}, ask = fc.ask, st = iceSet();
+  if (liveHero) { el.classList.add('hidden'); return; }
+  /* Morgens: kurz nachfragen, ob die Prognose von gestern gestimmt hat (lernt, wie stark die Scheibe am Stellplatz auskühlt) */
+  if (h >= 5 && h < 12 && ask && ask.day === todayYMD() && !ask.done) {
+    $('frost-h').textContent = 'War die Scheibe heute früh vereist?';
+    $('frost-t').innerHTML = `<span class="block">Prognose gestern: ${ICE_LVL[ask.lvl]}${Number.isFinite(ask.tg) ? ' (Scheibe ≈ ' + fmt(Math.round(ask.tg) || 0, 0).replace('-', '−') + ' °C)' : ''}. Deine Antwort macht die Warnung genauer.</span><span class="mt-1.5 flex gap-2"><button type="button" data-ice="1" class="rounded-lg bg-sky-600 px-3 py-1 text-xs font-semibold text-white">Ja, vereist</button><button type="button" data-ice="0" class="rounded-lg bg-black/10 dark:bg-white/10 px-3 py-1 text-xs font-semibold">Nein, frei</button></span>`;
+    el.classList.remove('hidden'); return;
+  }
+  /* Abends kein eigener Hinweis mehr (die Eis-Badges an der Verbrauchs-Prognose zeigen es dezent) – nur die Prognose für die Rückfrage am Morgen merken */
+  el.classList.add('hidden'); if (h < 16) return;
+  let ice = null; try { ice = await iceRisk(); } catch (e) { }
+  if (ice) { const c = load(KEY_FROST, {}) || {}; if (!c.ask || c.ask.day !== ice.day || !c.ask.done) { c.ask = ice.lvl >= 1 || ice.minTg <= 2 ? { day: ice.day, lvl: ice.lvl, tg: Math.round(ice.minTg * 10) / 10 } : null; save(KEY_FROST, c); } }
+}
+$('frost-x').addEventListener('click', () => { const c = load(KEY_FROST, {}) || {}; if (c.ask && c.ask.day === todayYMD() && new Date().getHours() < 12) c.ask.done = true; else c.snooze = todayYMD(); save(KEY_FROST, c); $('frost-banner').classList.add('hidden'); });
+$('frost-banner').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-ice]'); if (!b) return; const c = load(KEY_FROST, {}) || {}, a = c.ask; if (!a) return;
+  const yes = b.dataset.ice === '1', st = iceSet(); let k = st.k;
+  if (yes && a.lvl === 0) k *= 1.12; else if (yes && a.lvl === 1) k *= 1.05; else if (!yes && a.lvl === 2) k *= 0.9; else if (!yes && a.lvl === 1) k *= 0.95;
+  k = Math.round(Math.max(0.5, Math.min(1.8, k)) * 100) / 100; if (k !== st.k) setQuickSetting('iceK', k);
+  a.done = true; a.ans = yes; save(KEY_FROST, c); localStorage.removeItem(KEY_ICE);
+  $('frost-h').textContent = 'Danke!'; $('frost-t').textContent = k !== st.k ? 'Die Eis-Warnung ist jetzt ' + (k > st.k ? 'etwas empfindlicher' : 'etwas zurückhaltender') + '.' : 'Passt – die Warnung bleibt, wie sie ist.';
+  setTimeout(() => $('frost-banner').classList.add('hidden'), 2500);
+});
+/* =====================================================================
+   Eis-Warnung (Vortag): Scheibe vereist, wenn das Glas unter 0 °C und unter den Taupunkt fällt. In klaren, windstillen Nächten strahlt die Scheibe ab und ist
+   2–5 °C kälter als die Luft (Raureif schon bei +2 °C möglich). Glas ≈ Luft − 4 °C × (1 − Bewölkung) × Windfaktor × Stellplatz × gelernter Faktor.
+   Nässe am Abend mit Frost danach → Eisschicht. Stunden von 18 Uhr bis zur Abfahrt am Ort „Zuhause“ (sonst Wetter-Standort). Stufen: 0 gering, 1 möglich, 2 wahrscheinlich.
+   ===================================================================== */
+const KEY_ICE = 'enyaq.ice', ICE_LVL = ['gering', 'möglich', 'wahrscheinlich'];
+const iceSet = () => { const s = getSettings(); return { dep: /^\d{1,2}:\d{2}$/.test(s.iceDep || '') ? s.iceDep.padStart(5, '0') : '06:30', we: !!s.iceWe, park: ['open', 'carport', 'garage'].includes(s.icePark) ? s.icePark : 'open', min: s.iceMin === 'high' ? 2 : 1, k: Number(s.iceK) > 0 ? Number(s.iceK) : 1 }; };
+const iceLoc = () => { const hm = getTPlaces().find(p => p.kind === 'home' && Number.isFinite(p.lat)); return hm ? { lat: hm.lat, lon: hm.lon } : wxLoc(); };
+/* Eis-Risiko für den Morgen von `day` aus stündlichen Werten (Nacht ab 18 Uhr des Vortags bis zur Abfahrt) */
+function iceEval(H, day, st) {
+  const prev = wxIso(new Date(Date.parse(day + 'T12:00:00') - 864e5)), [dh] = st.dep.split(':').map(Number), pf = st.park === 'carport' ? 0.35 : 1, rows = [];
+  H.time.forEach((t, i) => { const d = t.slice(0, 10), hr = +t.slice(11, 13); if (!((d === prev && hr >= 18) || (d === day && hr <= dh))) return;
+    const T = Number(H.temperature_2m[i]), Td = Number(H.dew_point_2m[i]), cc = Number(H.cloud_cover[i]) || 0, ws = Number(H.wind_speed_10m[i]) || 0, p = Number(H.precipitation[i]) || 0;
+    if (H.temperature_2m[i] == null || !Number.isFinite(T)) return; const wf = ws < 1.5 ? 1 : ws < 3 ? 0.75 : ws < 5 ? 0.45 : 0.2, Tg = T - 4 * (1 - cc / 100) * wf * pf * st.k;
+    rows.push({ d, hr, T, Td: Number.isFinite(Td) ? Td : T - 3, cc, ws, p, Tg }); });
+  const late = rows.filter(x => x.d === day && x.hr >= dh - 6); if (!late.length) return null;
+  const frostH = late.filter(x => x.Tg <= 0 && x.Tg <= x.Td + 0.5).length, minTg = Math.min(...late.map(x => x.Tg)), gap = Math.min(...late.map(x => x.Tg - x.Td));
+  let glaze = false; rows.forEach((x, i) => { if (x.p >= 0.2 && rows.slice(i + 1).some(y => y.Tg <= -0.5)) glaze = true; });
+  const lvl = glaze && minTg <= 0 || (frostH >= 3 && minTg <= -1) ? 2 : frostH >= 1 || (minTg <= 0.5 && gap <= 1.5) ? 1 : 0, last = rows[rows.length - 1];
+  /* Eis-Wahrscheinlichkeit (Schätzung, kein Messwert): innerhalb der Stufe nach Stärke abgestuft – gering 5–25 %, möglich 30–60 %, wahrscheinlich 65–95 % */
+  const cl = (v) => Math.max(0, Math.min(1, v)), sev = lvl >= 2 ? cl((-1 - minTg) / 4 + frostH / 14 + (glaze ? 0.5 : 0)) : lvl === 1 ? cl((0.5 - minTg) / 2 + (1.5 - gap) / 3) : cl((2.5 - minTg) / 3 + (3 - gap) / 6);
+  const p = Math.round(((lvl >= 2 ? 65 : lvl === 1 ? 30 : 5) + sev * (lvl === 0 ? 20 : 30)) / 5) * 5;
+  return { day, lvl, p, T: last.T, minT: Math.min(...late.map(x => x.T)), minTg, cc: late.reduce((a, x) => a + x.cc, 0) / late.length, ws: late.reduce((a, x) => a + x.ws, 0) / late.length, glaze, frostH };
+}
+async function iceHourly(l, st) {
+  const sig = [l.lat.toFixed(3), l.lon.toFixed(3), wxIso(new Date())].join('|'), c = load(KEY_ICE + 'H', null);
+  if (c && c.sig === sig && Date.now() - c.t < 3600e3) return c.H;
+  const r = await fetch('https://api.open-meteo.com/v1/forecast?latitude=' + l.lat + '&longitude=' + l.lon + '&hourly=temperature_2m,dew_point_2m,cloud_cover,wind_speed_10m,precipitation&wind_speed_unit=ms&timezone=auto&past_days=1&forecast_days=8');
+  if (!r.ok) { if (c && c.H) return c.H; throw new Error('Wetter ' + r.status); } const H = (await r.json()).hourly; if (!H || !H.time) throw new Error('Wetter leer');
+  save(KEY_ICE + 'H', { sig, t: Date.now(), H }); return H;
+}
+async function iceRisk() {
+  const st = iceSet(); if (st.park === 'garage') return null; const l = iceLoc(); if (!l) return null;
+  const tm = new Date(Date.now() + 864e5), day = wxIso(tm), wd = tm.getDay(); if (!st.we && (wd === 0 || wd === 6)) return null;
+  return iceEval(await iceHourly(l, st), day, st);
+}
+/** Eis-Risiko je Morgen für die nächsten Tage (7-Tage-Prognose) – unabhängig von der Wochenend-Einstellung */
+async function iceDays(days) { const st = iceSet(), l = iceLoc(); if (st.park === 'garage' || !l) return {}; const H = await iceHourly(l, st), out = {}; days.forEach(d => { const r = iceEval(H, d, st); if (r) out[d] = r; }); return out; }
+/* =====================================================================
+   Verbrauchs-Prognose (Start): lernendes Modell aus den eigenen Ladungen + Open-Meteo-Vorhersage.
+   Jede genaue Strecke zwischen zwei Ladungen (Akku-%, ≥ 20 km) ist ein Lernpunkt: Verbrauch aus dem Akku (ohne Ladeverluste, wie der Bordcomputer) gegen die mittlere Tagestemperatur
+   und den Anteil nasser Tage (≥ 1 mm) am Wetter-Standort. Modell: kWh/100 km = Basis + Kälte × max(0, 18 °C − T) + Regen × Nass-Anteil.
+   Bayes'sche Ridge-Regression: Startwerte aus Erfahrungswerten (Kälte +0,25 je Grad, Regen +1,0) gelten wie 3 Ladungen; mit jeder Ladung
+   übernehmen die eigenen Daten mehr (neuere Ladungen zählen stärker, Halbwertszeit 90 Tage). Ergebnis 6 h zwischengespeichert, Vorhersage 1 h.
+   ===================================================================== */
+const WXO_RES = 20;                                                                   // Reserve im Lade-Tipp (Laden 20–80 %)
+const WXO_HALF = 90;                                                                  // Halbwertszeit in Tagen: eine 90 Tage alte Ladung zählt halb so viel
+const KEY_WXO = 'enyaq.wxo4', WXO_T0 = 18, WXO_T1 = 5;
+/* Modell: kWh/100 km = a + b·max(0, 18 °C − T) + d·max(0, 5 °C − T) + c·Nass-Anteil + e·Anteil feuchter Morgen
+   a Grundverbrauch, b Kälte (mild), d Kältezuschlag unter 5 °C (Heizung, kalter Akku), c Regen, e feuchter Morgen (Scheiben trocknen: Heizung + Klima).
+   Startwerte (Prior) zählen jeweils etwa wie 3 Ladungen mit typischen Werten; danach übernehmen die eigenen Ladungen. */
+const WXO_PRIOR = { a: 14.0, b: 0.12, d: 0.25, c: 0.9, e: 0.6 }, WXO_LAMBDA = [0.05, 3 * 25, 3 * 9, 3 * 0.25, 3 * 0.25];
+const wxoX = (T, r, h) => [1, Math.max(0, WXO_T0 - T), Math.max(0, WXO_T1 - T), r, h];
+/** Feuchter Morgen je Tag: 5–9 Uhr im Mittel ≥ 90 % Luftfeuchte bei unter 10 °C (Scheiben beschlagen) → { 'JJJJ-MM-TT': 0 | 1 } */
+function wxoHumDays(j) {
+  const h = j && j.hourly, out = {}; if (!h || !h.time || !h.relative_humidity_2m) return out; const acc = {};
+  h.time.forEach((t, i) => { const hr = +t.slice(11, 13); if (hr < 5 || hr > 9) return; const rh = h.relative_humidity_2m[i], tc = h.temperature_2m ? h.temperature_2m[i] : null; if (rh == null || tc == null) return; const d = t.slice(0, 10), o = acc[d] = acc[d] || { rh: 0, t: 0, n: 0 }; o.rh += rh; o.t += tc; o.n++; });
+  Object.keys(acc).forEach(d => { const o = acc[d]; out[d] = o.n >= 3 && o.rh / o.n >= 90 && o.t / o.n < 10 ? 1 : 0; }); return out;
+}
+const wxoIcon = (w) => w == null ? '🌡️' : w === 0 ? '☀️' : w <= 2 ? '🌤️' : w === 3 ? '☁️' : w <= 48 ? '🌫️' : w <= 57 ? '🌦️' : w <= 67 ? '🌧️' : w <= 77 ? '❄️' : w <= 82 ? '🌦️' : w <= 86 ? '🌨️' : '⛈️';
+/** Meteocons (Bas Milius, MIT-Lizenz, Bilder/wx/) je Wettercode von Open-Meteo; Tagesvarianten, da es Tageswerte sind */
+const WX_MC = (w) => w == null ? null : w === 0 ? 'clear-day' : w <= 2 ? 'partly-cloudy-day' : w === 3 ? 'overcast-day' : w <= 48 ? 'fog-day' : w <= 55 ? 'drizzle' : w <= 57 ? 'sleet' : w <= 65 ? 'rain' : w <= 67 ? 'sleet' : w <= 77 ? 'snow' : w <= 82 ? 'partly-cloudy-day-rain' : w <= 86 ? 'partly-cloudy-day-snow' : w === 95 ? 'thunderstorms-day-rain' : 'hail';
+const wxIconStyle = () => getSettings().wxIcons === 'emoji' ? 'emoji' : 'meteo';
+/** Wetter-Symbol als HTML: Meteocons (Standard) oder Emoji – Einstellung „Wetter-Symbole“ */
+function wxoIconHtml(w, px) { const n = WX_MC(w); return wxIconStyle() === 'meteo' && n ? `<img src="Bilder/wx/${n}.svg" alt="${wxoText(w)}" width="${px}" height="${px}" class="inline-block align-middle" style="width:${px}px;height:${px}px;margin:-${Math.round(px * 0.12)}px 0">` : wxoIcon(w); }
+const wxoText = (w) => w == null ? '' : w === 0 ? 'sonnig' : w <= 2 ? 'heiter' : w === 3 ? 'bewölkt' : w <= 48 ? 'Nebel' : w <= 57 ? 'Niesel' : w <= 67 ? 'Regen' : w <= 77 ? 'Schnee' : w <= 82 ? 'Schauer' : w <= 86 ? 'Schneeschauer' : 'Gewitter';
+function wxoSolve(A, y) {                                                          // n×n Gauß mit Pivot
+  const n = y.length, M = A.map((r, i) => r.concat(y[i]));
+  for (let i = 0; i < n; i++) { let p = i; for (let k = i + 1; k < n; k++) if (Math.abs(M[k][i]) > Math.abs(M[p][i])) p = k; [M[i], M[p]] = [M[p], M[i]]; if (Math.abs(M[i][i]) < 1e-9) return null;
+    for (let k = 0; k < n; k++) if (k !== i) { const f = M[k][i] / M[i][i]; for (let j = i; j <= n; j++) M[k][j] -= f * M[i][j]; } }
+  return M.map((r, i) => r[n] / r[i]);
+}
+/** Lernpunkte aus den Ladungen (Strecke zwischen zwei Ladungen) + Wetter-Archiv → Modell { a, b, d, c, e, n, sd, … } */
+async function wxoModel(l) {
+  const rs = getReadings(), iv = [];
+  rs.forEach((r, i) => { if (i < 1) return; const s = entryStats(rs, i), a = Date.parse(rs[i - 1].date), b = Date.parse(r.date); const y = s.usedBat / s.km * 100; if (s.method !== 'soc' || s.rough || !(y > 3 && y < 60) || s.km < 20 || !Number.isFinite(a) || !Number.isFinite(b)) return; iv.push({ a: wxIso(new Date(a)), b: wxIso(new Date(b)), y, t: b }); });
+  const sig = iv.length + ':' + (iv.length ? iv[iv.length - 1].b : '') + ':' + l.lat + ',' + l.lon, c = load(KEY_WXO, null);
+  if (c && c.sig === sig && Date.now() - c.t < 6 * 3600e3) return c.m;
+  let pts = [];
+  if (iv.length) {
+    const days = await wxTemps(l, iv.reduce((m, x) => x.a < m ? x.a : m, iv[0].a), iv.reduce((m, x) => x.b > m ? x.b : m, iv[0].b)), tc = load(KEY_TEMPS, {}) || {}, rain = tc.rain || {}, hum = tc.hum || {};
+    iv.forEach(x => { let st = 0, n = 0, wet = 0, nr = 0, hu = 0, nh = 0;
+      for (let t = Date.parse(x.a + 'T12:00:00'), e = Date.parse(x.b + 'T12:00:00'); t <= e; t += 864e5) { const d = wxIso(new Date(t)), v = days[d], p = rain[d], q = hum[d]; if (v != null) { st += v; n++; } if (p != null) { nr++; if (p >= 1) wet++; } if (q != null) { nh++; hu += q; } }
+      if (n) pts.push({ T: st / n, r: nr ? wet / nr : 0, h: nh ? hu / nh : 0, y: x.y, w: Math.pow(0.5, (Date.now() - x.t) / (WXO_HALF * 864e5)) }); });
+  }
+  const P = WXO_PRIOR, L = WXO_LAMBDA, K = 5, pr = [P.a, P.b, P.d, P.c, P.e];
+  const A = L.map((x, i) => L.map((_, j) => i === j ? x : 0)), v = L.map((x, i) => x * pr[i]);
+  if (pts.length) { const my = pts.reduce((s, p) => s + p.y, 0) / pts.length, adj = pts.reduce((s, p) => { const x = wxoX(p.T, p.r, p.h); return s + P.b * x[1] + P.d * x[2] + P.c * x[3] + P.e * x[4]; }, 0) / pts.length; v[0] = L[0] * (my - adj); }   // Grund-Startwert aus den eigenen Daten
+  pts.forEach(p => { const x = wxoX(p.T, p.r, p.h); for (let i = 0; i < K; i++) { v[i] += p.w * x[i] * p.y; for (let j = 0; j < K; j++) A[i][j] += p.w * x[i] * x[j]; } });
+  const beta = wxoSolve(A, v) || pr.slice();
+  const cl = (x, lo, hi) => Math.min(hi, Math.max(lo, x));                                               // physikalisch sinnvoll halten
+  const m = { a: beta[0], b: cl(beta[1], 0, 0.8), d: cl(beta[2], 0, 1.2), c: cl(beta[3], 0, 4), e: cl(beta[4], 0, 3) };
+  const res = pts.map(p => p.y - wxoPredX(m, wxoX(p.T, p.r, p.h))), sd = res.length > 5 ? Math.sqrt(res.reduce((s, x) => s + x * x, 0) / (res.length - 5)) : null;
+  Object.assign(m, { n: pts.length, sd, spanT: pts.length ? Math.max(...pts.map(p => p.T)) - Math.min(...pts.map(p => p.T)) : 0,
+    coldN: pts.filter(p => p.T < WXO_T1).length, wetN: pts.filter(p => p.r > 0.3).length, humN: pts.filter(p => p.h > 0.3).length });
+  save(KEY_WXO, { sig, t: Date.now(), m }); return m;
+}
+const wxoPredX = (m, x) => m.a + m.b * x[1] + m.d * x[2] + m.c * x[3] + m.e * x[4];
+const wxoPred = (m, T, wet, hum) => wxoPredX(m, wxoX(T, wet ? 1 : 0, hum ? 1 : 0));
+/** Zuschläge eines Tages für die 7-Tage-Ansicht: ❄️ Kälte (beide Stufen), 🌧️ Regen, 💧 feuchter Morgen */
+function wxoParts(m, T, wet, hum) { const x = wxoX(T, wet ? 1 : 0, hum ? 1 : 0); return { cold: m.b * x[1] + m.d * x[2], rain: m.c * x[3], hum: m.e * x[4] }; }
+/** 7-Tage-Vorhersage: Tagesmittel, Niederschlag, Wettercode (1 h zwischengespeichert) */
+async function wxoForecast(l) {
+  const c = load(KEY_WXO + 'F', null), same = c && c.lat === l.lat && c.lon === l.lon && c.day === wxIso(new Date()) && c.days && c.days[0] && 't7' in c.days[0];
+  if (same && Date.now() - c.t < 3600e3) return c.days;
+  try {
+    const r = await fetch('https://api.open-meteo.com/v1/forecast?latitude=' + l.lat + '&longitude=' + l.lon + '&daily=temperature_2m_mean,temperature_2m_min,temperature_2m_max,precipitation_sum,weather_code&hourly=temperature_2m,relative_humidity_2m&timezone=auto&forecast_days=8');
+    if (!r.ok) throw new Error(r.status);
+    const j = await r.json(), d = j.daily, hd = wxoHumDays(j), hr = (t, h) => { const k = (j.hourly && j.hourly.time || []).indexOf(t + 'T' + String(h).padStart(2, '0') + ':00'); const v = k >= 0 ? j.hourly.temperature_2m[k] : null; return v == null ? null : v; };
+    const days = d.time.map((t, i) => ({ t7: hr(t, WXO_H1), t16: hr(t, WXO_H2), hum: hd[t] || 0, d: t, T: d.temperature_2m_mean[i] ?? (d.temperature_2m_min[i] + d.temperature_2m_max[i]) / 2, lo: d.temperature_2m_min[i], hi: d.temperature_2m_max[i], p: d.precipitation_sum[i] ?? 0, w: d.weather_code[i] }));
+    save(KEY_WXO + 'F', { lat: l.lat, lon: l.lon, day: wxIso(new Date()), t: Date.now(), days }); return days;
+  } catch (e) { if (c && c.lat === l.lat) return c.days.filter(x => x.d >= wxIso(new Date())); throw e; }
+}
+/** Ø km pro Tag aus den letzten ~90 Tagen der km-Stände; typisches Ladeziel (Median der letzten 10 Akku-Ende-Werte) */
+function wxoHabits() {
+  const rs = getReadings().filter(r => r.odometerKm > 0 && Number.isFinite(Date.parse(r.date))).sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
+  let kmDay = null;
+  if (rs.length >= 2) { const last = rs[rs.length - 1], lim = Date.parse(last.date) - 90 * 864e5, first = rs.find(r => Date.parse(r.date) >= lim) || rs[0], d = (Date.parse(last.date) - Date.parse(first.date)) / 864e5; if (d >= 7 && last.odometerKm > first.odometerKm) kmDay = (last.odometerKm - first.odometerKm) / d; }
+  const ends = getReadings().filter(r => r.socEnd > 30).slice(-10).map(r => r.socEnd);
+  return { kmDay, target: ends.length ? Math.round(median(ends)) : 80 };
+}
+/** Aktueller Akkustand vom Auto (1 h zwischengespeichert – die Škoda-API erlaubt 20 Abfragen pro Stunde); bei Fehlern der letzte Wert bis 6 h alt */
+async function wxoSoc() {
+  const c = load(KEY_WXO + 'S', null);
+  if (c && c.d && Date.now() - c.t < 3600e3) return c.soc;                     // ältere Zwischenstände ohne Fahrzeugdaten einmal neu holen
+  const old = c && Date.now() - c.t < 6 * 3600e3 ? c.soc : null;
+  if (!apiEnabled()) return old;
+  try {
+    const res = await fetch('/api/vehicle', { headers: await authHeaders() }), d = await res.json().catch(() => ({}));
+    if (!res.ok || d.soc == null) return old;
+    if (d.odometerKm != null) { carKmCache = { t: Date.now(), km: Math.round(d.odometerKm), at: d.capturedAt || null }; odoNote(d); }
+    save(KEY_WXO + 'S', { t: Date.now(), soc: d.soc, d }); try { renderVehCard(); } catch (e) { } try { if (!ltmSaved) renderLtm(); } catch (e) { } return d.soc;
+  } catch (e) { return old; }
+}
+/* PC: Fahrzeugstatus rechts neben dem Auto (Glas-Karte) – aus der stündlichen Abfrage beim Auto (gleicher Zwischenspeicher wie der Restakku) */
+/* Handy: Fahrzeugstatus als eigene Karte im Wisch-Bereich (zwischen Prognose und Zählerstand); am PC steht er neben dem Auto */
+/** Farbe des Akku-Balkens: unter 15 % rot, unter 25 % orange, sonst grün */
+const socBarCls = (soc) => soc < 15 ? 'from-red-600 to-red-400' : soc < 25 ? 'from-orange-600 to-orange-400' : 'from-emerald-600 to-emerald-400';
+function renderVehSlide() {
+  const el = $('veh-slide'); if (!el) return;
+  const c = load(KEY_WXO + 'S', null), d = c && c.d, on = !isDesk() && apiEnabled() && d && d.soc != null;
+  el.classList.toggle('hidden', !on); el.classList.toggle('flex', !!on); setTimeout(() => { try { dashSwipeSync(); } catch (e) { } }, 0); if (!on) return;
+  const soc = Math.round(d.soc), tgt = Number(d.targetSoc) || null, charging = d.chargeState === 'CHARGING' || d.chargePowerKw > 0, plugged = d.plug === 'CONNECTED';
+  const lk = d.doorsLocked || d.locked, locked = lk === 'YES' ? true : lk === 'NO' ? false : null, ok = locked !== false && !/OPEN/.test(d.doors || '') && !/OPEN/.test(d.windows || '');
+  const at = d.capturedAt ? new Date(d.capturedAt) : new Date(c.t);
+  const tile = (a, b, col) => `<div class="min-w-0 rounded-xl bg-slate-100 dark:bg-slate-800/70 px-2.5 py-1.5"><p class="text-[10.5px] text-left text-slate-500 dark:text-slate-400">${a}</p><p class="truncate text-[13px] font-semibold ${col || ''}">${b}</p></div>`;
+  el.innerHTML = `<div class="flex items-center justify-between gap-2"><p class="font-barlow text-xl font-bold uppercase tracking-[0.08em] leading-6">Fahrzeugstatus</p><span class="text-[11px] ${ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}">● ${ok ? 'Alles OK' : 'Bitte prüfen'}</span></div>
+    <div class="mt-1.5 flex items-baseline gap-2"><span class="font-barlow text-[36px] font-bold leading-none">${soc} %</span>${d.rangeKm != null ? `<span class="text-[15px] font-semibold">${fmt(d.rangeKm, 0)} km</span>` : ''}<span class="ml-auto text-[10.5px] text-slate-500 dark:text-slate-400">${at.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })} · ${hhmm(at.getTime())}</span></div>
+    <div class="relative mt-2 h-3 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800"><div class="h-full rounded-full bg-gradient-to-r ${socBarCls(soc)} ${charging ? 'animate-pulse' : ''}" style="width:${Math.max(2, Math.min(100, soc))}%"></div>${tgt ? `<div class="absolute inset-y-0 border-l-2 border-slate-900/70 dark:border-white/80" style="left:${tgt}%"></div>` : ''}</div>
+    <div class="min-h-2 flex-1"></div>
+    <div class="grid grid-cols-2 gap-1.5">${[
+      locked != null ? tile('Verriegelt', locked ? '🔒 geschlossen' : '🔓 geöffnet', locked ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400') : tile('Ladestatus', d.chargeState === 'READY_FOR_CHARGING' ? 'bereit' : charging ? 'lädt' : 'kein Laden'),
+      charging ? tile('Lädt', (d.chargePowerKw > 0 ? fmt(d.chargePowerKw, 1) + ' kW' : '') + (d.minutesToFull > 0 ? ' · voll ' + hhmm(at.getTime() + d.minutesToFull * 60000) : ''), 'text-sky-600 dark:text-sky-300') : tile('Ladekabel', plugged ? 'verbunden' : 'nicht verbunden'),
+      tile('Ladeziel', tgt ? tgt + ' %' + (d.careMode === 'ACTIVATED' ? ' · Schonung' : '') : '–'),
+      tile('km-Stand', d.odometerKm != null ? fmt(Math.round(d.odometerKm), 0) + ' km' : '–')].join('')}</div>`;
+}
+function renderVehCard() {
+  try { renderVehSlide(); } catch (e) { }
+  const el = $('veh-card'), wrap = $('hero-car'); if (!el) return;
+  const c = load(KEY_WXO + 'S', null), d = c && c.d, on = isDesk() && apiEnabled() && d && d.soc != null && !liveHero;
+  el.classList.toggle('on', !!on); wrap.classList.toggle('has-veh', !!on); if (!on) return;
+  const soc = Math.round(d.soc), tgt = Number(d.targetSoc) || null, cs = d.chargeState || '', charging = cs === 'CHARGING' || d.chargePowerKw > 0;
+  const plugged = d.plug === 'CONNECTED', lk = d.doorsLocked || d.locked, locked = lk === 'YES' ? true : lk === 'NO' ? false : null;
+  const at = d.capturedAt ? new Date(d.capturedAt) : new Date(c.t), atTxt = at.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }) + ' · ' + hhmm(at.getTime());
+  const ok = locked !== false && !/OPEN/.test(d.doors || '') && !/OPEN/.test(d.windows || '') && !/^ON$/.test(d.lights || '');
+  const row = (i, a, b, col) => `<div class="flex items-center justify-between gap-2 border-t border-white/10 py-1.5 text-[12.5px]"><span class="flex items-center gap-2 text-slate-200">${i}${a}</span><span class="font-semibold ${col || 'text-slate-200'}">${b}</span></div>`;
+  const ico = (path) => `<svg class="h-4 w-4 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true">${path}</svg>`;
+  const I = { lock: ico('<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>'), plug: ico('<path d="M9 2v6M15 2v6M7 8h10v4a5 5 0 0 1-10 0V8zM12 17v5"/>'), tgt: ico('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>'), odo: ico('<path d="M4 18a8 8 0 1 1 16 0"/><path d="M12 18l4-5"/>'), bolt: ico('<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>') };
+  const rows = [
+    locked != null ? row(I.lock, 'Verriegelt', locked ? 'geschlossen' : 'geöffnet', locked ? 'text-emerald-400' : 'text-amber-400') : '',
+    charging ? row(I.bolt, 'Lädt', (d.chargePowerKw > 0 ? fmt(d.chargePowerKw, 1) + ' kW' : '') + (d.minutesToFull > 0 ? ' · voll ' + hhmm(Date.parse(d.capturedAt || new Date(c.t).toISOString()) + d.minutesToFull * 60000) : ''), 'text-sky-300')
+      : row(I.plug, 'Ladekabel', plugged ? 'verbunden' : 'nicht verbunden', plugged ? 'text-sky-300' : 'text-slate-400'),
+    tgt ? row(I.tgt, 'Ladeziel', tgt + ' %' + (d.careMode === 'ACTIVATED' ? ' · Akkuschonung' : '')) : '',
+    d.odometerKm != null ? row(I.odo, 'km-Stand', fmt(Math.round(d.odometerKm), 0) + ' km') : ''
+  ].join('');
+  el.innerHTML = `<div class="rounded-[20px] border border-white/10 bg-slate-900/55 px-4 py-3.5 text-white backdrop-blur-md">
+    <div class="flex items-center justify-between"><span class="font-barlow text-[15px] font-bold uppercase tracking-[0.08em]">Fahrzeugstatus</span><span class="text-[11px] ${ok ? 'text-emerald-400' : 'text-amber-400'}">● ${ok ? 'Alles OK' : 'Bitte prüfen'}</span></div>
+    <div class="mt-2 flex items-baseline gap-2"><span class="font-barlow text-[40px] font-bold leading-none">${soc} %</span>${d.rangeKm != null ? `<span class="text-[15px] font-semibold">${fmt(d.rangeKm, 0)} km</span>` : ''}</div>
+    <div class="relative mb-2.5 mt-2 h-3.5 overflow-hidden rounded-full bg-slate-800"><div class="h-full rounded-full bg-gradient-to-r ${socBarCls(soc)} ${charging ? 'animate-pulse' : ''}" style="width:${Math.max(2, Math.min(100, soc))}%"></div>${tgt ? `<div class="absolute -inset-y-0.5 border-l-2 border-white/80" style="left:${tgt}%"></div>` : ''}</div>
+    ${rows}<p class="mt-1.5 text-[10.5px] text-slate-400">Stand vom Auto: ${atTxt}</p></div>`;
+}
+const WXO_H1 = 7, WXO_H2 = 16;                                                        // Anzeige: Temperatur zur Hin- und Rückfahrt (nur Anzeige, gerechnet wird mit dem Tagesmittel)
+const wxoTT = (v) => fmt(Math.round(v), 0).replace('-', '−') + '°';
+const wxoCut = () => { const v = Number(getSettings().wxoCut); return Number.isInteger(v) && v >= 0 && v <= 24 ? v : 18; };   // ab dieser Stunde gilt „Morgen“
+const dashFirst = () => { const v = getSettings().dashFirst; return v === 'meter' || v === 'dyn' ? v : 'wx'; };
+const DASH_DYN_SOC = 30;                                                                  // „Dynamisch“: unter diesem Akkustand zuerst der Zählerstand
+/** Welche Karte beim Öffnen vorne liegt: fest gewählt oder dynamisch nach dem zuletzt vom Auto gemeldeten Akkustand (bis 6 h alt) */
+function dashFirstSlide(soc) {
+  const f = dashFirst(); if (f !== 'dyn') return f;
+  if (soc == null) { const c = load(KEY_WXO + 'S', null); soc = c && Date.now() - c.t < 6 * 3600e3 ? c.soc : null; }
+  return soc != null && soc < DASH_DYN_SOC ? 'meter' : 'wx';
+}
+function setQuickSetting(k, v) { const st = load(KEY_SETTINGS, {}) || {}; if (v === undefined) delete st[k]; else st[k] = v; save(KEY_SETTINGS, st); try { pushPrefs(); } catch (e) { } }
+function fillWxoPrefs() {
+  Promise.resolve().then(() => fillIcePush()).catch(() => { });                    // erst nach dem Laden des Skripts (Konstanten weiter unten)
+  try { const st = iceSet(), f = (id, v) => { const e = $(id); if (e && document.activeElement !== e) e.value = v; }; f('set-ice-dep', st.dep); f('set-ice-park', st.park); f('set-ice-min', st.min === 2 ? 'high' : 'mid'); f('set-ice-we', st.we ? '1' : '0');
+    $('set-ice-info').textContent = 'Eis-Wahrscheinlichkeit für den Ort „Zuhause“ (Temperatur, Taupunkt, Bewölkung, Wind) als Badge an der Verbrauchs-Prognose und in der 7-Tage-Ansicht; „Hinweis ab“ gilt für die Push-Nachricht. Morgens fragt die App kurz nach, ob es gestimmt hat.' + (Math.abs(st.k - 1) >= 0.02 ? ' Gelernt: dein Stellplatz kühlt ' + fmt(Math.abs(st.k - 1) * 100, 0) + ' % ' + (st.k > 1 ? 'stärker' : 'schwächer') + ' aus als üblich.' : ''); } catch (e) { }
+  const gm = $('set-gt-mirror'); if (gm) gm.checked = !!getSettings().gtMirror;
+  const wi = $('set-wx-icons'); if (wi && document.activeElement !== wi) wi.value = wxIconStyle();
+  const cn = $('set-car-n'), cs = $('set-car-sec'); if (cn && document.activeElement !== cn) cn.value = String(carAutoN()); if (cs && document.activeElement !== cs) { const v = String(carAutoMs() / 1000); cs.value = [...cs.options].some(o => o.value === v) ? v : '30'; } const a = $('set-wxo-cut'), b = $('set-dash-first'); if (a && document.activeElement !== a) a.value = String(wxoCut()); if (b && document.activeElement !== b) b.value = dashFirst(); }
+$('set-wxo-cut').addEventListener('change', (e) => { setQuickSetting('wxoCut', Number(e.target.value)); renderWxo(); });
+$('set-car-n').addEventListener('change', (e) => { setQuickSetting('carN', Number(e.target.value)); try { window.carReschedule && window.carReschedule(); } catch (er) { } });
+$('set-car-sec').addEventListener('change', (e) => { setQuickSetting('carSec', Number(e.target.value)); try { window.carReschedule && window.carReschedule(); } catch (er) { } });
+$('set-wx-icons').addEventListener('change', (e) => { setQuickSetting('wxIcons', e.target.value); try { renderWxo(); } catch (er) { } });
+$('set-dash-first').addEventListener('change', (e) => { setQuickSetting('dashFirst', e.target.value); });
+[['set-ice-dep', 'iceDep', v => /^\d{2}:\d{2}$/.test(v) ? v : undefined], ['set-ice-park', 'icePark', v => v], ['set-ice-min', 'iceMin', v => v], ['set-ice-we', 'iceWe', v => v === '1' || undefined]].forEach(([id, key, f]) =>
+  $(id).addEventListener('change', (e) => { setQuickSetting(key, f(e.target.value)); localStorage.removeItem(KEY_ICE); const c = load(KEY_FROST, {}) || {}; delete c.snooze; save(KEY_FROST, c); try { fillWxoPrefs(); renderFrost(); } catch (er) { } }));
+const wxoN = () => !isDesk() ? 3 : ($('wxo-card').clientWidth || document.querySelector('main').clientWidth) >= 760 ? 7 : 5;   // Tage in der Vorschau: Handy 3, PC je nach Breite 5 oder 7
+let wxoNLast = 0; window.addEventListener('resize', () => { clearTimeout(window.__wxoRs); window.__wxoRs = setTimeout(() => { if (wxoN() !== wxoNLast) try { renderWxo(); } catch (e) { } }, 250); });
+let wxoTok = 0, wxoLast = null;
+const wxoFmtR = (km) => fmt(Math.round(km / 5) * 5, 0);
+const wxoLowR = (km) => Math.round(km / 5) * 5 < 250;                                // Reichweite unter 250 km: ganz in Rot
+async function renderWxo() {
+  const el = $('wxo-card'), l = wxLoc(); if (!el) return;
+  if (!l || liveHero) { el.classList.add('hidden'); return; }
+  const tok = ++wxoTok; let m, fc, socNow = null;
+  try { [m, fc, socNow] = await Promise.all([wxoModel(l), wxoForecast(l), wxoSoc().catch(() => null)]); } catch (e) { if (tok === wxoTok) el.classList.add('hidden'); return; }
+  if (tok !== wxoTok) return;
+  const today = wxIso(new Date()), days = fc.filter(x => x.d >= today).slice(0, 7); if (days.length < 3) { el.classList.add('hidden'); return; }
+  const eff = (() => { try { return avgEff(getReadings()); } catch (e) { return BAT.eta; } })(), cap = batteryKwh(), rng = (k) => cap / k * 100;
+  days.forEach(x => { x.k = wxoPred(m, x.T, x.p >= 1, x.hum); x.r = rng(x.k); x.parts = wxoParts(m, x.T, x.p >= 1, x.hum); });
+  const best = rng(m.a), hl = new Date().getHours() >= wxoCut() ? 1 : 0, lab = (i) => i === 0 ? 'Heute' : i === 1 ? 'Morgen' : wxDay(days[i].d).wd + '.';
+  wxoLast = { m, days, eff, cap };
+  wxoNLast = wxoN(); $('wxo-days').style.gridTemplateColumns = 'repeat(' + wxoNLast + ', minmax(0, 1fr))';
+  $('wxo-days').innerHTML = days.slice(0, wxoNLast).map((x, i) => { const on = i === hl;
+    return `<div data-wd="${x.d}" class="relative min-w-0 rounded-2xl px-1.5 py-2 text-center ${on ? 'bg-sky-50 dark:bg-sky-950/60 ring-[1.5px] ring-sky-400' : 'bg-slate-100 dark:bg-slate-800/60'}">
+      <p class="text-center text-[11px] font-semibold ${on ? 'text-sky-700 dark:text-sky-300' : 'text-slate-500 dark:text-slate-400'}">${lab(i)}</p>
+      <p class="mt-0.5 text-center text-[22px] leading-none">${wxoIconHtml(x.w, wxIconStyle() === 'meteo' ? 40 : 30)}</p><p class="text-center text-[12.5px] font-semibold leading-tight whitespace-nowrap" title="${WXO_H1} Uhr / ${WXO_H2} Uhr · Ø ${fmt(x.T, 0)}°">${x.t7 != null && x.t16 != null ? wxoTT(x.t7) + ' / ' + wxoTT(x.t16) : wxoTT(x.T)}</p>
+      <p class="mt-0.5 text-center text-[15px] font-bold leading-tight">${fmt(x.k, 1)}</p><p class="text-center text-[9.5px] leading-tight text-slate-500 dark:text-slate-400">kWh/100 km</p>
+      <div class="mx-1.5 mt-1.5 h-[5px] rounded-full bg-slate-200 dark:bg-slate-700"><div class="h-[5px] rounded-full bg-gradient-to-r from-emerald-500 to-sky-400" style="width:${Math.max(8, Math.min(100, x.r / best * 100)).toFixed(0)}%"></div></div>
+      <p class="mt-0.5 text-center text-[12px]${wxoLowR(x.r) ? ' text-red-600 dark:text-red-400' : ''}"><b>${wxoFmtR(x.r)}</b> <span class="${wxoLowR(x.r) ? '' : 'text-slate-500 dark:text-slate-400'}">km</span></p></div>`; }).join('');
+  wxoIceBadges(days.slice(0, wxoNLast).map(x => x.d), tok);
+  /* Reicht-bis: aktueller Akkustand vom Auto (Škoda-API) bis 20 % Reserve, mit Ø km/Tag und dem vorhergesagten Verbrauch des jeweiligen Tages.
+     Ohne Fahrzeugdaten: ab dem typischen Ladeziel (Ladehub 20–80 %). */
+  const hb = wxoHabits(), tip = $('wxo-tip'), soc = Number.isFinite(socNow) ? socNow : null, from = soc ?? hb.target;
+  if (hb.kmDay > 3) {
+    let e = cap * (from - WXO_RES) / 100, i = hl, n = 0;
+    while (n < 30 && e > 0) { const x = days[Math.min(i, days.length - 1)], need = hb.kmDay * x.k / 100; if (e < need) break; e -= need; i++; n++; }
+    const head = soc != null ? Math.round(soc) + ' % Restakku' : `Ladehub ${WXO_RES}–${hb.target} %`;
+    const until = from <= WXO_RES ? 'unter der Reserve' : n <= 0 ? 'reicht keinen vollen Tag' : n === 1 ? 'reicht bis ' + (hl ? 'morgen' : 'heute Abend') : hl + n - 1 < days.length ? 'reicht bis ' + wxDay(days[hl + n - 1].d).wd + '. (' + n + ' Tage)' : 'reicht ca. ' + n + ' Tage';
+    tip.textContent = head + ' – ' + until;
+    tip.classList.remove('hidden');
+  } else tip.classList.add('hidden');
+  el.classList.remove('hidden');
+  if (dashFirst() === 'dyn' && !window.dSwUser) { const want = dashFirstSlide(soc) === 'wx' ? dashIdx('wxo-card') : dashIdx('meter-card'); if (dSw.idx !== want) setTimeout(() => dashSwipeTo(want), 50); }
+  try { save(KEY_WXO + 'H', { day: todayYMD(), st: wxIconStyle(), n: wxoN(), cut: hl, days: $('wxo-days').innerHTML, tip: tip.classList.contains('hidden') ? '' : tip.textContent }); } catch (e) { }   // für den sofortigen Aufbau beim nächsten Öffnen
+}
+/** Beim Laden: Karte sofort aus dem letzten Stand zeigen (oder als Platzhalter in gleicher Höhe), damit nichts springt; renderWxo füllt sie danach neu */
+function wxoBoot() {
+  if (!wxLoc() || liveHero) return;
+  const c = load(KEY_WXO + 'H', null), sk = '<div class="h-[148px] rounded-2xl bg-slate-100 dark:bg-slate-800/60 animate-pulse"></div>';
+  $('wxo-days').style.gridTemplateColumns = 'repeat(' + wxoN() + ', minmax(0, 1fr))';
+  $('wxo-days').innerHTML = c && c.day === todayYMD() && c.days && (c.n || 3) === wxoN() && (c.st || 'emoji') === wxIconStyle() ? c.days : sk.repeat(wxoN());
+  const tip = $('wxo-tip'); tip.textContent = c && c.day === todayYMD() ? c.tip || '' : ''; tip.classList.toggle('hidden', !tip.textContent);
+  if (!tip.textContent) { tip.textContent = ' '; tip.classList.remove('hidden'); }       // gleiche Höhe wie mit Text
+  $('wxo-card').classList.remove('hidden');
+}
+function wxoPartsHtml(q) {
+  if (!q) return ''; const t = [[q.cold, '❄️'], [q.rain, '🌧️'], [q.hum, '💧']].filter(([v]) => v >= 0.05);   // je Anteil eine Zeile: Symbole und Zahlen jeweils untereinander
+  return t.length ? `<span class="mt-px flex justify-end"><span class="grid grid-cols-[auto_30px] items-center gap-x-1 text-[11.5px] leading-[1.35] text-slate-500 dark:text-slate-400">${t.map(([v, i]) => `<span class="text-center">${i}</span><span class="text-right tabular-nums">+${fmt(v, 1)}</span>`).join('')}</span></span>` : '';
+}
+function openWxoSheet() {
+  const o = wxoLast; if (!o) return; const { m, days } = o, P = WXO_PRIOR;
+  $('wxo-sheet-box').innerHTML = `<div class="mx-auto h-1 w-10 shrink-0 rounded bg-slate-300 dark:bg-slate-700 max-sm:hidden"></div><p class="shrink-0 text-xl font-bold">Prognose 7 Tage</p>
+    <div class="flex shrink-0 justify-end gap-2 text-[11.5px] text-slate-500 dark:text-slate-400"><span>kWh/100 km</span><span class="w-[62px] text-right">Reichweite</span></div>
+    <div class="divide-y divide-slate-200 dark:divide-slate-800 !mt-1 max-sm:!-mt-1 max-sm:flex max-sm:min-h-0 max-sm:flex-1 max-sm:flex-col max-sm:overflow-y-auto">${days.map((x, i) => `<div class="flex items-center gap-2 py-2.5 max-sm:flex-[1_0_auto] max-sm:py-1.5"><span class="w-[54px] shrink-0 whitespace-nowrap leading-tight"><span class="block text-[15px] font-semibold">${i === 0 ? 'Heute' : i === 1 ? 'Morgen' : wxDay(x.d).wd + '.'}</span><span class="block text-[11.5px] text-slate-500 dark:text-slate-400">${wxDay(x.d).dm}</span></span><span class="shrink-0 text-2xl">${wxoIconHtml(x.w, 42)}</span>
+      <span class="w-[84px] shrink-0 whitespace-nowrap text-[13px] leading-snug text-slate-500 dark:text-slate-400">${fmt(x.lo, 0).replace('-', '−')} bis ${fmt(x.hi, 0).replace('-', '−')} °C${x.p >= 1 ? '<br>' + fmt(x.p, 0) + ' mm' : ''}<span class="block sm:hidden" data-icem="${x.d}"></span></span>
+      <span class="hidden min-w-[26px] flex-1 justify-center sm:flex" data-iced="${x.d}"></span><span class="min-w-0 flex-1 text-right sm:w-[72px] sm:flex-none sm:shrink-0"><span class="block text-[18px] font-bold leading-tight">${fmt(x.k, 1)}</span>${wxoPartsHtml(x.parts)}</span><span class="w-[62px] shrink-0 whitespace-nowrap text-right text-[15px]${wxoLowR(x.r) ? ' text-red-600 dark:text-red-400' : ''}">${wxoFmtR(x.r)} km</span></div>`).join('')}</div>
+    <details class="group rounded-2xl bg-slate-100 dark:bg-slate-800/60 p-3 text-[12.5px] leading-relaxed max-sm:shrink-0 max-sm:max-h-[45dvh] max-sm:overflow-y-auto">
+      <summary class="flex cursor-pointer list-none items-center justify-between font-semibold [&::-webkit-details-marker]:hidden">So rechnet die Prognose<span class="text-slate-400 transition-transform group-open:rotate-90">›</span></summary>
+      <p class="mt-1">Grundverbrauch (ab ${WXO_T0} °C, trocken): <b>${fmt(m.a, 1)}</b> kWh/100 km${m.n ? '' : ' <span class="text-slate-400">(Startwert)</span>'}</p>
+      <p>Kälte: <b>+${fmt(m.b, 2)}</b> je Grad unter ${WXO_T0} °C ${m.n >= 5 && m.spanT >= 6 ? '' : '<span class="text-slate-400">(noch nah am Startwert ' + fmt(P.b, 2) + ')</span>'}</p>
+      <p>Kältezuschlag: <b>+${fmt(m.d, 2)}</b> je Grad unter ${WXO_T1} °C ${m.coldN >= 3 ? '' : '<span class="text-slate-400">(Startwert ' + fmt(P.d, 2) + ', lernt ab Ladungen unter ' + WXO_T1 + ' °C)</span>'}</p>
+      <p>Regentag: <b>+${fmt(m.c, 1)}</b> ${m.wetN >= 4 ? '' : '<span class="text-slate-400">(noch nah am Startwert ' + fmt(P.c, 1) + ')</span>'}</p>
+      <p>Feuchter Morgen (5–9 Uhr ≥ 90 %, unter 10 °C): <b>+${fmt(m.e, 1)}</b> ${m.humN >= 4 ? '' : '<span class="text-slate-400">(noch nah am Startwert ' + fmt(P.e, 1) + ')</span>'}</p>
+      <p class="text-slate-500 dark:text-slate-400">❄️ Kälte · 🌧️ Regen · 💧 beschlagene Scheiben (Heizung + Klima)</p>
+      <p class="text-slate-500 dark:text-slate-400"><span class="font-semibold text-orange-500">70 %</span> Eis-Wahrscheinlichkeit morgens – geschätzt aus der Scheibentemperatur (Temperatur, Taupunkt, Bewölkung, Wind, Stellplatz); <span class="text-yellow-500">gelb</span> Raureif möglich, <span class="text-orange-500">orange</span> wahrscheinlich vereist, <span class="text-red-500">rot</span> fast sicher bzw. Eisschicht. Ab 20 % angezeigt (Eis-Warnung, Ort „Zuhause“, Abfahrt laut Einstellungen)</p>
+      ${m.sd ? `<p>Typische Abweichung: ±${fmt(m.sd, 1)} kWh/100 km</p>` : ''}
+      <p class="mt-1.5 text-slate-500 dark:text-slate-400">Gelernt aus ${m.n} genauen Ladungen (mit Akku-% und km-Stand, ≥ 20 km) und dem Wetter an deinem Standort. Jede neue Ladung verbessert die Werte; neuere zählen stärker (eine 90 Tage alte Ladung halb so viel). Verbrauch ohne Ladeverluste (aus dem Akku, vergleichbar mit der Anzeige im Auto). Wetter: Open-Meteo${wxIconStyle() === 'meteo' ? ', Symbole: Meteocons von Bas Milius (MIT)' : ''}. Reichweite: ${fmt(o.cap, 1)} kWh netto bei 100 % Akku.</p>
+    </details>
+    <button type="button" data-wxo="close" class="h-12 w-full shrink-0 rounded-2xl border border-slate-300 dark:border-slate-700 text-sm font-semibold">Schließen</button>`;
+  $('wxo-sheet').classList.remove('hidden');
+  iceDays(days.map(x => x.d)).then(map => {                                     // Eis-Wahrscheinlichkeit je Morgen: Prozent + Balken (Handy unter den Temperaturen, PC in der Lücke)
+    const bar = (r, w) => { const p = r.p, c = p < 50 ? '#eab308' : p < 80 ? '#f97316' : '#ef4444', t = 'Eis morgens ≈ ' + p + ' % (Scheibe ≈ ' + fmt(Math.round(r.minTg) || 0, 0).replace('-', '−') + ' °C, ' + ICE_LVL[r.lvl] + ')';
+      return `<span class="inline-flex items-center gap-1.5" title="${t}"><span class="whitespace-nowrap text-[12px] font-bold tabular-nums" style="color:${c}">${p} %</span><span class="block h-[5px] overflow-hidden rounded-full bg-slate-300 dark:bg-slate-700" style="width:${w}px"><span class="block h-full rounded-full" style="width:${p}%;background:${c}"></span></span><span class="sr-only">${t}</span></span>`; };
+    document.querySelectorAll('#wxo-sheet-box [data-icem]').forEach(el => { const r = map[el.dataset.icem]; if (r && r.p >= 20) el.innerHTML = bar(r, 40); });
+    document.querySelectorAll('#wxo-sheet-box [data-iced]').forEach(el => { const r = map[el.dataset.iced]; if (r && r.p >= 20) el.innerHTML = bar(r, 46); });
+  }).catch(() => { });
+}
+/* Start: Verbrauchs-Prognose und Zählerstand seitlich wischen (Standard: Prognose). Höhe folgt der sichtbaren Karte. */
+const dSw = { tr: $('dash-swipe-track'), idx: 0 };
+function dashSlides() { return [$('ltm-card'), $('btm-card'), $('wxo-card'), $('veh-slide'), $('meter-card')].filter(x => x && !x.classList.contains('hidden') && !((x.id === 'btm-card' || x.id === 'ltm-card') && liveHero)); }
+const dashIdx = (id) => Math.max(0, dashSlides().indexOf($(id)));
+/** Karte beim Öffnen: Prognose oder Zählerstand (Akku-Temperatur liegt links davon und wird nur per Wischen erreicht) */
+const dashDefaultIdx = () => dashFirstSlide() === 'wx' && !$('wxo-card').classList.contains('hidden') ? dashIdx('wxo-card') : dashIdx('meter-card');
+function dashSwipeSync() {
+  const sl = dashSlides(), w = dSw.tr.clientWidth + 12, i = Math.max(0, Math.min(sl.length - 1, Math.round(dSw.tr.scrollLeft / (w || 1)))); dSw.idx = i;
+  const two = sl.length > 1, dd = $('dash-dots'); dd.classList.toggle('hidden', !two);
+  if (dd.children.length !== sl.length) dd.innerHTML = sl.map((x, k) => `<button type="button" data-dslide="${k}" aria-label="${x.id === 'ltm-card' ? 'Langzeitverbrauch' : x.id === 'btm-card' ? 'Akku-Temperatur' : x.id === 'wxo-card' ? 'Verbrauchs-Prognose' : x.id === 'veh-slide' ? 'Fahrzeugstatus' : 'Zählerstand'}" class="pointer-events-auto h-1.5 w-1.5 rounded-full bg-slate-300 dark:bg-slate-700 transition-all"></button>`).join('');
+  dd.querySelectorAll('[data-dslide]').forEach((b, k) => { const on = k === i; b.classList.toggle('w-4', on); b.classList.toggle('w-1.5', !on); ['bg-slate-400', 'dark:bg-slate-500'].forEach(c => b.classList.toggle(c, on)); ['bg-slate-300', 'dark:bg-slate-700'].forEach(c => b.classList.toggle(c, !on)); });
+}
+function dashSwipeTo(i, smooth = true) { const sl = dashSlides(); if (!sl[i]) return; dSw.tr.scrollTo({ left: sl[i].offsetLeft - dSw.tr.offsetLeft, behavior: smooth ? 'smooth' : 'auto' }); }
+['pointerdown', 'touchstart', 'wheel'].forEach(ev => dSw.tr.addEventListener(ev, () => { window.dSwUser = true; }, { passive: true }));   // selbst gewischt: nicht mehr automatisch umschalten
+$('dash-dots').addEventListener('pointerdown', () => { window.dSwUser = true; });
+let dSwT = null; dSw.tr.addEventListener('scroll', () => { clearTimeout(dSwT); dSwT = setTimeout(dashSwipeSync, 60); }, { passive: true });
+$('dash-dots').addEventListener('click', (e) => { const b = e.target.closest('[data-dslide]'); if (b) dashSwipeTo(Number(b.dataset.dslide)); });
+try { new ResizeObserver(() => dashSwipeSync()).observe($('ltm-card')); new ResizeObserver(() => dashSwipeSync()).observe($('btm-card')); new ResizeObserver(() => dashSwipeSync()).observe($('wxo-card')); new ResizeObserver(() => dashSwipeSync()).observe($('meter-card')); } catch (e) { }
+let dSwVis = false; new MutationObserver(() => { const v = !$('wxo-card').classList.contains('hidden'); if (v !== dSwVis) { dSwVis = v; dashSwipeTo(dashDefaultIdx(), false); } dashSwipeSync(); }).observe($('wxo-card'), { attributes: true, attributeFilter: ['class'] });
+$('btn-live').addEventListener('click', () => setTimeout(() => dashSwipeTo(dashSlides().length - 1), 0));
+mouseSwipe(dSw.tr, 12);
+dashSwipeSync();
+$('wxo-more').addEventListener('click', openWxoSheet);
+$('wxo-days').addEventListener('click', (e) => { const b = e.target.closest('[data-iceb]'); if (b) { e.stopPropagation(); wxoIceTip(b); return; } openWxoSheet(); });
+/* Eis-Badge oben rechts an den Prognose-Kacheln (ab 20 %), Farben wie in der 7-Tage-Prognose; Tipp darauf zeigt kurz die Erklärung über den Kacheln */
+const ICE_COL = (p) => p < 50 ? '#eab308' : p < 80 ? '#f97316' : '#ef4444', ICE_NAME = (p) => p < 50 ? 'Raureif' : p < 80 ? 'Vereist' : 'Eisschicht';
+let wxoIceMap = {}, wxoIceT = 0;
+function wxoIceBadges(ds, tok) {
+  iceDays(ds).then(map => { if (tok !== wxoTok) return; wxoIceMap = map;
+    document.querySelectorAll('#wxo-days [data-wd]').forEach(el => { const r = map[el.dataset.wd], old = el.querySelector('[data-iceb]'); if (old) old.remove(); if (!r || r.p < 20) return;
+      el.insertAdjacentHTML('beforeend', `<button type="button" data-iceb="${el.dataset.wd}" aria-label="Eis morgens ${r.p} Prozent – Erklärung" class="absolute -top-[7px] -right-1 z-[1] inline-flex items-center gap-0.5 rounded-full py-0.5 pl-1 pr-1.5 text-[10px] font-bold leading-none text-slate-900 shadow-sm active:scale-95 transition" style="background:${ICE_COL(r.p)}"><span class="text-[10px] leading-none" aria-hidden="true">❄️</span>${r.p} %</button>`); });
+  }).catch(() => { });
+}
+function wxoIceTip(b) {
+  const r = wxoIceMap[b.dataset.iceb], el = $('wxo-ice-tip'); if (!r) return; clearTimeout(wxoIceT);
+  const day = b.dataset.iceb === wxIso(new Date()) ? 'Heute früh' : b.dataset.iceb === wxIso(new Date(Date.now() + 864e5)) ? 'Morgen früh' : wxDay(b.dataset.iceb).wd + '. früh', cur = ICE_NAME(r.p);
+  const item = (e, n) => `<span class="${n === cur ? 'font-bold' : 'opacity-55'}">${e} ${n}</span>`;
+  el.innerHTML = `<p class="text-[13px] font-semibold">${day}: Eis ≈ ${r.p} % · Scheibe ≈ ${fmt(Math.round(r.minTg) || 0, 0).replace('-', '−')} °C</p><p class="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[12.5px]">${item('🟡', 'Raureif')}${item('🟠', 'Vereist')}${item('🔴', 'Eisschicht')}</p>`;
+  el.classList.remove('hidden'); wxoIceT = setTimeout(() => el.classList.add('hidden'), 5000);
+}
+$('wxo-ice-tip').addEventListener('click', () => { clearTimeout(wxoIceT); $('wxo-ice-tip').classList.add('hidden'); });
+$('wxo-sheet').addEventListener('click', (e) => { if (e.target === $('wxo-sheet') || e.target.closest('[data-wxo="close"]')) $('wxo-sheet').classList.add('hidden'); });
+wxoBoot(); fillWxoPrefs(); renderWxo(); setInterval(() => { if (!document.hidden && currentView === 'dashboard') renderWxo(); }, 30 * 60 * 1000);
+setTimeout(() => renderFrost(), 1500); setInterval(() => { if (!document.hidden && currentView === 'dashboard') renderFrost(); }, 15 * 60 * 1000);
+let wxTimer = null, wxTok = 0, wxChart = null;
+function wxKill() { if (wxChart) { wxChart.destroy(); wxChart = null; } }
+function wxClose() { wxTok++; clearTimeout(wxTimer); wxKill(); $('wx-pop').classList.add('hidden'); }
+function wxBody(html) { wxKill(); $('wx-body').innerHTML = html; }
+function wxArm() { clearTimeout(wxTimer); wxTimer = setTimeout(wxClose, WX_SECONDS * 1000); }   // schließt nach 10 s von selbst (ohne Anzeige)
+const WX_MUTED = 'text-slate-500 dark:text-slate-400', WX_GREEN = 'text-emerald-600 dark:text-emerald-400';
+function wxRender(data, l) {
+  const today = wxIso(new Date()), days = data.days.filter(x => x.d > today).slice(0, 7), isDry = (x) => x.p != null && x.p < WX_DRY, dry = days.filter(isDry);
+  let h = '<p class="pr-10 text-[13px] ' + WX_MUTED + '">' + (dry.length ? 'Nächster trockener Tag' : 'Trockene Tage') + '</p>';
+  if (dry.length) { const n = wxDay(dry[0].d); h += '<p class="text-[28px] font-bold leading-tight">' + n.long + ', ' + n.dm + '</p><p class="mt-0.5 text-sm font-bold ' + WX_GREEN + '">' + dry[0].p + ' % Regenwahrscheinlichkeit</p>'; }
+  else h += '<p class="text-[24px] font-bold leading-tight">Kein trockener Tag</p><p class="mt-0.5 text-sm ' + WX_MUTED + '">In den nächsten 7 Tagen liegt die Regenwahrscheinlichkeit überall bei ' + WX_DRY + ' % oder mehr.</p>';
+  h += '<div class="relative mt-3 h-[190px]"><canvas id="wx-chart" role="img" aria-label="Regenwahrscheinlichkeit der nächsten 7 Tage"></canvas></div>';
+  const more = dry.slice(1).map(x => { const n = wxDay(x.d); return n.wd + ' ' + n.dm + ' (' + x.p + ' %)'; });
+  h += '<p class="mt-2 text-xs ' + WX_MUTED + '">Regenwahrscheinlichkeit in %, Grenze = ' + WX_DRY + ' %.' + (more.length ? ' Außerdem trocken: ' + more.join(', ') + '.' : '') + '</p>';
+  const st = data.stale ? ' · offline, Stand ' + new Date(data.t).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : '';
+  h += '<p class="mt-1 text-[11px] ' + WX_MUTED + '">' + esc(l.label) + ' · Open-Meteo' + st + '</p>';
+  wxBody(h); wxDraw(days, isDry);
+}
+/** Diagramm als Chart.js-Canvas (wie die Diagramme auf Start): Farben bleiben auch bei aggressiven Handy-Dunkelmodi erhalten. */
+function wxDraw(days, isDry) {
+  const cv = $('wx-chart'); if (!cv || typeof Chart === 'undefined' || !days.length) return;
+  const dark = matchMedia('(prefers-color-scheme: dark)').matches, text = dark ? '#cbd5e1' : '#475569', line = dark ? '#94a3b8' : '#64748b', green = '#10b981';
+  const top = Math.max(40, Math.ceil(Math.max(...days.map(x => x.p || 0)) / 10) * 10 + 10);
+  const extra = { id: 'wxExtra', afterDatasetsDraw(ch) {                                // gestrichelte 10-%-Linie + Prozentwerte über den Balken
+    const { ctx, chartArea: a, scales: { y } } = ch, yy = y.getPixelForValue(WX_DRY);
+    ctx.save(); ctx.setLineDash([5, 4]); ctx.strokeStyle = line; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(a.left, yy); ctx.lineTo(a.right, yy); ctx.stroke(); ctx.setLineDash([]);
+    ctx.font = '700 12px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ch.getDatasetMeta(0).data.forEach((b, i) => { const x = days[i]; ctx.fillStyle = isDry(x) ? (dark ? '#34d399' : '#059669') : (dark ? '#e2e8f0' : '#334155'); ctx.fillText(x.p == null ? '–' : String(x.p), b.x, b.y - 5); });
+    ctx.restore(); } };
+  wxChart = new Chart(cv, { type: 'bar', plugins: [extra],
+    data: { labels: days.map(x => wxDay(x.d).wd), datasets: [{ data: days.map(x => x.p || 0), backgroundColor: days.map(x => isDry(x) ? green : '#000000'), borderColor: days.map(x => isDry(x) ? green : (dark ? '#e2e8f0' : '#000000')), borderWidth: 1.5,
+      borderRadius: { topLeft: 6, topRight: 6, bottomLeft: 2, bottomRight: 2 }, borderSkipped: false, minBarLength: 4, barPercentage: .5, categoryPercentage: 1 }] },
+    options: { responsive: true, maintainAspectRatio: false, animation: false, layout: { padding: { top: 20 } }, plugins: { legend: { display: false }, tooltip: { enabled: false } },
+      scales: { x: { grid: { display: false }, border: { display: false }, ticks: { color: text, font: { size: 12 } } }, y: { display: false, min: 0, max: top } } } });
+}
+async function wxOpen() {
+  const pop = $('wx-pop'), card = $('wx-card'), tok = ++wxTok, t = $('app-title').getBoundingClientRect(), l = wxLoc();
+  clearTimeout(wxTimer); card.style.transition = 'none'; card.style.transform = ''; card.style.opacity = '';
+  card.style.top = Math.round(t.bottom + 12) + 'px'; pop.classList.remove('hidden');
+  const c = card.getBoundingClientRect(); $('wx-caret').style.left = Math.min(Math.max(t.left - c.left + 15, 21), c.width - 35) + 'px';   // Pfeil zeigt auf die Überschrift
+  if (!l) {
+    wxBody('<p class="pr-10 text-[13px] ' + WX_MUTED + '">Wetter</p><p class="text-xl font-bold leading-tight">Kein Standort hinterlegt</p><p class="mt-1 text-sm ' + WX_MUTED + '">Trage in den Einstellungen einen Ort oder eine Postleitzahl ein.</p><button id="wx-go" type="button" class="mt-3 w-full rounded-xl bg-emerald-600 py-2.5 text-sm font-semibold text-white active:scale-95 transition">Standort eintragen</button>');
+    $('wx-go').addEventListener('click', () => { wxClose(); openSettings('wetter'); $('wx-q').scrollIntoView({ block: 'center' }); $('wx-q').focus({ preventScroll: true }); });
+    wxArm(); return;
+  }
+  wxBody('<p class="pr-10 text-[13px] ' + WX_MUTED + '">Wetter</p><p class="text-xl font-bold leading-tight">Wird geladen …</p>');
+  try { const data = await wxForecast(l); if (tok !== wxTok) return; wxRender(data, l); }
+  catch (e) { if (tok !== wxTok) return; wxBody('<p class="pr-10 text-[13px] ' + WX_MUTED + '">Wetter</p><p class="text-xl font-bold leading-tight">Keine Daten</p><p class="mt-1 text-sm ' + WX_MUTED + '">Die Vorhersage konnte nicht geladen werden. Bitte Internetverbindung prüfen.</p>'); }
+  wxArm();
+}
+(() => {                                                                               // Bedienung: Überschrift antippen, schließen per Kreuz, Hintergrund, Esc oder Wegwischen
+  const t = $('app-title'), card = $('wx-card'); let sx = 0, sy = 0, id = null, drag = false;
+  t.setAttribute('role', 'button'); t.setAttribute('tabindex', '0'); t.setAttribute('aria-label', 'Wetter: trockene Tage anzeigen'); t.classList.add('cursor-pointer');
+  t.addEventListener('click', wxOpen);
+  t.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); wxOpen(); } });
+  $('wx-x').addEventListener('click', wxClose); $('wx-bd').addEventListener('click', wxClose);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('wx-pop').classList.contains('hidden')) wxClose(); });
+  card.addEventListener('pointerdown', e => { id = e.pointerId; sx = e.clientX; sy = e.clientY; drag = false; card.style.transition = 'none'; });
+  card.addEventListener('pointermove', e => {
+    if (e.pointerId !== id) return; const dx = e.clientX - sx, dy = e.clientY - sy;
+    if (!drag && Math.max(Math.abs(dx), Math.abs(dy)) > 8) { drag = true; try { card.setPointerCapture(id); } catch (e) { } }
+    if (drag) { card.style.transform = 'translate(' + dx + 'px,' + dy + 'px)'; card.style.opacity = String(Math.max(0.3, 1 - Math.max(Math.abs(dx), Math.abs(dy)) / 260)); }
+  });
+  const end = e => {
+    if (e.pointerId !== id) return; id = null; if (!drag) return; drag = false;
+    const m = Math.max(Math.abs(e.clientX - sx), Math.abs(e.clientY - sy));
+    if (m >= 60) wxClose(); else { card.style.transition = 'transform .2s, opacity .2s'; card.style.transform = ''; card.style.opacity = ''; }
+  };
+  card.addEventListener('pointerup', end); card.addEventListener('pointercancel', end);
+})();
+renderWxLoc();
+
+
+// ───── src/10-rueckblick-akte-checkheft.js ─────
+/* =====================================================================
+   Rückblick als teilbares Bild (Poster 4:5, ohne Zählerstand und ohne Standort): Canvas → Teilen-Dialog des Geräts, sonst PNG-Download
+   ===================================================================== */
+async function wrShare(btn) {
+  /* Teilbares Bild = letzte Seite des Rückblicks („Alles auf einen Blick“ + 6–8 Kacheln): gleiche Farben, Schriften und Werte, auf 1080 × 1350 px hochskaliert */
+  if (!wrCur) return; const { p, st } = wrCur, W = 1080, H = 1350, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  try { await document.fonts.load('700 100px "Barlow Condensed"'); } catch (e) { }
+  const g = cv.getContext('2d'), DF = "'Barlow Condensed','Arial Narrow',system-ui,sans-serif", SF = 'system-ui,-apple-system,"Segoe UI",sans-serif';
+  const BG = '#0f172a', AC = '#6ee7b7', MU = '#cbd5e1', INK = '#ffffff', TILE = 'rgba(255,255,255,.08)';
+  const txt = (s, x, y, size, wt, col, font = SF, al = 'left') => { g.font = wt + ' ' + size + 'px ' + font; g.fillStyle = col; g.textAlign = al; g.textBaseline = 'alphabetic'; g.fillText(s, x, y); return g.measureText(s).width; };
+  const rr = (x, y, w, h, r) => { g.beginPath(); g.roundRect ? g.roundRect(x, y, w, h, r) : g.rect(x, y, w, h); g.fill(); };
+  const tiles = [['Gefahren', fmt(st.km || 0, 0), 'km'], ['Geladen', fmt(st.kwh, 0), 'kWh'], ['Ø Verbrauch inkl. Verluste', st.kwh100 != null ? fmt(st.kwh100, 1) : '–', 'kWh/100 km'],
+    ['Ladekosten', fmt(st.laden, 2), '€'], ['Ladungen', fmt(st.n, 0), ''], ['Ø Strompreis', st.kwh > 0 ? fmt(st.laden / st.kwh * 100, 1) : '–', 'ct/kWh']];
+  if (st.km > 0) { const cc = cmpCar(), lit = st.km * cc.l / 100; const co = fmtCo2(cmpCo2(st.km, st.kwh).sav).split(' '); tiles.push(['Energiekostenersparnis', fmt(lit * cc.eur - st.laden, 0), '€'], ['CO₂ vermieden', co[0], co[1]]); }
+  const ROWS = Math.ceil(tiles.length / 2);
+  const S = 2.74, M = 72, GAP = Math.round(12 * S), TW = (W - 2 * M - GAP) / 2, PAD = Math.round(14 * S), LS = Math.round(12 * S), VS = Math.round(36 * S), US = Math.round(13 * S);
+  const TH = PAD + LS + 10 + Math.round(VS * 1.05) + PAD, HEAD = Math.round(44 * S), SUB = Math.round(16 * S);
+  g.font = '700 ' + HEAD + 'px ' + DF; const lines = []; 'Alles auf einen Blick'.split(' ').forEach(wd => { const l = lines.length ? lines[lines.length - 1] + ' ' + wd : wd; if (lines.length && g.measureText(l).width <= W - 2 * M) lines[lines.length - 1] = l; else lines.push(wd); });   // wie auf der Seite umbrechen, falls zu breit
+  const LH = Math.round(HEAD * 0.98), headH = LH * (lines.length - 1) + HEAD;
+  const blockH = headH + 18 + SUB + Math.round(20 * S) + ROWS * TH + (ROWS - 1) * GAP, top = Math.round((H - blockH) / 2);
+  g.fillStyle = BG; g.fillRect(0, 0, W, H);
+  lines.forEach((l, k) => txt(l, M, top + HEAD * 0.82 + k * LH, HEAD, 700, INK, DF));
+  txt(p.label, M, top + headH + 18 + SUB * 0.8, SUB, 400, MU);
+  const y0 = top + headH + 18 + SUB + Math.round(20 * S);
+  tiles.forEach(([l, v, u], i) => {
+    const x = M + (i % 2) * (TW + GAP), y = y0 + Math.floor(i / 2) * (TH + GAP);
+    g.fillStyle = TILE; rr(x, y, TW, TH, Math.round(20 * S));
+    g.font = '400 ' + LS + 'px ' + SF; const ls = Math.min(LS, Math.floor(LS * (TW - 2 * PAD) / Math.max(1, g.measureText(l).width)));   // lange Bezeichnung passend verkleinern
+    txt(l, x + PAD, y + PAD + LS * 0.85, ls, 400, MU);
+    g.font = '500 ' + US + 'px ' + SF; const uw = u ? g.measureText(u).width + Math.round(4 * S) : 0;
+    g.font = '700 ' + VS + 'px ' + DF; let vs = VS; const vw = g.measureText(v).width, max = TW - 2 * PAD - uw; if (vw > max) vs = Math.floor(VS * max / vw);
+    const by = y + PAD + LS + 10 + VS * 0.9, w = txt(v, x + PAD, by, vs, 700, AC, DF);
+    if (u) txt(u, x + PAD + w + Math.round(4 * S), by, US, 500, MU);
+  });
+  cv.toBlob(async (blob) => {
+    const old = btn ? btn.textContent : '', say = (m) => { if (btn) { btn.textContent = m; setTimeout(() => { if (btn.isConnected) btn.textContent = old; }, 2200); } };
+    if (!blob) { say('Bild konnte nicht erstellt werden'); return; }
+    const name = 'enyaq-rueckblick-' + p.id + '.png', file = new File([blob], name, { type: 'image/png' });
+    try { if (navigator.canShare?.({ files: [file] })) { await navigator.share({ files: [file], title: wrTitle() }); return; } } catch (e) { if (e.name === 'AbortError') return; }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); say('Bild gespeichert');
+  }, 'image/png');
+}
+
+/* =====================================================================
+   Lade-Heatmap (Statistik): Kalender der Ladetage (je dunkler, desto mehr kWh) + Ladungen nach Wochentag. Gezeichnet auf Canvas (Farben bleiben auf jedem Gerät erhalten).
+   ===================================================================== */
+function renderHeat() {
+  const rs = getReadings(), days = new Map(), wdN = [0, 0, 0, 0, 0, 0, 0]; let nCh = 0, first = null;
+  rs.forEach((r, i) => { if (!isCharge(rs, i)) return; const t = Date.parse(r.date); if (!Number.isFinite(t)) return; const k = wxIso(new Date(t)), o = days.get(k) || { n: 0, kwh: 0 }; o.n++; o.kwh += r.consumedSinceLast || 0; days.set(k, o); wdN[(new Date(t).getDay() + 6) % 7]++; nCh++; if (first == null || t < first) first = t; });
+  $('st-heat-card').classList.toggle('hidden', nCh < 3); if (nCh < 3) return;
+  const dark = matchMedia('(prefers-color-scheme: dark)').matches, text = dark ? '#cbd5e1' : '#475569', empty = dark ? '#1e293b' : '#e2e8f0', ramp = dark ? ['#065f46', '#059669', '#10b981', '#6ee7b7'] : ['#bbf7d0', '#6ee7b7', '#10b981', '#047857'];
+  const mon = (d) => { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; }, today = new Date(), thisMon = mon(today);
+  const N = Math.min(53, Math.max(16, Math.round((thisMon - mon(new Date(first))) / (7 * 864e5)) + 1)), start = new Date(thisMon); start.setDate(start.getDate() - 7 * (N - 1));
+  const vals = [...days.values()].map(o => o.kwh).filter(v => v > 0).sort((a, b) => a - b), q = (f) => vals.length ? vals[Math.min(vals.length - 1, Math.floor(f * vals.length))] : 0, lvl = (o) => o.kwh <= 0 ? 0 : o.kwh >= q(.75) ? 3 : o.kwh >= q(.5) ? 2 : o.kwh >= q(.25) ? 1 : 0;
+  const dpr = window.devicePixelRatio || 1, P = 16, L = 26, T = 18, W = L + N * P, H = T + 7 * P + 30, cv = $('st-heat'), g = cv.getContext('2d');
+  cv.style.width = W + 'px'; cv.style.height = H + 'px'; cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
+  const cell = (x, y, col) => { g.fillStyle = col; g.beginPath(); g.roundRect ? g.roundRect(x, y, 13, 13, 3) : g.rect(x, y, 13, 13); g.fill(); };
+  g.font = '11px system-ui, sans-serif'; g.fillStyle = text; g.textAlign = 'left';
+  ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].forEach((l, i) => g.fillText(l, 0, T + i * P + 11));   // alle sieben Wochentage
+  let lastM = -1;
+  for (let c = 0; c < N; c++) {
+    const d0 = new Date(start); d0.setDate(d0.getDate() + c * 7); if (d0.getMonth() !== lastM) { lastM = d0.getMonth(); g.fillStyle = text; g.fillText(['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'][lastM], L + c * P, 12); }
+    for (let r = 0; r < 7; r++) {
+      const d = new Date(start); d.setDate(d.getDate() + c * 7 + r); if (d > today) continue;
+      const o = days.get(wxIso(d)), x = L + c * P, y = T + r * P; cell(x, y, o ? ramp[lvl(o)] : empty);
+      if (wxIso(d) === wxIso(today)) { g.strokeStyle = dark ? '#e2e8f0' : '#0f172a'; g.lineWidth = 1.5; g.strokeRect(x + .75, y + .75, 11.5, 11.5); }
+    }
+  }
+  const ly = T + 7 * P + 8; g.fillStyle = text; g.fillText('weniger', L, ly + 11); let lx = L + 48; cell(lx, ly, empty); ramp.forEach((col, i) => cell(lx + (i + 1) * P, ly, col)); g.fillStyle = text; g.fillText('mehr', lx + 5 * P + 4, ly + 11);
+  $('st-heat-scroll').scrollLeft = 1e6;
+  /* Wochentage */
+  const wc = $('st-heat-wd'), cw = Math.max(200, wc.parentElement.clientWidth || 300), RH = 26, WH = 7 * RH + 4, wg = wc.getContext('2d'), mx = Math.max(...wdN), names = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'], LONG = ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag'];
+  wc.style.height = WH + 'px'; wc.width = Math.round(cw * dpr); wc.height = Math.round(WH * dpr); wg.setTransform(dpr, 0, 0, dpr, 0, 0); wg.clearRect(0, 0, cw, WH); wg.font = '13px system-ui, sans-serif'; wg.textBaseline = 'middle';
+  wdN.forEach((n, i) => { const y = i * RH + RH / 2 + 2, bw = Math.max(n ? 4 : 0, n / mx * (cw - 34 - 46)); wg.fillStyle = text; wg.textAlign = 'left'; wg.fillText(names[i], 0, y);
+    wg.fillStyle = n === mx ? '#10b981' : (dark ? '#475569' : '#94a3b8'); wg.beginPath(); wg.roundRect ? wg.roundRect(34, y - 8, bw, 16, 4) : wg.rect(34, y - 8, bw, 16); wg.fill(); wg.fillStyle = text; wg.fillText(String(n), 34 + bw + 8, y); });
+  const keys = [...days.keys()].sort(), gaps = keys.slice(1).map((k, i) => (Date.parse(k + 'T12:00:00') - Date.parse(keys[i] + 'T12:00:00')) / 864e5), top = wdN.indexOf(mx), gmax = gaps.length ? Math.max(...gaps) : 0, gi = gaps.indexOf(gmax);
+  $('st-heat-note').textContent = nCh + ' Ladungen an ' + keys.length + ' Tagen. Am häufigsten lädst du am ' + LONG[top] + ' (' + fmt(mx / nCh * 100, 0) + ' %).' + (gaps.length ? ' Ø Abstand ' + fmt(gaps.reduce((a, b) => a + b, 0) / gaps.length, 1) + ' Tage, längste Pause ' + fmt(gmax, 0) + ' Tage (' + wrDY(Date.parse(keys[gi] + 'T12:00:00')) + ' – ' + wrDY(Date.parse(keys[gi + 1] + 'T12:00:00')) + ').' : '');
+}
+
+/* =====================================================================
+   Fahrzeugakte (PDF über den Druckdialog des Geräts, wie die Berichte): Eckdaten, Betrieb gesamt, Akku-Schätzung, km-Verlauf, Wartung und Service, Kosten nach Kategorie, Wartungsplan.
+   Alles aus den eigenen Aufzeichnungen der App; kein Gutachten.
+   ===================================================================== */
+const AKTE_SERVICE = /service|wartung|inspektion|reifen|räder|werkstatt|tüv|\bhu\b|\bau\b|reparatur|bremse|garantie|ersatzteil|rückruf/i;
+/* ---- Diagramm-Helfer: Canvas → PNG, damit die Grafiken im PDF scharf und farbtreu sind ---- */
+const AK = { ink: '#334155', grid: '#e2e8f0', green: '#059669', sky: '#0284c7', amber: '#d97706', rose: '#e11d48', slate: '#94a3b8' };
+const akNice = (lo, hi, n = 4) => { const span = Math.max(1e-9, hi - lo), s0 = span / n, mag = Math.pow(10, Math.floor(Math.log10(s0))), r = s0 / mag, step = (r <= 1 ? 1 : r <= 2 ? 2 : r <= 5 ? 5 : 10) * mag, a = Math.floor(lo / step + 1e-9) * step, t = []; for (let v = a; v <= hi + step * .999; v += step) t.push(+v.toFixed(10)); return t.length > 1 ? t : [a, a + step]; };
+const akDec = (yt) => { const st = yt[1] - yt[0]; return st >= 1 ? 0 : Math.min(2, Math.ceil(-Math.log10(st) - 1e-9)); };   // Nachkommastellen der y-Achse (sonst stehen bei kleiner Spanne gleiche Zahlen mehrfach)
+const akImg = (cv, alt) => '<div style="break-inside:avoid;margin:2px 0 12px;padding-bottom:10px;border-bottom:1px solid #cbd5e1"><img alt="' + alt + '" width="' + cv.width + '" height="' + cv.height + '" loading="eager" decoding="sync" src="' + cv.toDataURL('image/png') + '" style="display:block;width:100%;height:auto"></div>';
+function akLegend(g, items, W) { g.font = '19px system-ui, sans-serif'; g.textAlign = 'left'; g.textBaseline = 'middle'; let x = 86; items.forEach(([col, lab]) => { g.fillStyle = col; g.fillRect(x, 12, 18, 18); g.fillStyle = AK.ink; g.fillText(lab, x + 26, 21); x += 26 + g.measureText(lab).width + 28; }); }
+function akAxes(g, W, H, L, R, T, yt, Y, yFmt) { const dec = akDec(yt); g.fillStyle = '#fff'; g.fillRect(0, 0, W, H); g.font = '19px system-ui, sans-serif'; g.lineWidth = 1; g.strokeStyle = AK.grid; g.fillStyle = AK.ink; g.textAlign = 'right'; g.textBaseline = 'middle'; yt.forEach(v => { const y = Y(v); g.beginPath(); g.moveTo(L, y); g.lineTo(W - R, y); g.stroke(); g.fillText(yFmt(v, dec), L - 10, y); }); }
+function akRef(g, ref, W, L, R, Y) { (ref || []).forEach(r => { const y = Y(r.y); g.save(); g.setLineDash([9, 7]); g.strokeStyle = r.color; g.lineWidth = 2.5; g.beginPath(); g.moveTo(L, y); g.lineTo(W - R, y); g.stroke(); g.restore(); g.font = 'bold 19px system-ui, sans-serif'; const tw = g.measureText(r.label).width; g.fillStyle = '#fff'; g.fillRect(W - R - tw - 14, y - 30, tw + 12, 26); g.fillStyle = r.color; g.textAlign = 'right'; g.textBaseline = 'bottom'; g.fillText(r.label, W - R - 8, y - 6); }); }
+/** Linien/Punkte-Diagramm: series = [{ kind: 'line'|'dots', pts: [[x, y]], color }], ref = [{ y, label, color }]; xTicks optional (sonst Anfang und Ende). */
+function akXY(c) {
+  const W = 1000, H = c.H || 330, L = 90, R = 24, T = c.legend ? 46 : 20, B = 50, cv = document.createElement('canvas'); cv.width = W; cv.height = H; const g = cv.getContext('2d');
+  const ys = [].concat(...c.series.map(s => s.pts.map(q => q[1])), (c.ref || []).map(r => r.y)), yt = akNice(c.ymin != null ? c.ymin : Math.min(...ys), Math.max(...ys), 4), ylo = yt[0], yhi = yt[yt.length - 1], xhi = Math.max(c.xmax, c.xmin + 1e-9);
+  const X = (x) => L + (x - c.xmin) / (xhi - c.xmin) * (W - L - R), Y = (y) => T + (1 - (y - ylo) / Math.max(1e-9, yhi - ylo)) * (H - T - B);
+  akAxes(g, W, H, L, R, T, yt, Y, c.yFmt); g.textBaseline = 'alphabetic'; g.fillStyle = AK.ink;
+  if (c.xTicks) { g.textAlign = 'center'; c.xTicks.forEach(x => g.fillText(c.xFmt(x), X(x), H - 16)); } else { g.textAlign = 'left'; g.fillText(c.xFmt(c.xmin), L, H - 16); g.textAlign = 'right'; g.fillText(c.xFmt(xhi), W - R, H - 16); }
+  if (c.xTitle) { g.textAlign = 'center'; g.fillText(c.xTitle, (L + W - R) / 2, H - 16); }
+  akRef(g, c.ref, W, L, R, Y);
+  c.series.forEach(s => { if (s.kind === 'line') { g.strokeStyle = s.color; g.lineWidth = s.w || 4; g.beginPath(); s.pts.forEach((q, i) => i ? g.lineTo(X(q[0]), Y(q[1])) : g.moveTo(X(q[0]), Y(q[1]))); g.stroke(); } else { g.fillStyle = s.color; s.pts.forEach(q => { g.beginPath(); g.arc(X(q[0]), Y(q[1]), s.r || 5, 0, 7); g.fill(); }); } });
+  if (c.legend) akLegend(g, c.legend, W);
+  return akImg(cv, c.alt || 'Diagramm');
+}
+/** Balkendiagramm (auch gestapelt): labels, stacks = [{ color, label, vals }], ref wie oben. */
+function akBars(c) {
+  const W = 1000, H = c.H || 330, L = 90, R = 24, T = 46, B = 56, n = c.labels.length, cv = document.createElement('canvas'); cv.width = W; cv.height = H; const g = cv.getContext('2d');
+  const tot = c.labels.map((_, i) => c.stacks.reduce((a, s) => a + Math.max(0, s.vals[i] || 0), 0)), yt = akNice(0, Math.max(...tot, ...(c.ref || []).map(r => r.y), 1e-9), 4), yhi = yt[yt.length - 1];
+  const Y = (v) => T + (1 - v / yhi) * (H - T - B), cx = (i) => L + (i + .5) * (W - L - R) / n, bw = Math.min(64, (W - L - R) / n * .64);
+  akAxes(g, W, H, L, R, T, yt, Y, c.yFmt);
+  c.labels.forEach((_, i) => { let acc = 0; c.stacks.forEach(s => { const v = Math.max(0, s.vals[i] || 0); if (v > 0) { g.fillStyle = s.color; g.fillRect(cx(i) - bw / 2, Y(acc + v), bw, Y(acc) - Y(acc + v)); acc += v; } }); });
+  g.font = '18px system-ui, sans-serif'; g.fillStyle = AK.ink; g.textAlign = 'center'; g.textBaseline = 'alphabetic'; const st = Math.ceil(n / 12); c.labels.forEach((l, i) => { if (i % st === 0) g.fillText(l, cx(i), H - 20); });
+  akRef(g, c.ref, W, L, R, Y); akLegend(g, c.stacks.map(s => [s.color, s.label]), W);
+  return akImg(cv, c.alt || 'Diagramm');
+}
+/** Zwei gestapelte Balken (Energie, Anzahl): AC (grün) gegen DC (orange), je mit Prozentangabe. */
+function akSplit(rows) {
+  const W = 1000, H = 230, L = 250, R = 24, cv = document.createElement('canvas'); cv.width = W; cv.height = H; const g = cv.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, W, H); akLegend(g, [[AK.green, 'AC (Zuhause + Bosch)'], [AK.amber, 'DC (Unterwegs)']], W);
+  rows.forEach(([lab, ac, dc, fmtV], i) => { const y = 70 + i * 74, tot = ac + dc, wA = tot > 0 ? (W - L - R) * ac / tot : 0, wD = (W - L - R) - wA; g.font = '20px system-ui, sans-serif'; g.fillStyle = AK.ink; g.textAlign = 'right'; g.textBaseline = 'middle'; g.fillText(lab, L - 16, y + 26);
+    g.fillStyle = AK.green; g.fillRect(L, y, wA, 52); g.fillStyle = AK.amber; g.fillRect(L + wA, y, wD, 52); g.font = 'bold 20px system-ui, sans-serif'; g.fillStyle = '#fff'; g.textAlign = 'center';
+    const put = (v, w, cx) => { const full = fmt(v / tot * 100, 0) + ' % · ' + fmtV(v), short = fmt(v / tot * 100, 0) + ' %'; if (tot > 0 && g.measureText(full).width <= w - 24) g.fillText(full, cx, y + 27); else if (tot > 0 && g.measureText(short).width <= w - 16) g.fillText(short, cx, y + 27); };   // lange Beschriftung nur, wenn sie ins Segment passt
+    put(ac, wA, L + wA / 2); put(dc, wD, L + wA + wD / 2); });
+  return akImg(cv, 'AC- und DC-Laden');
+}
+/** Monatsdaten ab dem ersten Eintrag bis heute: km, Ladungen, kWh, Ø Verbrauch, Ladekosten, sonstige Kosten, Einnahmen. */
+function akMonths(rs, cs) {
+  const ts = rs.map(r => Date.parse(r.date)).concat(cs.map(c => Date.parse(c.date))).filter(Number.isFinite); if (!ts.length) return [];
+  const a = new Date(Math.min(...ts)), now = new Date(), out = [];
+  for (let y = a.getFullYear(), m = a.getMonth(); y < now.getFullYear() || (y === now.getFullYear() && m <= now.getMonth()); m++) {
+    if (m > 11) { m = 0; y++; if (y > now.getFullYear()) break; }
+    const s0 = new Date(y, m, 1).getTime(), e0 = new Date(y, m + 1, 1).getTime(), idx = []; rs.forEach((r, i) => { const t = Date.parse(r.date); if (t >= s0 && t < e0 && !isStartRow(rs, i)) idx.push(i); });
+    const mr = monthReport(y, m, 'all'), ct = costTotals(y, m), tot = idx.length ? consumptionTotals(rs, idx) : null;
+    out.push({ y, m, label: MONTHS[m] + ' ' + String(y).slice(2), km: rangeKm(s0, e0) || 0, n: mr.charges.length, kwh: mr.kwh, k100: tot && tot.km ? tot.kwh100 : null, laden: ct.laden, other: ct.other, income: ct.income });
+  }
+  return out;
+}
+function akTempPts() {                                                                  // nur aus dem lokalen Temperatur-Cache (kein Netz nötig); leer, wenn Standort/Cache fehlen
+  const l = wxLoc(), c = load(KEY_TEMPS, null); if (!l || !c || c.loc !== l.lat + ',' + l.lon) return []; const rs = getReadings(), pts = [];
+  rs.forEach((r, i) => { if (i < 1) return; const s = entryStats(rs, i), a = Date.parse(rs[i - 1].date), b = Date.parse(r.date); if (s.method !== 'soc' || s.rough || !(s.kwh100 > 0) || s.km < 20 || !Number.isFinite(a) || !Number.isFinite(b)) return;
+    let sum = 0, n = 0; for (let t = Date.parse(wxIso(new Date(a)) + 'T12:00:00'), e = Date.parse(wxIso(new Date(b)) + 'T12:00:00'); t <= e; t += 864e5) { const v = c.days[wxIso(new Date(t))]; if (v != null) { sum += v; n++; } } if (n) pts.push([sum / n, s.kwh100]); });
+  return pts;
+}
+function akteHtml() {
+  const rs = getReadings(), cs = getCosts(), set = getSettings(), now = Date.now(), name = (set.title || DEFAULT_TITLE).split('|')[0].trim() || 'Fahrzeug', D1 = (ms) => wrDY(ms), P0 = Date.parse(purchaseDay() + 'T12:00:00');
+  const od = rs.filter(r => r.odometerKm > 0), km = lastKnownKm(), driven = od.length > 1 && km != null ? km - od[0].odometerKm : null, tot = rs.length ? consumptionTotals(rs, rs.map((_, i) => i)) : null, pk = set.purchaseKm != null ? Number(set.purchaseKm) : null, pp = set.purchasePrice != null ? Number(set.purchasePrice) : null;
+  let kwh = 0, laden = 0, n = 0, chg = 0, stored = 0; const pl = { home: { n: 0, kwh: 0, cost: 0, ck: 0 }, bosch: { n: 0, kwh: 0, cost: 0, ck: 0 }, away: { n: 0, kwh: 0, cost: 0, ck: 0 } }, ent = [];
+  rs.forEach((r, i) => { if (isStartRow(rs, i)) return; const c = r.consumedSinceLast || 0, st = entryStats(rs, i), o = pl[placeOf(r)]; kwh += c; laden += r.cost || 0; o.kwh += c; o.cost += r.cost || 0; if (c > 0 && r.cost > 0) o.ck += c; if (isCharge(rs, i)) { n++; o.n++; } if (st.stored !== undefined) { chg += c; stored += st.stored; } ent.push({ r, st, c, t: Date.parse(r.date), ch: isCharge(rs, i) }); });
+  const other = cs.reduce((a, c) => a + Math.max(0, costAmt(c)), 0), income = -cs.reduce((a, c) => a + Math.min(0, costAmt(c)), 0), total = laden + other - income, loss = chg > 0 ? (1 - stored / chg) * 100 : null;
+  const H2 = (t) => '<h2 style="font-size:15px;margin:22px 0 6px;padding-bottom:3px;border-bottom:2px solid #059669;break-after:avoid">' + t + '</h2>', CAP = (t) => '<p style="font-size:12px;font-weight:600;margin:10px 0 2px;break-after:avoid">' + t + '</p>', NOTE = (t) => '<p style="font-size:11px;color:#64748b;margin:2px 0 0">' + t + '</p>';
+  const TD = 'padding:4px 6px;border-bottom:1px solid #e2e8f0;vertical-align:top;font-size:12px', TH = 'text-align:left;padding:4px 6px;border-bottom:2px solid #94a3b8;font-size:12px';
+  const kv = (rows) => '<table style="width:100%;border-collapse:collapse">' + rows.filter(Boolean).map(([k, v]) => '<tr style="break-inside:avoid"><td style="' + TD + ';width:46%;color:#475569">' + k + '</td><td style="' + TD + ';font-weight:600">' + v + '</td></tr>').join('') + '</table>';
+  const tbl = (head, rows, right = [], fs = 12) => (rows.length <= 14 ? '<div style="break-inside:avoid">' : '') + '<table style="width:100%;border-collapse:collapse"><thead><tr>' + head.map((h, i) => '<th style="' + TH + (right.includes(i) ? ';text-align:right' : '') + ';font-size:' + fs + 'px">' + h + '</th>').join('') + '</tr></thead><tbody>' + rows.map(r => '<tr style="break-inside:avoid' + (r.bold ? ';font-weight:700' : '') + '">' + r.map((c, i) => '<td style="' + TD + (right.includes(i) ? ';text-align:right' : '') + ';font-size:' + fs + 'px">' + c + '</td>').join('') + '</tr>').join('') + '</tbody></table>' + (rows.length <= 14 ? '</div>' : '');
+  const kpi = (rows) => '<table style="width:100%;border-collapse:collapse;margin-top:12px;border-top:1px solid #cbd5e1">' + rows.map(r => '<tr style="break-inside:avoid">' + r.map(([l, v]) => '<td style="width:33%;padding:7px 8px 7px 0;border-bottom:1px solid #cbd5e1;vertical-align:top"><div style="font-size:10.5px;color:#64748b">' + l + '</div><div style="font-size:16px;font-weight:700;margin-top:1px">' + v + '</div></td>').join('') + '</tr>').join('') + '</table>';
+  const fit = batFit(batRows()), batOk = !!fit && fit.n >= BAT.minN && fit.sumHub >= BAT.minHub, months = akMonths(rs, cs);
+  let h = '<div style="max-width:720px;margin:0 auto;font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#111;line-height:1.35"><h1 style="font-size:26px;margin:0">Fahrzeugakte</h1><p style="margin:2px 0 0;font-size:15px;color:#475569">' + esc(name) + ' · erstellt am ' + D1(now) + '</p>';
+  h += kpi([[['Kilometerstand', km != null ? fmt(km, 0) + ' km' : '–'], ['Geladen', fmt(kwh, 0) + ' kWh'], ['Ø Verbrauch', tot && tot.km ? fmt(tot.kwh100, 1) + ' kWh/100 km' : '–']], [['Ø Strompreis', kwh > 0 ? fmt(laden / kwh * 100, 1) + ' ct/kWh' : '–'], ['Betriebskosten gesamt', eur(total)], ['Betriebskosten pro km', driven > 0 ? fmt(total / driven * 100, 1) + ' ct/km' : '–']]]);
+  const yrs = (now - P0) / (365.25 * 864e5), sincePk = pk != null && km != null ? km - pk : null;
+  const SV = getSettings(), mm = [SV.brand, SV.model].filter(Boolean).join(' ');
+  h += H2('Fahrzeug') + kv([mm ? ['Fahrzeug', esc(mm)] : null, SV.year ? ['Baujahr', esc(SV.year)] : null, SV.plate ? ['Kennzeichen', esc(SV.plate)] : null, SV.vin ? ['Fahrgestellnummer (FIN)', esc(SV.vin)] : null, ['Kauftag', D1(P0)], ['Nutzungsdauer', fmt((now - P0) / 864e5 / 30.4375, 1) + ' Monate'], pk != null ? ['Kilometerstand bei Kauf', fmt(pk, 0) + ' km'] : null, pp != null ? ['Kaufpreis', eur(pp)] : null, ['Aktueller km-Stand', km != null ? fmt(km, 0) + ' km' : '–'], sincePk != null ? ['Gefahren seit Kauf', fmt(sincePk, 0) + ' km' + (yrs >= .25 ? ' (Ø ' + fmt(sincePk / yrs, 0) + ' km pro Jahr)' : '')] : null, driven != null ? ['Aufgezeichnet', fmt(driven, 0) + ' km seit ' + D1(Date.parse(od[0].date))] : null, ['Batterie (Nettokapazität laut Einstellung)', fmt(batteryKwh(), 0) + ' kWh'], rs.length ? ['Aufzeichnung', D1(Date.parse(rs[0].date)) + ' bis ' + D1(Date.parse(rs[rs.length - 1].date))] : null]);
+  { const cc = getSettings().ccEnd; h += H2('Ausstattung') + kv(AUSST.pdf.map(([k, v]) => [k, esc(v)]).concat(/^\d{4}-\d{2}-\d{2}$/.test(cc || '') ? [['Care Connect bis', fmtYMD(cc)]] : []))
+    + CAP('Technische Daten') + kv(AUSST.tech.flatMap(g => g[2]).map(([k, v]) => [esc(k), esc(v)]))
+    + AUSST.groups.map(([name, , items]) => CAP(esc(name)) + tbl(['Code', 'Bezeichnung'], items.map(([c, t]) => [c || 'Serie', esc(t)]), [], 11)).join(''); }
+  h += H2('Betrieb und Kosten gesamt') + kv([['Ladungen', fmt(n, 0)], ['Geladene Energie', fmt(kwh, 0) + ' kWh'], tot && tot.km ? ['Ø Verbrauch inkl. Ladeverluste', fmt(tot.kwh100, 1) + ' kWh/100 km (WLTP-Angabe ' + fmt(wltpVal(), 1) + ')'] : null, loss != null ? ['Ø Ladeverlust', fmt(loss, 1) + ' %'] : null, kwh > 0 ? ['Ø Strompreis', fmt(laden / kwh * 100, 1) + ' ct/kWh'] : null, ['Ladekosten', eur(laden)], ['Sonstige Kosten (Service, Reifen, …)', eur(other)], income ? ['Einnahmen und Erstattungen', eur(income)] : null, ['Betriebskosten gesamt (ohne Kaufpreis)', eur(total)], driven > 0 ? ['Betriebskosten pro km', fmt(total / driven * 100, 1) + ' ct/km'] : null]);
+  const placeRows = PLACE_KEYS.filter(k => pl[k].kwh > 0 || pl[k].n > 0).map(k => [PLACES[k], fmt(pl[k].n, 0), fmt(pl[k].kwh, 0), kwh ? fmt(pl[k].kwh / kwh * 100, 0) + ' %' : '–', eur(pl[k].cost), pl[k].ck > 0 ? fmt(pl[k].cost / pl[k].ck * 100, 1) : '–']);
+  if (placeRows.length) h += CAP('Ladeorte') + tbl(['Ort', 'Ladungen', 'kWh', 'Anteil', 'Kosten', 'ct/kWh'], placeRows, [1, 2, 3, 4, 5]);
+  const ac = { n: pl.home.n + pl.bosch.n, kwh: pl.home.kwh + pl.bosch.kwh }, dc = pl.away, pc = (x, t) => t > 0 ? fmt(x / t * 100, 0) + ' %' : '–', noKwh = ent.filter(e => e.ch && !(e.c > 0)).length;
+  if (n > 0) h += '<div style="break-inside:avoid">' + CAP('AC- und DC-Laden') + akSplit([['Energie (kWh)', ac.kwh, dc.kwh, (v) => fmt(v, 0) + ' kWh'], ['Ladungen (Anzahl)', ac.n, dc.n, (v) => fmt(v, 0) + (v === 1 ? ' Ladung' : ' Ladungen')]])
+    + tbl(['Ladeart', 'Ladungen', 'Anteil', 'Energie (kWh)', 'Anteil'], [['AC-Laden (Zuhause + Bosch)', fmt(ac.n, 0), pc(ac.n, n), fmt(ac.kwh, 0), pc(ac.kwh, kwh)], ['davon Zuhause', fmt(pl.home.n, 0), pc(pl.home.n, n), fmt(pl.home.kwh, 0), pc(pl.home.kwh, kwh)], ['davon Bosch', fmt(pl.bosch.n, 0), pc(pl.bosch.n, n), fmt(pl.bosch.kwh, 0), pc(pl.bosch.kwh, kwh)], ['DC-Laden (Unterwegs)', fmt(dc.n, 0), pc(dc.n, n), fmt(dc.kwh, 0), pc(dc.kwh, kwh)], Object.assign(['Summe', fmt(n, 0), '100 %', fmt(kwh, 0), '100 %'], { bold: true })], [1, 2, 3, 4])
+    + NOTE('AC = Zuhause und Bosch, DC = Unterwegs.' + (noKwh ? ' ' + noKwh + (noKwh === 1 ? ' Ladung ohne kWh-Angabe zählt' : ' Ladungen ohne kWh-Angabe zählen') + ' nur bei der Anzahl, nicht bei der Energie.' : '')) + '</div>';
+  h += H2('Akku-Schätzung') + (batOk ? kv([['Nutzbar im Auto je 100 % Akku', fmt(fit.K * BAT.eta, 1) + ' kWh (bei ' + Math.round(BAT.eta * 100) + ' % Ladewirkungsgrad)'], ['Brutto an der Steckdose je 100 % Akku', fmt(fit.K, 1) + ' kWh (± ' + fmt(fit.ci, 1) + ', 95 %)'], ['Akkugesundheit (Schätzung)', fmt(fit.K * BAT.eta / AVILOO.nom * 100, 1) + ' % von ' + AVILOO.nom + ' kWh Werksangabe' + (lastKnownKm() ? ' · typisch bei ' + fmt(lastKnownKm(), 0) + ' km: ' + fmt(avSoh(lastKnownKm()), 1) + ' %' : '')], ['Typisch laut Aviloo-Benchmark', fmt(AVILOO.n, 0) + ' Enyaq iV: ' + AVILOO.pts.slice(1).map(q => fmt(q[1], 1) + ' % nach ' + fmt(q[0], 0) + ' km').join(', ')], ['Basis', fit.n + ' Ladungen, ' + D1(fit.use[0].t) + ' bis ' + D1(fit.use[fit.use.length - 1].t)]]) + NOTE('Schätzung aus eigenen Messungen der Ladungen, kein Gutachten und kein Wert des Herstellers.') : '<p style="font-size:12px;color:#475569;margin:0">Noch nicht genug passende Ladungen (Akku-Start/-Ende in % und gemessene kWh) für eine Schätzung.</p>');
+  /* Diagramme */
+  h += H2('Diagramme');
+  const kmPts = rs.filter(r => r.odometerKm > 0).map(r => [Date.parse(r.date), r.odometerKm]).concat(cs.filter(c => c.odometerKm > 0).map(c => [Date.parse(c.date), c.odometerKm])).filter(q => Number.isFinite(q[0])).sort((a, b) => a[0] - b[0]);
+  if (kmPts.length > 1) h += CAP('Kilometerstand im Zeitverlauf') + akXY({ series: [{ kind: 'line', pts: kmPts, color: AK.green }, { kind: 'dots', pts: kmPts, color: AK.green, r: 4 }], xmin: kmPts[0][0], xmax: kmPts[kmPts.length - 1][0], xFmt: D1, yFmt: (v, d) => fmt(v, d), alt: 'Kilometerstand im Zeitverlauf' });
+  if (months.length > 1 && months.some(x => x.km > 0)) h += CAP('Gefahrene Kilometer je Monat') + akBars({ labels: months.map(x => x.label), stacks: [{ color: AK.sky, label: 'km je Monat', vals: months.map(x => x.km) }], yFmt: (v, d) => fmt(v, d), alt: 'Kilometer je Monat' });
+  if (months.some(x => x.k100 != null)) h += CAP('Ø Verbrauch je Monat (kWh/100 km, inkl. Ladeverluste)') + akBars({ labels: months.map(x => x.label), stacks: [{ color: AK.green, label: 'Verbrauch', vals: months.map(x => x.k100 || 0) }], ref: [{ y: wltpVal(), label: 'WLTP ' + fmt(wltpVal(), 1), color: AK.amber }], yFmt: (v, d) => fmt(v, d), alt: 'Verbrauch je Monat' });
+  if (months.some(x => x.laden + x.other > 0)) h += CAP('Kosten je Monat (Euro)') + akBars({ labels: months.map(x => x.label), stacks: [{ color: AK.green, label: 'Laden', vals: months.map(x => x.laden) }, { color: AK.amber, label: 'Sonstige Kosten', vals: months.map(x => x.other) }], yFmt: (v, d) => fmt(v, d), alt: 'Kosten je Monat' }) + NOTE('Einnahmen und Erstattungen sind nicht abgezogen.');
+  const tp = akTempPts();
+  if (tp.length >= 5) { const mxx = tp.reduce((a, q) => a + q[0], 0) / tp.length, myy = tp.reduce((a, q) => a + q[1], 0) / tp.length, sxx = tp.reduce((a, q) => a + (q[0] - mxx) ** 2, 0), sl = sxx > 0 ? tp.reduce((a, q) => a + (q[0] - mxx) * (q[1] - myy), 0) / sxx : 0, ic = myy - sl * mxx, xa = Math.min(...tp.map(q => q[0])), xb = Math.max(...tp.map(q => q[0]));
+    h += CAP('Verbrauch je Außentemperatur (jeder Punkt = eine Ladung)') + akXY({ series: [{ kind: 'dots', pts: tp, color: AK.slate, r: 6 }].concat(xb - xa >= 6 ? [{ kind: 'line', pts: [[xa, ic + sl * xa], [xb, ic + sl * xb]], color: AK.green, w: 5 }] : []), xmin: Math.floor(xa), xmax: Math.ceil(xb), xFmt: (v) => fmt(v, 0) + ' °C', xTicks: akNice(xa, xb, 5), yFmt: (v, d) => fmt(v, d), alt: 'Verbrauch je Außentemperatur' }) + NOTE('Mittlere Tagestemperatur zwischen zwei Ladungen am Wetter-Standort (Open-Meteo), Verbrauch in kWh/100 km.'); }
+  const br = batRows(); if (br.length >= 5) { const roll = []; br.forEach(r => { const w = br.filter(x => x.t > r.t - BAT.win * BAT.day && x.t <= r.t); if (w.length >= 6) { const f = batFit(w); if (f) roll.push([r.t, f.K]); } });
+    h += CAP('Akku-Schätzung je Ladung (kWh an der Steckdose je 100 % Akku)') + akXY({ series: [{ kind: 'dots', pts: br.map(x => [x.t, x.k]), color: AK.slate, r: 5 }].concat(roll.length > 1 ? [{ kind: 'line', pts: roll, color: AK.green, w: 5 }] : []), ref: batOk ? [{ y: fit.K, label: 'Ø ' + fmt(fit.K, 1), color: AK.amber }] : [], xmin: br[0].t, xmax: br[br.length - 1].t, xFmt: D1, yFmt: (v, d) => fmt(v, d), legend: [[AK.slate, 'Einzelne Ladung'], [AK.green, 'Gleitender Wert (3 Monate)']], alt: 'Akku-Schätzung je Ladung' }) + NOTE('Einzelwerte streuen durch Rundung des Akku-% und Temperatur. Aussagekräftig ist die Veränderung über lange Zeit.'); }
+  const pp2 = ent.filter(e => unitOf(e.r) > 0 && Number.isFinite(e.t)); if (pp2.length >= 3) { const col = { home: AK.green, bosch: AK.sky, away: AK.amber }, ser = PLACE_KEYS.map(k => ({ kind: 'dots', pts: pp2.filter(e => placeOf(e.r) === k).map(e => [e.t, unitOf(e.r) * 100]), color: col[k], r: 6 })).filter(x => x.pts.length);
+    h += CAP('Strompreis je Ladung (ct/kWh)') + akXY({ series: ser, ref: kwh > 0 ? [{ y: laden / kwh * 100, label: 'Ø ' + fmt(laden / kwh * 100, 1), color: AK.rose }] : [], xmin: Math.min(...pp2.map(e => e.t)), xmax: Math.max(...pp2.map(e => e.t)), xFmt: D1, yFmt: (v, d) => fmt(v, d), legend: PLACE_KEYS.filter(k => pp2.some(e => placeOf(e.r) === k)).map(k => [col[k], PLACES[k]]), alt: 'Strompreis je Ladung' }); }
+  /* Monatsübersicht */
+  if (months.length) { const sum = months.reduce((a, x) => ({ km: a.km + x.km, n: a.n + x.n, kwh: a.kwh + x.kwh, laden: a.laden + x.laden, other: a.other + x.other, income: a.income + x.income }), { km: 0, n: 0, kwh: 0, laden: 0, other: 0, income: 0 });
+    h += H2('Monatsübersicht') + tbl(['Monat', 'km', 'Ladungen', 'kWh', 'kWh/100 km', 'Laden', 'Sonstige', 'Einnahmen'], months.map(x => [x.label, x.km ? fmt(x.km, 0) : '–', fmt(x.n, 0), x.kwh ? fmt(x.kwh, 0) : '–', x.k100 != null ? fmt(x.k100, 1) : '–', eur(x.laden), eur(x.other), x.income ? eur(x.income) : '–']).concat([Object.assign(['Summe', fmt(sum.km, 0), fmt(sum.n, 0), fmt(sum.kwh, 0), tot && tot.km ? fmt(tot.kwh100, 1) : '–', eur(sum.laden), eur(sum.other), sum.income ? eur(sum.income) : '–'], { bold: true })]), [1, 2, 3, 4, 5, 6, 7], 11); }
+  /* Rekorde */
+  const withK = ent.filter(e => e.st.kwh100 != null && !e.st.rough), withC = ent.filter(e => e.c > 0 && e.r.cost > 0), rec = [];
+  if (withK.length) { const lo = withK.reduce((a, e) => e.st.kwh100 < a.st.kwh100 ? e : a), hi = withK.reduce((a, e) => e.st.kwh100 > a.st.kwh100 ? e : a); rec.push(['Niedrigster Verbrauch', fmt(lo.st.kwh100, 1) + ' kWh/100 km', D1(lo.t)], ['Höchster Verbrauch', fmt(hi.st.kwh100, 1) + ' kWh/100 km', D1(hi.t)]); }
+  if (withC.length) { const lo = withC.reduce((a, e) => e.r.cost / e.c < a.r.cost / a.c ? e : a), hi = withC.reduce((a, e) => e.r.cost / e.c > a.r.cost / a.c ? e : a), big = withC.reduce((a, e) => e.c > a.c ? e : a), cheap = withC.reduce((a, e) => e.r.cost < a.r.cost ? e : a), dear = withC.reduce((a, e) => e.r.cost > a.r.cost ? e : a);
+    rec.push(['Günstigster Strompreis', fmt(lo.r.cost / lo.c * 100, 1) + ' ct/kWh', D1(lo.t)], ['Höchster Strompreis', fmt(hi.r.cost / hi.c * 100, 1) + ' ct/kWh', D1(hi.t)], ['Größte Ladung', fmt(big.c, 1) + ' kWh', D1(big.t)], ['Günstigste Ladung', eur(cheap.r.cost), D1(cheap.t)], ['Teuerste Ladung', eur(dear.r.cost), D1(dear.t)]); }
+  const trs = getTrips().filter(tripVisible);
+  if (trs.length) { const bm = tripsByMonth(trs), keys = Object.keys(bm).sort(), sumT = (l, g) => l.filter(t => !g || tripLabel(t).lab.id === g).reduce((a, t) => a + (t.km || 0), 0), labs = getTLabels().filter(lb => trs.some(t => tripLabel(t).lab.id === lb.id)), k100 = (l) => { const w = l.filter(t => t.kwh > 0 && t.km > 0), k = w.reduce((a, t) => a + t.km, 0); return k ? fmt(w.reduce((a, t) => a + t.kwh, 0) / k * 100, 1) : '–'; };
+    h += H2('Fahrten (Fahrtenbuch der MyŠkoda-App)') + tbl(['Monat', 'Fahrten', 'km'].concat(labs.map(lb => esc(lb.name)), ['kWh/100 km']), keys.map(k => { const l = bm[k]; return [MONTHS[+k.slice(5) - 1] + ' ' + k.slice(2, 4), fmt(l.length, 0), fmt(sumT(l), 0)].concat(labs.map(lb => fmt(sumT(l, lb.id), 0)), [k100(l)]); })
+      .concat([Object.assign(['Summe', fmt(trs.length, 0), fmt(sumT(trs), 0)].concat(labs.map(lb => fmt(sumT(trs, lb.id), 0)), [k100(trs)]), { bold: true })]), labs.map((_, i) => i + 3).concat([1, 2, labs.length + 3]), 11)
+      + NOTE('Verbrauch laut Auto ohne Ladeverluste. Fahrten unter 1 km sind nicht enthalten.'); }
+  if (rec.length) h += H2('Rekorde') + tbl(['Kennzahl', 'Wert', 'Datum'], rec, [1]);
+  /* Wartung, Kosten, Plan */
+  const svc = cs.filter(c => costAmt(c) > 0 && AKTE_SERVICE.test((c.category || '') + ' ' + (c.title || ''))).sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
+  h += H2('Wartung und Service') + (svc.length ? tbl(['Datum', 'km-Stand', 'Bezeichnung', 'Kategorie', 'Betrag', 'Beleg'], svc.map(c => [D1(Date.parse(c.date)), c.odometerKm > 0 ? fmt(c.odometerKm, 0) : '–', esc(c.title || ''), esc(c.category || '–'), eur(costAmt(c)), c.files && c.files.length ? 'ja (' + c.files.length + ')' : '–']).concat([Object.assign(['Summe', '', '', '', eur(svc.reduce((a, c) => a + costAmt(c), 0)), ''], { bold: true })]), [1, 4]) : '<p style="font-size:12px;color:#475569;margin:0">Keine Einträge in Kategorien wie Service, Wartung, Reifen oder Reparatur gefunden.</p>');
+  const cat = new Map(); cs.forEach(c => { const a = costAmt(c); if (a <= 0) return; const k = c.category || 'Ohne Kategorie', o = cat.get(k) || { n: 0, s: 0 }; o.n++; o.s += a; cat.set(k, o); });
+  if (cat.size || laden) h += H2('Kosten nach Kategorie') + tbl(['Kategorie', 'Anzahl', 'Summe'], [['Laden (Strom)', fmt(n, 0), eur(laden)]].concat([...cat.entries()].sort((a, b) => b[1].s - a[1].s).map(([k, o]) => [esc(k), fmt(o.n, 0), eur(o.s)])), [1, 2]);
+  const runsP = getReminders().filter(r => r.kind === 'run').sort((a, b) => String(a.startDate || '').localeCompare(String(b.startDate || '')));
+  const rem = getReminders().filter(r => r.kind !== 'run').sort((a, b) => String(a.dueDate || '9999').localeCompare(String(b.dueDate || '9999')));
+  if (rem.length) h += H2('Wartungsplan (Erinnerungen)') + tbl(['Titel', 'Fällig am', 'Fällig bei'], rem.map(r => [esc((r.title || '').replace(/^[\p{Extended_Pictographic}\uFE0F\u200D\s]+/u, '')), r.dueDate ? D1(Date.parse(r.dueDate + 'T12:00:00')) : '–', r.dueKm > 0 ? fmt(r.dueKm, 0) + ' km' : '–']));
+  if (runsP.length) h += H2('Pflege und Laufzeiten') + tbl(['Was', 'Seit', 'Hält ca.', 'Läuft bis'], runsP.map(r => [esc((r.title || '').replace(/^[\p{Extended_Pictographic}\uFE0F\u200D\s]+/u, '')) + (r.note ? '<br><span style="color:#64748b">' + esc(r.note) + '</span>' : ''), r.startDate ? D1(Date.parse(r.startDate + 'T12:00:00')) : '–', r.lifeN ? esc(runLifeText(r)) : '–', r.dueDate ? D1(Date.parse(r.dueDate + 'T12:00:00')) : '–']));
+  const hist = []; getReminders().forEach(r => remLog(r).forEach(e => hist.push({ t: Date.parse(e.at), title: (r.title || '').replace(/^[\p{Extended_Pictographic}\uFE0F\u200D\s]+/u, ''), km: e.km, cost: e.cost })));
+  hist.sort((a, b) => b.t - a.t);
+  if (hist.length) h += H2('Wartungsnachweis (erledigt)') + tbl(['Datum', 'Arbeit', 'km-Stand', 'Kosten'], hist.map(x => [D1(x.t), esc(x.title), x.km > 0 ? fmt(x.km, 0) + ' km' : '–', x.cost > 0 ? eur(x.cost) : '–']), [2, 3]);
+  h += '<p style="font-size:11px;color:#64748b;margin:24px 0 0;border-top:1px solid #cbd5e1;padding-top:8px">Diese Akte wurde am ' + D1(now) + ' aus den eigenen Aufzeichnungen der App erzeugt. Kaufkilometer und Kaufpreis sind Angaben des Halters und fließen nicht in die Kostenrechnung ein. Die Akte ist kein Gutachten und ersetzt weder das Serviceheft noch Herstellernachweise.</p></div>';
+  return h;
+}
+$('btn-akte').addEventListener('click', async () => {
+  const btn = $('btn-akte'), box = $('akte-print'), label = btn.textContent; btn.disabled = true; btn.textContent = 'Akte wird vorbereitet …';
+  try {
+    /* Akte als sichtbare Seite öffnen (nicht unsichtbar im Hintergrund): Nur was wirklich auf dem Bildschirm gezeichnet ist, landet zuverlässig im PDF.
+       Zurück geht es über „Schließen“, nicht über afterprint (das feuert auf Android teils sofort und würde die Akte vor dem Druck wieder entfernen). */
+    box.innerHTML = '<div id="akte-bar"><button type="button" data-akte="close" style="background:#e2e8f0;color:#0f172a">Schließen</button><button type="button" data-akte="print" style="background:#059669;color:#fff">Drucken / als PDF</button></div>' + akteHtml();
+    akteOldTitle = document.title; document.body.classList.add('print-akte'); window.scrollTo(0, 0);
+    document.title = 'Fahrzeugakte ' + ((getSettings().title || DEFAULT_TITLE).split('|')[0].trim() || '');
+    await akteReady(box);                                                          // Druck startet erst über den Button „Drucken / als PDF“
+  } finally { btn.disabled = false; btn.textContent = label; }
+});
+/* =====================================================================
+   Digitales Checkheft (Berichte → Daten → Checkheft): alle Kosten der Kategorien Service, Reparatur und TÜV als Zeitleiste,
+   Detailansicht mit Belegen (Google Drive) und „Checkheft als PDF“: Deckblatt mit Inhaltsverzeichnis + alle Belege chronologisch,
+   jede Seite mit Kopfzeile (Art · Leistung · Datum · km) und Seitenzahl. Zusammengesetzt im Browser mit pdf-lib.
+   ===================================================================== */
+let chFilter = 'all', chSheetId = null; const chPend = [];
+const chEntries = () => getCosts().filter(c => chType(c.category) && Number.isFinite(Date.parse(c.date)));
+const chDY = (ms) => new Date(ms).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+const chMY = (d) => String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear();
+const chAddM = (ms, m) => { const d = new Date(ms); d.setMonth(d.getMonth() + m); return d; };
+const CH_ICON = {
+  service: '<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z"/>',
+  rep: '<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9L2 18a2 2 0 0 0 1.7 3h16.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>',
+  tuev: '<path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/>'
+};
+const chSvg = (k, cls) => '<svg class="' + cls + '" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true">' + CH_ICON[k] + '</svg>';
+const CH_FILE_SVG = '<svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4"/></svg>';
+const chIsPdf = (f) => /pdf/i.test(f.mime || '') || /\.pdf$/i.test(f.name || '');
+const chFilesLabel = (f) => f.length ? (f.every(chIsPdf) ? f.length + ' PDF' : f.every(x => !chIsPdf(x)) ? f.length + (f.length === 1 ? ' Foto' : ' Fotos') : f.length + ' Belege') : '';
+/** Nächste Fälligkeiten aus Einstellungen → Erinnerungen (Monat JJJJ-MM): HU und Service (inkl. Klimaservice, Reifenwechsel usw.). */
+function chDue() {
+  const st = getSettings(), m = (v) => /^(\d{4})-(\d{2})$/.exec(v || ''), out = [], hu = m(st.nextHu), sv = m(st.nextService);
+  if (hu) out.push({ k: 'tuev', l: 'Nächste HU', d: new Date(Number(hu[1]), Number(hu[2]) - 1, 1) });
+  if (sv) out.push({ k: 'service', l: 'Service', d: new Date(Number(sv[1]), Number(sv[2]) - 1, 1) });
+  return out;
+}
+function renderCheckheft() {
+  const all = chEntries().sort((a, b) => Date.parse(b.date) - Date.parse(a.date)), P0 = Date.parse(purchaseDay() + 'T00:00:00');
+  const nF = all.reduce((a, c) => a + (c.files || []).length, 0), cnt = (k) => all.filter(c => chType(c.category).k === k).length;
+  $('ch-count').textContent = all.length ? all.length + (all.length === 1 ? ' Eintrag' : ' Einträge') + ' · ' + nF + (nF === 1 ? ' Beleg' : ' Belege') : '';
+  const chip = (k, label, cls) => '<button type="button" data-chf="' + k + '" class="h-8 rounded-full px-3 text-xs font-semibold ' + (chFilter === k ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900' : 'border border-slate-300 dark:border-slate-700 ' + cls) + '">' + label + '</button>';
+  $('ch-chips').innerHTML = all.length ? chip('all', 'Alle', '') + CH_TYPES.map(t => chip(t.k, t.n + ' ' + cnt(t.k), t.txt)).join('') : '';
+  const due = chDue(), now = new Date(), mon0 = new Date(now.getFullYear(), now.getMonth(), 1);
+  $('ch-due').classList.toggle('hidden', !due.length);
+  $('ch-due').innerHTML = due.length ? '<div class="flex items-center gap-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 px-3 py-2.5 text-xs text-slate-600 dark:text-slate-300">' + chSvg('tuev', 'h-[18px] w-[18px] shrink-0 text-violet-600 dark:text-violet-300') + '<span class="min-w-0 text-left">' + due.map(x => x.l + ' ' + (x === due[0] ? 'fällig ' : '') + '<b class="' + (x.d < mon0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-900 dark:text-slate-100') + '">' + chMY(x.d) + (x.d < mon0 ? ' (überfällig)' : '') + '</b>').join(' · ') + '</span></div>' : '';
+  const list = chFilter === 'all' ? all : all.filter(c => chType(c.category).k === chFilter);
+  let html = '', divDone = false;
+  const divider = () => '<li class="flex items-center gap-2 py-1.5 pl-11 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400 dark:text-slate-500"><span class="h-px flex-1 bg-slate-200 dark:bg-slate-800"></span>Kauf ' + chDY(P0) + (getSettings().purchaseKm ? ' · ' + fmt(Number(getSettings().purchaseKm), 0) + ' km' : '') + '<span class="h-px flex-1 bg-slate-200 dark:bg-slate-800"></span></li>';
+  list.forEach(c => {
+    const t = Date.parse(c.date), ty = chType(c.category), pre = t < P0, f = c.files || [], amt = costAmt(c);
+    if (pre && !divDone) { html += divider(); divDone = true; }
+    const sub = [chDY(t), c.odometerKm > 0 ? fmt(c.odometerKm, 0) + ' km' : '', c.note || ''].filter(Boolean).join(' · ');
+    html += '<li><button type="button" data-chid="' + esc(String(c.id)) + '" class="relative flex w-full items-start gap-3 py-2 text-left active:opacity-70' + (pre ? ' opacity-80' : '') + '">'
+      + '<span class="relative z-[1] flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ' + ty.bg + '">' + chSvg(ty.k, 'h-[18px] w-[18px]') + '</span>'
+      + '<span class="min-w-0 flex-1"><span class="flex justify-between gap-2"><span class="truncate text-sm font-semibold">' + esc(c.title || ty.n) + '</span><span class="shrink-0 text-[13px] text-slate-600 dark:text-slate-300">' + (pre && !amt ? 'Vorbesitzer' : eur(amt)) + '</span></span>'
+      + '<span class="block truncate text-xs text-slate-500 dark:text-slate-400">' + esc(sub) + '</span>'
+      + (f.length ? '<span class="mt-1 inline-flex items-center gap-1 rounded-md bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 text-[11px] text-slate-600 dark:text-slate-300">' + CH_FILE_SVG + chFilesLabel(f) + '</span>' : '') + '</span></button></li>';
+  });
+  if (list.length && !divDone && chFilter === 'all') html += divider();
+  $('ch-list').innerHTML = list.length ? '<span class="pointer-events-none absolute bottom-5 left-[17px] top-5 w-0.5 bg-slate-200 dark:bg-slate-800" aria-hidden="true"></span>' + html : '';
+  $('ch-empty').classList.toggle('hidden', all.length > 0);
+  $('btn-ch-pdf').classList.toggle('hidden', !all.length);
+  $('btn-ch-pdf-l').textContent = 'Checkheft als PDF' + (nF ? ' (' + nF + (nF === 1 ? ' Beleg)' : ' Belege)') : '');
+}
+$('ch-chips').addEventListener('click', (e) => { const b = e.target.closest('[data-chf]'); if (b) { chFilter = b.dataset.chf; renderCheckheft(); } });
+$('ch-list').addEventListener('click', (e) => { const b = e.target.closest('[data-chid]'); if (b) openChSheet(b.dataset.chid); });
+
+/* ---- Detailansicht (Bottom-Sheet) ---- */
+function openChSheet(id) { chSheetId = String(id); chPend.length = 0; renderChSheet(); $('ch-sheet').classList.remove('hidden'); }
+function closeChSheet() { $('ch-sheet').classList.add('hidden'); chSheetId = null; chPend.length = 0; }
+function renderChSheet(msg) {
+  const c = getCosts().find(x => String(x.id) === chSheetId); if (!c) { closeChSheet(); return; }
+  const ty = chType(c.category) || CH_TYPES[0], f = c.files || [], t = Date.parse(c.date), box = 'rounded-xl bg-slate-100 dark:bg-slate-800 p-2.5';
+  $('ch-sheet-box').innerHTML = '<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div>'
+    + '<div class="flex items-center gap-3"><span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ' + ty.bg + '">' + chSvg(ty.k, 'h-[22px] w-[22px]') + '</span>'
+    + '<div class="min-w-0 flex-1"><p class="text-[11px] font-bold uppercase tracking-[0.1em] ' + ty.txt + '">' + esc(ty.n) + '</p><p class="truncate text-lg font-bold">' + esc(c.title || ty.n) + '</p></div>'
+    + '<button type="button" data-chs="close" aria-label="Schließen" class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-800"><svg class="h-[18px] w-[18px]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>'
+    + '<div class="grid grid-cols-3 gap-2"><div class="' + box + '"><p class="text-[11px] text-slate-500 dark:text-slate-400">Datum</p><p class="text-[15px] font-semibold">' + chDY(t) + '</p></div>'
+    + '<div class="' + box + '"><p class="text-[11px] text-slate-500 dark:text-slate-400">km-Stand</p><p class="text-[15px] font-semibold">' + (c.odometerKm > 0 ? fmt(c.odometerKm, 0) : '–') + '</p></div>'
+    + '<div class="' + box + '"><p class="text-[11px] text-slate-500 dark:text-slate-400">Betrag</p><p class="text-[15px] font-semibold">' + eur(costAmt(c)) + '</p></div></div>'
+    + (c.note ? '<p class="text-sm text-slate-600 dark:text-slate-300 text-left">Notiz: ' + esc(c.note) + '</p>' : '')
+    + '<div class="space-y-2"><p class="text-xs font-semibold text-slate-500 dark:text-slate-400">Belege in Google Drive</p>'
+    + (f.length ? '<div class="grid grid-cols-2 gap-2.5">' + f.map(x => '<a href="' + dvLink(x.id) + '" target="_blank" rel="noopener" class="flex flex-col gap-2 rounded-2xl bg-slate-100 dark:bg-slate-800 p-2 active:opacity-70"><span class="flex h-24 items-center justify-center rounded-xl bg-white dark:bg-slate-950 text-slate-400"><svg class="h-9 w-9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true">' + (chIsPdf(x) ? '<path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4M9 13h6M9 17h6"/>' : '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-8 8"/>') + '</svg></span><span class="truncate text-xs font-semibold">' + esc(x.name) + '</span></a>').join('') + '</div><p class="text-[11px] text-slate-400 dark:text-slate-500 text-left">Antippen öffnet den Beleg in Google Drive.</p>' : '<p class="text-sm text-slate-500 dark:text-slate-400 text-left">Noch kein Beleg hinterlegt.</p>')
+    + (chPend.length ? '<ul class="space-y-1">' + chPend.map((x, i) => '<li class="flex items-center justify-between gap-2 rounded-lg bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1.5 text-xs"><span class="min-w-0 truncate">' + esc(x.name) + ' · ' + fmt(x.size / 1048576, 1) + ' MB · noch nicht hochgeladen</span><button type="button" data-chs="rm" data-i="' + i + '" aria-label="Entfernen" class="shrink-0 px-2 py-1 text-slate-500">✕</button></li>').join('') + '</ul>' : '')
+    + '<p id="ch-sheet-msg" class="text-xs text-slate-500 dark:text-slate-400 text-left empty:hidden">' + esc(msg || '') + '</p></div>'
+    + '<div class="grid grid-cols-2 gap-2.5"><button type="button" data-chs="edit" class="h-12 rounded-2xl border border-slate-300 dark:border-slate-700 text-sm font-semibold active:scale-95 transition">Bearbeiten</button>'
+    + (chPend.length ? '<button type="button" data-chs="upload" class="h-12 rounded-2xl bg-emerald-600 text-sm font-semibold text-white active:scale-95 transition">Hochladen (' + chPend.length + ')</button>' : '<button type="button" data-chs="pick" class="h-12 rounded-2xl bg-emerald-600 text-sm font-semibold text-white active:scale-95 transition">Beleg hinzufügen</button>') + '</div>';
+}
+$('ch-sheet').addEventListener('click', async (e) => {
+  if (e.target === $('ch-sheet')) { closeChSheet(); return; }
+  const b = e.target.closest('[data-chs]'); if (!b) return; const act = b.dataset.chs;
+  if (act === 'close') closeChSheet();
+  else if (act === 'pick') $('ch-file').click();
+  else if (act === 'rm') { chPend.splice(Number(b.dataset.i), 1); renderChSheet(); }
+  else if (act === 'edit') {                                                     // Historie → Kosten im Bearbeiten-Modus, Eintrag in die Mitte scrollen
+    const id = chSheetId; closeChSheet(); histFilter = 'kosten'; showView('history'); setEditMode(true);
+    const j = getCosts().findIndex(c => String(c.id) === id), li = document.querySelector('#history-list li[data-cidx="' + j + '"]');
+    if (li) setTimeout(() => { li.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, 120);
+  }
+  else if (act === 'upload') {
+    const c = getCosts().find(x => String(x.id) === chSheetId), msg = (t) => { const m = $('ch-sheet-msg'); if (m) m.textContent = t; };
+    if (!c || !chPend.length) return;
+    if (!window.cloud?.isSignedIn()) { msg('Belege brauchen die Anmeldung bei Google (Einstellungen).'); return; }
+    const tokP = window.cloud.driveToken(); tokP.catch(() => { }); b.disabled = true; msg('Verbinde mit Google Drive …');
+    try { const up = await dvUploadFor(c, chPend.slice(), tokP, (i, n) => msg('Lade hoch ' + i + ' von ' + n + ' …')); chPend.length = 0; await dvSetFiles(c.id, f => f.concat(up)); renderChSheet(up.length + (up.length === 1 ? ' Beleg' : ' Belege') + ' in Google Drive gespeichert.'); renderCheckheft(); }
+    catch (err) { if (err && err.status === 401) window.cloud.driveForget(); b.disabled = false; msg('Upload fehlgeschlagen: ' + dvErrText(err)); }
+  }
+});
+$('ch-file').addEventListener('change', (e) => {
+  let big = ''; Array.from(e.target.files || []).forEach(f => { if (f.size > DV_MAX) big = '„' + f.name + '“ ist größer als 15 MB und wurde ausgelassen.'; else chPend.push(f); });
+  e.target.value = ''; renderChSheet(big || (chPend.length ? 'Zum Speichern in Google Drive auf „Hochladen“ tippen.' : ''));
+});
+
+/* ---- Checkheft als PDF (pdf-lib, im Browser) ---- */
+let chPdfLib = null;
+function chLoadPdfLib() {
+  if (window.PDFLib) return Promise.resolve(window.PDFLib);
+  if (!chPdfLib) chPdfLib = new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js'; sc.onload = () => window.PDFLib ? res(window.PDFLib) : rej(new Error('pdf-lib fehlt')); sc.onerror = () => { chPdfLib = null; rej(new Error('pdf-lib konnte nicht geladen werden (offline?)')); }; document.head.appendChild(sc); });
+  return chPdfLib;
+}
+async function chImageBytes(buf, mime) {                                         // Fotos als JPEG/PNG einbetten; andere Formate (WebP, HEIC …) über ein Canvas zu JPEG
+  if (/jpe?g/i.test(mime)) return { kind: 'jpg', bytes: buf };
+  if (/png/i.test(mime)) return { kind: 'png', bytes: buf };
+  const bmp = await createImageBitmap(new Blob([buf], { type: mime })); const cv = document.createElement('canvas'); cv.width = bmp.width; cv.height = bmp.height; cv.getContext('2d').drawImage(bmp, 0, 0);
+  const bl = await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.88)); return { kind: 'jpg', bytes: await bl.arrayBuffer() };
+}
+async function buildCheckheftPdf(onMsg, tokP) {
+  const L = window.PDFLib, { PDFDocument, StandardFonts, rgb } = L, entries = chEntries().sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
+  const nFiles = entries.reduce((a, c) => a + (c.files || []).length, 0);
+  const doc = await PDFDocument.create(), F = await doc.embedFont(StandardFonts.Helvetica), FB = await doc.embedFont(StandardFonts.HelveticaBold);
+  const W = 595.28, H = 841.89, ink = rgb(0.06, 0.09, 0.16), grey = rgb(0.39, 0.45, 0.55), line = rgb(0.89, 0.91, 0.94);
+  const COL = { service: rgb(0.012, 0.412, 0.631), rep: rgb(0.706, 0.325, 0.035), tuev: rgb(0.427, 0.157, 0.851) }, TINT = { service: rgb(0.88, 0.95, 0.99), rep: rgb(1, 0.95, 0.86), tuev: rgb(0.93, 0.91, 1) };
+  const safe = (f, s) => Array.from(String(s == null ? '' : s).replace(/[   ]/g, ' ')).map(ch => { try { f.encodeText(ch); return ch; } catch (e) { return '?'; } }).join('');
+  const fit = (f, s, size, w) => { let t = safe(f, s); if (f.widthOfTextAtSize(t, size) <= w) return t; while (t.length > 1 && f.widthOfTextAtSize(t + '…', size) > w) t = t.slice(0, -1); return t + '…'; };
+  const txt = (pg, s, x, y, o = {}) => { const f = o.bold ? FB : F, size = o.size || 10, t = o.w ? fit(f, s, size, o.w) : safe(f, s); const xx = o.right ? x - f.widthOfTextAtSize(t, size) : x; pg.drawText(t, { x: xx, y, size, font: f, color: o.color || ink }); };
+  const set = getSettings(), car = [set.brand, set.model].filter(Boolean).join(' ') || (set.title || DEFAULT_TITLE).split('|')[0].trim(), P0 = Date.parse(purchaseDay() + 'T00:00:00');
+  /* Inhaltsverzeichnis: Zeilen = Einträge + Trennzeile „Kauf“; Seiten vorab anlegen, damit die Seitenzahlen der Belege feststehen */
+  const rows = []; let kaufDone = false;
+  entries.forEach(c => { if (!kaufDone && Date.parse(c.date) >= P0) { rows.push({ kauf: true }); kaufDone = true; } rows.push({ c }); });
+  if (!kaufDone) rows.push({ kauf: true });
+  const RH = 30, CAP1 = 15, CAPN = 23, nIdx = rows.length <= CAP1 ? 1 : 1 + Math.ceil((rows.length - CAP1) / CAPN), idx = []; for (let i = 0; i < nIdx; i++) idx.push(doc.addPage([W, H]));
+  /* Belege */
+  const startPage = new Map(); let tok = null, done = 0;
+  for (const c of entries) {
+    const f = c.files || [], ty = chType(c.category); if (!f.length) continue;
+    startPage.set(c.id, doc.getPageCount() + 1);
+    for (let i = 0; i < f.length; i++) {
+      done++; onMsg('Lade Beleg ' + done + ' von ' + nFiles + ' …');
+      const head = { ty, c, label: 'Beleg ' + (i + 1) + ' von ' + f.length }; let placed = 0, err = '';
+      try {
+        if (!tok) tok = await tokP;
+        const buf = await (await dvFetch(tok, 'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(f[i].id) + '?alt=media')).arrayBuffer();
+        if (chIsPdf(f[i])) {
+          const src = await PDFDocument.load(buf, { ignoreEncryption: true }), n = src.getPageCount();
+          const emb = await doc.embedPages(src.getPages());
+          emb.forEach((ep, p) => { const pg = doc.addPage([W, H]); chDrawFit(pg, ep, true); chHead(pg, head, n > 1 ? ' · S. ' + (p + 1) + '/' + n : ''); placed++; });
+        } else {
+          const im = await chImageBytes(buf, f[i].mime || ''), img = im.kind === 'png' ? await doc.embedPng(im.bytes) : await doc.embedJpg(im.bytes);
+          const pg = doc.addPage([W, H]); chDrawFit(pg, img, false); chHead(pg, head, ''); placed++;
+        }
+      } catch (e) { if (e && e.status === 401) { window.cloud.driveForget(); throw e; } err = (e && e.message) || String(e); }
+      if (!placed) {                                                              // Ersatzseite statt Abbruch (z. B. verschlüsseltes oder gelöschtes Dokument)
+        const pg = doc.addPage([W, H]); chHead(pg, head, '');
+        txt(pg, 'Beleg konnte nicht eingebunden werden', 60, 640, { bold: true, size: 16 }); txt(pg, f[i].name, 60, 612, { size: 11, w: 475 });
+        txt(pg, err || 'Unbekannter Fehler', 60, 592, { size: 10, color: grey, w: 475 }); txt(pg, 'Original in Google Drive:', 60, 560, { size: 10, color: grey }); txt(pg, dvLink(f[i].id), 60, 544, { size: 9, color: COL.service, w: 475 });
+      }
+    }
+  }
+  function chDrawFit(pg, obj, isPage) {                                           // Beleg in den Bereich unter der Kopfzeile einpassen, zentriert
+    const bx = 24, by = 30, bw = W - 48, bh = H - 34 - 40, ow = obj.width, oh = obj.height, k = Math.min(bw / ow, bh / oh), w = ow * k, h = oh * k, x = bx + (bw - w) / 2, y = by + (bh - h) / 2;
+    if (isPage) pg.drawPage(obj, { x, y, width: w, height: h }); else pg.drawImage(obj, { x, y, width: w, height: h });
+    pg.drawRectangle({ x, y, width: w, height: h, borderColor: line, borderWidth: 0.6 });
+  }
+  function chHead(pg, hd, extra) {
+    const k = hd.ty.k, tag = safe(FB, hd.ty.n.toUpperCase()), tw = FB.widthOfTextAtSize(tag, 8.5) + 12;
+    pg.drawRectangle({ x: 24, y: H - 30, width: tw, height: 15, color: TINT[k] }); pg.drawText(tag, { x: 30, y: H - 26, size: 8.5, font: FB, color: COL[k] });
+    const meta = chDY(Date.parse(hd.c.date)) + (hd.c.odometerKm > 0 ? ' · ' + fmt(hd.c.odometerKm, 0) + ' km' : ''), right = hd.label + extra, rw = F.widthOfTextAtSize(safe(F, right), 9);
+    const mw = F.widthOfTextAtSize(safe(F, meta), 9), titleW = W - 24 - rw - 14 - (24 + tw + 8) - mw - 10;
+    const t = fit(FB, hd.c.title || hd.ty.n, 10, Math.max(40, titleW)); pg.drawText(t, { x: 24 + tw + 8, y: H - 26, size: 10, font: FB, color: ink });
+    txt(pg, meta, 24 + tw + 8 + FB.widthOfTextAtSize(t, 10) + 8, H - 26, { size: 9, color: grey }); txt(pg, right, W - 24, H - 26, { size: 9, color: grey, right: true });
+    pg.drawLine({ start: { x: 24, y: H - 36 }, end: { x: W - 24, y: H - 36 }, thickness: 0.6, color: rgb(0.8, 0.84, 0.88) });
+  }
+  /* Deckblatt + Inhaltsverzeichnis */
+  const total = doc.getPageCount(), p1 = idx[0], sum = entries.reduce((a, c) => a + Math.max(0, costAmt(c)), 0);
+  txt(p1, 'DIGITALES CHECKHEFT', 44, H - 82, { bold: true, size: 28 });
+  txt(p1, car + (set.year ? ' · Erstzulassung ' + set.year : '') + (set.plate ? ' · ' + set.plate : ''), 44, H - 102, { size: 11, color: grey, w: 380 });
+  txt(p1, 'erstellt am ' + chDY(Date.now()), W - 44, H - 82, { size: 9, color: grey, right: true }); txt(p1, total + ' Seiten', W - 44, H - 95, { size: 9, color: grey, right: true });
+  p1.drawLine({ start: { x: 44, y: H - 114 }, end: { x: W - 44, y: H - 114 }, thickness: 1.6, color: ink });
+  const tiles = CH_TYPES.map(t => [t.n.toUpperCase(), String(entries.filter(c => chType(c.category).k === t.k).length), COL[t.k]]).concat([['KOSTEN', eur(sum), grey]]), tW = (W - 88 - 30) / 4;
+  tiles.forEach((t, i) => { const x = 44 + i * (tW + 10); p1.drawRectangle({ x, y: H - 182, width: tW, height: 50, borderColor: line, borderWidth: 1 }); txt(p1, t[0], x + 10, H - 148, { bold: true, size: 8, color: t[2] }); txt(p1, t[1], x + 10, H - 172, { bold: true, size: 18, w: tW - 20 }); });
+  const X = { d: 44, a: 112, l: 176, km: 432, b: 492, s: W - 44 };
+  let pi = 0, y = 0, onPage = 0;
+  const startIdx = (pg, first) => { txt(pg, first ? 'INHALT' : 'INHALT (FORTSETZUNG)', 44, first ? H - 214 : H - 70, { bold: true, size: 13 }); y = first ? H - 238 : H - 94;
+    [['DATUM', X.d], ['ART', X.a], ['LEISTUNG', X.l]].forEach(([t, x]) => txt(pg, t, x, y, { bold: true, size: 7.5, color: grey })); [['KM', X.km], ['BETRAG', X.b], ['SEITE', X.s]].forEach(([t, x]) => txt(pg, t, x, y, { bold: true, size: 7.5, color: grey, right: true }));
+    pg.drawLine({ start: { x: 44, y: y - 6 }, end: { x: W - 44, y: y - 6 }, thickness: 0.8, color: rgb(0.8, 0.84, 0.88) }); y -= 24; onPage = 0; };
+  startIdx(idx[0], true);
+  rows.forEach(r => {
+    if (onPage >= (pi === 0 ? CAP1 : CAPN)) { pi++; startIdx(idx[pi], false); }
+    const pg = idx[pi];
+    if (r.kauf) txt(pg, 'KAUF AM ' + chDY(P0) + (set.purchaseKm ? ' BEI ' + fmt(Number(set.purchaseKm), 0) + ' KM' : ''), X.d, y + 2, { bold: true, size: 7.5, color: grey });
+    else {
+      const c = r.c, ty = chType(c.category), f = c.files || [], sp = startPage.get(c.id), pre = Date.parse(c.date) < P0, amt = costAmt(c);
+      txt(pg, chDY(Date.parse(c.date)), X.d, y + 4, { size: 9.5 }); txt(pg, ty.n, X.a, y + 4, { bold: true, size: 9.5, color: COL[ty.k] });
+      txt(pg, c.title || ty.n, X.l, y + 4, { size: 9.5, w: X.km - X.l - 52 });
+      txt(pg, [pre ? 'vor dem Kauf' : '', c.note || '', f.length ? f.length + (f.length === 1 ? ' Beleg' : ' Belege') : 'ohne Beleg'].filter(Boolean).join(' · '), X.l, y - 7, { size: 7.5, color: grey, w: X.km - X.l - 52 });
+      txt(pg, c.odometerKm > 0 ? fmt(c.odometerKm, 0) : '–', X.km, y + 4, { size: 9.5, right: true }); txt(pg, pre && !amt ? '–' : eur(amt), X.b, y + 4, { size: 9.5, right: true });
+      let pages = '–'; if (sp) { let end = total; for (const [id, s0] of startPage) if (s0 > sp && s0 - 1 < end) end = s0 - 1; pages = end > sp ? sp + '–' + end : String(sp); }
+      txt(pg, pages, X.s, y + 4, { size: 9.5, right: true });
+    }
+    pg.drawLine({ start: { x: 44, y: y - 13 }, end: { x: W - 44, y: y - 13 }, thickness: 0.5, color: line });
+    y -= RH; onPage++;
+  });
+  /* Fälligkeiten + Hinweis unten auf Seite 1 */
+  const due = chDue();
+  due.forEach((d, i) => { const bw = (W - 88 - 10) / 2, x = 44 + i * (bw + 10); p1.drawRectangle({ x, y: 92, width: bw, height: 38, color: TINT[d.k] }); txt(p1, d.l === 'Service' ? 'Nächster Service' : d.l, x + 10, 116, { bold: true, size: 9, color: COL[d.k] }); txt(p1, chMY(d.d), x + 10, 100, { size: 10 }); });
+  p1.drawLine({ start: { x: 44, y: 76 }, end: { x: W - 44, y: 76 }, thickness: 0.5, color: line });
+  txt(p1, 'Zusammengestellt aus den Belegen in EnyaqStrom. Die Belege folgen in zeitlicher Reihenfolge, jede Seite trägt oben Art, Datum und km-Stand.', 44, 62, { size: 7.5, color: grey, w: W - 88 });
+  txt(p1, 'Die Mappe ersetzt keine Herstellernachweise.', 44, 52, { size: 7.5, color: grey });
+  /* Fußzeile auf allen Seiten */
+  doc.getPages().forEach((pg, i) => { txt(pg, 'Digitales Checkheft · ' + car, 24, 14, { size: 7.5, color: grey, w: 360 }); txt(pg, 'Seite ' + (i + 1) + ' von ' + total, W - 24, 14, { size: 7.5, color: grey, right: true }); });
+  doc.setTitle('Digitales Checkheft ' + car); doc.setCreator('EnyaqStrom'); doc.setProducer('EnyaqStrom (pdf-lib)');
+  return doc.save();
+}
+let chBusy = false;
+$('btn-ch-pdf').addEventListener('click', async () => {
+  if (chBusy) return; const msg = $('ch-msg'), nF = chEntries().reduce((a, c) => a + (c.files || []).length, 0);
+  if (nF && !window.cloud?.isSignedIn()) { msg.textContent = 'Für die Belege bitte zuerst bei Google anmelden (Einstellungen).'; return; }
+  chBusy = true; const btn = $('btn-ch-pdf'); btn.disabled = true; btn.classList.add('opacity-60');
+  const tokWarm = nF ? window.cloud.driveToken() : null; if (tokWarm) tokWarm.catch(() => { });   // Google-Fenster direkt nach dem Tipp öffnen
+  try {
+    msg.textContent = 'Bereite das Checkheft vor …'; await chLoadPdfLib();
+    const bytes = await buildCheckheftPdf((t) => { msg.textContent = t; }, tokWarm), blob = new Blob([bytes], { type: 'application/pdf' }), url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'Checkheft ' + ((getSettings().model || 'Enyaq').trim()) + ' ' + wxIso(new Date()) + '.pdf'; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    msg.textContent = 'Fertig: ' + fmt(blob.size / 1048576, 1) + ' MB · im Download-Ordner gespeichert.';
+  } catch (e) { msg.textContent = 'Checkheft konnte nicht erstellt werden: ' + (e && e.status ? dvErrText(e) : (e && e.message) || e); }
+  finally { chBusy = false; btn.disabled = false; btn.classList.remove('opacity-60'); }
+});
+
+let akteOldTitle = '';
+async function akteReady(box) {                                                     // alle Diagramm-Bilder geladen, dekodiert und gezeichnet
+  await Promise.all([...box.querySelectorAll('img')].map(i => (i.complete ? Promise.resolve() : new Promise(r => { i.onload = i.onerror = r; })).then(() => i.decode ? i.decode().catch(() => { }) : null)));
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); await new Promise(r => setTimeout(r, 400));
+}
+$('akte-print').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-akte]'); if (!b) return;
+  if (b.dataset.akte === 'close') { document.body.classList.remove('print-akte'); $('akte-print').innerHTML = ''; if (akteOldTitle) document.title = akteOldTitle; window.scrollTo(0, 0); }
+  else { await akteReady($('akte-print')); window.print(); }
+});
+
+/* =====================================================================
+   Verbrauch je Außentemperatur (Statistik): Für jede Strecke zwischen zwei Ladungen (genaue Werte aus Akku-%) wird die mittlere Tagestemperatur am Wetter-Standort
+   bestimmt (Open-Meteo: Archiv bis vor 7 Tagen, danach Vorhersage-Schnittstelle mit past_days). Nichts davon wird an den Ladungen gespeichert; nur die Tageswerte liegen lokal im Cache.
+   ===================================================================== */
+let stTempChart = null, stTempTok = 0;
+async function wxTemps(l, fromIso, toIso) {
+  const key = l.lat + ',' + l.lon; let c = load(KEY_TEMPS, null); if (!c || c.loc !== key) c = { loc: key, days: {} };
+  const recent = wxIso(new Date(Date.now() - 3 * 864e5)), arch = wxIso(new Date(Date.now() - 7 * 864e5)); let need = false;
+  c.rain = c.rain || {}; c.hum = c.hum || {};
+  for (let t = Date.parse(fromIso + 'T12:00:00'), e = Date.parse(toIso + 'T12:00:00'); t <= e; t += 864e5) { const d = wxIso(new Date(t)); if (c.days[d] === undefined || c.rain[d] === undefined || c.hum[d] === undefined || d >= recent) { need = true; break; } }   // die letzten 3 Tage immer neu holen
+  if (need) {
+    const q = '&latitude=' + l.lat + '&longitude=' + l.lon + '&daily=temperature_2m_mean,precipitation_sum&hourly=temperature_2m,relative_humidity_2m&timezone=auto', put = (j) => { const hd = wxoHumDays(j); j.daily.time.forEach((d, i) => { const v = j.daily.temperature_2m_mean[i], p = (j.daily.precipitation_sum || [])[i]; if (v != null) c.days[d] = v; if (p != null) c.rain[d] = p; if (hd[d] != null) c.hum[d] = hd[d]; }); };
+    try {
+      if (fromIso <= arch) { const r = await fetch('https://archive-api.open-meteo.com/v1/archive?start_date=' + fromIso + '&end_date=' + (toIso < arch ? toIso : arch) + q); if (r.ok) put(await r.json()); }
+      if (toIso > arch) { const r = await fetch('https://api.open-meteo.com/v1/forecast?past_days=10&forecast_days=1' + q); if (r.ok) put(await r.json()); }
+      save(KEY_TEMPS, c);
+    } catch (e) { /* offline: vorhandene Werte nutzen */ }
+  }
+  return c.days;
+}
+async function renderTempChart() {
+  const tok = ++stTempTok, rs = getReadings(), l = wxLoc(), note = $('st-temp-note'), wrap = $('st-temp-wrap');
+  if (stTempChart) { stTempChart.destroy(); stTempChart = null; } wrap.classList.add('hidden');
+  const iv = [];                                                                       // nur genaue Strecken (Akku-%), ohne grobe Entnahmen unter 3 kWh und Kurzstrecken unter 20 km
+  rs.forEach((r, i) => { if (i < 1) return; const s = entryStats(rs, i), a = Date.parse(rs[i - 1].date), b = Date.parse(r.date); if (s.method !== 'soc' || s.rough || !(s.kwh100 > 0) || s.km < 20 || !Number.isFinite(a) || !Number.isFinite(b)) return; iv.push({ a: wxIso(new Date(a)), b: wxIso(new Date(b)), y: s.kwh100 }); });
+  if (!l) { note.textContent = 'Für diese Auswertung bitte in den Einstellungen einen Wetter-Standort eintragen.'; return; }
+  if (iv.length < 3) { note.textContent = 'Noch zu wenige genaue Ladungen: Es braucht mindestens 3 Ladungen mit Akku-Start/-Ende in % und km-Stand.'; return; }
+  note.textContent = 'Temperaturen werden geladen …';
+  const days = await wxTemps(l, iv.reduce((m, x) => x.a < m ? x.a : m, iv[0].a), iv.reduce((m, x) => x.b > m ? x.b : m, iv[0].b)); if (tok !== stTempTok) return;
+  const pts = [];
+  iv.forEach(x => { let sum = 0, n = 0; for (let t = Date.parse(x.a + 'T12:00:00'), e = Date.parse(x.b + 'T12:00:00'); t <= e; t += 864e5) { const v = days[wxIso(new Date(t))]; if (v != null) { sum += v; n++; } } if (n) pts.push({ x: +(sum / n).toFixed(1), y: +x.y.toFixed(2) }); });
+  if (pts.length < 3) { note.textContent = 'Keine Temperaturdaten verfügbar (offline?). Sobald eine Verbindung besteht, erscheint die Auswertung.'; return; }
+  if (typeof Chart === 'undefined') { note.textContent = 'Diagramm nicht verfügbar (Chart.js nicht geladen).'; return; }
+  const n = pts.length, mx = pts.reduce((a, p) => a + p.x, 0) / n, my = pts.reduce((a, p) => a + p.y, 0) / n, sxx = pts.reduce((a, p) => a + (p.x - mx) ** 2, 0), sxy = pts.reduce((a, p) => a + (p.x - mx) * (p.y - my), 0);
+  const slope = sxx > 0 ? sxy / sxx : 0, icpt = my - slope * mx, xmin = Math.min(...pts.map(p => p.x)), xmax = Math.max(...pts.map(p => p.x)), trend = n >= 5 && xmax - xmin >= 6;
+  const dark = matchMedia('(prefers-color-scheme: dark)').matches, text = dark ? '#cbd5e1' : '#475569', grid = dark ? 'rgba(148,163,184,.15)' : 'rgba(100,116,139,.15)';
+  const ds = [{ type: 'scatter', data: pts, backgroundColor: '#94a3b8', pointRadius: 3.5 }];
+  if (trend) ds.push({ type: 'line', data: [{ x: xmin, y: +(icpt + slope * xmin).toFixed(2) }, { x: xmax, y: +(icpt + slope * xmax).toFixed(2) }], borderColor: '#10b981', backgroundColor: '#10b981', pointRadius: 0, borderWidth: 2.5 });
+  wrap.classList.remove('hidden');
+  stTempChart = new Chart($('st-temp-chart'), { data: { datasets: ds }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { filter: (c) => c.datasetIndex === 0, callbacks: { label: (c) => fmt(c.parsed.y, 1) + ' kWh/100 km bei ' + fmt(c.parsed.x, 1) + ' °C' } } },
+    scales: { x: { type: 'linear', title: { display: true, text: 'Ø Außentemperatur seit der letzten Ladung (°C)', color: text }, ticks: { color: text }, grid: { color: grid } }, y: { title: { display: true, text: 'kWh/100 km', color: text }, ticks: { color: text }, grid: { color: grid } } } } });
+  const d10 = -slope * 10, parts = [n + ' Ladungen'];
+  if (trend) { parts.push('Trend: je 10 °C kälter ' + (d10 >= 0 ? '+' : '−') + fmt(Math.abs(d10), 1) + ' kWh/100 km'); const a20 = icpt + slope * 20, a0 = icpt; if (xmin <= 5 && xmax >= 15 && a20 > 0 && a0 > 0) parts.push('bei 20 °C ≈ ' + fmt(a20, 1) + ', bei 0 °C ≈ ' + fmt(a0, 1) + ' kWh/100 km (' + (a0 >= a20 ? '+' : '−') + fmt(Math.abs((a0 / a20 - 1) * 100), 0) + ' %)'); }
+  note.textContent = parts.join(' · ') + '. Jeder Punkt ist eine Ladung: der Verbrauch seit der vorherigen Ladung bei der Durchschnittstemperatur dieser Tage am Wetter-Standort.';
+}
+
+/* =====================================================================
+   „<Titel> Wrapped“: Rückblick als Story mit 5 Seiten (Distanz, Energie, Durchschnittsverbrauch, Kosten, Überblick).
+   Auslöser: jeder 01.01., der Jahrestag des Kauftags und alle 5.000 gefahrenen km (gezählt ab dem ersten km-Stand). Die Werte gelten für die abgelaufene Periode,
+   z. B. 08.06.–31.12., 01.01.–07.06. bzw. die jeweiligen 5.000 km. Berechnet wird alles aus den vorhandenen Daten; gemerkt wird nur, welche Rückblicke schon gesehen wurden.
+   ===================================================================== */
+const WR_KM = 5000, WR_HOUSEHOLD = 1500, WR_F = "font-family:'Barlow Condensed','Arial Narrow',system-ui,sans-serif";   // km je Rückblick; Jahresstrom Single-Haushalt (Richtwert, kWh)
+const wltpVal = () => { const v = Number(getSettings().wltp); return v > 5 && v < 40 ? v : 16; };
+const wrD = (ms) => { const d = new Date(ms); return String(d.getDate()).padStart(2, '0') + '.' + String(d.getMonth() + 1).padStart(2, '0') + '.'; };
+const wrDY = (ms) => wrD(ms) + new Date(ms).getFullYear();
+const wrTitle = () => ((getSettings().title || DEFAULT_TITLE).split('|')[0].trim() || 'Enyaq') + ' Wrapped';
+/** Vergleichs-Benziner aus Einstellungen → Fahrtenbuch (Standard: 7,0 l/100 km, 1,75 €/l) */
+const cmpCar = () => { const s = getSettings(), l = Number(s.cmpL), e = Number(s.cmpEur), g = Number(s.cmpCo2); return { name: (s.cmpCar || '').trim() || 'ein Benziner', l: l > 1 && l < 30 ? l : 7, eur: e > 0.5 && e < 5 ? e : 1.75, g: g >= 0 && g < 2000 ? g : 0 }; };
+const CO2_L = 2.37;                                                                   // kg CO₂ je Liter Benzin (Verbrennung)
+/** CO₂-Bilanz: Benziner (Liter × 2,37 kg) gegen geladenen Strom (kWh × g/kWh laut Einstellung, Ökostrom = 0) → kg */
+const cmpCo2 = (km, kwh) => { const c = cmpCar(), fuel = km * c.l / 100 * CO2_L, el = (kwh || 0) * c.g / 1000; return { fuel, el, sav: fuel - el }; };
+const fmtCo2 = (kg) => Math.abs(kg) >= 1000 ? fmt(kg / 1000, 1) + ' t' : fmt(kg, 0) + ' kg';
+const wrSeen = () => { const l = load(KEY_WRAP, []); return Array.isArray(l) ? l : []; };
+
+/** Kennzahlen einer Periode: km (aus den km-Ständen), geladene kWh, Kosten (Laden + Kosten − Einnahmen), Ø Verbrauch inkl. Ladeverluste, Zahl der Ladungen. */
+function wrStats(p) {
+  const rs = getReadings(), idx = []; let kwh = 0, laden = 0;
+  rs.forEach((r, i) => { const t = Date.parse(r.date); if (!(t >= p.t0 && t <= p.t1) || isStartRow(rs, i)) return; idx.push(i); kwh += r.consumedSinceLast || 0; laden += r.cost || 0; });
+  const other = getCosts().reduce((a, c) => { const t = Date.parse(c.date); return t >= p.t0 && t <= p.t1 ? a + costAmt(c) : a; }, 0), tot = idx.length ? consumptionTotals(rs, idx) : null;
+  return { n: idx.length, km: rangeKm(p.t0, p.t1 + 1), kwh, laden, cost: laden + other, kwh100: tot && tot.km ? tot.kwh100 : null, days: Math.max(1, Math.round((Math.min(p.t1, Date.now()) - p.t0) / 864e5) + 1) };
+}
+/** Alle abgeschlossenen Perioden (neueste zuerst) + Beginn der laufenden Zeit-Periode. */
+function wrPeriods() {
+  const rs = getReadings().filter(r => Number.isFinite(Date.parse(r.date))), now = Date.now(), ty = new Date().getFullYear(), [py, pm, pd] = purchaseDay().split('-').map(Number), P = new Date(py, pm - 1, pd).getTime(), time = [], km = [];
+  const bs = [...new Set([].concat(...Array.from({ length: Math.max(0, ty - py) }, (_, i) => [new Date(py + 1 + i, 0, 1).getTime(), new Date(py + 1 + i, pm - 1, pd).getTime()])))].filter(x => x > P && x <= now).sort((a, b) => a - b);
+  let s = P; bs.forEach(x => { time.push({ kind: 't', id: 't' + wxIso(new Date(x)), t0: s, t1: x - 1, avail: x, label: wrDY(s) + ' – ' + wrDY(x - 1) }); s = x; });
+  const od = rs.filter(r => r.odometerKm > 0);
+  if (od.length > 1) { const base = od[0].odometerKm; let prev = od[0], k = 1;
+    od.forEach(r => { const m = Math.floor((r.odometerKm - base) / WR_KM); if (m >= k) { const t1 = Date.parse(r.date);
+      km.push({ kind: 'k', id: 'k' + m, t0: km.length ? Date.parse(prev.date) + 1 : Date.parse(prev.date), t1, avail: t1, label: k === 1 ? 'Die ersten ' + fmt(m * WR_KM, 0) + ' km' : fmt((k - 1) * WR_KM, 0) + ' – ' + fmt(m * WR_KM, 0) + ' km' }); prev = r; k = m + 1; } }); }
+  [time, km].forEach(a => a.forEach((p, i) => { p.prev = a[i - 1] || null; }));
+  const list = time.concat(km).map(p => ({ ...p, st: wrStats(p) })).filter(p => p.st.n >= 1 && p.st.km > 0).sort((a, b) => b.avail - a.avail);
+  return { list, runStart: s, runPrev: time[time.length - 1] || null };
+}
+/* ---- Vergleiche ---- */
+const WR_DEST = [[400, 'Paris'], [750, 'Berlin'], [900, 'Wien'], [1250, 'Rom'], [1600, 'Madrid'], [2200, 'Lissabon'], [2500, 'Istanbul'], [3300, 'zum Nordkap']];   // grobe Straßenentfernungen ab dem Saarland
+/** Vergleich zur gefahrenen Strecke, abhängig von der Größe: Anteil bis Paris, ein Reiseziel samt Rest-km, Anteil an der Erde oder Erdumrundungen. */
+function wrDist(km) {
+  const EARTH = 40075, to = (n) => n.startsWith('zum') ? n : 'nach ' + n;
+  if (km < 400) return { text: 'Schon ' + fmt(km / 400 * 100, 0) + ' % des Wegs nach Paris (ca. 400 km).', dest: 'Paris' };
+  if (km >= EARTH) { const x = km / EARTH; return { text: 'Das sind ' + fmt(x, 1) + '-mal um die Erde (je 40.075 km).', dest: fmt(x, 1) + '× Erde' }; }
+  /* Bestes Vielfaches: Ziel × 1 bis 5, das die Strecke gut trifft (kleiner Rest, möglichst wenige Wiederholungen); passt nichts auf 15 % genau, Anteil an der Erde */
+  const WORD = ['', 'Einmal', 'Zweimal', 'Dreimal', 'Viermal', 'Fünfmal'];
+  let best = null;
+  WR_DEST.forEach(([d, name]) => { for (let n = 1; n <= 5; n++) { const rest = km - n * d; if (rest < 0) break; const score = rest + (n - 1) * km * 0.08;   // jedes weitere „mal“ kostet etwas: ein Ziel einmal ist schöner als ein nahes Ziel viermal
+    if (!best || score < best.score || (score === best.score && d > best.d)) best = { d, name, n, rest, score }; } });
+  if (best && best.rest > km * 0.15 && km < 4400) { const d1 = WR_DEST.filter(x => km >= x[0]).pop(); best = { d: d1[0], name: d1[1], n: 1, rest: km - d1[0], keep: true }; }   // kurze Strecken: einfach das nächste Ziel samt Rest
+  if (!best || (!best.keep && best.rest > km * 0.15)) return { text: 'So viel wie ' + fmt(km / EARTH * 100, 0) + ' % einmal um die Erde (40.075 km).', dest: 'Erde' };   // kein Ziel passt gut
+  const { d, name, n, rest } = best;
+  return { text: WORD[n] + ' ' + to(name) + ' (' + (n > 1 ? 'je ' : '') + 'ca. ' + fmt(d, 0) + ' km)' + (rest >= 50 ? ' und noch ' + fmt(Math.round(rest / 10) * 10, 0) + ' km weiter.' : '.'), dest: (n > 1 ? n + '× ' : '') + name.replace(/^zum /, '') };
+}
+const wrDur = (days) => days < 14 ? fmt(days, 0) + ' Tage' : days < 70 ? fmt(days / 7, 0) + ' Wochen' : fmt(days / 30.4375, 1) + ' Monate';
+const wrBar = (pct, ac) => '<div style="height:10px;border-radius:5px;background:rgba(255,255,255,.18);overflow:hidden"><div style="width:' + Math.max(2, Math.min(100, pct)) + '%;height:100%;background:' + ac + '"></div></div>';
+const wrSmall = (t) => '<div style="font-size:13px;color:#cbd5e1;margin-top:6px">' + t + '</div>';
+
+/** Die Seiten einer Periode (Strecke, Energie, Verbrauch, Kosten, Ersparnis vs. Benziner, Überblick). */
+function wrPages(p) {
+  const st = p.st || wrStats(p), pv = p.prev ? wrStats(p.prev) : null, w = wltpVal(), city = ((wxLoc() || {}).label || '').split(',')[0] || 'Zuhause', MU = '#cbd5e1';
+  const page = (bg, ac, lead, big, unit, sub, vis, cmp, cmp2) => ({ bg, ac, body:
+    '<div style="font-size:22px;color:' + MU + '">' + lead + '</div><div style="' + WR_F + ';font-size:min(34vw,150px);font-weight:700;line-height:.95;white-space:nowrap;color:' + ac + '">' + big + '</div>' +
+    '<div style="' + WR_F + ';font-size:52px;font-weight:600;line-height:1;margin-top:4px">' + unit + '</div><div style="font-size:16px;color:' + MU + ';margin-top:8px">' + sub + '</div>' + (vis ? '<div style="margin-top:30px">' + vis + '</div>' : '') +
+    (cmp ? '<div style="font-size:22px;line-height:1.3;margin-top:22px">' + cmp + '</div>' : '') + (cmp2 ? '<div style="font-size:15px;color:' + MU + ';margin-top:8px">' + cmp2 + '</div>' : '') });
+  const per = esc(p.label), pages = [];
+  // 1 Distanz
+  const dc = wrDist(st.km || 0);
+  pages.push(page('#022c22', '#6ee7b7', 'Du bist gefahren', fmt(st.km || 0, 0), 'Kilometer', per,
+    '<div style="display:flex;align-items:center;gap:8px"><div style="width:10px;height:10px;border-radius:5px;background:#6ee7b7"></div><div style="flex:1;border-top:2px dashed #6ee7b7"></div><div style="width:10px;height:10px;border-radius:5px;background:#6ee7b7"></div></div><div style="display:flex;justify-content:space-between;font-size:13px;color:' + MU + ';margin-top:6px"><span>' + esc(city) + '</span><span>' + dc.dest + '</span></div>', dc.text, ''));
+  // 2 Energie
+  const pct = st.kwh / WR_HOUSEHOLD * 100;
+  pages.push(page('#0c4a6e', '#7dd3fc', 'Du hast geladen', fmt(st.kwh, 0), 'kWh', per, wrBar(pct, '#7dd3fc') + wrSmall('Jahresstrom eines Single-Haushalts: ca. ' + fmt(WR_HOUSEHOLD, 0) + ' kWh'),
+    'Das sind ' + fmt(pct, 0) + ' % des Jahresstroms eines Single-Haushalts.', 'Damit käme ein Single-Haushalt etwa ' + wrDur(st.kwh / (WR_HOUSEHOLD / 365)) + ' aus.'));
+  // 3 Durchschnittsverbrauch vs. WLTP
+  if (st.kwh100 != null) {
+    const v = st.kwh100, lo = Math.min(w, v) * .85, hi = Math.max(w, v) * 1.15, pos = (x) => ((x - lo) / (hi - lo) * 100).toFixed(1), d = (v / w - 1) * 100;
+    const cmp = Math.abs(d) < 1.5 ? 'Genau auf WLTP-Niveau.' : fmt(Math.abs(d), 0) + ' % ' + (d < 0 ? 'unter' : 'über') + ' dem WLTP-Wert von ' + fmt(w, 1) + ' kWh/100 km.';
+    pages.push(page('#422006', '#fcd34d', 'Dein Durchschnittsverbrauch', fmt(v, 1), 'kWh/100 km', per,
+      '<div style="position:relative;height:56px"><div style="position:absolute;left:0;right:0;top:26px;height:4px;border-radius:2px;background:rgba(255,255,255,.25)"></div><div style="position:absolute;left:' + pos(w) + '%;top:0;transform:translateX(-50%);font-size:13px;color:' + MU + ';white-space:nowrap">WLTP ' + fmt(w, 1) + '</div><div style="position:absolute;left:' + pos(w) + '%;top:20px;width:3px;height:16px;background:#fff;transform:translateX(-50%)"></div><div style="position:absolute;left:' + pos(v) + '%;top:19px;width:18px;height:18px;border-radius:9px;background:#fcd34d;transform:translateX(-50%)"></div><div style="position:absolute;left:' + pos(v) + '%;top:40px;transform:translateX(-50%);font-size:13px;font-weight:700;color:#fcd34d;white-space:nowrap">Du ' + fmt(v, 1) + '</div></div>',
+      cmp, d < 0 ? 'Sparsamer als die Herstellerangabe.' : d <= 15 ? 'Nah an der Herstellerangabe.' : 'Kälte, Autobahn und Heizung kosten im Alltag Reichweite.'));
+  } else pages.push(page('#422006', '#fcd34d', 'Dein Durchschnittsverbrauch', '–', 'kWh/100 km', per, '', 'Dafür fehlen in dieser Periode Ladungen mit Akku-Start/-Ende in %.', ''));
+  // 4 Kosten
+  const ck = st.km > 0 ? st.cost / st.km : null, pk = pv && pv.km > 0 && pv.cost > 0 ? pv.cost / pv.km : null; let c4 = '', c4b = '', vis4 = '';
+  if (ck != null && pk != null) {
+    const dd = (ck / pk - 1) * 100, mx = Math.max(ck, pk), row = (l, c, col) => '<div style="font-size:13px;color:' + MU + ';margin:10px 0 4px">' + l + ' · ' + fmt(c * 100, 1) + ' ct/km</div>' + wrBar(c / mx * 100, col);
+    vis4 = row('Diese Periode', ck, '#fda4af') + row('Vorperiode', pk, 'rgba(255,255,255,.55)');
+    c4 = Math.abs(dd) < 1 ? 'Pro Kilometer genauso teuer wie in der Vorperiode.' : 'Pro Kilometer ' + fmt(Math.abs(dd), 0) + ' % ' + (dd < 0 ? 'günstiger' : 'teurer') + ' als in der Vorperiode.';
+    c4b = 'Vorperiode (' + wrD(p.prev.t0) + '–' + wrD(p.prev.t1) + '): ' + eur(pv.cost) + ' für ' + fmt(pv.km, 0) + ' km.';
+  } else if (ck != null) { c4 = fmt(ck * 100, 2) + ' € pro 100 km.'; c4b = 'Das sind ' + eur(st.cost / st.days) + ' pro Tag.'; }
+  pages.push(page('#4c0519', '#fda4af', 'Deine Kosten', fmt(st.cost, 2), '€', per, vis4, c4, c4b));
+  // 5 Ersparnis gegenüber dem Vergleichs-Benziner (nur Energie: Sprit vs. Ladekosten)
+  const cc = cmpCar(), lit = (st.km || 0) * cc.l / 100, fuel = lit * cc.eur, sav = fuel - st.laden;
+  if (st.km > 0) { const mx = Math.max(fuel, st.laden, 0.01), row = (l, v, col) => '<div style="font-size:13px;color:' + MU + ';margin:10px 0 4px">' + l + ' · ' + fmt(v, 0) + ' €</div>' + wrBar(v / mx * 100, col);
+    pages.push(page('#1e1b4b', '#c4b5fd', sav >= 0 ? 'Gegenüber dem Benziner gespart' : 'Gegenüber dem Benziner mehr bezahlt', fmt(Math.abs(sav), 0), '€', per,
+      row('Sprit für ' + esc(cc.name), fuel, 'rgba(255,255,255,.55)') + row('Strom fürs Laden', st.laden, '#c4b5fd')
+        + (() => { const c = cmpCo2(st.km, st.kwh); return '<div style="display:flex;align-items:center;gap:12px;margin-top:14px;padding:10px 14px;border-radius:16px;background:rgba(134,239,172,.12)"><div style="font-size:24px">🌱</div><div style="min-width:0"><div style="font-size:18px;font-weight:700;color:#86efac">' + fmtCo2(c.sav) + ' CO₂ vermieden</div><div style="font-size:13px;color:' + MU + ';margin-top:2px">Benziner ' + fmtCo2(c.fuel) + ' · Laden ' + (cc.g ? fmtCo2(c.el) + ' (' + fmt(cc.g, 0) + ' g/kWh)' : '0 kg (Ökostrom)') + '</div></div></div>'; })(),
+      'Statt ' + fmt(lit, 0) + ' l Sprit (' + fmt(cc.l, 1) + ' l/100 km · ' + fmt(cc.eur, 2) + ' €/l).',
+      fmt(st.laden / st.km * 100, 1) + ' statt ' + fmt(fuel / st.km * 100, 1) + ' ct/km · nur Energiekosten')); }
+  // 5 Überblick
+  const tile = (l, v, u) => '<div style="background:rgba(255,255,255,.08);border-radius:20px;padding:14px 12px;min-width:0"><div style="font-size:' + (l.length > 16 ? 11 : 12) + 'px;line-height:1.3;color:' + MU + '">' + l + '</div><div style="' + WR_F + ';font-size:36px;font-weight:700;line-height:1.05;color:#6ee7b7">' + v + '<wbr><span style="font-family:system-ui,sans-serif;font-size:' + (u.length > 6 ? 11 : 12) + 'px;font-weight:500;color:' + MU + ';margin-left:4px;white-space:nowrap;display:inline-block">' + u + '</span></div></div>';
+  pages.push({ bg: '#0f172a', ac: '#6ee7b7', body: '<div style="' + WR_F + ';font-size:44px;font-weight:700;line-height:1">Alles auf einen Blick</div><div style="font-size:16px;color:' + MU + ';margin:6px 0 20px">' + per + '</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">' +
+    tile('Gefahren', fmt(st.km || 0, 0), 'km') + tile('Geladen', fmt(st.kwh, 0), 'kWh') + tile('Ø Verbrauch inkl. Verluste', st.kwh100 != null ? fmt(st.kwh100, 1) : '–', 'kWh/100 km') + tile('Ladekosten', fmt(st.laden, 2), '€') + tile('Ladungen', fmt(st.n, 0), '') + tile('Ø Strompreis', st.kwh > 0 ? fmt(st.laden / st.kwh * 100, 1) : '–', 'ct/kWh') + (st.km > 0 ? tile('Energiekostenersparnis', fmt(sav, 0), '€') + tile('CO₂ vermieden', fmtCo2(cmpCo2(st.km, st.kwh).sav).replace(/ (kg|t)$/, ''), / t$/.test(fmtCo2(cmpCo2(st.km, st.kwh).sav)) ? 't' : 'kg') : '') + '</div>' });
+  return pages;
+}
+
+/* ---- Story-Anzeige ---- */
+let wrCur = null, wrIdx = 0, wrCardP = null, wrSwiped = false;
+const wrMarkAll = () => { const l = wrSeen(); wrPeriods().list.forEach(x => { if (!l.includes(x.id)) l.push(x.id); }); save(KEY_WRAP, l); };
+function wrRender() {
+  const pg = wrCur.pages[wrIdx], n = wrCur.pages.length, last = wrIdx === n - 1, bt = 'height:44px;padding:0 8px;border:0;background:transparent;font-size:15px;cursor:pointer;color:';
+  const seg = wrCur.pages.map((_, k) => '<div style="flex:1;height:3px;border-radius:2px;background:' + (k <= wrIdx ? pg.ac : 'rgba(255,255,255,.28)') + '"></div>').join('');
+  /* Von oben: tiefes Schwarz (passend zur schwarzen Statusleiste), das zügig in die Seitenfarbe übergeht */
+  $('wr-ov').style.background = 'linear-gradient(180deg,#000 0,#000 env(safe-area-inset-top,0px),rgba(0,0,0,.55) calc(env(safe-area-inset-top,0px) + 80px),rgba(0,0,0,0) calc(env(safe-area-inset-top,0px) + 230px)),' + pg.bg;
+  $('wr-page').innerHTML = '<div data-wr="prev" style="position:absolute;left:0;top:96px;bottom:84px;width:35%"></div><div data-wr="next" style="position:absolute;right:0;top:96px;bottom:84px;width:65%"></div>' +
+    '<div style="position:relative;z-index:1"><div style="display:flex;gap:4px">' + seg + '</div><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px"><div style="min-width:0"><div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#cbd5e1">' + esc(wrCur.head) + '</div><div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;margin-top:2px;color:#cbd5e1">' + esc(wrCur.period) + '</div></div>' +
+    '<button data-wr="close" aria-label="Schließen" style="width:44px;height:44px;flex:none;border:0;background:transparent;color:#cbd5e1;display:flex;align-items:center;justify-content:center;cursor:pointer"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div></div>' +
+    '<div style="flex:1"></div><div style="position:relative;pointer-events:none">' + pg.body + '</div><div style="flex:1"></div>' +
+    (last ? '<div style="position:relative;z-index:1;margin-bottom:10px"><button data-wr="share" style="width:100%;height:52px;border:0;border-radius:26px;background:#6ee7b7;color:#022c22;font-size:16px;font-weight:700;cursor:pointer">Als Bild teilen</button></div>' : '') +
+    '<div style="position:relative;z-index:1;display:flex;justify-content:space-between;align-items:center"><button data-wr="prev" style="' + bt + '#cbd5e1;' + (wrIdx ? '' : 'visibility:hidden') + '">‹ Zurück</button><div style="font-size:13px;color:#cbd5e1">' + (wrIdx + 1) + ' von ' + n + '</div><button data-wr="next" style="' + bt + pg.ac + ';font-weight:700">' + (last ? 'Fertig' : 'Weiter ›') + '</button></div>';
+}
+function wrOpen(p) {
+  wrCur = { head: wrTitle(), period: p.label, p, st: p.st || wrStats(p), pages: wrPages(p) }; wrIdx = 0; if (!p.preview) wrMarkAll();
+  $('wr-ov').classList.remove('hidden'); wrRender(); $('wrap-card').classList.add('hidden');
+}
+function wrClose() { wrCur = null; $('wr-ov').classList.add('hidden'); try { renderWrapCard(); } catch (e) { } }
+function wrGo(d) { if (!wrCur) return; const i = wrIdx + d; if (i < 0) return; if (i >= wrCur.pages.length) { wrClose(); return; } wrIdx = i; wrRender(); }
+(() => {
+  const ov = $('wr-ov'); let sx = 0, sy = 0, down = false;
+  ov.addEventListener('click', e => { if (wrSwiped) { wrSwiped = false; return; } const a = e.target.closest('[data-wr]'); if (!a) return; const k = a.dataset.wr; if (k === 'close') wrClose(); else if (k === 'share') wrShare(a); else wrGo(k === 'next' ? 1 : -1); });
+  ov.addEventListener('pointerdown', e => { down = true; sx = e.clientX; sy = e.clientY; wrSwiped = false; });
+  ov.addEventListener('pointerup', e => { if (!down) return; down = false; const dx = e.clientX - sx, dy = e.clientY - sy;
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) { wrSwiped = true; wrGo(dx < 0 ? 1 : -1); } else if (dy > 90 && Math.abs(dy) > Math.abs(dx)) { wrSwiped = true; wrClose(); } });
+  ov.addEventListener('pointercancel', () => { down = false; });
+  document.addEventListener('keydown', e => { if (!wrCur) return; if (e.key === 'Escape') wrClose(); else if (e.key === 'ArrowRight') wrGo(1); else if (e.key === 'ArrowLeft') wrGo(-1); });
+})();
+
+/* ---- Karte auf Start (unter der Überschrift, wegwischbar) und Liste in Berichte → Statistik ---- */
+function renderWrapCard() {
+  const c = $('wrap-card'); if (!c || wrCur) return; const seen = wrSeen(), p = wrPeriods().list.find(x => !seen.includes(x.id)); wrCardP = p || null;
+  c.classList.toggle('hidden', !p); if (p) $('wrap-card-s').textContent = wrTitle() + ' · ' + p.label;
+}
+(() => {
+  const c = $('wrap-card'); let sx = 0, id = null, dx = 0, drag = false;
+  c.addEventListener('pointerdown', e => { if (e.clientX < 40) return; id = e.pointerId; sx = e.clientX; dx = 0; drag = false; c.style.transition = 'none'; });
+  c.addEventListener('pointermove', e => { if (e.pointerId !== id) return; dx = e.clientX - sx; if (!drag && Math.abs(dx) > 10) { drag = true; try { c.setPointerCapture(id); } catch (e) { } } if (drag) { c.style.transform = 'translateX(' + dx + 'px)'; c.style.opacity = String(Math.max(.3, 1 - Math.abs(dx) / 300)); } });
+  const end = e => { if (e.pointerId !== id) return; id = null; if (!drag) return; drag = false; c.dataset.swiped = '1'; if (Math.abs(dx) > 90) { wrMarkAll(); c.classList.add('hidden'); } c.style.transition = ''; c.style.transform = ''; c.style.opacity = ''; };
+  c.addEventListener('pointerup', end); c.addEventListener('pointercancel', end);
+  $('wrap-open').addEventListener('click', () => { if (c.dataset.swiped) { delete c.dataset.swiped; return; } if (wrCardP) wrOpen(wrCardP); });
+})();
+function renderWrapList() {
+  const box = $('st-wrap-list'), { list } = wrPeriods(); box.textContent = ''; $('st-wrap-title').textContent = wrTitle(); $('st-wrap-card').classList.toggle('hidden', !list.length);   // ohne fälligen Rückblick bleibt die Karte weg
+  list.forEach(p => {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'flex min-h-[56px] w-full items-center justify-between gap-3 border-t border-slate-200 dark:border-slate-800 py-2 text-left';
+    b.innerHTML = '<span class="min-w-0"><span class="block text-sm font-semibold">' + esc(p.kind === 'k' ? p.label : 'Rückblick ' + p.label) + '</span><span class="block text-xs text-slate-500 dark:text-slate-400">' + (p.kind === 'k' ? esc(wrDY(p.t0) + ' – ' + wrDY(p.t1)) : 'Zeitraum') + ' · ' + fmt(p.st.km, 0) + ' km</span></span><svg class="h-5 w-5 shrink-0 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>';
+    b.addEventListener('click', () => wrOpen(p)); box.appendChild(b);
+  });
+}
+$('btn-wrap-preview').addEventListener('click', () => {
+  const { runStart, runPrev } = wrPeriods(), p = { kind: 't', id: 'preview', preview: true, t0: runStart, t1: Date.now(), label: wrDY(runStart) + ' – heute', prev: runPrev }, st = wrStats(p);
+  if (st.n < 1 || !(st.km > 0)) { alert('Für die Vorschau fehlen im laufenden Zeitraum noch Ladungen mit km-Stand.'); return; }
+  p.st = st; showView('dashboard'); wrOpen(p);
+});
+try { renderWrapCard(); } catch (e) { }
+
+
+// ───── src/11-cloud-drive-sicherung.js ─────
+/* =====================================================================
+   Cloud-Abgleich von WLTP-Wert, Wetter-Standort, Ladeanbieter-Angaben und Einstellungen (Fahrzeugdaten, Strompreis, Akku, Kauf …)
+   im Dokument enyaqStrom/<uid>/settings/prefs, gleiche Regel wie Anbieter und Kategorien. Die PIN bleibt nur auf dem Gerät.
+   Erster Abgleich: Was die Cloud hat, gilt; fehlt dort etwas und ist lokal vorhanden, wird es hochgeladen. Danach gilt die Cloud (Änderung auf einem Gerät wirkt auf allen).
+   ===================================================================== */
+const SYNC_SET_KEYS = ['title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAcKwh', 'certDcKwh', 'certKm', 'wltpNet', 'ccEnd', 'wxoCut', 'dashFirst', 'carN', 'carSec', 'wxIcons', 'nRep', 'nTrips', 'nBakYm', 'nBakAt', 'nBakSnz', 'gtMirror', 'gtList', 'iceDep', 'iceWe', 'icePark', 'iceMin', 'iceK', 'cmpCar', 'cmpL', 'cmpEur', 'cmpCo2'];
+/** Einstellungen für die Cloud: feste Reihenfolge, ohne leere Werte (Firestore verbietet undefined). null = nichts vorhanden. */
+function syncSet(src) {
+  const o = {}; if (src && typeof src === 'object') SYNC_SET_KEYS.forEach(k => { const v = src[k]; if (v != null && v !== '' && !(typeof v === 'number' && !isFinite(v))) o[k] = v; });
+  return Object.keys(o).length ? o : null;
+}
+function pushPrefs() {
+  if (!window.cloud?.isSignedIn()) return;
+  const w = Number(getSettings().wltp);
+  window.cloud.setPrefs({ wltp: w > 0 ? w : null, wxLoc: wxLoc() || null, provInfo: load(KEY_PROVINFO, null), settings: syncSet(load(KEY_SETTINGS, {})), kb: load('enyaq.kb', null), lab: labNoFc(load(KEY_LAB, null)) }).catch(() => { });
+}
+window.onCloudPrefs = (d, first, uid) => {
+  if (first) checkCacheUid(uid);
+  const lw = Number(getSettings().wltp) > 0 ? Number(getSettings().wltp) : null, ll = wxLoc();
+  let nw = d && Number(d.wltp) > 0 ? Number(d.wltp) : null, nl = d && d.wxLoc && Number.isFinite(d.wxLoc.lat) && Number.isFinite(d.wxLoc.lon) ? { lat: d.wxLoc.lat, lon: d.wxLoc.lon, label: String(d.wxLoc.label || '') } : null, up = false;
+  if (first) { if (nw == null && lw != null) { nw = lw; up = true; } if (nl == null && ll) { nl = ll; up = true; } }
+  if (nw !== lw) { const raw = load(KEY_SETTINGS, {}) || {}; if (nw == null) delete raw.wltp; else raw.wltp = nw; save(KEY_SETTINGS, raw); if (document.activeElement !== $('set-wltp')) $('set-wltp').value = nw != null ? String(nw).replace('.', ',') : ''; }
+  if (JSON.stringify(nl) !== JSON.stringify(ll || null)) { if (nl) save(KEY_WXLOC, nl); else localStorage.removeItem(KEY_WXLOC); localStorage.removeItem(KEY_WXCACHE); renderWxLoc(); }
+  /* Ladeanbieter-Angaben (Name Zuhause, Tarife, Preise): wie WLTP – beim ersten Abgleich lokal hochladen, wenn die Cloud noch nichts hat */
+  const lp = load(KEY_PROVINFO, null); let np = d && d.provInfo && typeof d.provInfo === 'object' ? d.provInfo : null;
+  if (first && np == null && lp) { np = lp; up = true; }
+  if (JSON.stringify(np) !== JSON.stringify(lp)) { if (np) save(KEY_PROVINFO, np); else localStorage.removeItem(KEY_PROVINFO); if (currentView === 'providers') renderProvidersView(); }
+  /* Einstellungen (Fahrzeugdaten, Strompreis, Akku, Kauf …): beim ersten Abgleich gilt die Cloud; hat sie noch nichts, werden die lokalen hochgeladen */
+  const ls = syncSet(load(KEY_SETTINGS, {})); let ns = d ? syncSet(d.settings) : null;
+  if (first && ns == null && ls) { ns = ls; up = true; }
+  if (ns && JSON.stringify(ns) !== JSON.stringify(ls)) {
+    const raw = load(KEY_SETTINGS, {}) || {}; SYNC_SET_KEYS.forEach(k => delete raw[k]); save(KEY_SETTINGS, { ...raw, ...ns });   // PIN, WLTP usw. bleiben
+    applyTitle(); renderReminderBadges(); renderHeroStats(); try { fillWxoPrefs(); window.carReschedule && window.carReschedule(); } catch (e) { }
+    try { renderReportBanner(); renderTripsBanner(); renderBakBanner(); } catch (e) { }   // Hinweise, die auf einem anderen Gerät erledigt wurden
+    if (currentView === 'settings' && !$('view-settings').contains(document.activeElement)) fillSettings();   // nicht mitten in eine Eingabe schreiben
+    if (currentView === 'dashboard') renderDashboard();
+  }
+  /* Wissen (Einträge, Kategorien): wie die Ladeanbieter-Angaben */
+  const lk = load('enyaq.kb', null); let nk = d && d.kb && typeof d.kb === 'object' ? d.kb : null;
+  if (first && nk == null && lk) { nk = lk; up = true; }
+  if (JSON.stringify(nk) !== JSON.stringify(lk)) { if (nk) save('enyaq.kb', nk); else localStorage.removeItem('enyaq.kb'); try { renderKbStart(); if (currentView === 'kb') renderKb(); } catch (e) { } }
+  /* Labor (Ladekurven, Rekorde, Tempomat-Messreihe): wie Wissen */
+  /* Labor: zusammenführen (neuester Stand je Element), nie durch einen älteren oder fehlenden Cloud-Stand löschen */
+  const lq = load(KEY_LAB, null), cq = d && d.lab && typeof d.lab === 'object' ? d.lab : null; let nq = labMerge(lq, cq);
+  if (nq && labCanon(labNoFc(nq)) !== labCanon(labNoFc(cq))) up = true;                    // gemerkte Fahrten laufen über das eigene Routen-Dokument
+  if (labCanon(nq) !== labCanon(lq)) { if (nq) save(KEY_LAB, nq); try { renderCurve(); if (currentView === 'recs') renderRecs(); if (currentView === 'tires') renderTires(); if (currentView === 'wish') renderWish(); if (currentView === 'route') rtTabs(); } catch (e) { } }
+  try { if (currentView === 'route') rtCloudPlan(); } catch (e) { }
+  if (up) window.cloud.setPrefs({ wltp: nw, wxLoc: nl, provInfo: np, settings: ns, kb: nk, lab: labNoFc(nq) }).catch(() => { });
+};
+
+/* =====================================================================
+   Belege in Google Drive (nur bei Kosten): Fotos/PDFs werden in den Ordner „Enyaq Belege“ deines Google Drive hochgeladen; am Kosteneintrag liegt nur die Verknüpfung (files: [{ id, name, mime }]),
+   die über die bestehende Kosten-Synchronisierung auf alle Geräte geht. Zugriff: nur drive.file (Dateien, die diese App selbst anlegt). Der Google-Dialog erscheint nach Tipps auf „Speichern“/„Hochladen“.
+   ===================================================================== */
+const DV_NAME = 'Enyaq Belege', DV_MAX = 15e6, KEY_DRIVE = 'enyaq.driveFolder', dvPend = new Map();      // dvPend: 'form' bzw. 'c<id>' → noch nicht hochgeladene Dateien
+const dvLink = (id) => 'https://drive.google.com/file/d/' + encodeURIComponent(id) + '/view';
+const DV_CLIP = '<svg class="h-4 w-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5l-8.5 8.5a5 5 0 0 1-7-7L14 4.5a3.5 3.5 0 0 1 5 5L10.5 18a2 2 0 0 1-3-3L15 7.5"/></svg>';
+function dvChips(c) { const f = c.files || []; return f.length ? '<div class="mt-2 flex flex-wrap gap-1.5">' + f.map(x => '<a href="' + dvLink(x.id) + '" target="_blank" rel="noopener" class="inline-flex max-w-full items-center gap-1 rounded-lg bg-slate-100 dark:bg-slate-800 px-2.5 py-1 text-xs">' + DV_CLIP + '<span class="truncate">' + esc(x.name) + '</span></a>').join('') + '</div>' : ''; }
+function dvBlockInner(scope, c) {
+  const att = (c && c.files) || [], pend = dvPend.get(scope) || [], form = scope === 'form', btn = 'rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm font-medium active:scale-95 transition';
+  const row = (inner, act) => '<li class="flex items-center justify-between gap-2 rounded-lg bg-slate-100 dark:bg-slate-800 px-2.5 py-1.5 text-xs"><span class="min-w-0 truncate">' + inner + '</span>' + act + '</li>';
+  const x = (a, extra) => '<button type="button" data-dv="' + a + '" ' + extra + ' aria-label="Entfernen" class="shrink-0 px-2 py-1 text-slate-500 dark:text-slate-400">✕</button>';
+  return (att.length || pend.length ? '<ul class="mb-2 space-y-1">' + att.map(f => row('<a href="' + dvLink(f.id) + '" target="_blank" rel="noopener" class="underline">' + esc(f.name) + '</a>', x('rm-file', 'data-id="' + esc(f.id) + '"'))).join('')
+      + pend.map((f, i) => row(esc(f.name) + ' · ' + fmt(f.size / 1048576, 1) + ' MB · ' + (form ? 'wird beim Speichern hochgeladen' : 'noch nicht hochgeladen'), x('rm-pend', 'data-i="' + i + '"'))).join('') + '</ul>' : '')
+    + '<div class="flex gap-2"><button type="button" data-dv="pick" class="flex-1 ' + btn + '">Beleg hinzufügen</button>' + (!form && pend.length ? '<button type="button" data-dv="upload" class="flex-1 rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white active:scale-95 transition">Hochladen (' + pend.length + ')</button>' : '') + '</div>'
+    + '<input type="file" data-dv-in accept="image/*,application/pdf" multiple class="hidden"><p data-dv-msg class="mt-1 text-xs text-slate-500 dark:text-slate-400"></p>';
+}
+function dvRefresh(blk, msg) { const sc = blk.dataset.dvBlock, c = sc === 'form' ? null : getCosts().find(x => String(x.id) === sc.slice(1)); blk.innerHTML = dvBlockInner(sc, c); if (msg) dvMsg(blk, msg); }
+const dvRefreshForm = () => dvRefresh($('cost-belege'));
+const dvMsg = (blk, t) => { const m = blk.querySelector('[data-dv-msg]'); if (m) m.textContent = t; };
+function dvErrText(e) {
+  const m = String((e && (e.code || e.message)) || e);
+  if (/popup-blocked/.test(m)) return 'Das Google-Fenster wurde blockiert. Bitte Pop-ups für die App erlauben.';
+  if (/popup-closed|cancelled-popup/.test(m)) return 'Die Anmeldung bei Google wurde abgebrochen.';
+  if (/user-mismatch/.test(m)) return 'Bitte mit demselben Google-Konto anmelden wie in der App.';
+  if (e && e.status === 403 && /has not been used|accessNotConfigured|disabled/i.test(m)) return 'Die Google-Drive-API ist im Cloud-Projekt noch nicht aktiviert (Google Cloud Console → APIs & Dienste → Drive API).';
+  if (e && e.status === 401) return 'Die Google-Anmeldung ist abgelaufen. Bitte erneut versuchen.';
+  return m;
+}
+async function dvFetch(tok, url, init = {}) {
+  const r = await fetch(url, { ...init, headers: { ...(init.headers || {}), Authorization: 'Bearer ' + tok } });
+  if (!r.ok) { let m = ''; try { m = (await r.json()).error?.message || ''; } catch (e) { } const err = new Error(m || 'Google Drive: HTTP ' + r.status); err.status = r.status; throw err; }
+  return r;
+}
+async function dvFolder(tok) {                                                                // Ordner finden oder anlegen (gemerkt wird nur die ID; Umbenennen/Verschieben in Drive ist unkritisch)
+  const known = load(KEY_DRIVE, null);
+  if (known && known.id) { try { const j = await (await dvFetch(tok, 'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(known.id) + '?fields=id,trashed')).json(); if (!j.trashed) return j.id; } catch (e) { if (e.status !== 404) throw e; } }
+  const q = encodeURIComponent("appProperties has { key='enyaqBelege' and value='1' } and mimeType='application/vnd.google-apps.folder' and trashed=false");
+  const l = await (await dvFetch(tok, 'https://www.googleapis.com/drive/v3/files?q=' + q + '&fields=files(id)&pageSize=1')).json();
+  let id = l.files && l.files[0] && l.files[0].id;
+  if (!id) id = (await (await dvFetch(tok, 'https://www.googleapis.com/drive/v3/files?fields=id', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: DV_NAME, mimeType: 'application/vnd.google-apps.folder', appProperties: { enyaqBelege: '1' } }) })).json()).id;
+  save(KEY_DRIVE, { id }); renderDvInfo(); return id;
+}
+async function dvPrepare(file) {                                                              // Fotos verkleinern (max. 1.800 px, JPEG), PDFs unverändert
+  const ext0 = ((file.name.split('.').pop() || 'bin').toLowerCase().replace(/[^a-z0-9]/g, '') || 'bin'), plain = { blob: file, mime: file.type || 'application/octet-stream', ext: ext0 };
+  if (!/^image\/(jpeg|png|webp|heic|heif)$/i.test(file.type)) return plain;
+  const bmp = await createImageBitmap(file).catch(() => null); if (!bmp) return plain;
+  const k = Math.min(1, 1800 / Math.max(bmp.width, bmp.height)), cv = document.createElement('canvas'); cv.width = Math.round(bmp.width * k); cv.height = Math.round(bmp.height * k); cv.getContext('2d').drawImage(bmp, 0, 0, cv.width, cv.height);
+  const blob = await new Promise(res => cv.toBlob(res, 'image/jpeg', 0.82)); return blob && blob.size < file.size ? { blob, mime: 'image/jpeg', ext: 'jpg' } : plain;
+}
+function dvName(c, i, ext) {                                                                  // z. B. 2026-10-13_Reifen_Winterreifen_149,90.jpg
+  const d = new Date(c.date), ds = isNaN(d) ? '' : wxIso(d), parts = [ds, c.category, c.title && c.title !== c.category ? c.title : '', Math.abs(Number(c.amount) || 0).toFixed(2).replace('.', ',')].filter(Boolean);
+  return parts.join('_').replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim().slice(0, 110) + (i > 0 ? '_' + (i + 1) : '') + '.' + ext;
+}
+/* =====================================================================
+   Monatliche Sicherung in Google Drive: Datei „enyaq-sicherung-JJJJ-MM.json“ im Unterordner „Sicherungen“ des Belege-Ordners
+   (gleiche Berechtigung drive.file). Je Monat eine Datei; eine erneute Sicherung im selben Monat überschreibt sie.
+   Automatisch, sobald im neuen Monat ein Drive-Zugriff besteht (z. B. nach einem Beleg-Upload). Sonst erscheint auf Start ein Hinweis,
+   denn das Google-Fenster darf nur nach einem Tipp öffnen. Status: enyaq.driveBackup = { ym, at, auto (true/false), snooze ('JJJJ-MM-TT') }.
+   ===================================================================== */
+const KEY_DVBAK = 'enyaq.driveBackup';
+const bakState = () => { const l = { auto: true, ...(load(KEY_DVBAK, {}) || {}) }, st = getSettings();   // lokale Werte + geräteübergreifender Stand
+  const ym = maxStr(l.ym, st.nBakYm), at = maxStr(l.at, st.nBakAt), sn = maxStr(l.snooze, st.nBakSnz); if (ym) l.ym = ym; if (at) l.at = at; if (sn) l.snooze = sn; return l; };
+const bakYM = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); };
+const bakHasData = () => getReadings().length + getCosts().length + getReminders().length + getTrips().length > 0;
+const bakDue = () => { const b = bakState(); return b.auto && window.cloud?.isSignedIn() && bakHasData() && b.ym !== bakYM(); };
+async function bakSubFolder(tok) {
+  const parent = await dvFolder(tok), q = encodeURIComponent("appProperties has { key='enyaqBackup' and value='1' } and mimeType='application/vnd.google-apps.folder' and trashed=false and '" + parent + "' in parents");
+  const l = await (await dvFetch(tok, 'https://www.googleapis.com/drive/v3/files?q=' + q + '&fields=files(id)&pageSize=1')).json();
+  if (l.files && l.files[0]) return l.files[0].id;
+  return (await (await dvFetch(tok, 'https://www.googleapis.com/drive/v3/files?fields=id', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'Sicherungen', mimeType: 'application/vnd.google-apps.folder', parents: [parent], appProperties: { enyaqBackup: '1' } }) })).json()).id;
+}
+async function bakUpload(tok) {
+  const ym = bakYM(), folder = await bakSubFolder(tok), body = JSON.stringify(buildBackup(), null, 1), name = 'enyaq-sicherung-' + ym + '.json';
+  const q = encodeURIComponent("appProperties has { key='enyaqBackupYM' and value='" + ym + "' } and trashed=false and '" + folder + "' in parents");
+  const ex = await (await dvFetch(tok, 'https://www.googleapis.com/drive/v3/files?q=' + q + '&fields=files(id)&pageSize=1')).json(), id = ex.files && ex.files[0] && ex.files[0].id;
+  if (id) await dvFetch(tok, 'https://www.googleapis.com/upload/drive/v3/files/' + encodeURIComponent(id) + '?uploadType=media', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body });
+  else {
+    const bd = 'enyaq' + Date.now(), meta = { name, mimeType: 'application/json', parents: [folder], appProperties: { enyaqBackupYM: ym } };
+    const mp = '--' + bd + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify(meta) + '\r\n--' + bd + '\r\nContent-Type: application/json\r\n\r\n' + body + '\r\n--' + bd + '--';
+    await dvFetch(tok, 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', { method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + bd }, body: mp });
+  }
+  const b = bakState(); b.ym = ym; b.at = new Date().toISOString(); delete b.snooze; save(KEY_DVBAK, b); nagSet({ nBakYm: b.ym, nBakAt: b.at });
+  return { name, kb: Math.round(body.length / 1024) };
+}
+let bakBusy = false;
+/** Sichern: silent = nur mit bereits vorhandenem Drive-Zugriff (kein Google-Fenster). */
+async function runBackup(silent) {
+  if (bakBusy || !window.cloud?.isSignedIn()) { if (!silent) $('bak-msg').textContent = 'Bitte zuerst bei Google anmelden.'; return false; }
+  if (silent && !window.cloud.driveReady()) return false;
+  bakBusy = true; if (!silent) { $('bak-msg').textContent = 'Verbinde mit Google Drive …'; $('bak-banner-sub').textContent = 'Wird gesichert …'; }
+  try { const tok = await window.cloud.driveToken(), r = await bakUpload(tok); $('bak-msg').textContent = 'Gesichert: ' + r.name + ' (' + fmt(r.kb, 0) + ' KB) · ' + fmtDate(new Date().toISOString()); renderBakBanner(); return true; }
+  catch (e) { if (e && e.status === 401) window.cloud.driveForget(); const t = 'Sicherung fehlgeschlagen: ' + dvErrText(e); $('bak-msg').textContent = t; if (!silent) $('bak-banner-sub').textContent = t; return false; }
+  finally { bakBusy = false; }
+}
+function renderBakBanner() {
+  const b = bakState(), show = bakDue() && b.snooze !== todayYMD() && !$('view-dashboard').classList.contains('hidden') && !liveHero;
+  $('bak-banner').classList.toggle('hidden', !show);
+  if (show) $('bak-banner-sub').textContent = b.at ? 'Letzte Sicherung: ' + fmtDate(b.at) + ' · Antippen zum Sichern' : 'Antippen: alle Daten in Google Drive sichern';
+}
+function renderBakInfo() { const b = bakState(); $('bak-auto').checked = b.auto !== false; if (!bakBusy) $('bak-msg').textContent = b.at ? 'Letzte Sicherung: ' + fmtDate(b.at) + ' (' + b.ym + ')' : 'Noch keine Sicherung in Google Drive.'; }
+$('bak-auto').addEventListener('change', (e) => { const b = bakState(); b.auto = e.target.checked; save(KEY_DVBAK, b); renderBakBanner(); });
+$('bak-now').addEventListener('click', () => runBackup(false));
+$('bak-banner-go').addEventListener('click', () => runBackup(false));
+$('bak-banner-x').addEventListener('click', () => { const b = bakState(); b.snooze = todayYMD(); save(KEY_DVBAK, b); nagSet({ nBakSnz: b.snooze }); renderBakBanner(); });
+/* Prüfen: kurz nach dem Start, beim Wechsel auf Start und regelmäßig (Drive-Zugriff kann zwischendurch durch einen Beleg-Upload entstehen) */
+function bakCheck() { if (bakDue()) runBackup(true); renderBakBanner(); }
+setTimeout(bakCheck, 4000); setInterval(bakCheck, 5 * 60 * 1000);
+async function dvUploadFor(cost, files, tokP, onProgress) {
+  const tok = await (tokP || window.cloud.driveToken()), folder = await dvFolder(tok), out = [], have = (cost.files || []).length;
+  for (let i = 0; i < files.length; i++) {
+    if (onProgress) onProgress(i + 1, files.length);
+    const pr = await dvPrepare(files[i]); if (pr.blob.size > DV_MAX) throw new Error('„' + files[i].name + '“ ist größer als 15 MB.');
+    const body = new FormData(); body.append('metadata', new Blob([JSON.stringify({ name: dvName(cost, have + i, pr.ext), parents: [folder], mimeType: pr.mime, appProperties: { costId: String(cost.id) } })], { type: 'application/json' })); body.append('file', pr.blob);
+    const j = await (await dvFetch(tok, 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType', { method: 'POST', body })).json();
+    out.push({ id: j.id, name: j.name, mime: j.mimeType || pr.mime });
+  }
+  return out;
+}
+function dvSetFiles(costId, fn) { return commitCosts(getCosts().map(c => { if (String(c.id) !== String(costId)) return c; const f = fn(c.files || []), o = { ...c }; if (f.length) o.files = f; else delete o.files; return o; })); }
+async function dvAfterSave(entry, files, tokP, msg, text) {
+  flash(msg, text + ' · Belege werden zu Google Drive hochgeladen …', true);
+  try { const up = await dvUploadFor(entry, files, tokP); await dvSetFiles(entry.id, f => f.concat(up)); flash(msg, text + ' · ' + up.length + (up.length === 1 ? ' Beleg' : ' Belege') + ' in Google Drive ✓', true); }
+  catch (e) { if (e && e.status === 401) window.cloud.driveForget(); flash(msg, text + ' · Beleg-Upload fehlgeschlagen: ' + dvErrText(e) + ' (im Verlauf unter „Bearbeiten“ erneut hinzufügen)', false); }
+}
+function dvCostFromLi(li, c) {                                                                // aktuelle (noch ungespeicherte) Eingaben für den Dateinamen nutzen
+  const v = (f) => li && li.querySelector('[data-cf="' + f + '"]'), d = new Date(v('date')?.value), amt = parseNum(v('amount')?.value ?? '');
+  return { ...c, title: v('title')?.value.trim() || c.title, category: v('cat') ? v('cat').value : c.category, date: isNaN(d) ? c.date : d.toISOString(), amount: isFinite(amt) && amt !== 0 ? amt : c.amount };
+}
+async function dvUploadEdit(blk, scope) {
+  const cur = getCosts().find(c => String(c.id) === scope.slice(1)), files = dvPend.get(scope) || []; if (!cur || !files.length) return;
+  if (!window.cloud?.isSignedIn()) { dvMsg(blk, 'Bitte zuerst bei Google anmelden (Einstellungen).'); return; }
+  const tokP = window.cloud.driveToken(); tokP.catch(() => { }); dvMsg(blk, 'Verbinde mit Google Drive …');
+  try { const up = await dvUploadFor(dvCostFromLi(blk.closest('li'), cur), files, tokP, (i, n) => dvMsg(blk, 'Lade hoch ' + i + ' von ' + n + ' …')); dvPend.delete(scope); await dvSetFiles(cur.id, f => f.concat(up)); dvRefresh(blk, up.length + (up.length === 1 ? ' Beleg' : ' Belege') + ' in Google Drive gespeichert.'); }
+  catch (e) { if (e && e.status === 401) window.cloud.driveForget(); dvMsg(blk, 'Upload fehlgeschlagen: ' + dvErrText(e)); }
+}
+async function dvRemove(blk, scope, fid) {
+  const cur = getCosts().find(c => String(c.id) === scope.slice(1)), f = cur && (cur.files || []).find(x => x.id === fid); if (!f) return;
+  if (!confirm('Beleg „' + f.name + '“ aus dem Eintrag entfernen und in Google Drive löschen?')) return;
+  if (!window.cloud?.isSignedIn()) { dvMsg(blk, 'Bitte zuerst bei Google anmelden.'); return; }
+  const tokP = window.cloud.driveToken(); tokP.catch(() => { }); dvMsg(blk, 'Verbinde mit Google Drive …');
+  try { const tok = await tokP; try { await dvFetch(tok, 'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(fid), { method: 'DELETE' }); } catch (e) { if (e.status !== 404) throw e; }   // 404 = in Drive schon weg
+    await dvSetFiles(cur.id, l => l.filter(x => x.id !== fid)); dvRefresh(blk, 'Beleg entfernt.'); }
+  catch (e) { if (e && e.status === 401) window.cloud.driveForget(); dvMsg(blk, 'Entfernen fehlgeschlagen: ' + dvErrText(e)); }
+}
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-dv]'), blk = b && b.closest('[data-dv-block]'); if (!blk) return; const scope = blk.dataset.dvBlock, act = b.dataset.dv;
+  if (act === 'pick') blk.querySelector('[data-dv-in]').click();
+  else if (act === 'rm-pend') { const l = dvPend.get(scope) || []; l.splice(Number(b.dataset.i), 1); dvPend.set(scope, l); dvRefresh(blk); }
+  else if (act === 'rm-file') dvRemove(blk, scope, b.dataset.id);
+  else if (act === 'upload') dvUploadEdit(blk, scope);
+});
+document.addEventListener('change', (e) => {
+  const inp = e.target.closest('[data-dv-in]'), blk = inp && inp.closest('[data-dv-block]'); if (!blk) return; const scope = blk.dataset.dvBlock, l = dvPend.get(scope) || []; let big = '';
+  Array.from(inp.files).forEach(f => { if (f.size > DV_MAX) big = '„' + f.name + '“ ist größer als 15 MB und wurde ausgelassen.'; else l.push(f); });
+  dvPend.set(scope, l); dvRefresh(blk, big);
+});
+function renderDvInfo() {
+  const f = load(KEY_DRIVE, null), a = $('dv-open');
+  $('dv-info').textContent = f && f.id ? 'Die Belege liegen im Ordner „' + DV_NAME + '“ in deinem Google Drive. Du kannst den Ordner dort umbenennen oder verschieben.' : 'Beim ersten Beleg-Upload legt die App den Ordner „' + DV_NAME + '“ in deinem Google Drive an. Sie sieht dabei nur Dateien, die sie selbst angelegt hat.';
+  a.classList.toggle('hidden', !(f && f.id)); if (f && f.id) a.href = 'https://drive.google.com/drive/folders/' + encodeURIComponent(f.id);
+}
+dvRefreshForm(); renderDvInfo();
+
+
+// ───── src/12-fahrtenbuch-steuer.js ─────
+/* =====================================================================
+   Fahrtenbuch (Import der CSV aus der MyŠkoda-App: „tripStatistics_<VIN>_….csv“)
+   Lokal: enyaq.trips = alle Fahrten. Cloud: enyaqStrom/<uid>/tripMonths/<JJJJ-MM> = { list: [Fahrten des Monats], updatedAt }.
+   Pro Monat ein Dokument: Ein Import schreibt nur die Monate, deren Inhalt sich geändert hat (meist der laufende und ggf. der Vormonat),
+   statt jedes Mal alle Fahrten. Die ID einer Fahrt ergibt sich aus Start- und Endzeit, damit erkennt ein erneuter Import dieselbe Fahrt wieder.
+   Eigene Angaben (Etikett „ucls“) bleiben beim Import erhalten. Orte: enyaq.tripPlaces = [{ id, name, kind: 'home'|'work'|'', lat, lon }],
+   Cloud-Dokument enyaqStrom/<uid>/settings/places. Ein Ort gilt für alle Fahrten im Umkreis von 300 m.
+   Fahrt: { id, s, e (ISO), cls (Klassifizierung aus der Datei), ucls (eigenes Etikett), a0, a1 (Adressen), p0, p1 ("lat,lon"), km, o0, o1,
+            dmin (Fahrzeit), tmin (Reisezeit), v (Ø km/h), kwh, k100, soc0, soc1, pcs (öffentliche Ladestopps), pcg (% dort geladen), short }
+   ===================================================================== */
+const KEY_TRIPS = 'enyaq.trips', KEY_TPLACES = 'enyaq.tripPlaces', KEY_TRIPS_IMP = 'enyaq.tripsImport';
+const getTrips = () => { const l = load(KEY_TRIPS, []); return Array.isArray(l) ? l : []; };
+const getTPlaces = () => { const l = load(KEY_TPLACES, []); return Array.isArray(l) ? l : []; };
+const tripYM = (t) => { const d = new Date(t.s); return d.getFullYear() + '-' + pad2(d.getMonth() + 1); };   // Monat in Ortszeit
+const tripVisible = (t) => (t.km || 0) >= 1;                                               // 0-km-„Fahrten“ (Rangieren, Tür auf/zu) ausblenden
+/** Schreibweg für Fahrten: lokal speichern + nur geänderte Monatsdokumente in die Cloud. */
+function commitTrips(next) {
+  const prev = getTrips(); next.sort((a, b) => (a.s < b.s ? -1 : a.s > b.s ? 1 : 0));
+  if (!save(KEY_TRIPS, next)) return false;
+  try { setTimeout(() => { ltFillKm(); btFillTrips(); }, 0); } catch (e) { }                                  // Langzeit-Ablesungen per Sprache: km-Stand jetzt genau aus den Fahrten
+  if (!window.cloud?.isSignedIn()) return Promise.resolve('local');
+  return window.cloud.pushTrips(prev, next).then(n => 'cloud:' + n).catch(e => { console.error('Firestore-Schreibfehler (Fahrten)', e); window.onCloudStatus?.({ error: 'Fahrten: ' + (e.code === 'permission-denied' ? 'Keine Berechtigung für enyaqStrom/<uid>/tripMonths (Firestore-Regel ergänzen)' : e.code || e.message) }); return 'error:' + (e.code || e.message); });
+}
+const tripSig = (t) => JSON.stringify([t.id, t.s, t.e, t.cls, t.ucls, t.a0, t.a1, t.p0, t.p1, t.km, t.o0, t.o1, t.dmin, t.tmin, t.v, t.kwh, t.k100, t.soc0, t.soc1, t.pcs, t.pcg, t.short]);
+/** Gruppiert Fahrten nach Monat: { 'JJJJ-MM': [Fahrten] } */
+function tripsByMonth(list) { const m = {}; list.forEach(t => { (m[tripYM(t)] = m[tripYM(t)] || []).push(t); }); return m; }
+
+/** CSV der MyŠkoda-App lesen. Datumsformat „TT.MM.JJJJ HH:MM“ (lokale Zeit), Dezimalpunkt; leere Felder = unbekannt. */
+function parseTripCsv(text) {
+  const rows = parseCsv(text); if (rows.length < 2) throw new Error('Die Datei enthält keine Fahrten.');
+  const H = rows[0].map(h => h.trim()), col = (n) => H.indexOf(n);
+  if (col('Start of trip') < 0 || col('Distance in km') < 0) throw new Error('Das ist keine Fahrtenbuch-Datei aus der MyŠkoda-App (Spalte „Start of trip“ fehlt).');
+  const dt = (v) => { const m = /^(\d{1,2})\.(\d{1,2})\.(\d{4})\s+(\d{1,2}):(\d{2})/.exec(v || ''); if (m) return new Date(+m[3], m[2] - 1, +m[1], +m[4], +m[5]); const t = Date.parse(v); return isNaN(t) ? null : new Date(t); };
+  const num = (v) => { if (v == null || String(v).trim() === '') return null; const n = Number(String(v).trim().replace(',', '.')); return isFinite(n) ? n : null; };
+  const str = (v) => (v || '').trim();
+  const out = [], seen = new Set();
+  rows.slice(1).forEach(r => {
+    const g = (n) => r[col(n)], s = dt(g('Start of trip')), e = dt(g('End of trip')); if (!s || !e) return;
+    const k = (d) => d.getFullYear() + pad2(d.getMonth() + 1) + pad2(d.getDate()) + pad2(d.getHours()) + pad2(d.getMinutes());
+    let id = 't' + k(s) + '-' + pad2(e.getHours()) + pad2(e.getMinutes()); while (seen.has(id)) id += 'x'; seen.add(id);
+    const t = { id, s: s.toISOString(), e: e.toISOString(), cls: str(g('Classification')), a0: str(g('Start address')), a1: str(g('End address')), p0: str(g('Start coordinates')), p1: str(g('End coordinates')),
+      km: num(g('Distance in km')), o0: num(g('Start odometer in km')), o1: num(g('End odometer in km')), dmin: num(g('Driving time in minutes')), tmin: num(g('Travel time in minutes')), v: num(g('Average speed in km/h')),
+      kwh: num(g('Electricity consumption in kWh')), k100: num(g('Average electricity consumption in kWh/100km')), soc0: num(g('Start SoC in %')), soc1: num(g('End SoC in %')),
+      pcs: num(g('Public charging stops')), pcg: num(g('Public charge SoC gained in %')), short: /^true$/i.test(str(g('Short trip'))) };
+    Object.keys(t).forEach(x => { if (t[x] === null || t[x] === '') delete t[x]; });     // Firestore verbietet undefined, leere Felder sparen Platz
+    out.push(t);
+  });
+  if (!out.length) throw new Error('Keine gültigen Fahrten in der Datei gefunden.');
+  return out;
+}
+/** Import: neue Fahrten anlegen, geänderte aktualisieren, eigenes Etikett behalten. Fahrten, die in der Datei fehlen, bleiben erhalten. */
+async function importTrips(file) {
+  const msg = $('trips-msg');
+  try {
+    const parsed = parseTripCsv(await file.text()), cur = getTrips(), byId = new Map(cur.map(t => [t.id, t]));
+    let fresh = 0, changed = 0;
+    parsed.forEach(t => { const old = byId.get(t.id); if (!old) { byId.set(t.id, t); fresh++; return; } const n = { ...t }; if (old.ucls) n.ucls = old.ucls; if (tripSig(n) !== tripSig(old)) { byId.set(t.id, n); changed++; } });
+    if (!fresh && !changed) { flash(msg, 'Keine neuen Fahrten: alle ' + parsed.length + ' Fahrten der Datei sind schon vorhanden.', true); msg.classList.remove('hidden'); return; }
+    const status = commitTrips([...byId.values()]); if (!status) return;
+    save(KEY_TRIPS_IMP, { at: new Date().toISOString(), n: parsed.length }); renderTripsLast();
+    const text = fresh + ' neue Fahrten' + (changed ? ', ' + changed + ' aktualisiert' : '') + ' importiert';
+    flash(msg, text + (window.cloud?.isSignedIn() ? ' · Cloud: wird übertragen …' : ' · nur lokal (nicht angemeldet)'), true); msg.classList.remove('hidden');
+    status.then(r => { if (r.startsWith('cloud')) { flash(msg, text + ' · Cloud ✓ (' + r.slice(6) + (r.slice(6) === '1' ? ' Monat' : ' Monate') + ' geschrieben)', true); msg.classList.remove('hidden'); } else if (r.startsWith('error:')) { flash(msg, text + ' · Cloud-Fehler: ' + r.slice(6), false); msg.classList.remove('hidden'); } });
+    refreshViews();
+  } catch (err) { flash(msg, 'Fahrtenbuch-Import fehlgeschlagen: ' + err.message, false); msg.classList.remove('hidden'); }
+}
+function renderTripsLast() {
+  const x = load(KEY_TRIPS_IMP, null), n = getTrips().length, el = $('trips-last'); if (!el) return;
+  el.textContent = n ? n + ' Fahrten gespeichert' + (x && x.at ? ' · letzter Import ' + fmtDate(x.at) : '') + '. Lade jeden Monat die neueste Datei hoch: Nur Neues wird übertragen.' : 'In der MyŠkoda-App das Fahrtenbuch als CSV exportieren und hier hochladen.';
+}
+$('btn-trips').addEventListener('click', () => $('trips-file').click());
+$('trips-file').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) importTrips(f); });
+
+/* ---- Orte ---- */
+const geoOf = (p) => { const m = /^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/.exec(p || ''); return m ? { lat: +m[1], lon: +m[2] } : null; };
+const geoDist = (a, b) => { const R = 6371000, r = Math.PI / 180, dl = (b.lat - a.lat) * r, dn = (b.lon - a.lon) * r, x = Math.sin(dl / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dn / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(x)); };
+function placeAt(p) { const g = geoOf(p); if (!g) return null; let best = null, bd = 300; getTPlaces().forEach(pl => { const d = geoDist(g, pl); if (d <= bd) { bd = d; best = pl; } }); return best; }
+const shortAddr = (a) => { if (!a) return 'Unbekannter Ort'; const p = a.split(',').map(x => x.trim()); return p.length >= 2 ? p[0] + ', ' + p[1].replace(/^\d{4,5}\s*/, '') : p[0]; };
+const placeName = (a, p) => { const pl = placeAt(p); return pl ? pl.name : shortAddr(a); };
+/* ---- Etiketten und Regeln ----
+   Etiketten: enyaq.tripLabels = [{ id, name, color }], frei anpassbar in den Einstellungen. Fahrten speichern im Feld „ucls“ die ID (ältere Einträge den Namen, das wird erkannt).
+   Regeln: enyaq.tripRules = [{ id, a: { lat, lon, addr }, b: { lat, lon, addr }, label }] = „Strecke A ↔ B bekommt dieses Etikett“, beide Richtungen, Umkreis 300 m.
+   Reihenfolge: eigenes Etikett der Fahrt > Regel > Klassifizierung aus der Datei > Zuhause ↔ Arbeit = Arbeitsweg > Standard-Etikett. */
+const KEY_TLABELS = 'enyaq.tripLabels', KEY_TRULES = 'enyaq.tripRules', KEY_TDEF = 'enyaq.tripDefLabel';
+const LABEL_COLORS = ['#0ea5e9', '#94a3b8', '#f59e0b', '#10b981', '#a855f7', '#ef4444', '#ec4899', '#14b8a6', '#6366f1', '#84cc16', '#f97316', '#78716c'];   // 12 Farben = max. 12 Etiketten, jede nur einmal
+/** Doppelte Farben auflösen: Ein späteres Etikett mit bereits vergebener Farbe bekommt die erste freie Farbe. */
+const uniqColors = (ls) => { const taken = new Set(); return ls.map((x, i) => { let c = x.color; if (!c || taken.has(c)) c = LABEL_COLORS.find(k => !taken.has(k) && !ls.slice(i + 1).some(y => y.color === k)) || LABEL_COLORS.find(k => !taken.has(k)) || c; taken.add(c); return c === x.color ? x : { ...x, color: c }; }); };
+const freeColor = (ls, from = -1) => { const used = new Set(ls.map(l => l.color)); for (let k = 1; k <= LABEL_COLORS.length; k++) { const c = LABEL_COLORS[(from + k) % LABEL_COLORS.length]; if (!used.has(c)) return c; } return null; };
+const DEF_LABELS = [{ id: 'arbeitsweg', name: 'Arbeitsweg', color: '#0ea5e9' }, { id: 'privat', name: 'Privat', color: '#94a3b8' }, { id: 'dienstlich', name: 'Dienstlich', color: '#f59e0b' }];
+const getTLabels = () => { const l = load(KEY_TLABELS, null); return uniqColors(Array.isArray(l) && l.length ? l : DEF_LABELS.map(x => ({ ...x }))); };
+const getTRules = () => { const l = load(KEY_TRULES, []); return Array.isArray(l) ? l : []; };
+const defLabelId = () => { const d = load(KEY_TDEF, 'privat'), l = getTLabels(); return l.some(x => x.id === d) ? d : (l.find(x => x.id === 'privat') || l[0]).id; };
+const labelById = (id) => { if (!id) return null; const l = getTLabels(), k = String(id).toLowerCase(); return l.find(x => x.id === id) || l.find(x => x.name.toLowerCase() === k) || null; };
+const sameRoute = (r, g0, g1) => (geoDist(g0, r.a) <= 300 && geoDist(g1, r.b) <= 300) || (geoDist(g0, r.b) <= 300 && geoDist(g1, r.a) <= 300);
+function ruleFor(t) { const g0 = geoOf(t.p0), g1 = geoOf(t.p1); if (!g0 || !g1) return null; return getTRules().find(r => labelById(r.label) && sameRoute(r, g0, g1)) || null; }
+/** Etikett einer Fahrt samt Herkunft: 'manual' (selbst gesetzt), 'rule', 'file' (aus der CSV) oder 'auto' (Standard). */
+function tripLabel(t) {
+  let l = labelById(t.ucls); if (l) return { lab: l, src: 'manual' };
+  const r = ruleFor(t); if (r) return { lab: labelById(r.label), src: 'rule' };
+  const c = t.cls || '', m = /business|dienst|gesch/i.test(c) ? 'dienstlich' : /commut|arbeit|work/i.test(c) ? 'arbeitsweg' : /priva/i.test(c) ? 'privat' : '';
+  if (m && (l = labelById(m))) return { lab: l, src: 'file' };
+  const k0 = placeAt(t.p0)?.kind, k1 = placeAt(t.p1)?.kind;
+  if (((k0 === 'home' && k1 === 'work') || (k0 === 'work' && k1 === 'home')) && (l = labelById('arbeitsweg'))) return { lab: l, src: 'rule' };
+  return { lab: labelById(defLabelId()), src: 'auto' };
+}
+const tripTag = (t) => tripLabel(t).lab.name;
+/** Etiketten, Regeln, Standard und Orte gemeinsam sichern: lokal + Cloud-Dokument settings/places. */
+function pushTripPrefs() {
+  if (!window.cloud?.isSignedIn()) return;
+  window.cloud.setTripPrefs({ list: getTPlaces(), labels: getTLabels(), rules: getTRules(), defLabel: defLabelId() }).catch(e => window.onCloudStatus?.({ error: 'Fahrten-Einstellungen: ' + (e.code === 'permission-denied' ? 'Keine Berechtigung für enyaqStrom/<uid>/settings/places' : e.code || e.message) }));
+}
+function setTripPrefs(o) {
+  if (o.labels) save(KEY_TLABELS, o.labels); if (o.rules) save(KEY_TRULES, o.rules); if (o.defLabel) save(KEY_TDEF, o.defLabel);
+  renderTLabelSettings(); refreshViews(); pushTripPrefs();
+}
+function renderTLabelSettings() {
+  const ls = getTLabels(), el = $('tlab-list'); if (!el) return;
+  el.innerHTML = ls.map(l => `<span class="inline-flex items-center gap-1 pl-1 pr-1 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 text-sm max-w-full"><button type="button" data-tlcol="${esc(l.id)}" aria-label="Farbe von ${esc(l.name)} wechseln" class="w-7 h-7 shrink-0 flex items-center justify-center"><span class="block w-4 h-4 rounded-full" style="background:${esc(l.color)}"></span></button><button type="button" data-tlren="${esc(l.id)}" class="truncate">${esc(l.name)}</button><button type="button" data-tldel="${esc(l.id)}" aria-label="${esc(l.name)} entfernen" class="w-6 h-6 shrink-0 rounded-lg text-slate-500 hover:text-red-600 active:scale-95">×</button></span>`).join('');
+  $('tlab-def').innerHTML = ls.map(l => `<option value="${esc(l.id)}" ${l.id === defLabelId() ? 'selected' : ''}>${esc(l.name)}</option>`).join('');
+  const rules = getTRules();
+  $('trule-count').textContent = rules.length;
+  $('trule-list').innerHTML = rules.length ? rules.map(r => { const l = labelById(r.label); return `<li class="flex items-center justify-between gap-2 rounded-xl bg-slate-100 dark:bg-slate-800 pl-3 pr-1 py-1.5 text-sm"><span class="min-w-0 truncate">${esc(placeName(r.a.addr, r.a.lat + ',' + r.a.lon))} ↔ ${esc(placeName(r.b.addr, r.b.lat + ',' + r.b.lon))} → <span style="color:${l ? esc(l.color) : '#94a3b8'}" aria-hidden="true">●</span> ${l ? esc(l.name) : 'gelöschtes Etikett'}</span><button type="button" data-trdel="${esc(r.id)}" aria-label="Regel entfernen" class="w-6 h-6 shrink-0 rounded-lg text-slate-500 hover:text-red-600 active:scale-95">×</button></li>`; }).join('')
+    : '<li class="text-xs text-slate-500 dark:text-slate-400">Noch keine Regeln.</li>';
+  const pl = getTPlaces(), opt = pl.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
+  $('trule-form').classList.toggle('hidden', pl.length < 1);
+  ['trule-a', 'trule-b'].forEach(id => { const v = $(id).value; $(id).innerHTML = opt; if (pl.some(p => p.id === v)) $(id).value = v; });
+  const lv = $('trule-l').value; $('trule-l').innerHTML = ls.map(l => `<option value="${esc(l.id)}">${esc(l.name)}</option>`).join(''); if (labelById(lv)) $('trule-l').value = lv;
+}
+$('btn-tlab-add').addEventListener('click', () => {
+  const name = $('tlab-new').value.trim().replace(/\s+/g, ' ').slice(0, 24), ls = getTLabels(); if (!name) return;
+  if (ls.some(l => l.name.toLowerCase() === name.toLowerCase())) { $('tlab-msg').textContent = '„' + name + '“ gibt es schon.'; return; }
+  if (ls.length >= LABEL_COLORS.length) { $('tlab-msg').textContent = 'Maximal ' + LABEL_COLORS.length + ' Etiketten (eine Farbe je Etikett).'; return; }
+  $('tlab-new').value = ''; $('tlab-msg').textContent = '';
+  setTripPrefs({ labels: ls.concat({ id: 'l' + Date.now(), name, color: freeColor(ls) }) });
+});
+$('tlab-new').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('btn-tlab-add').click(); } });
+$('tlab-list').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-tlcol],[data-tlren],[data-tldel]'); if (!b) return; const ls = getTLabels();
+  if (b.dataset.tlcol) { const l = ls.find(x => x.id === b.dataset.tlcol), c = freeColor(ls.filter(x => x.id !== l.id).concat({ color: l.color }), LABEL_COLORS.indexOf(l.color));   // nächste Farbe, die kein anderes Etikett hat
+    if (!c) { $('tlab-msg').textContent = 'Alle Farben sind vergeben.'; return; } setTripPrefs({ labels: ls.map(x => x.id === l.id ? { ...x, color: c } : x) }); return; }
+  if (b.dataset.tlren) { const l = ls.find(x => x.id === b.dataset.tlren), n = (prompt('Neuer Name für „' + l.name + '“:', l.name) || '').trim().replace(/\s+/g, ' ').slice(0, 24);
+    if (!n || n === l.name) return; if (ls.some(x => x.id !== l.id && x.name.toLowerCase() === n.toLowerCase())) { $('tlab-msg').textContent = '„' + n + '“ gibt es schon.'; return; }
+    setTripPrefs({ labels: ls.map(x => x.id === l.id ? { ...x, name: n } : x) }); return; }
+  if (b.dataset.tldel) { if (ls.length <= 1) { $('tlab-msg').textContent = 'Mindestens ein Etikett muss bleiben.'; return; }
+    const l = ls.find(x => x.id === b.dataset.tldel), nRule = getTRules().filter(r => r.label === l.id).length;
+    if (!confirm('Etikett „' + l.name + '“ entfernen?' + (nRule ? ' ' + nRule + (nRule === 1 ? ' Regel wird' : ' Regeln werden') + ' mit entfernt.' : '') + ' Fahrten mit diesem Etikett bekommen wieder ihr automatisches Etikett.')) return;
+    setTripPrefs({ labels: ls.filter(x => x.id !== l.id), rules: getTRules().filter(r => r.label !== l.id) }); }
+});
+$('tlab-def').addEventListener('change', (e) => setTripPrefs({ defLabel: e.target.value }));
+$('trule-list').addEventListener('click', (e) => { const id = e.target.dataset.trdel; if (id) setTripPrefs({ rules: getTRules().filter(r => r.id !== id) }); });
+$('btn-trule-add').addEventListener('click', () => {
+  const pl = getTPlaces(), a = pl.find(p => p.id === $('trule-a').value), b = pl.find(p => p.id === $('trule-b').value), lab = $('trule-l').value; if (!a || !b || !lab) return;
+  const pa = { lat: a.lat, lon: a.lon, addr: a.name }, pb = { lat: b.lat, lon: b.lon, addr: b.name };
+  setTripPrefs({ rules: getTRules().filter(r => !sameRoute(r, pa, pb)).concat({ id: 'r' + Date.now(), a: pa, b: pb, label: lab }) });
+});
+/* ---- Etikett einer Fahrt wählen (Antippen in der Historie) ---- */
+let ttagTrip = null;
+function openTTag(t) {
+  ttagTrip = t; const cur = tripLabel(t), g0 = geoOf(t.p0), g1 = geoOf(t.p1), canRule = !!(g0 && g1);
+  const others = canRule ? getTrips().filter(x => x.id !== t.id && tripVisible(x) && geoOf(x.p0) && geoOf(x.p1) && sameRoute({ a: g0, b: g1 }, geoOf(x.p0), geoOf(x.p1))).length : 0;
+  $('ttag-route').textContent = placeName(t.a0, t.p0) + ' → ' + placeName(t.a1, t.p1) + (canRule ? ' · ' + (others + 1) + (others ? ' Fahrten' : ' Fahrt') + ' auf dieser Strecke' : '');
+  $('ttag-opts').innerHTML = getTLabels().map(l => `<button type="button" data-tpick="${esc(l.id)}" class="flex items-center gap-2 w-full rounded-xl px-3 py-3 text-left font-medium active:scale-[0.99] transition ${l.id === cur.lab.id ? 'ring-2 ring-emerald-500' : ''} bg-slate-100 dark:bg-slate-800"><span class="block w-3.5 h-3.5 rounded-full" style="background:${esc(l.color)}"></span>${esc(l.name)}</button>`).join('')
+    + (cur.src === 'manual' ? '<button type="button" data-tpick="" class="w-full rounded-xl px-3 py-2.5 text-left text-sm text-slate-600 dark:text-slate-300 active:scale-[0.99] transition">Eigene Auswahl zurücksetzen (Regel/Standard)</button>' : '');
+  $('ttag-rule-wrap').classList.toggle('hidden', !canRule); $('ttag-rule').checked = canRule && (others > 0 || !!ruleFor(t));
+  $('ttag-dialog').classList.remove('hidden');
+}
+$('ttag-cancel').addEventListener('click', () => $('ttag-dialog').classList.add('hidden'));
+$('ttag-dialog').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) { e.currentTarget.classList.add('hidden'); return; }
+  const b = e.target.closest('[data-tpick]'); if (!b || !ttagTrip) return; const id = b.dataset.tpick, t = ttagTrip, list = getTrips();
+  if (id && $('ttag-rule').checked && !$('ttag-rule-wrap').classList.contains('hidden')) {   // Regel: gilt für alle Fahrten dieser Strecke (eigene Auswahl dort wird aufgehoben)
+    const g0 = geoOf(t.p0), g1 = geoOf(t.p1), rule = { id: 'r' + Date.now(), a: { ...g0, addr: t.a0 || '' }, b: { ...g1, addr: t.a1 || '' }, label: id };
+    commitTrips(list.map(x => { const x0 = geoOf(x.p0), x1 = geoOf(x.p1); if (x.ucls && x0 && x1 && sameRoute(rule, x0, x1)) { const n = { ...x }; delete n.ucls; return n; } return x; }));
+    setTripPrefs({ rules: getTRules().filter(r => !sameRoute(r, g0, g1)).concat(rule) });
+  } else commitTrips(list.map(x => { if (x.id !== t.id) return x; const n = { ...x }; if (id) n.ucls = id; else delete n.ucls; return n; }));
+  $('ttag-dialog').classList.add('hidden'); renderTrips();
+});
+function setTPlaces(list) {
+  save(KEY_TPLACES, list); renderTPlaceList(); refreshViews();
+  renderTLabelSettings(); pushTripPrefs();
+}
+function renderTPlaceList() {
+  const el = $('tplace-list'); if (!el) return; const l = getTPlaces(), K = { home: ' · Zuhause', work: ' · Arbeit' };
+  $('tplace-count').textContent = l.length;                                   // Anzahl im zugeklappten Kopf
+  el.innerHTML = l.length ? l.map(p => `<span class="inline-flex items-center gap-1 pl-3 pr-1 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 text-sm max-w-full"><span class="truncate">${esc(p.name)}${K[p.kind] || ''}</span><button type="button" data-del="${esc(p.id)}" aria-label="${esc(p.name)} entfernen" class="w-6 h-6 shrink-0 rounded-lg text-slate-500 hover:text-red-600 active:scale-95">×</button></span>`).join('')
+    : '<span class="text-xs text-slate-500 dark:text-slate-400">Noch keine Orte benannt.</span>';
+}
+$('tplace-list').addEventListener('click', (e) => { const id = e.target.dataset.del; if (id) setTPlaces(getTPlaces().filter(p => p.id !== id)); });
+let tplaceEdit = null;                                                                     // { pos: "lat,lon", addr, place }
+function openTPlace(pos, addr) {
+  const pl = placeAt(pos); tplaceEdit = { pos, addr, place: pl };
+  $('tplace-addr').textContent = addr || pos; $('tplace-name').value = pl ? pl.name : ''; $('tplace-kind').value = pl ? pl.kind || '' : '';
+  $('tplace-del').classList.toggle('hidden', !pl); $('tplace-dialog').classList.remove('hidden'); $('tplace-name').focus();
+}
+$('tplace-cancel').addEventListener('click', () => $('tplace-dialog').classList.add('hidden'));
+$('tplace-dialog').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden'); });
+$('tplace-del').addEventListener('click', () => { if (tplaceEdit?.place) setTPlaces(getTPlaces().filter(p => p.id !== tplaceEdit.place.id)); $('tplace-dialog').classList.add('hidden'); });
+$('tplace-save').addEventListener('click', () => {
+  const name = $('tplace-name').value.trim().replace(/\s+/g, ' ').slice(0, 30), kind = $('tplace-kind').value, g = geoOf(tplaceEdit?.pos);
+  if (!name || !g) { $('tplace-name').focus(); return; }
+  let l = getTPlaces();
+  if (kind) l = l.map(p => p.kind === kind && (!tplaceEdit.place || p.id !== tplaceEdit.place.id) ? { ...p, kind: '' } : p);   // nur ein Zuhause und eine Arbeit
+  if (tplaceEdit.place) l = l.map(p => p.id === tplaceEdit.place.id ? { ...p, name, kind } : p);
+  else l = l.concat({ id: 'p' + Date.now(), name, kind, lat: g.lat, lon: g.lon });
+  setTPlaces(l); $('tplace-dialog').classList.add('hidden');
+});
+
+/* ---- km pro Tag vom Auto (ohne Fahrtenbuch): bei jeder Abfrage beim Škoda-Server den km-Stand je Tag merken (erster + letzter Wert).
+   lab.odo = [{ id: 'o' + Tag, d: 'YYYY-MM-DD', km0, t0, km1, t1 }] – synchronisiert wie die übrigen Messreihen. Gefahren an Tag D = letzter Stand D − letzter Stand des
+   vorherigen Tags mit Wert; liegen Tage ohne Abfrage dazwischen, gilt der Wert für den ganzen Zeitraum. */
+function odoNote(d) {
+  const km = d && Number(d.odometerKm); if (!(km > 0)) return;
+  const at = d.capturedAt && Number.isFinite(Date.parse(d.capturedAt)) ? d.capturedAt : new Date().toISOString(), day = wxIso(new Date(at)), id = 'o' + day, kmr = Math.round(km);
+  const lab = getLab(), cur = lab.odo.find(x => x.id === id);
+  if (cur && cur.km1 === kmr && Date.parse(cur.t1) >= Date.parse(at)) return;                 // nichts Neues
+  if (cur && Date.parse(at) < Date.parse(cur.t1)) return;                                      // ältere Meldung
+  lab.odo = lab.odo.filter(x => x.id !== id).concat(cur ? { ...cur, km1: kmr, t1: at } : { id, d: day, km0: kmr, t0: at, km1: kmr, t1: at });
+  if (lab.odo.length > 800) lab.odo = lab.odo.sort((a, b) => a.d.localeCompare(b.d)).slice(-800);
+  setLab(lab); if (currentView === 'history' && histFilter === 'fahrten') try { renderTrips(); } catch (e) { }
+}
+/** Tage mit gefahrenen km laut Auto: [{ k: Tag, km, from: erster Tag des Zeitraums (bei Lücken), a, b }], neueste zuerst */
+function odoDays() {
+  const l = getLab().odo.filter(x => x.d && x.km1 > 0).sort((a, b) => a.d.localeCompare(b.d)), out = [];
+  for (let i = 1; i < l.length; i++) { const p = l[i - 1], c = l[i], km = c.km1 - p.km1; if (km < 1 || km > 3000) continue;
+    const nx = wxIso(new Date(Date.parse(p.d + 'T12:00:00') + 864e5)); out.push({ k: c.d, km, from: nx !== c.d ? nx : null, a: p.km1, b: c.km1 }); }
+  return out.reverse();
+}
+
+/* ---- Historie → Fahrten ---- */
+let tripDays = 21;
+const fmtMin = (m) => m == null ? '' : m < 60 ? Math.round(m) + ' min' : Math.floor(m / 60) + ' h ' + pad2(Math.round(m % 60)) + ' min';
+const hm = (iso) => { const d = new Date(iso); return pad2(d.getHours()) + ':' + pad2(d.getMinutes()); };
+const dayKey = (iso) => wxIso(new Date(iso));
+function renderTrips() {
+  const all = getTrips().filter(tripVisible).sort((a, b) => (a.s < b.s ? 1 : -1)), wrap = $('trips-wrap'); if (!wrap) return;
+  /* km vom Auto nur für die Zeit nach dem letzten Fahrtenbuch-Import (davor ist das Fahrtenbuch genauer) */
+  const tAll = getTrips().filter(t => t.e), lastDay = tAll.reduce((m, t) => { const k = dayKey(t.e); return k > m ? k : m; }, ''), lastKm = tAll.reduce((m, t) => Math.max(m, Number(t.o1) || 0), 0);
+  const odo = odoDays().filter(o => o.k > lastDay).map(o => { if (lastDay && (o.from || o.k) <= lastDay) { const from = wxIso(new Date(Date.parse(lastDay + 'T12:00:00') + 864e5)); return lastKm > 0 ? { ...o, km: Math.max(0, o.b - Math.max(o.a, lastKm)), from: from !== o.k ? from : null } : o; } return o; }).filter(o => o.km >= 1);
+  const any = all.length || odo.length;
+  $('trips-empty').classList.toggle('hidden', !!any); $('trips-kpi').classList.toggle('hidden', !any); $('trips-csv').classList.toggle('hidden', !all.length);
+  const imp = load(KEY_TRIPS_IMP, null);
+  $('trips-info').textContent = [all.length ? all.length + ' Fahrten' + (imp && imp.at ? ' · Import vom ' + fmtDate(imp.at) : '') : '', odo.length ? 'danach km vom Auto' : ''].filter(Boolean).join(' · ');
+  if (!any) { $('trips-list').innerHTML = ''; $('trips-more').classList.add('hidden'); return; }
+  const lastK = [all.length ? dayKey(all[0].s) : '', odo.length ? odo[0].k : ''].sort().pop(), last = new Date(lastK + 'T12:00:00'), ym = lastK.slice(0, 7);
+  const mt = all.filter(t => tripYM(t) === ym), mo = odo.filter(o => o.k.slice(0, 7) === ym), km = mt.reduce((a, t) => a + (t.km || 0), 0) + mo.reduce((a, o) => a + o.km, 0);
+  const tile = (l, v, u) => `<div class="rounded-2xl bg-white dark:bg-slate-900 shadow-sm p-3"><p class="text-xs text-slate-500 dark:text-slate-400 truncate">${l}</p><p class="text-xl font-semibold tabular-nums text-slate-900 dark:text-slate-100">${v}${u ? ' <span class="text-xs font-normal text-slate-500 dark:text-slate-400">' + u + '</span>' : ''}</p></div>`;
+  const dDays = new Set(mt.map(t => dayKey(t.s)).concat(mo.map(o => o.k))).size;
+  $('trips-kpi').innerHTML = tile(MONTHS_LONG[last.getMonth()], fmt(km, 0), 'km') + (mo.length ? tile('Tage gefahren', dDays, '') + tile('Ø pro Tag', dDays ? fmt(km / dDays, 0) : '–', 'km')
+    : tile('Fahrten', mt.length, '') + tile('Ø Strecke', mt.length ? fmt(km / mt.length, 0) : '–', 'km'));
+  const days = [], idx = new Map();
+  all.forEach(t => { const k = dayKey(t.s); if (!idx.has(k)) { idx.set(k, days.length); days.push({ k, trips: [] }); } days[idx.get(k)].trips.push(t); });
+  odo.forEach(o => { if (!idx.has(o.k)) { idx.set(o.k, days.length); days.push({ k: o.k, trips: [], odo: o }); } });
+  days.sort((a, b) => b.k.localeCompare(a.k));
+  const today = dayKey(new Date().toISOString()), yest = dayKey(new Date(Date.now() - 864e5).toISOString());
+  const pos = (p, a) => geoOf(p) ? `<button type="button" data-tpos="${esc(p)}" data-taddr="${esc(a || '')}" class="min-w-0 truncate text-left text-sm underline decoration-dotted decoration-slate-400 underline-offset-4">${esc(placeName(a, p))}</button>` : `<span class="min-w-0 truncate text-sm">${esc(placeName(a, p))}</span>`;
+  $('trips-list').innerHTML = days.slice(0, tripDays).map(d => {
+    const dd = new Date(d.k + 'T12:00:00'), sum = d.trips.reduce((a, t) => a + (t.km || 0), 0);
+    const title = (d.k === today ? 'Heute, ' : d.k === yest ? 'Gestern, ' : '') + WEEKDAYS[dd.getDay()].slice(0, 2) + ' ' + pad2(dd.getDate()) + '.' + pad2(dd.getMonth() + 1) + '.' + (dd.getFullYear() !== new Date().getFullYear() ? dd.getFullYear() : '');
+    if (d.odo) { const o = d.odo, fd = o.from ? new Date(o.from + 'T12:00:00') : null;
+      return `<div class="space-y-2"><div class="flex justify-between items-baseline px-0.5"><span class="font-semibold">${title}</span><span class="text-sm text-slate-500 dark:text-slate-400">${fd ? 'seit ' + WEEKDAYS[fd.getDay()].slice(0, 2) + ' ' + pad2(fd.getDate()) + '.' + pad2(fd.getMonth() + 1) + '.' : 'km vom Auto'}</span></div>
+        <div class="rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-3.5 flex items-center gap-3"><span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" aria-hidden="true"><svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M12 14l3-5"/><path d="M4.5 18a9 9 0 1 1 15 0"/></svg></span>
+          <div class="min-w-0 flex-1"><p class="text-sm">km-Stand vom Auto</p><p class="truncate text-xs text-slate-500 dark:text-slate-400 tabular-nums">${fmt(o.km < o.b - o.a ? o.b - o.km : o.a, 0)} → ${fmt(o.b, 0)} km · Fahrten folgen mit dem Fahrtenbuch</p></div>
+          <span class="shrink-0 text-lg font-semibold tabular-nums">${fmt(o.km, 0)} <span class="text-xs font-normal text-slate-500 dark:text-slate-400">km</span></span></div></div>`; }
+    return `<div class="space-y-2"><div class="flex justify-between items-baseline px-0.5"><span class="font-semibold">${title}</span><span class="text-sm text-slate-500 dark:text-slate-400">${d.trips.length} ${d.trips.length === 1 ? 'Fahrt' : 'Fahrten'} · ${fmt(sum, 0)} km</span></div>`
+      + d.trips.slice().reverse().map(t => { const tl = tripLabel(t), SRC = { rule: ' · Regel', auto: ' · auto', file: '', manual: '' };
+        return `<div class="rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-3.5 flex gap-3">
+          <div class="flex flex-col items-center pt-1.5" aria-hidden="true"><span class="block w-2.5 h-2.5 rounded-full border-2 border-emerald-500"></span><span class="block flex-1 w-0.5 my-1 bg-slate-200 dark:bg-slate-700"></span><span class="block w-2.5 h-2.5 rounded-full bg-emerald-500"></span></div>
+          <div class="min-w-0 flex-1 space-y-1.5">
+            <div class="flex justify-between gap-2">${pos(t.p0, t.a0)}<span class="shrink-0 text-sm text-slate-500 dark:text-slate-400">${hm(t.s)}</span></div>
+            <div class="flex justify-between gap-2">${pos(t.p1, t.a1)}<span class="shrink-0 text-sm text-slate-500 dark:text-slate-400">${hm(t.e)}</span></div>
+            <div class="flex items-center justify-between gap-2 pt-0.5">
+              <button type="button" data-ttag="${esc(t.id)}" class="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 active:scale-95 transition"><span class="block w-2.5 h-2.5 rounded-full" style="background:${esc(tl.lab.color)}" aria-hidden="true"></span>${esc(tl.lab.name)}<span class="opacity-60">${SRC[tl.src]}</span></button>
+              <span class="text-lg font-semibold tabular-nums">${fmt(t.km || 0, 0)} <span class="text-xs font-normal text-slate-500 dark:text-slate-400">km · ${fmtMin(t.dmin)}</span></span>
+            </div>
+            ${t.k100 != null || t.soc0 != null ? `<p class="text-xs text-slate-500 dark:text-slate-400 text-right">${[t.k100 != null && t.k100 > 0 ? fmt(t.k100, 1) + ' kWh/100 km' : '', t.soc0 != null && t.soc1 != null ? 'Akku ' + t.soc0 + ' → ' + t.soc1 + ' %' : '', t.pcs > 0 ? t.pcs + '× unterwegs geladen' : ''].filter(Boolean).join(' · ')}</p>` : ''}
+          </div></div>`; }).join('') + '</div>';
+  }).join('');
+  $('trips-more').classList.toggle('hidden', days.length <= tripDays);
+}
+$('trips-more').addEventListener('click', () => { tripDays += 30; renderTrips(); });
+/* Vergleichs-Benziner (Rückblick): sofort speichern */
+$('set-cmp-car').addEventListener('change', (e) => setQuickSetting('cmpCar', e.target.value.trim().slice(0, 40) || undefined));
+[['set-cmp-l', 'cmpL', 1, 30], ['set-cmp-eur', 'cmpEur', 0.5, 5], ['set-cmp-co2', 'cmpCo2', -0.01, 2000]].forEach(([id, k, lo, hi]) => $(id).addEventListener('change', (e) => { const v = deDec(e.target.value);
+  if (e.target.value.trim() === '') { setQuickSetting(k, undefined); return; } if (Number.isFinite(v) && v > lo && v < hi) { setQuickSetting(k, Math.round(v * 100) / 100); e.target.value = String(Math.round(v * 100) / 100).replace('.', ','); } else e.target.value = getSettings()[k] ? String(getSettings()[k]).replace('.', ',') : ''; }));
+$('trips-go-set').addEventListener('click', () => openSettings('fahrten'));
+$('trips-list').addEventListener('click', (e) => {
+  const tg = e.target.closest('[data-ttag]');
+  if (tg) { const list = getTrips(), t = list.find(x => x.id === tg.dataset.ttag); if (!t) return;
+    openTTag(t); return; }
+  const ps = e.target.closest('[data-tpos]'); if (ps) openTPlace(ps.dataset.tpos, ps.dataset.taddr);
+});
+/** CSV (Semikolon, Dezimalkomma, BOM: öffnet direkt in Excel). */
+function tripsCsv(list, name) {
+  const q = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"', n = (v, d = 1) => v == null ? '' : fmt(v, d);
+  const lines = [['Start', 'Ende', 'Kategorie', 'Von', 'Nach', 'Startadresse', 'Zieladresse', 'km', 'km-Stand Start', 'km-Stand Ende', 'Fahrzeit min', 'kWh', 'kWh/100 km', 'Akku Start %', 'Akku Ende %'].map(q).join(';')]
+    .concat(list.slice().sort((a, b) => (a.s < b.s ? -1 : 1)).map(t => [fmtDate(t.s) + ' ' + hm(t.s), fmtDate(t.e) + ' ' + hm(t.e), tripTag(t), placeName(t.a0, t.p0), placeName(t.a1, t.p1), t.a0 || '', t.a1 || '', n(t.km, 0), t.o0 ?? '', t.o1 ?? '', t.dmin ?? '', n(t.kwh, 2), n(t.k100), t.soc0 ?? '', t.soc1 ?? ''].map(q).join(';')));
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' })); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+$('trips-csv').addEventListener('click', () => tripsCsv(getTrips().filter(tripVisible), 'fahrtenbuch-' + todayYMD() + '.csv'));
+
+/* ---- Berichte → Fahrten ---- */
+/* =====================================================================
+   Steuerhelfer Arbeitsweg (Berichte → Fahrten): Arbeitstage = Kalendertage mit mindestens einer Fahrt mit Etikett „Arbeitsweg“.
+   Entfernungspauschale: ab 2026 0,38 € je Entfernungs-km ab dem 1. km; bis 2025 0,30 € (1.–20. km) und 0,38 € ab dem 21. km.
+   Einfache Entfernung: eigene Angabe (Einstellung commuteKm) oder der Median der Arbeitsweg-Fahrten, auf ganze km abgerundet.
+   ===================================================================== */
+let taxY = new Date().getFullYear();
+const isCommute = (t) => { const l = tripLabel(t).lab; return l && (l.id === 'arbeitsweg' || /arbeit/i.test(l.name || '')); };
+const taxRate = (y, km) => y >= 2026 ? km * 0.38 : Math.min(km, 20) * 0.30 + Math.max(0, km - 20) * 0.38;
+function taxData(y) {
+  const trips = getTrips().filter(t => tripVisible(t) && new Date(t.s).getFullYear() === y), com = trips.filter(isCommute);
+  const days = new Map(); com.forEach(t => { const d = new Date(t.s), k = ymd(d); const o = days.get(k) || { d, n: 0, km: 0 }; o.n++; o.km += t.km || 0; days.set(k, o); });
+  const med = wbMedian(com.map(t => t.km || 0).filter(v => v > 0)) ?? (com.length ? com[0].km : null);
+  const own = Number(getSettings().commuteKm) > 0 ? Number(getSettings().commuteKm) : null, dist = own ?? (med ? Math.floor(med) : null);
+  const comKm = com.reduce((a, t) => a + (t.km || 0), 0);
+  /* echte Kosten: Arbeitsweg-km × Ø Verbrauch inkl. Ladeverluste × Ø Strompreis des Jahres (sonst Gesamtwerte) */
+  const rs = getReadings(), inY = rs.map((r, i) => i).filter(i => new Date(rs[i].date).getFullYear() === y), all = rs.map((_, i) => i);
+  const tc = (idx) => { try { const t = idx.length ? consumptionTotals(rs, idx) : null; return t && t.km ? t.kwh100 : null; } catch (e) { return null; } };
+  const pr = (idx) => { let e = 0, c = 0; idx.forEach(i => { const r = rs[i]; if (r.consumedSinceLast > 0 && r.cost > 0) { e += r.consumedSinceLast; c += r.cost; } }); return e > 0 ? c / e : null; };
+  const k100 = tc(inY) ?? tc(all), price = pr(inY) ?? pr(all), real = k100 != null && price != null ? comKm * k100 / 100 * price : null;
+  /* Lücken: Monate (ab Kaufmonat, bis heute) ohne jede Fahrt im Fahrtenbuch */
+  const [py, pm] = purchaseMonth().split('-').map(Number), now = new Date(), gaps = [];
+  for (let m = 0; m < 12; m++) { if (y < py || (y === py && m < pm - 1) || y > now.getFullYear() || (y === now.getFullYear() && m > now.getMonth())) continue; if (!trips.some(t => new Date(t.s).getMonth() === m)) gaps.push(m); }
+  return { y, days: [...days.values()].sort((a, b) => a.d - b.d), dist, own: own != null, med, sum: dist ? days.size * taxRate(y, dist) : null, comKm, real, gaps, n: com.length };
+}
+const MON_S = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
+function taxYears() { const ys = new Set(getTrips().filter(isCommute).map(t => new Date(t.s).getFullYear())); return [...ys].sort(); }
+function renderTax() {
+  const ys = taxYears(), card = $('tax-card'); card.classList.toggle('hidden', !ys.length); if (!ys.length) return;
+  if (!ys.includes(taxY)) taxY = ys[ys.length - 1];
+  const d = taxData(taxY), i = ys.indexOf(taxY);
+  $('tax-y').textContent = taxY; $('tax-prev').disabled = i <= 0; $('tax-next').disabled = i >= ys.length - 1;
+  $('tax-prev').classList.toggle('opacity-30', i <= 0); $('tax-next').classList.toggle('opacity-30', i >= ys.length - 1);
+  $('tax-days').textContent = d.days.length;
+  $('tax-sub').textContent = 'Tage mit mindestens einer Fahrt „Arbeitsweg“ · ' + d.n + (d.n === 1 ? ' Fahrt' : ' Fahrten') + ', ' + fmt(d.comKm, 0) + ' km';
+  if (document.activeElement !== $('tax-km')) { $('tax-km').value = d.dist ?? ''; $('tax-km').placeholder = d.med ? String(Math.floor(d.med)) : '–'; }
+  $('tax-rate-l').textContent = taxY >= 2026 ? 'Pauschale (0,38 €/km)' : 'Pauschale (0,30/0,38 €/km)';
+  $('tax-sum').textContent = d.sum != null ? eur(d.sum) : '–';
+  $('tax-real').textContent = d.real != null ? eur(d.real) : '–';
+  $('tax-formula').textContent = d.dist ? d.days.length + ' Tage × ' + (taxY >= 2026 ? d.dist + ' km × 0,38 €' : (d.dist <= 20 ? d.dist + ' km × 0,30 €' : '(20 km × 0,30 € + ' + (d.dist - 20) + ' km × 0,38 €)')) + (d.own ? ' · Entfernung selbst eingetragen' : ' · Entfernung aus deinen Fahrten (Median), änderbar') : 'Trage die einfache Entfernung zur Arbeit ein.';
+  $('tax-gap').classList.toggle('hidden', !d.gaps.length);
+  if (d.gaps.length) $('tax-gap').textContent = 'Ohne Fahrtenbuch-Daten: ' + d.gaps.map(m => MON_S[m]).join(', ') + ' – dort können Arbeitstage fehlen. Fahrtenbuch für diese Monate importieren.';
+  const byM = {}; d.days.forEach(x => { (byM[x.d.getMonth()] = byM[x.d.getMonth()] || []).push(x); });
+  $('tax-months').innerHTML = Object.keys(byM).map(Number).sort((a, b) => a - b).map(m => `<div><p class="font-semibold text-slate-700 dark:text-slate-200">${MON_S[m]} · ${byM[m].length} ${byM[m].length === 1 ? 'Tag' : 'Tage'}</p><p class="text-slate-500 dark:text-slate-400 leading-5">${byM[m].map(x => pad2(x.d.getDate()) + '.').join(' ')}</p></div>`).join('') || '<p class="text-slate-500">Keine Arbeitstage.</p>';
+}
+$('tax-prev').addEventListener('click', () => { const ys = taxYears(), i = ys.indexOf(taxY); if (i > 0) { taxY = ys[i - 1]; renderTax(); } });
+$('tax-next').addEventListener('click', () => { const ys = taxYears(), i = ys.indexOf(taxY); if (i < ys.length - 1) { taxY = ys[i + 1]; renderTax(); } });
+$('tax-km').addEventListener('change', (e) => {
+  const v = parseInt(e.target.value, 10), raw = load(KEY_SETTINGS, {}) || {};
+  if (v > 0 && v < 1000) raw.commuteKm = v; else delete raw.commuteKm;
+  save(KEY_SETTINGS, raw); pushPrefs(); renderTax();
+});
+$('tax-pdf').addEventListener('click', async () => {
+  const d = taxData(taxY), st = getSettings(), mm = [st.brand, st.model].filter(Boolean).join(' '), box = $('akte-print');
+  const byM = {}; d.days.forEach(x => { (byM[x.d.getMonth()] = byM[x.d.getMonth()] || []).push(x); });
+  const TD = 'padding:5px 8px;border-bottom:1px solid #e2e8f0;font-size:12px;vertical-align:top';
+  let h = '<div style="max-width:720px;margin:0 auto;font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#111;line-height:1.4"><h1 style="font-size:24px;margin:0">Wege zur ersten Tätigkeitsstätte ' + taxY + '</h1>'
+    + '<p style="margin:2px 0 14px;color:#475569;font-size:14px">' + esc(mm || 'Fahrzeug') + (st.plate ? ' · ' + esc(st.plate) : '') + ' · erstellt am ' + fmtDate(new Date().toISOString()) + '</p>'
+    + '<table style="width:100%;border-collapse:collapse;margin-bottom:16px">'
+    + [['Arbeitstage (Tage mit Fahrt „Arbeitsweg“)', d.days.length], ['Einfache Entfernung', d.dist ? d.dist + ' km' : '–'], ['Entfernungspauschale', taxY >= 2026 ? '0,38 € je km ab dem 1. km' : '0,30 € (1.–20. km), 0,38 € ab dem 21. km'], ['Betrag', d.sum != null ? '<b>' + eur(d.sum) + '</b>' : '–'], ['Gefahrene Arbeitsweg-km (laut Fahrtenbuch)', fmt(d.comKm, 0) + ' km']]
+      .map(([k, v]) => '<tr><td style="' + TD + ';color:#475569">' + k + '</td><td style="' + TD + ';text-align:right">' + v + '</td></tr>').join('') + '</table>'
+    + '<h2 style="font-size:16px;margin:0 0 6px">Arbeitstage je Monat</h2><table style="width:100%;border-collapse:collapse"><thead><tr><th style="' + TD + ';text-align:left">Monat</th><th style="' + TD + ';text-align:right">Tage</th><th style="' + TD + ';text-align:left">Daten</th></tr></thead><tbody>'
+    + Object.keys(byM).map(Number).sort((a, b) => a - b).map(m => '<tr style="break-inside:avoid"><td style="' + TD + '">' + MON_S[m] + '</td><td style="' + TD + ';text-align:right">' + byM[m].length + '</td><td style="' + TD + '">' + byM[m].map(x => pad2(x.d.getDate()) + '.' + pad2(m + 1) + '.').join(', ') + '</td></tr>').join('') + '</tbody></table>'
+    + (d.gaps.length ? '<p style="font-size:12px;color:#92400e;margin-top:10px">Hinweis: Für ' + d.gaps.map(m => MON_S[m]).join(', ') + ' liegen keine Fahrtenbuch-Daten vor.</p>' : '')
+    + '<p style="font-size:11px;color:#64748b;margin:20px 0 0;border-top:1px solid #cbd5e1;padding-top:8px">Aus dem Fahrtenbuch der MyŠkoda-App (Etikett „Arbeitsweg“) erstellt. Keine Steuerberatung; Angaben vor der Verwendung prüfen.</p></div>';
+  box.innerHTML = '<div id="akte-bar"><button type="button" data-akte="close" style="background:#e2e8f0;color:#0f172a">Schließen</button><button type="button" data-akte="print" style="background:#059669;color:#fff">Drucken / als PDF</button></div>' + h;
+  akteOldTitle = document.title; document.title = 'Arbeitsweg ' + taxY; document.body.classList.add('print-akte'); window.scrollTo(0, 0);
+});
+function renderTripReport(y, m) {
+  try { renderTax(); } catch (e) { console.error(e); }
+  const ym = y + '-' + pad2(m + 1), list = getTrips().filter(t => tripYM(t) === ym && tripVisible(t)), empty = !list.length;
+  $('rf-empty').classList.toggle('hidden', !empty); $('rf-body').classList.toggle('hidden', empty);
+  $('rep-sub').textContent = 'Fahrtenbuch · aus der MyŠkoda-App'; if (empty) return;
+  const km = list.reduce((a, t) => a + (t.km || 0), 0), long = list.reduce((a, t) => (t.km || 0) > (a.km || 0) ? t : a);
+  $('rf-km').textContent = fmt(km, 0);
+  $('rf-sub').textContent = list.length + (list.length === 1 ? ' Fahrt' : ' Fahrten') + ' · Ø ' + fmt(km / list.length, 0) + ' km · längste ' + fmt(long.km, 0) + ' km (' + WEEKDAYS[new Date(long.s).getDay()].slice(0, 2) + ' ' + wrD(Date.parse(long.s)) + ')';
+  const dim = new Date(y, m + 1, 0).getDate(), per = Array(dim).fill(0); list.forEach(t => { per[new Date(t.s).getDate() - 1] += t.km || 0; });
+  const mx = Math.max(...per, 1);
+  $('rf-bars').innerHTML = per.map((v, i) => `<div class="flex-1 rounded-t-[3px] ${v === mx ? 'bg-emerald-500' : v ? 'bg-emerald-700/70 dark:bg-emerald-800' : 'bg-slate-200 dark:bg-slate-800'}" style="height:${v ? Math.max(5, v / mx * 96) : 3}px" title="${i + 1}.: ${fmt(v, 0)} km"></div>`).join('');
+  $('rf-bars-l').innerHTML = [1, 8, 15, 22, dim].map(d => '<span>' + d + '.</span>').join('');
+  const wk = list.filter(t => t.kwh > 0 && t.km > 0), skwh = wk.reduce((a, t) => a + t.kwh, 0), skm = wk.reduce((a, t) => a + t.km, 0), dmin = list.reduce((a, t) => a + (t.dmin || 0), 0);
+  $('rf-k100').textContent = skm ? fmt(skwh / skm * 100, 1) : '–'; $('rf-time').textContent = dmin ? fmt(dmin / 60, 1) : '–'; $('rf-speed').textContent = dmin ? fmt(km / (dmin / 60), 0) : '–';
+  const split = {}; list.forEach(t => { const g = tripLabel(t).lab.id; split[g] = (split[g] || 0) + (t.km || 0); });
+  const tags = getTLabels().filter(l => split[l.id] > 0);
+  $('rf-split').innerHTML = '<div class="flex h-3 rounded-full overflow-hidden">' + tags.map(l => `<div style="width:${(split[l.id] / km * 100).toFixed(1)}%;background:${esc(l.color)}"></div>`).join('') + '</div>'
+    + '<div class="mt-2 flex flex-wrap justify-between gap-x-4 gap-y-1 text-sm">' + tags.map(l => `<span><span style="color:${esc(l.color)}" aria-hidden="true">●</span> ${esc(l.name)} ${fmt(split[l.id], 0)} km <span class="text-xs text-slate-500 dark:text-slate-400">${fmt(split[l.id] / km * 100, 0)} %</span></span>`).join('') + '</div>';
+  const dest = new Map(); list.forEach(t => { const n = placeName(t.a1, t.p1), o = dest.get(n) || { n: 0, km: 0 }; o.n++; o.km += t.km || 0; dest.set(n, o); });
+  $('rf-top').innerHTML = [...dest.entries()].sort((a, b) => b[1].n - a[1].n || b[1].km - a[1].km).slice(0, 5).map(([n, o]) => repRow(esc(n), o.n + ' × · ' + fmt(o.km, 0) + ' km')).join('');
+}
+$('rf-csv').addEventListener('click', () => { const ym = reportYM.y + '-' + pad2(reportYM.m + 1); tripsCsv(getTrips().filter(t => tripYM(t) === ym && tripVisible(t)), 'fahrtenbuch-' + ym + '.csv'); });
+$('rf-all').addEventListener('click', () => { histFilter = 'fahrten'; showView('history'); });
+
+/** Datensicherung: Fahrten zusammenführen (gleiche ID = vorhanden, eigenes Etikett bleibt) und Orte/Regeln/Etiketten ergänzen. Liefert die Zahl neuer Fahrten. */
+function importTripsFromBackup(text) {
+  let d; try { d = JSON.parse(text); } catch (e) { return 0; }
+  const list = Array.isArray(d.trips) ? d.trips.filter(t => t && typeof t.id === 'string' && !isNaN(Date.parse(t.s)) && !isNaN(Date.parse(t.e))) : [];
+  const cur = getTrips(), ids = new Set(cur.map(t => t.id)), fresh = list.filter(t => !ids.has(t.id));
+  if (fresh.length) commitTrips(cur.concat(fresh));
+  const pf = d.tripPrefs; if (pf && typeof pf === 'object') {
+    const pl = getTPlaces(), ru = getTRules(), np = Array.isArray(pf.places) ? pf.places.filter(p => p && p.id && isFinite(p.lat) && isFinite(p.lon) && !pl.some(q => q.id === p.id)) : [];
+    const nr = Array.isArray(pf.rules) ? pf.rules.filter(r => r && r.id && r.a && r.b && !ru.some(q => q.id === r.id)) : [];
+    const cl = getTLabels(), nl = Array.isArray(pf.labels) ? pf.labels.filter(l => l && l.id && l.name && !cl.some(q => q.id === l.id)) : [];
+    if (np.length) save(KEY_TPLACES, pl.concat(np));
+    if (nr.length || nl.length) setTripPrefs({ rules: ru.concat(nr), labels: cl.concat(nl).slice(0, LABEL_COLORS.length) }); else if (np.length) { renderTPlaceList(); pushTripPrefs(); }
+  }
+  return fresh.length;
+}
+/* ---- Cloud-Abgleich ---- */
+window.onCloudTrips = (months, first, uid) => {                    // months = { 'JJJJ-MM': [Fahrten] }
+  if (first) checkCacheUid(uid);
+  const cloud = [].concat(...Object.values(months)), local = getTrips();
+  let next = cloud;
+  if (first) {                                                     // vor der Anmeldung importierte Fahrten nachreichen
+    const ids = new Set(cloud.map(t => t.id)), missing = local.filter(t => !ids.has(t.id));
+    if (missing.length) { next = cloud.concat(missing); window.cloud.pushTrips(cloud, next).catch(() => { }); }
+  }
+  next.sort((a, b) => (a.s < b.s ? -1 : a.s > b.s ? 1 : 0));
+  if (JSON.stringify(next) !== JSON.stringify(local)) { save(KEY_TRIPS, next); refreshViews(); try { ltFillKm(); btFillTrips(); } catch (e) { } }
+};
+window.onCloudPlaces = (d, first, uid) => {                       // d = { list (Orte), labels, rules, defLabel } oder null
+  if (first) checkCacheUid(uid);
+  const lp = getTPlaces(), lr = getTRules();
+  if (!d) { if (first && (lp.length || lr.length || localStorage.getItem(KEY_TLABELS))) pushTripPrefs(); return; }
+  let places = Array.isArray(d.list) ? d.list : [], rules = Array.isArray(d.rules) ? d.rules : [], up = false;
+  if (first) {                                                     // vor der Anmeldung angelegte Orte/Regeln nachreichen
+    const mp = places.concat(lp.filter(p => !places.some(q => q.id === p.id))), mr = rules.concat(lr.filter(r => !rules.some(q => q.id === r.id)));
+    if (mp.length !== places.length || mr.length !== rules.length || (!d.labels && localStorage.getItem(KEY_TLABELS))) up = true; places = mp; rules = mr;
+  }
+  const before = JSON.stringify([lp, lr, getTLabels(), defLabelId()]);
+  save(KEY_TPLACES, places); save(KEY_TRULES, rules);
+  if (Array.isArray(d.labels) && d.labels.length) save(KEY_TLABELS, d.labels); if (d.defLabel) save(KEY_TDEF, d.defLabel);
+  if (up) pushTripPrefs();
+  if (JSON.stringify([getTPlaces(), getTRules(), getTLabels(), defLabelId()]) !== before) { renderTPlaceList(); renderTLabelSettings(); refreshViews(); }
+};
+renderTPlaceList(); renderTLabelSettings(); renderTripsLast();
+
+/* =====================================================================
+   Wischgesten für die Segment-Tabs: links/rechts wischen = nächster/vorheriger Tab. Es wird einfach der benachbarte Button „geklickt“,
+   damit gilt dieselbe Logik wie beim Antippen. Touch-Events statt Pointer-Events, weil der Browser Pointer beim Scrollen abbricht.
+   Ausgenommen: Eingabefelder, Schieberegler (Akku), Kamera, waagrecht scrollbare Bereiche und Start am Bildschirmrand (Zurück-Geste von Android).
+   ===================================================================== */
+function segSwipe(area, seg, ignore = '') {
+  if (!area || !seg) return;
+  const skip = 'input,select,textarea,video,.touch-none,[role=slider],.overflow-x-auto' + (ignore ? ',' + ignore : '');
+  let sx = 0, sy = 0, st = 0, on = false;
+  area.addEventListener('touchstart', (e) => {
+    const t = e.touches[0]; on = e.touches.length === 1 && !e.target.closest(skip) && t.clientX > 24 && t.clientX < innerWidth - 24;
+    sx = t.clientX; sy = t.clientY; st = Date.now();
+  }, { passive: true });
+  area.addEventListener('touchend', (e) => {
+    if (!on) return; on = false;
+    const t = e.changedTouches[0], dx = t.clientX - sx, dy = t.clientY - sy;
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5 || Date.now() - st > 800) return;     // nur klare, zügige Wischbewegung zur Seite
+    const btns = [...seg.querySelectorAll('button')].filter(b => b.offsetParent !== null), i = btns.findIndex(b => b.classList.contains('bg-white')), j = i + (dx < 0 ? 1 : -1);
+    if (i < 0 || j < 0 || j >= btns.length) return;
+    btns[j].click();
+  }, { passive: true });
+  area.addEventListener('touchcancel', () => { on = false; }, { passive: true });
+}
+segSwipe($('view-capture'), $('cap-place'));                               // Laden: Zuhause | Bosch | Unterwegs (ganze Seite)
+segSwipe($('view-history'), $('hist-filter'));                             // Historie: Alle | Laden | Kosten | Fahrten (ganze Seite)
+
+// ───── src/13-einstellungen-ui.js ─────
+/* =====================================================================
+   Einstellungen als Bereiche mit Seitenleiste (Burger-Menü). Die vorhandenen Karten werden anhand ihrer Überschrift einem Bereich zugeordnet;
+   sichtbar ist immer nur ein Bereich. Beim Öffnen der Einstellungen erscheint die Seitenleiste zur Auswahl.
+   ===================================================================== */
+const SET_SECS = [
+  { k: 'fahrzeug', e: '🚗', t: 'Fahrzeug & Kauf', h: ['Allgemein', 'Kauf'], save: true },
+  { k: 'laden', e: '⚡', t: 'Laden & Akku', h: ['Fahrzeug und Laden'], save: true },
+  { k: 'erinnerungen', e: '🔔', t: 'Erinnerungen', h: ['Erinnerungen'], save: true },
+  { k: 'fahrten', e: '🧭', t: 'Fahrtenbuch', h: ['Fahrtenbuch'] },
+  { k: 'listen', e: '🏷️', t: 'Anbieter & Kategorien', h: ['Listen'] },
+  { k: 'wetter', e: '⛅', t: 'Wetter', h: ['Wetter', 'Eis-Warnung'] },
+  { k: 'daten', e: '☁️', t: 'Sicherung & Belege', h: ['Belege', 'Datensicherung'] },
+  { k: 'sprache', e: '🎙️', t: 'Sprachsteuerung', h: ['So funktioniert’s', 'Akku-Temperatur', 'Langzeitverbrauch'] },
+  { k: 'konto', e: '👤', t: 'Konto & Cloud', h: ['Cloud-Sync'], hidden: true },
+  { k: 'gefahr', e: '⚠️', t: 'Alle Daten löschen', h: ['Gefahrenzone'], hidden: true }
+];
+const SET_ICON = {sprache: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M8 21h8"/>', fahrzeug: '<path d="M5 17h14M6 17v2M18 17v2M4 13l2-5h12l2 5v4H4z"/><circle cx="8" cy="14" r="1"/><circle cx="16" cy="14" r="1"/>', laden: '<path d="M13 2L4 14h7l-1 8 9-12h-7l1-8Z"/>', erinnerungen: '<path d="M6 17V11a6 6 0 0 1 12 0v6l1.5 2h-15zM10 21a2 2 0 0 0 4 0"/>', fahrten: '<circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M8 18h6a4 4 0 0 0 0-8h-4a4 4 0 0 1 0-8h6"/>', listen: '<path d="M20 12l-8 8-9-9V3h8z"/><circle cx="7.5" cy="7.5" r="1.5"/>', wetter: '<path d="M7 18a5 5 0 1 1 1-9.9A6 6 0 0 1 19 10a4 4 0 0 1-1 8z"/>', daten: '<path d="M7 18a5 5 0 1 1 1-9.9A6 6 0 0 1 19 10a4 4 0 0 1-1 8z"/><path d="M12 11v6M9.5 13.5L12 11l2.5 2.5"/>', konto: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/>', gefahr: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>'};
+const KEY_SETSEC = 'enyaq.setSec';
+let setSec = (() => { try { return localStorage.getItem(KEY_SETSEC) || 'fahrzeug'; } catch (e) { return 'fahrzeug'; } })();
+(function tagSettingsCards() {
+  [...$('view-settings').children].forEach(el => {
+    if (el.id === 'set-head' || el.id === 'set-sub') return;
+    if (el.querySelector('#btn-save-settings')) { el.dataset.secs = SET_SECS.filter(x => x.save).map(x => x.k).join(' '); return; }
+    const h = (el.querySelector('h2')?.textContent || '').trim(), sec = SET_SECS.find(x => x.h.includes(h));
+    el.dataset.secs = sec ? sec.k : 'fahrzeug';
+  });
+  $('sd-list').innerHTML = SET_SECS.filter(x => !x.hidden).map(x => `<button type="button" data-sec="${x.k}" class="sd-item flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left active:bg-slate-100 dark:active:bg-slate-800"><svg class="h-[22px] w-[22px] shrink-0 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true">${SET_ICON[x.k] || ''}</svg><span class="min-w-0 truncate">${esc(x.t)}</span></button>`).join('');
+})();
+function setSettingsSec(k) {
+  const sec = SET_SECS.find(x => x.k === k) || SET_SECS[0]; setSec = sec.k; try { localStorage.setItem(KEY_SETSEC, sec.k); } catch (e) { }
+  [...$('view-settings').children].forEach(el => { if (el.dataset.secs) el.classList.toggle('hidden', !el.dataset.secs.split(' ').includes(sec.k)); });
+  $('set-h').textContent = sec.t;
+  /* Nur eine Karte im Bereich: deren Kopfzeile (Symbol + Titel) doppelt die Seitenüberschrift → ausblenden, ihr Erklärsatz wird Untertitel */
+  const cards = [...$('view-settings').children].filter(el => el.dataset.secs && !el.classList.contains('hidden') && !el.querySelector('#btn-save-settings'));
+  cards.forEach(c => { const hd = c.querySelector(':scope > .border-b-2'); if (hd) hd.classList.remove('hidden'); });
+  let sub = '';
+  if (cards.length === 1) { const hd = cards[0].querySelector(':scope > .border-b-2'); if (hd) { hd.classList.add('hidden'); sub = (hd.querySelector('p')?.textContent || '').trim(); } }
+  $('set-sub').textContent = sub; $('set-sub').classList.toggle('hidden', !sub);
+  document.querySelectorAll('#set-drawer [data-sec]').forEach(b => { if (!b.classList.contains('sd-item')) return; const on = b.dataset.sec === sec.k; b.classList.toggle('bg-emerald-600/15', on); b.classList.toggle('text-emerald-700', on); b.classList.toggle('dark:text-emerald-300', on); b.classList.toggle('font-semibold', on); });
+  window.scrollTo(0, 0);
+}
+function renderDrawerUser() {
+  const u = window.cloud?.userInfo?.(), av = $('sd-avatar');
+  $('sd-name').textContent = u ? (u.name || u.email || 'Angemeldet') : 'Nicht angemeldet';
+  $('sd-sub').textContent = u ? 'Cloud ✓' + (typeof apiEnabled === 'function' && apiEnabled() ? ' · Škoda-API verbunden' : '') : 'Konto & Cloud – antippen zum Anmelden';
+  const ini = u ? (u.name || u.email || '?').split(/[\s@.]+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('') : '?';
+  av.innerHTML = u && u.photo ? '<img src="' + esc(u.photo) + '" alt="" referrerpolicy="no-referrer" class="h-full w-full object-cover">' : esc(ini);
+}
+function openSetDrawer() {
+  renderDrawerUser();
+  const d = $('set-drawer'); d.classList.remove('pointer-events-none'); d.setAttribute('aria-hidden', 'false'); $('set-burger').setAttribute('aria-expanded', 'true');
+  $('set-drawer-bg').classList.replace('opacity-0', 'opacity-100'); $('set-drawer-panel').classList.replace('-translate-x-full', 'translate-x-0');
+}
+function closeSetDrawer() {
+  const d = $('set-drawer'); d.classList.add('pointer-events-none'); d.setAttribute('aria-hidden', 'true'); $('set-burger').setAttribute('aria-expanded', 'false');
+  $('set-drawer-bg').classList.replace('opacity-100', 'opacity-0'); $('set-drawer-panel').classList.replace('translate-x-0', '-translate-x-full');
+}
+$('set-burger').addEventListener('click', openSetDrawer);
+$('set-drawer-bg').addEventListener('click', closeSetDrawer);
+$('set-drawer').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-sec],[data-go]'); if (!b) return;
+  closeSetDrawer();
+  if (b.dataset.sec) { openSettings(b.dataset.sec); return; }
+  const g = b.dataset.go;
+  showView(g);
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('set-drawer').getAttribute('aria-hidden') === 'false') closeSetDrawer(); });
+/* Wischen: vom linken Rand nach rechts öffnet, nach links schließt */
+(() => { let sx = 0, sy = 0, on = false;
+  document.addEventListener('touchstart', (e) => { const t = e.touches[0], open = $('set-drawer').getAttribute('aria-hidden') === 'false'; on = currentView === 'settings' && (open || t.clientX < 40); sx = t.clientX; sy = t.clientY; }, { passive: true });
+  document.addEventListener('touchend', (e) => { if (!on) return; on = false; const t = e.changedTouches[0], dx = t.clientX - sx, dy = t.clientY - sy; if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return; const open = $('set-drawer').getAttribute('aria-hidden') === 'false'; if (dx > 0 && !open) openSetDrawer(); else if (dx < 0 && open) closeSetDrawer(); }, { passive: true });
+})();
+
+/* ---- Schnellmenü auf Start („☰“ links neben dem Titel oder vom linken Rand nach rechts wischen): alle wichtigen Seiten und Reiter mit einem Tipp ---- */
+function navOpen() { return $('nav-drawer').getAttribute('aria-hidden') === 'false'; }
+/** Konto-Zeile unten im Schnellmenü (am PC dauerhaft sichtbar) – wird auch bei jeder Änderung der Anmeldung neu gezeichnet */
+function renderNavUser() {
+  try { const u = window.cloud?.userInfo?.(), av = $('nav-avatar'); $('nav-name').textContent = u ? (u.name || u.email || 'Angemeldet') : 'Nicht angemeldet';
+    $('nav-sub').textContent = u ? 'Cloud ✓' + (typeof apiEnabled === 'function' && apiEnabled() ? ' · Škoda-API verbunden' : '') : 'Konto & Cloud – antippen zum Anmelden';
+    const ini = u ? (u.name || u.email || '?').split(/[\s@.]+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('') : '?';
+    av.innerHTML = u && u.photo ? '<img src="' + esc(u.photo) + '" alt="" referrerpolicy="no-referrer" class="h-full w-full object-cover">' : esc(ini); } catch (e) { }
+}
+function openNavDrawer() {
+  renderNavUser();
+  const n = Number(($('bell-badge')?.textContent || '').replace(/\D/g, '')) || 0, rb = $('nav-rem-n'); rb.textContent = n; rb.classList.toggle('hidden', !(n > 0 && !$('bell-badge').classList.contains('hidden')));
+  let due = false; try { const lim = new Date(); lim.setMonth(lim.getMonth() + 2); due = chDue().some(x => x.d <= lim); } catch (e) { } $('nav-ch-dot').classList.toggle('hidden', !due);   // HU/Service in den nächsten 2 Monaten oder überfällig
+  const d = $('nav-drawer'); d.classList.remove('pointer-events-none'); d.setAttribute('aria-hidden', 'false'); $('btn-nav').setAttribute('aria-expanded', 'true');
+  $('nav-drawer-bg').classList.replace('opacity-0', 'opacity-100'); $('nav-drawer-panel').classList.replace('-translate-x-full', 'translate-x-0');
+}
+function closeNavDrawer() {
+  if (isDesk()) { $('nav-q').value = ''; navSearch(); return; }        // PC: Menü bleibt offen
+  $('nav-q').value = ''; navSearch(); try { $('nav-q').blur(); } catch (e) { }
+  const d = $('nav-drawer'); d.classList.add('pointer-events-none'); d.setAttribute('aria-hidden', 'true'); $('btn-nav').setAttribute('aria-expanded', 'false');
+  $('nav-drawer-bg').classList.replace('opacity-100', 'opacity-0'); $('nav-drawer-panel').classList.replace('translate-x-0', '-translate-x-full');
+}
+const navStart = (id) => { if (currentView !== 'dashboard') showView('dashboard'); setTimeout(() => { const el = $(id); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 320); };
+const NAV_GO = {
+  sprache: () => openSettings('sprache'),
+  home: () => showView('dashboard'),
+  'cap-home': () => { setCapPlace('home'); showView('capture'); setCapPlace('home'); }, 'cap-bosch': () => { setCapPlace('bosch'); showView('capture'); setCapPlace('bosch'); },
+  'cap-away': () => { setCapPlace('away'); showView('capture'); setCapPlace('away'); }, costs: () => showView('costs'),
+  eff: () => navStart('sec-eff'), trends: () => navStart('sec-trends'), recs: () => { if (recRoute === 'bt') recRoute = 'all'; showView('recs'); }, akkutemp: () => { recRoute = 'bt'; showView('recs'); },
+  curve: () => { repMode = 'akku'; setBtTab('kurve', false); showView('report'); },
+  rep: () => { repMode = 'laden'; showView('report'); }, akku: () => { repMode = 'akku'; showView('report'); }, stat: () => { repMode = 'stat'; setDpTab('stat', false); showView('report'); },
+  trips: () => { histFilter = 'fahrten'; tripDays = 21; showView('history'); }, hist: () => { histFilter = 'all'; showView('history'); },
+  badges: () => showView('badges'), wrap: () => $('btn-wrap-preview').click(),
+  tax: () => { repMode = 'fahrten'; showView('report'); setTimeout(() => { const t = $('tax-card'); if (t && !t.classList.contains('hidden')) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 250); },
+  akte: () => { repMode = 'stat'; setDpTab('akte', false); showView('report'); }, checkheft: () => { repMode = 'stat'; setDpTab('checkheft', false); showView('report'); }, ausst: () => { repMode = 'stat'; setDpTab('ausst', false); showView('report'); },
+  reminders: () => showView('reminders'), kb: () => showView('kb'), providers: () => showView('providers'), tires: () => showView('tires'), wish: () => { wishTab = 'open'; showView('wish'); },
+  route: () => showView('route'), backup: () => openSettings('daten'), car: () => openSettings('fahrzeug'), settings: () => showView('settings'), account: () => openSettings('konto'),
+  'rep-kosten': () => { repMode = 'kosten'; showView('report'); }, 'rep-fahrten': () => { repMode = 'fahrten'; showView('report'); },
+  'hist-kosten': () => { histFilter = 'kosten'; showView('history'); }, 'hist-laden': () => { histFilter = 'laden'; showView('history'); },
+  'akte-pdf': () => { NAV_GO.akte(); setTimeout(() => $('btn-akte').click(), 300); }, 'ch-pdf': () => { NAV_GO.checkheft(); setTimeout(() => { const b = $('btn-ch-pdf'); if (b && !b.classList.contains('hidden')) b.scrollIntoView({ block: 'center' }); }, 300); },
+  'bak-now': () => { openSettings('daten'); setTimeout(() => $('bak-now').scrollIntoView({ block: 'center' }), 200); },
+  'set-laden': () => openSettings('laden'), 'set-rem': () => openSettings('erinnerungen'), 'set-fahrten': () => openSettings('fahrten'), 'set-listen': () => openSettings('listen'), 'set-wetter': () => openSettings('wetter'), 'set-gefahr': () => openSettings('gefahr')
+};
+/* Suche im Schnellmenü: Titel, Ort in der App und Stichwörter; alle Suchwörter müssen vorkommen (Groß/klein und Umlaute egal) */
+const NAV_IDX = [
+  ['cap-home', 'Laden Zuhause erfassen', 'Laden', 'wallbox zähler foto heim'], ['cap-bosch', 'Laden Bosch erfassen', 'Laden', 'arbeit werk lichtblick'], ['cap-away', 'Laden unterwegs erfassen', 'Laden', 'schnelllader dc ladesäule'],
+  ['route', 'Routenplaner', 'Fahrzeug › Strecken-Prognose', 'route strecke hin und zurück rundfahrt verbrauch prognose abrp höhenprofil wind wetter reichweite ankunft akku planen'], ['costs', 'Kosten erfassen', 'Kosten', 'ausgabe beleg rechnung versicherung'], ['rep', 'Bericht Laden', 'Berichte › Laden', 'monat kwh'], ['rep-kosten', 'Bericht Kosten', 'Berichte › Kosten', 'tco ausgaben'],
+  ['eff', 'Verbräuche & Effizienz', 'Start', 'verbrauch kwh/100 km ladekosten pro km strompreis'], ['trends', 'Trends', 'Start', 'laufleistung stromkosten gesamtkosten monate'], ['recs', 'Rekorde', 'Rekorde', 'verbrauch bestwert strecke tempomat messreihe reichweite langzeitverbrauch seit kauf bordcomputer akku temperatur °c notieren'],
+  ['akkutemp', 'Akku-Temperatur notieren', 'Rekorde › Akku °C', 'akku temperatur °c grad notieren batterie'], ['curve', 'DC-Ladekurve', 'Berichte › Akku', 'schnellladen ladeleistung kw ladezeit rechner sommer winter'],
+  ['akku', 'Akku', 'Berichte › Akku', 'kapazität pflege temperatur soh netto rebalancing'], ['stat', 'Statistik', 'Berichte › Daten', 'fahrzeugdaten verbrauch laufleistung'], ['badges', 'Abzeichen', 'Abzeichen', 'badges erfolge'],
+  ['akte', 'Fahrzeugakte', 'Berichte › Daten', 'verkauf historie'], ['sprache', 'Sprachsteuerung', 'Einstellungen', 'gemini sprachbefehle google tasks akku langzeit android auto'], ['ausst', 'Ausstattung', 'Berichte › Daten', 'sonderausstattung datenblatt care connect pr-code farbe felgen'], ['akte-pdf', 'Fahrzeugakte als PDF', 'Aktion', 'drucken export'], ['checkheft', 'Checkheft', 'Berichte › Daten', 'service reparatur tüv hu werkstatt'],
+  ['ch-pdf', 'Checkheft als PDF', 'Aktion', 'belege mappe drucken'], ['rep-fahrten', 'Fahrten-Bericht', 'Berichte › Fahrten', 'fahrtenbuch arbeitsweg'], ['tax', 'Steuer · Arbeitsweg', 'Berichte › Fahrten', 'pendlerpauschale entfernungspauschale werbungskosten'],
+  ['hist', 'Historie', 'Historie', 'verlauf bearbeiten datenprüfung'], ['hist-laden', 'Ladungen', 'Historie › Laden', 'verlauf'], ['hist-kosten', 'Kosten-Verlauf', 'Historie › Kosten', 'etiketten kategorien filter'], ['trips', 'Fahrten', 'Historie › Fahrten', 'fahrtenbuch'],
+  ['wrap', 'Rückblick', 'Start', 'jahr wrapped'], ['reminders', 'Erinnerungen', 'Erinnerungen', 'wartung termine fällig'], ['kb', 'Wissen', 'Wissen', 'notizen links tipps'], ['wish', 'Wunschliste', 'Wunschliste', 'zubehör kaufen wunsch matten kofferraum links shop'], ['tires', 'Reifen', 'Reifen', 'profiltiefe profil reifenprofil mm sommer winter allwetter messen'], ['providers', 'Ladekarten', 'Ladeanbieter', 'anbieter tarife preise'],
+  ['bak-now', 'Jetzt in Google Drive sichern', 'Einstellungen › Sicherung & Belege', 'backup drive'], ['backup', 'Sicherung & Belege', 'Einstellungen', 'export import drive'],
+  ['car', 'Fahrzeug & Kauf', 'Einstellungen', 'kennzeichen fin kaufpreis kauftag'], ['set-laden', 'Laden & Akku', 'Einstellungen', 'strompreis kapazität wltp referenz temperatur'], ['set-rem', 'Nächste HU / Service', 'Einstellungen › Erinnerungen', 'vorwarnung fälligkeit tüv'],
+  ['set-wetter', 'Eis-Warnung (Scheibe vereist)', 'Einstellungen › Wetter', 'eis frost scheibe vereist kratzen raureif vorklimatisieren abfahrt stellplatz carport garage benachrichtigung push nachricht'], ['set-fahrten', 'Fahrtenbuch-Einstellungen', 'Einstellungen', 'orte etiketten regeln import benziner vergleich sprit spritpreis ersparnis gespart co2 co₂ ökostrom strommix klima'], ['set-listen', 'Anbieter & Kategorien', 'Einstellungen', 'etiketten liste'], ['set-wetter', 'Wetter', 'Einstellungen', 'standort frost'],
+  ['account', 'Konto & Cloud', 'Einstellungen', 'anmelden google škoda api'], ['set-gefahr', 'Alle Daten löschen', 'Einstellungen', 'zurücksetzen reset']];
+const navNorm = (t) => String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+function navSearch() {
+  const q = navNorm($('nav-q').value.trim()), words = q.split(/\s+/).filter(Boolean), res = $('nav-results');
+  $('nav-tiles').classList.toggle('hidden', !!words.length); res.classList.toggle('hidden', !words.length); if (!words.length) { res.innerHTML = ''; return; }
+  const hits = NAV_IDX.filter(x => { const h = navNorm(x[1] + ' ' + x[2] + ' ' + x[3]); return words.every(w => h.includes(w)); });
+  res.innerHTML = hits.length ? hits.map(x => '<button type="button" data-nav="' + x[0] + '" class="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left active:bg-slate-100 dark:active:bg-slate-800"><span class="min-w-0 flex-1"><span class="block truncate text-[15px] font-semibold">' + esc(x[1]) + '</span><span class="block truncate text-xs text-slate-500 dark:text-slate-400">' + esc(x[2]) + '</span></span><svg class="h-4 w-4 shrink-0 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>').join('')
+    : '<p class="px-3 py-4 text-sm text-slate-500 dark:text-slate-400 text-left">Nichts gefunden.</p>';
+}
+$('nav-q').addEventListener('input', navSearch);
+$('nav-q').addEventListener('keydown', (e) => { if (e.key === 'Enter') { const b = $('nav-results').querySelector('[data-nav]'); if (b) b.click(); } });
+$('btn-nav').addEventListener('click', openNavDrawer);
+$('nav-drawer-bg').addEventListener('click', closeNavDrawer);
+$('nav-drawer').addEventListener('click', (e) => { const b = e.target.closest('[data-nav]'); if (!b) return; closeNavDrawer(); const f = NAV_GO[b.dataset.nav]; if (f) f(); });
+/* PC (≥ 1280 px): Erinnerungen-Seite fest in die rechte Spalte, Schnellmenü dauerhaft offen; zurück, sobald das Fenster schmaler wird */
+const NAV_VIEW = { home: 'dashboard', 'cap-home': 'capture', 'cap-bosch': 'capture', 'cap-away': 'capture', costs: 'costs', rep: 'report', hist: 'history', badges: 'badges', recs: 'recs', akkutemp: 'recs', kb: 'kb', providers: 'providers', tires: 'tires', wish: 'wish', route: 'route', settings: 'settings' };
+function deskNavMark(name) { $('nav-home').classList.toggle('nav-on', name === 'dashboard'); document.querySelectorAll('#nav-tiles [data-nav]').forEach(b => b.classList.toggle('nav-on', NAV_VIEW[b.dataset.nav] === name && name !== 'capture')); }
+function applyDesk() {
+  const vr = $('view-reminders'), aside = $('desk-rem');
+  if (isDesk()) {
+    if (vr.parentElement !== aside) aside.appendChild(vr);
+    vr.classList.remove('hidden'); try { renderReminders(); } catch (e) { }
+    try { renderWxo(); } catch (e) { }
+    try { renderVehCard(); } catch (e) { }
+    if (currentView === 'reminders') showView('dashboard');
+    try { openNavDrawer(); } catch (e) { }
+  } else if (vr.parentElement === aside) {
+    $('view-history').before(vr); vr.classList.toggle('hidden', currentView !== 'reminders');
+    try { closeNavDrawer(); } catch (e) { }
+    try { renderWxo(); } catch (e) { }
+    try { renderVehCard(); } catch (e) { }
+  }
+}
+try { matchMedia('(min-width: 1280px)').addEventListener('change', applyDesk); } catch (e) { }
+applyDesk();
+try { renderVehCard(); } catch (e) { }
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && navOpen()) closeNavDrawer(); });
+(() => { let sx = 0, sy = 0, on = false;     // Start: vom linken Rand nach rechts wischen öffnet, nach links schließt
+  document.addEventListener('touchstart', (e) => { const t = e.touches[0], open = navOpen(); on = e.touches.length === 1 && !lbOpen && (open || (currentView === 'dashboard' && t.clientX < 40)); sx = t.clientX; sy = t.clientY; }, { passive: true });
+  document.addEventListener('touchend', (e) => { if (!on) return; on = false; const t = e.changedTouches[0], dx = t.clientX - sx, dy = t.clientY - sy; if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy) * 1.5) return; const open = navOpen(); if (dx > 0 && !open) openNavDrawer(); else if (dx < 0 && open) closeNavDrawer(); }, { passive: true });
+})();
+setSettingsSec(setSec);
+/** Einstellungen direkt in einem Bereich öffnen (ohne Seitenleiste). */
+function openSettings(sec) { window.setNoDrawer = true; if (currentView !== 'settings') showView('settings'); else window.setNoDrawer = false; setSettingsSec(sec); }
+segSwipe($('view-report'), $('rep-mode'), '#rep-place,#dp-panes,#dp-seg,#bat-panes,#bat-seg');   // Berichte: Laden | Kosten | Akku | Datenpool | Fahrten (ganze Seite; im Datenpool wischen die Unter-Tabs)
+/* ---- Berichte → Akku: Unter-Tabs Pflege | Mehrkonsum | Alterung | Kurve ---- */
+const BT_TABS = ['pflege', 'mehr', 'alter', 'kurve'];
+let btTab = (() => { try { const t = localStorage.getItem('enyaq.batTab'); return BT_TABS.includes(t) ? t : 'pflege'; } catch (e) { return 'pflege'; } })();
+function setBtTab(t, anim = true) {
+  if (!BT_TABS.includes(t)) t = 'pflege';
+  const dir = BT_TABS.indexOf(t) - BT_TABS.indexOf(btTab); btTab = t; try { localStorage.setItem('enyaq.batTab', t); } catch (e) { }
+  segPaintKey('.bt-btn', 'bt', t);
+  BT_TABS.forEach(k => { const el = $('bt-' + k), on = k === t; el.classList.toggle('hidden', !on); el.classList.remove('dp-inL', 'dp-inR'); if (on && anim && dir) { void el.offsetWidth; el.classList.add(dir > 0 ? 'dp-inL' : 'dp-inR'); } });
+  if (t === 'alter') { try { const ch = Chart.getChart($('bat-chart')); if (ch) ch.resize(); } catch (e) { } }
+}
+document.querySelectorAll('.bt-btn').forEach(b => b.addEventListener('click', () => setBtTab(b.dataset.bt)));
+setBtTab(btTab, false);
+segSwipe($('bat-panes'), $('bat-seg'));
+segSwipe($('bat-seg'), $('bat-seg'));
+
+/* ---- Daten → Ausstattung: Datenblatt aus der Bestellung (Anlage N1-10), Sonderausstattung nach Kategorien, Care-Connect-Ablauf ---- */
+const AUSST = {
+  model: 'Škoda Enyaq 50 iV Loft', extras: 'Climatronic · Kessy · SHZ · PDC · ACC',
+  tiles: [['Modell', 'Enyaq 50 iV Loft', 'Design Selection Loft'], ['Farbe', 'Graphite-Grau', 'Metallic'], ['Räder', '19" Regulus Aero', '235/55 R19 rundum'], ['Innen', 'Stoff/Kunstleder', 'Dunkelgrau (Loft)']],
+  pdf: [['Modell', 'Škoda Enyaq 50 iV Loft (Climatronic, Kessy, SHZ, PDC, ACC)'], ['Lackierung', 'Graphite-Grau Metallic'], ['Innenausstattung', 'Stoff/Kunstleder-Kombination in Dunkelgrau (Loft)'], ['Räder', '19" Leichtmetallfelgen Regulus Aero Anthrazit-glanzgedreht, Reifen 235/55 R19']],
+  tech: [
+    ['Antrieb', '⚡', [['Leistung', '109 kW (148 PS)'], ['Drehmoment (Hinterachse, Peak)', '220 Nm'], ['Antrieb', 'Heckantrieb, 1-Gang (EV)'], ['Motor', 'Hinterachse APP310'], ['Motorart', '1 × Wechselstrom-Elektromaschine'], ['Motorbauart', '1 × permanentmagneterregte Synchronmaschine']]],
+    ['Fahrleistung & Akku', '🔋', [['Beschleunigung 0–100 km/h', '11,3 s'], ['Zellchemie', 'NMC']]],
+    ['Karosserie & Gewicht', '📐', [['cw-Wert', '0,272'], ['Leergewicht mit Fahrer', '1.941 kg']]],
+    ['Preis', '🏷️', [['Listenpreis', '46.000 €']]],
+  ],
+  techSum: '109 kW · 220 Nm · 0–100 in 11,3 s',
+  groups: [
+    ['Räder & Reifen', '🛞', [['C6H', '19" Leichtmetallfelge Regulus Aero Anthrazit-glanzgedreht'], ['J27', 'Reifen 235/55 R19']]],
+    ['Laden', '🔌', [['PUA', 'Mobile Ladestation „iV Universal Charger“ mit austauschbaren Anschlussadaptern']]],
+    ['Komfort & Sitze', '💺', [['Q2J', 'Komfortsitze vorn'], ['N2U', 'Sitzbezüge in Stoff/Kunstleder'], ['3L3', 'Höheneinstellbare Vordersitze'], ['7P4', 'Manuell einstellbare Lendenwirbelstütze in den Vordersitzen'], ['3NU', 'Rücksitzbank ungeteilt, Lehne geteilt umlegbar mit Mittelarmlehne'], ['', 'Sitzheizung'], ['', 'Standheizung'], ['', 'Klimaanlage'], ['', 'Mittelarmlehne'], ['', 'Fensterheber elektrisch'], ['', 'Teillederausstattung']]],
+    ['Licht & Sicht', '💡', [['QQ8', 'Ambientebeleuchtung'], ['8N6', 'Regensensor und Fahrlichtassistent (Easy Light Assist)'], ['9C3', 'Tagesfahrlichtschaltung und Coming/Leaving Home'], ['6T2', 'Fußraumbeleuchtung im Innenraum'], ['9E3', 'Gepäckraumbeleuchtung'], ['1J2', 'Projektionsleuchte (Spiegel)'], ['6XW', 'Außenspiegel elektrisch einstell-, anklapp- und beheizbar, automatisch abblendend (Fahrerseite)'], ['5JB', 'Außenspiegel Fahrer- und Beifahrerseite konvex'], ['4L6', 'Automatisch abblendbarer Innenspiegel'], ['4GS', 'Frontscheibe in Wärmeschutzglas'], ['', 'Abgedunkelte Scheiben']]],
+    ['Assistenz & Sicherheit', '🛡️', [['KA2', 'Rückfahrkamera'], ['7X2', 'Parksensoren vorn und hinten'], ['', 'Geschwindigkeitsregelanlage'], ['9TE', 'Zusätzliche Rückstrahler (Türbereich)'], ['', 'Fahrerairbag'], ['', 'ESP (Elektronisches Stabilitätsprogramm)'], ['', 'ASR (Antriebsschlupfregelung)'], ['', 'ABS (Antiblockiersystem)'], ['', 'Elektronische Wegfahrsperre'], ['', 'Servolenkung'], ['', 'Start/Stopp-Automatik']]],
+    ['Multimedia & Connect', '📡', [['8AV', 'Infotainmentdisplay 13"'], ['7UT', 'Navigationssystem'], ['8RM', '8 Lautsprecher'], ['YON', 'Care Connect inkl. iV Remote Services Basic und Infotainment Online (3 Jahre)'], ['', 'Bordcomputer']]],
+    ['Innenraum & Praktisch', '🧰', [['WAN', 'Clever'], ['3S2', 'Dachreling in Schwarz'], ['3N3', 'Ablagekästen im Kofferraum'], ['0TE', 'Fußmatten'], ['QJ1', 'Chromapplikationen im Interieur'], ['5MB', 'Dekorleisten „Alu brushed“']]],
+    ['Pakete', '📦', [['A8C', 'Design Selection Loft'], ['WQL', 'Ausstattungspaket für Enyaq iV 50 (Wiederanlauf)'], ['YPA', 'Steuerung Pakete']]],
+  ],
+};
+const AU_TOTAL = AUSST.groups.reduce((a, g) => a + g[2].length, 0), CC_TITLE = 'Care Connect verlängern';
+let auOpen = new Set(), auAll = false;
+const auNorm = (t) => String(t).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+function renderAusst() {
+  $('au-sub').textContent = 'Loft · ' + AUSST.extras;
+  $('au-tiles').innerHTML = AUSST.tiles.map(([k, v, d]) => `<div class="min-w-0 rounded-2xl bg-slate-100 dark:bg-slate-800/70 px-3 py-2.5"><p class="text-[11px] text-slate-500 dark:text-slate-400">${k}</p><p class="mt-0.5 truncate text-[14px] font-bold">${esc(v)}</p><p class="truncate text-[11px] text-slate-500 dark:text-slate-400">${esc(d)}</p></div>`).join('');
+  $('au-tech-sum').textContent = AUSST.techSum;
+  $('au-tech').innerHTML = AUSST.tech.map(([name, ico, rows]) => `<div class="mt-3"><p class="mb-1 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500 dark:text-slate-400"><span class="text-sm">${ico}</span>${esc(name)}</p>`
+    + rows.map(([k, v]) => `<div class="flex items-baseline justify-between gap-3 border-t border-slate-200 dark:border-slate-800 py-1.5"><span class="min-w-0 text-[13px] text-slate-500 dark:text-slate-400">${esc(k)}</span><span class="text-right text-[13px] font-semibold">${esc(v)}</span></div>`).join('') + '</div>').join('');
+  renderCcBanner(); renderAuList();
+}
+function renderAuList() {
+  const q = auNorm($('au-q').value.trim()), hit = (it) => !q || auNorm(it[0] + ' ' + it[1]).includes(q);
+  let n = 0;
+  const html = AUSST.groups.map(([name, ico, items]) => {
+    const its = items.filter(hit); if (!its.length) return ''; n += its.length;
+    const open = q || auAll || auOpen.has(name);
+    return `<div class="border-t border-slate-200 dark:border-slate-800"><button type="button" data-aug="${esc(name)}" class="flex w-full items-center gap-2.5 py-2.5 text-left"><span class="w-6 text-center text-base">${ico}</span><span class="min-w-0 flex-1 text-[14px] font-semibold">${esc(name)}</span><span class="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[11px] text-slate-500 dark:text-slate-400">${its.length}</span><span class="w-4 text-center text-slate-400 transition ${open ? 'rotate-90' : ''}">›</span></button>`
+      + (open ? '<div class="pb-2">' + its.map(([c, t]) => `<div class="flex items-start gap-2.5 py-1.5 pl-1"><span class="mt-px flex h-[22px] w-[44px] shrink-0 items-center justify-center rounded-md ${c ? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300' : 'border border-dashed border-slate-300 dark:border-slate-700 text-slate-400'} font-mono text-[10.5px] font-semibold">${c || 'Serie'}</span><span class="min-w-0 text-[13px] leading-snug">${esc(t)}</span></div>`).join('') + '</div>' : '') + '</div>';
+  }).join('');
+  $('au-list').innerHTML = html || '<p class="border-t border-slate-200 dark:border-slate-800 py-4 text-center text-sm text-slate-500 dark:text-slate-400">Nichts gefunden.</p>';
+  $('au-count').textContent = q ? n + ' von ' + AU_TOTAL + ' Positionen' : AU_TOTAL + ' Positionen';
+  $('au-all').classList.toggle('hidden', !!q);
+  $('au-all').textContent = auAll ? 'Alle zuklappen' : 'Alle ' + AU_TOTAL + ' anzeigen ›';
+}
+const ccRem = () => getReminders().find(r => r.title === CC_TITLE && !r.doneAt);
+function renderCcBanner() {
+  const end = getSettings().ccEnd, ok = /^\d{4}-\d{2}-\d{2}$/.test(end || '');
+  let txt;
+  if (!ok) txt = 'Care Connect inkl. Remote Services: <b>3 Jahre</b>. Ablaufdatum eintragen → Erinnerung';
+  else {
+    const d = daysBetween(parseYMD(end), dayStart()), m = Math.round(d / 30.44);
+    txt = d < 0 ? 'Care Connect ist am <b>' + fmtYMD(end) + '</b> abgelaufen.' : 'Care Connect läuft bis <b>' + fmtYMD(end) + '</b> (' + (d > 60 ? 'noch ' + m + ' Monate' : 'noch ' + d + (d === 1 ? ' Tag' : ' Tage')) + ').' + (ccRem() ? ' Erinnerung aktiv.' : '');
+  }
+  $('au-cc').innerHTML = `<span class="text-lg">📡</span><span class="min-w-0 flex-1">${txt}</span><span class="font-semibold text-sky-600 dark:text-sky-300">›</span>`;
+}
+function openCcSheet() {
+  const st = getSettings(), def = st.ccEnd || ymd(addMonths(parseYMD(purchaseDay()), 36)), btn = 'h-12 rounded-2xl text-sm font-semibold active:scale-[0.98] transition';
+  $('au-sheet-box').innerHTML = `<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div><p class="text-lg font-bold">Care Connect</p>
+    <p class="text-sm text-left text-slate-600 dark:text-slate-300">Inkl. iV Remote Services Basic und Infotainment Online, 3 Jahre ab Auslieferung. Das genaue Ablaufdatum steht in der MyŠkoda-App unter Dienste.</p>
+    <div><label for="cc-end" class="text-xs text-slate-500 dark:text-slate-400">Läuft ab am</label><input id="cc-end" type="date" value="${def}" class="${inCls}"></div>
+    <label class="flex items-center gap-2.5 text-sm"><input id="cc-rem" type="checkbox" class="h-5 w-5 accent-emerald-600" checked> Erinnerung 1 Monat vorher</label>
+    <p id="cc-msg" class="text-sm text-red-600 dark:text-red-400 empty:hidden"></p>
+    <div class="grid grid-cols-2 gap-2.5"><button type="button" data-cc="${st.ccEnd ? 'del' : 'close'}" class="${btn} border border-slate-300 dark:border-slate-700 ${st.ccEnd ? 'text-red-600 dark:text-red-400' : ''}">${st.ccEnd ? 'Entfernen' : 'Abbrechen'}</button><button type="button" data-cc="save" class="${btn} bg-emerald-600 text-white">Speichern</button></div>`;
+  $('au-sheet').classList.remove('hidden');
+}
+function ccSetEnd(end, withRem) {
+  const st = load(KEY_SETTINGS, {}); if (end) st.ccEnd = end; else delete st.ccEnd;
+  save(KEY_SETTINGS, st); try { pushPrefs(); } catch (e) { }
+  let rems = getReminders().filter(r => !(r.title === CC_TITLE && !r.doneAt));      // alte offene Care-Connect-Erinnerung ersetzen
+  if (end && withRem) {
+    const due = addMonths(parseYMD(end), -1);
+    rems = rems.concat(cleanRem({ id: Date.now(), title: CC_TITLE, category: 'Sonstiges', note: 'Läuft am ' + fmtYMD(end) + ' ab – rechtzeitig in der MyŠkoda-App verlängern.', dueDate: ymd(due < dayStart() ? dayStart() : due), startDate: purchaseDay() < ymd(due) ? purchaseDay() : todayYMD() }));
+  }
+  commitReminders(rems); try { renderReminders(); } catch (e) { }
+  renderCcBanner();
+}
+$('au-cc').addEventListener('click', openCcSheet);
+$('au-tech-btn').addEventListener('click', () => { const open = $('au-tech').classList.toggle('hidden') === false; $('au-tech-chev').classList.toggle('rotate-90', open); });
+$('au-sheet').addEventListener('click', (e) => {
+  if (e.target === $('au-sheet')) { $('au-sheet').classList.add('hidden'); return; }
+  const b = e.target.closest('[data-cc]'); if (!b) return; const act = b.dataset.cc;
+  if (act === 'close') { $('au-sheet').classList.add('hidden'); return; }
+  if (act === 'del') { if (!confirm('Ablaufdatum und Erinnerung entfernen?')) return; ccSetEnd(null); $('au-sheet').classList.add('hidden'); return; }
+  const v = $('cc-end').value; if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || isNaN(Date.parse(v))) { $('cc-msg').textContent = 'Bitte ein gültiges Datum wählen.'; return; }
+  ccSetEnd(v, $('cc-rem').checked); $('au-sheet').classList.add('hidden');
+});
+$('au-list').addEventListener('click', (e) => { const g = e.target.closest('[data-aug]'); if (!g || $('au-q').value.trim()) return; const k = g.dataset.aug; if (auAll) { auAll = false; auOpen = new Set(AUSST.groups.map(x => x[0])); } auOpen.has(k) ? auOpen.delete(k) : auOpen.add(k); renderAuList(); });
+$('au-all').addEventListener('click', () => { auAll = !auAll; auOpen = new Set(); renderAuList(); });
+$('au-q').addEventListener('input', renderAuList);
+
+/* ---- Daten (Berichte, früher „Datenpool“): Unter-Tabs Statistik | Fahrzeugakte | Checkheft, per Antippen oder Wischen ---- */
+let dpTab = 'stat';
+const DP_TABS = ['stat', 'akte', 'ausst', 'checkheft'];
+function setDpTab(t, anim = true) {
+  if (!DP_TABS.includes(t)) t = 'stat';
+  const dir = DP_TABS.indexOf(t) - DP_TABS.indexOf(dpTab); dpTab = t;
+  segPaintKey('.dp-btn', 'dp', t);
+  DP_TABS.forEach(k => { const el = $('dp-' + k), on = k === t; el.classList.toggle('hidden', !on); el.classList.remove('dp-inL', 'dp-inR'); if (on && anim && dir) { void el.offsetWidth; el.classList.add(dir > 0 ? 'dp-inL' : 'dp-inR'); } });
+  if (t === 'checkheft') { try { renderCheckheft(); } catch (e) { } }
+  if (t === 'ausst') { try { renderAusst(); } catch (e) { console.error(e); } }
+}
+document.querySelectorAll('.dp-btn').forEach(b => b.addEventListener('click', () => setDpTab(b.dataset.dp)));
+segSwipe($('dp-panes'), $('dp-seg'));                                     // im Datenpool wechselt Wischen die Unter-Tabs
+segSwipe($('dp-seg'), $('dp-seg'));
+setDpTab('stat', false);
+
+segSwipe($('rep-place'), $('rep-place'));                                   // Berichte → Laden: Ort direkt auf der Tab-Leiste wischen
+segSwipe($('dash-place'), $('dash-place'));                                 // Start: Ort auf der Tab-Leiste (die Seite selbst hat das Bilder-Karussell)
+segSwipe($('range-switch').parentElement, $('range-switch'));               // Start: Diagramm Woche | Monat | Jahr (ganze Karte)
+segSwipe(document.querySelector('.stat-btn').closest('.rounded-3xl'), document.querySelector('.stat-btn').parentElement);   // Start: Ø Ladungen
+
+initStatImg();                                           // Statistik-Bild laden (asynchron)
+/* Direktlinks (z. B. per NFC-Tag am Stromzähler): …/?go=laden öffnet „Laden“ mit Zuhause.
+   Weitere Ziele: laden-bosch, laden-unterwegs, kosten, historie, fahrten, berichte, einstellungen. Der Parameter wird danach aus der Adresse entfernt,
+   damit ein Neuladen wieder auf Start beginnt. */
+function openDeepLink() {
+  const q = new URLSearchParams(location.search), go = (q.get('go') || location.hash.replace(/^#/, '') || '').toLowerCase();
+  const T = { 'laden': ['capture', () => setCapPlace('home')], 'laden-zuhause': ['capture', () => setCapPlace('home')], 'laden-bosch': ['capture', () => setCapPlace('bosch')],
+    'laden-unterwegs': ['capture', () => setCapPlace('away')], 'kosten': ['costs'], 'historie': ['history', () => { histFilter = 'all'; }], 'fahrten': ['history', () => { histFilter = 'fahrten'; }],
+    'berichte': ['report'], 'einstellungen': ['settings'] };
+  const t = T[go];
+  if (t) { if (t[1]) t[1](); showView(t[0]); if (t[1]) t[1](); if (t[0] === 'history') applyHistFilter(); } else showView('dashboard');   // Ziel vor und nach dem Seitenwechsel setzen (showView setzt teils Standardwerte)
+  if (go) history.replaceState(null, '', location.pathname);
+  return !!t;
+}
+openDeepLink();
+
+// ───── src/14-labor-sprache-tasks.js ─────
+/* =====================================================================
+   Labor: DC-Ladekurven (Berichte → Akku) und Verbrauchsrekorde (eigene Seite „Rekorde“).
+   Speicher enyaq.lab = { curves: [{ id, name, date, s0, s1, kwh, min, maxKw, avgKw?, hi100?, tStart?, tEnd?, tOut?, loss?, pts?: { '10': kW, … }, files? }],
+                          recs: [{ id, route, date, km?, k100, tOut?, tBat?, v?, cond?: [..], note? }], speeds: [{ id, season, klima, note?, tOut?, rows: [{ v, k }] }] }
+   Synchronisiert über das Einstellungs-Dokument (prefs.lab) und in der Sicherung enthalten. Ohne eigene Daten gilt LAB_DEF (Sommerkurve 21.08.2026, Tempomat-Messreihe).
+   ===================================================================== */
+const KEY_LAB = 'enyaq.lab';
+const LAB_DEF = {
+  curves: [{ id: 'c1', name: 'Sommer', date: '2026-08-21', s0: 5, s1: 80, kwh: 37.17, min: 33, maxKw: 106.2, avgKw: 66.7, hi100: 25, tStart: 23, tEnd: 42, tOut: 20, loss: 5,
+    pts: { 10: 101, 20: 102, 30: 94, 40: 83, 50: 74, 60: 66, 70: 58, 80: 55, 81: 40, 90: 30, 95: 27, 100: 22 }, tail: [{ a: 80, b: 90, min: 10 }, { a: 90, b: 100, min: 13 }] }],
+  recs: [], speeds: [{ id: 's1', season: 'Sommer', klima: 'an', note: 'eben', rows: [{ v: 90, k: 13 }, { v: 100, k: 15 }, { v: 110, k: 17 }, { v: 120, k: 18.5 }, { v: 130, k: 21 }] }] };
+const cvMig = (c) => c && c.id === 'c1' && c.date === '2026-08-21' && c.s1 === 80 && !c.tail ? { ...c, tail: LAB_DEF.curves[0].tail, pts: { ...LAB_DEF.curves[0].pts, ...(c.pts || {}) } } : c;   // 80→100 % nachgetragen (10 + 13 min)
+function getLab() { const o = load(KEY_LAB, null); return { curves: o && Array.isArray(o.curves) ? o.curves.map(cvMig) : LAB_DEF.curves.slice(), recs: o && Array.isArray(o.recs) ? o.recs : [], routes: o && o.routes && typeof o.routes === 'object' && !Array.isArray(o.routes) ? o.routes : {}, lt: o && Array.isArray(o.lt) ? o.lt : [], bt: o && Array.isArray(o.bt) ? o.bt : [], tires: o && Array.isArray(o.tires) ? o.tires : [], wish: o && Array.isArray(o.wish) ? o.wish : [], fc: o && Array.isArray(o.fc) ? o.fc : [], odo: o && Array.isArray(o.odo) ? o.odo : [], speeds: o && Array.isArray(o.speeds) ? o.speeds : o && o.speed && Array.isArray(o.speed.rows) ? [{ id: 's1', season: 'Sommer', klima: 'an', note: 'eben', rows: o.speed.rows }] : JSON.parse(JSON.stringify(LAB_DEF.speeds)) }; }
+const recKey = (r) => String(r || '').trim().toLowerCase();
+/* Zusammenführen statt Überschreiben: jedes Element (Kurve, Rekord, Messreihe, Strecke) trägt u = letzte Änderung (ms),
+   Löschungen stehen in del { id: ms }. So gewinnt beim Abgleich zwischen Geräten/Cloud immer der neueste Stand je Element. */
+const LAB_LISTS = ['curves', 'recs', 'speeds', 'lt', 'bt', 'tires', 'wish', 'fc', 'odo'];
+function labStamp(o) {
+  const prev = load(KEY_LAB, null) || {}, now = Date.now(), del = { ...(prev.del || {}) };
+  LAB_LISTS.forEach(k => { const pm = new Map((prev[k] || []).map(x => [String(x.id), x])), ids = new Set();
+    o[k] = (o[k] || []).map(x => { ids.add(String(x.id)); const old = pm.get(String(x.id)), a = { ...x }; delete a.u; const b = old ? { ...old } : null; if (b) delete b.u;
+      return !old || JSON.stringify(a) !== JSON.stringify(b) ? { ...a, u: now } : { ...a, u: old.u || 0 }; });
+    pm.forEach((x, id) => { if (!ids.has(id)) del[id] = now; }); });
+  const pr = prev.routes || {}, nr = {}; Object.entries(o.routes || {}).forEach(([k, v]) => { const a = { ...v }; delete a.u; const b = pr[k] ? { ...pr[k] } : null; if (b) delete b.u; nr[k] = !b || JSON.stringify(a) !== JSON.stringify(b) ? { ...a, u: now } : { ...a, u: pr[k].u || 0 }; });
+  Object.keys(pr).forEach(k => { if (!nr[k]) del['r_' + k] = now; });
+  const cut = now - 400 * 864e5; Object.keys(del).forEach(k => { if (del[k] < cut) delete del[k]; });
+  return { ...o, routes: nr, del };
+}
+function labMerge(a, b) {
+  if (!a) return b; if (!b) return a;
+  const del = { ...(a.del || {}) }; Object.entries(b.del || {}).forEach(([k, t]) => { if (!(del[k] >= t)) del[k] = t; });
+  const out = { del };
+  LAB_LISTS.forEach(k => { const m = new Map(); [a[k] || [], b[k] || []].forEach(l => l.forEach(x => { const id = String(x.id), c = m.get(id); if (!c || (x.u || 0) > (c.u || 0)) m.set(id, x); }));
+    out[k] = [...m.values()].filter(x => !(del[String(x.id)] >= (x.u || 0))); });
+  const ra = a.routes || {}, rb = b.routes || {}; out.routes = {};
+  new Set(Object.keys(ra).concat(Object.keys(rb))).forEach(k => { const x = ra[k], y = rb[k], w = !x ? y : !y ? x : (y.u || 0) > (x.u || 0) ? y : x; if (!(del['r_' + k] >= (w.u || 0))) out.routes[k] = w; });
+  if (!a.speeds && !b.speeds && (a.speed || b.speed)) out.speed = a.speed || b.speed;
+  return out;
+}
+const labCanon = (o) => JSON.stringify(o, (k, v) => v && typeof v === 'object' && !Array.isArray(v) ? Object.keys(v).sort().reduce((r, x) => (r[x] = v[x], r), {}) : v);
+function setLab(o) { save(KEY_LAB, JSON.parse(JSON.stringify(labStamp(o)))); try { pushPrefs(); } catch (e) { } try { pushRoutes(); } catch (e) { } try { renderCurve(); } catch (e) { } if (currentView === 'recs') renderRecs(); if (currentView === 'tires') renderTires(); if (currentView === 'wish') renderWish(); }
+const labId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const deDec = (v) => { const t = String(v == null ? '' : v).trim().replace('−', '-').replace(',', '.'); return t === '' ? undefined : Number(t); };
+const labD = (iso) => { const d = new Date(iso + 'T12:00:00'); return isNaN(d) ? '' : d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }); };
+const sheetBox = 'w-full max-w-md max-h-[92vh] overflow-y-auto rounded-t-[28px] bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-4 pt-2.5 pb-5 space-y-3';
+const inCls = 'mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 text-[15px] focus:outline-none focus:ring-2 focus:ring-emerald-500';
+const fld = (id, label, val, ph, mode = 'decimal') => `<div class="min-w-0"><label for="${id}" class="text-xs text-slate-500 dark:text-slate-400">${label}</label><input id="${id}" type="text" inputmode="${mode}" autocomplete="off" value="${val == null ? '' : esc(String(val).replace('.', ','))}" placeholder="${ph || ''}" class="${inCls}"></div>`;
+
+/* ---- DC-Ladekurve ---- */
+let cvSel = null;
+function cvPow(c, p) {                                                          // kW bei Ladestand p (lineare Interpolation der Stützpunkte; ohne Punkte: Ø-Leistung)
+  const P = Object.entries(c.pts || {}).map(([k, v]) => [Number(k), Number(v)]).filter(x => x[1] > 0).sort((a, b) => a[0] - b[0]);
+  const sg = p > c.s1 && (c.tail || []).find(t => p >= t.a && p <= t.b && t.min > 0);
+  if (sg && !P.some(x => x[0] > c.s1)) return c.kwh / (c.s1 - c.s0) * (sg.b - sg.a) / (sg.min / 60);
+  if (!P.length) return c.avgKw || (c.kwh && c.min ? c.kwh / (c.min / 60) : 50);
+  if (p <= P[0][0]) return P[0][1]; if (p >= P[P.length - 1][0]) return P[P.length - 1][1];
+  for (let i = 0; i < P.length - 1; i++) if (p <= P[i + 1][0]) return P[i][1] + (P[i + 1][1] - P[i][1]) * (p - P[i][0]) / (P[i + 1][0] - P[i][0]);
+  return P[P.length - 1][1];
+}
+function cvMinutes(c, a, b) {                                                   // Ladezeit von a bis b %, auf die gemessene Dauer der Kurve geeicht
+  const per = c.kwh / (c.s1 - c.s0), raw = (x, y) => { let m = 0; for (let p = x; p < y; p += 0.5) m += per * 0.5 / cvPow(c, p + 0.25) * 60; return m; };
+  const k = c.min > 0 ? c.min / raw(c.s0, c.s1) : 1; let m = 0;
+  for (let p = a; p < b; p += 0.5) {                                            // über das Ende hinaus: je Abschnitt auf die gemessene Zeit geeicht
+    const sg = p >= c.s1 && (c.tail || []).find(t => p >= t.a && p < t.b && t.min > 0);
+    m += sg ? sg.min * raw(p, p + 0.5) / raw(sg.a, sg.b) : raw(p, p + 0.5) * k;
+  }
+  return m;
+}
+/** Software-Stand einer Ladekurve (letztes Update vor ihrem Datum) als kleiner Zusatz am Chip, z. B. „· 3.7.1“ – vor/nach einem Update vergleichbar */
+function cvUpTag(c) { try { const l = upList(); if (l.length < 2 || !c.date) return ''; const u = l.filter(x => x.inst <= c.date).pop(); return u ? ` <span class="opacity-70">· 📡 ${esc(u.ver || '')}</span>` : ''; } catch (e) { return ''; } }
+function renderCurve() {
+  const el = $('cv-body'); if (!el) return;
+  const lab = getLab(), cs = lab.curves.slice().sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  if (!cs.length) { el.innerHTML = '<p class="mt-2 text-sm text-slate-600 dark:text-slate-300 text-left">Noch keine Ladekurve erfasst. Nach der nächsten Schnellladung die Werte der Säule eintragen.</p><button type="button" data-cvact="new" class="mt-3 w-full py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-semibold">+ Kurve hinzufügen</button>'; $('cv-hdate').textContent = ''; return; }
+  if (!cs.some(c => c.id === cvSel)) cvSel = cs[cs.length - 1].id;
+  const c = cs.find(x => x.id === cvSel), others = cs.filter(x => x !== c);
+  const COL = ['#f59e0b', '#38bdf8', '#a78bfa', '#34d399'], col = (x) => COL[cs.indexOf(x) % COL.length];
+  const chips = `<div class="mt-2 flex flex-wrap gap-1.5">${cs.map(x => `<button type="button" data-cv="${esc(x.id)}" class="inline-flex h-[30px] items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold ${x === c ? '' : 'border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300'}"${x === c ? ` style="background:${col(x)}26;color:${col(x)}"` : ''}><span class="h-[3px] w-2.5 rounded" style="background:${col(x)}"></span>${esc(x.name || 'Kurve')} · ${String(x.date || '').slice(5, 7)}/${String(x.date || '').slice(0, 4)}${cvUpTag(x)}</button>`).join('')}<button type="button" data-cvact="new" class="inline-flex h-[30px] items-center rounded-full border border-dashed border-slate-400 dark:border-slate-600 px-2.5 text-xs font-semibold text-slate-500 dark:text-slate-400">+ Kurve hinzufügen</button></div>`;
+  const W = 320, H = 170, L = 34, R = 8, T = 14, B = 26, X = (p) => L + p / 100 * (W - L - R), Y = (kw) => T + (1 - Math.min(150, kw) / 150) * (H - T - B);
+  const cvEnd = (x) => Math.max(x.s1, ...(x.tail || []).filter(t => t.min > 0).map(t => t.b));
+  const path = (x, from = x.s0, to = cvEnd(x)) => { let d = ''; for (let p = from; p <= to + 0.01; p += 0.5) d += (d ? ' L' : 'M') + X(p).toFixed(1) + ' ' + Y(cvPow(x, p)).toFixed(1); return d; };
+  const avg = c.avgKw || (c.kwh && c.min ? c.kwh / (c.min / 60) : null);
+  let peakP = c.s0, peak = 0; for (let p = c.s0; p <= c.s1; p++) { const v = cvPow(c, p); if (v > peak) { peak = v; peakP = p; } }
+  const svg = `<svg viewBox="0 0 ${W} ${H}" class="mt-2 w-full" role="img" aria-label="Ladeleistung über Ladestand">`
+    + [150, 100, 50].map(v => `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" stroke="currentColor" class="text-slate-200 dark:text-slate-800"/><text x="${L - 6}" y="${Y(v) + 3.5}" text-anchor="end" font-size="10" fill="currentColor" class="text-slate-400">${v}</text>`).join('')
+    + `<line x1="${L}" x2="${W - R}" y1="${Y(0)}" y2="${Y(0)}" stroke="currentColor" class="text-slate-300 dark:text-slate-700"/>`
+    + [0, 50, 80, 100].map(p => `<text x="${X(p)}" y="${H - 8}" text-anchor="${p === 100 ? 'end' : 'middle'}" font-size="10" fill="currentColor" class="text-slate-400">${p} %</text>`).join('')
+    + others.map(x => `<path d="${path(x)}" fill="none" stroke="${col(x)}" stroke-width="1.6" stroke-dasharray="4 3" opacity=".7"/>`).join('')
+    + `<path d="${path(c, c.s0, c.s1)} L${X(c.s1)} ${Y(0)} L${X(c.s0)} ${Y(0)} Z" fill="${col(c)}" fill-opacity=".14"/><path d="${path(c, c.s0, c.s1)}" fill="none" stroke="${col(c)}" stroke-width="2.6" stroke-linejoin="round"/>`
+    + (cvEnd(c) > c.s1 ? `<path d="${path(c, c.s1, cvEnd(c))} L${X(cvEnd(c))} ${Y(0)} L${X(c.s1)} ${Y(0)} Z" fill="${col(c)}" fill-opacity=".07"/><path d="${path(c, c.s1, cvEnd(c))}" fill="none" stroke="${col(c)}" stroke-width="2" stroke-dasharray="5 3" stroke-linejoin="round"/><text x="${X((c.s1 + cvEnd(c)) / 2)}" y="${Y(cvPow(c, c.s1 + 1)) - 8}" text-anchor="middle" font-size="9.5" fill="${col(c)}">gedrosselt</text>` : '')
+    + (avg ? `<line x1="${L}" x2="${W - R}" y1="${Y(avg)}" y2="${Y(avg)}" stroke="#64748b" stroke-dasharray="4 3"/><text x="${W - R - 2}" y="${Y(avg) - 4}" text-anchor="end" font-size="9.5" fill="#94a3b8">Ø ${fmt(avg, 1)} kW</text>` : '')
+    + `<circle cx="${X(peakP)}" cy="${Y(c.maxKw || peak)}" r="3.5" fill="${col(c)}"/><text x="${X(peakP) + 5}" y="${Y(c.maxKw || peak) - 6}" font-size="10" font-weight="600" fill="${col(c)}">${fmt(c.maxKw || peak, 0)} kW</text></svg>`;
+  const tile = (l, v) => v == null || v === '' ? '' : `<div class="rounded-2xl bg-slate-100 dark:bg-slate-800/70 px-1 py-2 text-center"><p class="text-[11px] text-slate-500 dark:text-slate-400">${l}</p><p class="text-[15px] font-bold tabular-nums">${v}</p></div>`;
+  const tiles = [tile('Energie', c.kwh ? fmt(c.kwh, 1) + ' kWh' : null), tile('Max · Ø', c.maxKw ? fmt(c.maxKw, 0) + (avg ? ' · ' + fmt(avg, 0) : '') + ' kW' : null), tile('> 100 kW', c.hi100 != null ? 'bis ' + c.hi100 + ' %' : null),
+    tile('Akku', c.tStart != null ? fmt(c.tStart, 0) + (c.tEnd != null ? ' → ' + fmt(c.tEnd, 0) : '') + ' °C' : null), tile('Außen', c.tOut != null ? fmt(c.tOut, 0) + ' °C' : null), tile('Verlust', c.loss != null ? fmt(c.loss, 0) + ' %' : null)].filter(Boolean).join('');
+  const opts = (sel) => Array.from({ length: 21 }, (_, i) => i * 5).map(v => `<option value="${v}"${v === sel ? ' selected' : ''}>${v} %</option>`).join('');
+  const ra = Number(el.dataset.ra || 10), rb = Number(el.dataset.rb || 80);
+  el.innerHTML = chips
+    + `<div class="mt-3 flex items-baseline gap-2"><span class="font-barlow text-[42px] font-bold leading-none" style="color:${col(c)}">${fmt(c.min, 0)} min</span><span class="text-sm text-slate-500 dark:text-slate-400">für ${c.s0} → ${c.s1} %</span></div>`
+    + svg + (tiles ? `<div class="mt-2 grid grid-cols-3 gap-1.5">${tiles}</div>` : '')
+    + ((c.tail || []).some(t => t.min > 0) ? `<div class="mt-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800/70 px-3 py-2"><p class="text-[11px] text-slate-500 dark:text-slate-400 text-left">Ab ${c.s1} % gedrosselt (nachgeladen, aus Zeiten gerechnet)</p><div class="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-sm">${c.tail.filter(t => t.min > 0).map(t => `<span><b class="tabular-nums">${t.a} → ${t.b} %</b> ${fmt(t.min, 0)} min <span class="text-slate-500 dark:text-slate-400">· Ø ${fmt(c.kwh / (c.s1 - c.s0) * (t.b - t.a) / (t.min / 60), 0)} kW</span></span>`).join('')}</div></div>` : '')
+    + `<div class="mt-3 rounded-2xl bg-slate-100 dark:bg-slate-800/70 p-3"><p class="text-sm font-semibold text-left">Ladezeit-Rechner (diese Kurve)</p><div class="mt-2 flex items-center gap-1.5 text-sm"><span class="text-slate-500 dark:text-slate-400">von</span><select id="cv-a" aria-label="von" class="shrink-0 rounded-lg border border-slate-300 dark:border-slate-700 bg-transparent px-0.5 py-1.5 font-semibold">${opts(ra)}</select><span class="text-slate-500 dark:text-slate-400">bis</span><select id="cv-b" aria-label="bis" class="shrink-0 rounded-lg border border-slate-300 dark:border-slate-700 bg-transparent px-0.5 py-1.5 font-semibold">${opts(rb)}</select><span id="cv-res" class="ml-auto whitespace-nowrap font-barlow text-[22px] font-bold" style="color:${col(c)}"></span></div><p class="mt-1 text-[11px] text-slate-500 dark:text-slate-400 text-left">Bedingungen wie bei dieser Messung (Akku ${c.tStart != null ? fmt(c.tStart, 0) + ' °C' : 'warm'}). Bei kaltem Akku deutlich länger.${Object.keys(c.pts || {}).length ? '' : ' Ohne Leistungs-Stützpunkte gerechnet mit Ø-Leistung.'}</p></div>`
+    + `<div class="mt-3 flex items-center justify-between gap-2 text-sm font-semibold">${c.files && c.files.length ? `<a href="${dvLink(c.files[0].id)}" target="_blank" rel="noopener" class="text-sky-600 dark:text-sky-300">Foto der Säule ansehen ›</a>` : '<span></span>'}<button type="button" data-cvact="edit" class="text-sky-600 dark:text-sky-300">Bearbeiten ›</button></div>`;
+  $('cv-hdate').textContent = labD(c.date);
+  cvCalc();
+}
+function cvCalc() {
+  const el = $('cv-body'), a = $('cv-a'), b = $('cv-b'), r = $('cv-res'); if (!a || !b || !r) return; const c = getLab().curves.find(x => x.id === cvSel); if (!c) return;
+  const A = Number(a.value), Bv = Number(b.value); el.dataset.ra = A; el.dataset.rb = Bv;
+  r.textContent = Bv <= A ? '–' : '≈ ' + fmt(Math.round(cvMinutes(c, A, Bv)), 0) + ' min';
+}
+document.addEventListener('change', (e) => { if (e.target && (e.target.id === 'cv-a' || e.target.id === 'cv-b')) cvCalc(); });
+document.addEventListener('click', (e) => {
+  const ch = e.target.closest('#cv-body [data-cv]'); if (ch) { cvSel = ch.dataset.cv; renderCurve(); return; }
+  const b = e.target.closest('#cv-body [data-cvact]'); if (b) openCvSheet(b.dataset.cvact === 'edit' ? cvSel : null);
+});
+let cvEdit = null; const cvPend = [];
+function openCvSheet(id) {
+  const c = id ? getLab().curves.find(x => x.id === id) : null; cvEdit = c ? c.id : null; cvPend.length = 0;
+  const v = (k) => c ? c[k] : undefined, P = (c && c.pts) || {};
+  $('cv-sheet-box').innerHTML = `<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div><p class="text-lg font-bold">${c ? 'Ladekurve bearbeiten' : 'Ladekurve erfassen'}</p>
+    <div class="grid grid-cols-2 gap-2"><div class="min-w-0"><label for="cv-name" class="text-xs text-slate-500 dark:text-slate-400">Name</label><input id="cv-name" type="text" maxlength="24" value="${esc((c && c.name) || '')}" placeholder="z. B. Winter" class="${inCls}"></div><div class="min-w-0"><label for="cv-date" class="text-xs text-slate-500 dark:text-slate-400">Datum</label><input id="cv-date" type="date" value="${esc((c && c.date) || wxIso(new Date()))}" class="${inCls}"></div></div>
+    <div class="grid grid-cols-3 gap-2">${fld('cv-s0', 'Start %', v('s0'), '5', 'numeric')}${fld('cv-s1', 'Ende %', v('s1'), '80', 'numeric')}${fld('cv-kwh', 'Energie kWh', v('kwh'), '37,17')}${fld('cv-min', 'Dauer min', v('min'), '33', 'numeric')}${fld('cv-max', 'Max kW', v('maxKw'), '106,2')}${fld('cv-avg', 'Ø kW', v('avgKw'), 'optional')}${fld('cv-t0', 'Akku °C Start', v('tStart'), '', 'text')}${fld('cv-t1', 'Akku °C Ende', v('tEnd'), '', 'text')}${fld('cv-to', 'Außen °C', v('tOut'), '', 'text')}${fld('cv-hi', '> 100 kW bis %', v('hi100'), 'optional', 'numeric')}${fld('cv-loss', 'Verlust %', v('loss'), 'optional')}</div>
+    <p class="text-xs text-slate-500 dark:text-slate-400 text-left">Weitergeladen über das Ende hinaus? (optional)</p>
+    <div class="grid grid-cols-2 gap-2">${fld('cv-t90', 'Ende → 90 % · min', ((c && c.tail) || []).find(t => t.b === 90)?.min, 'z. B. 10', 'numeric')}${fld('cv-t100', '90 → 100 % · min', ((c && c.tail) || []).find(t => t.b === 100)?.min, 'z. B. 13', 'numeric')}</div>
+    <p class="text-xs text-slate-500 dark:text-slate-400 text-left">Leistung (kW) bei Ladestand – optional, ergibt die Kurve</p>
+    <div class="grid grid-cols-5 gap-1.5 text-center">${[10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map(p => `<label class="text-[10px] text-slate-500 dark:text-slate-400">${p} %<input data-cvp="${p}" type="text" inputmode="decimal" value="${P[p] != null ? String(P[p]).replace('.', ',') : ''}" class="mt-1 w-full min-w-0 rounded-lg border border-slate-300 dark:border-slate-700 bg-transparent px-0.5 py-2 text-center text-[13px] text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"></label>`).join('')}</div>
+    <div><button type="button" data-cvs="pick" class="w-full rounded-xl border border-dashed border-slate-300 dark:border-slate-600 py-2.5 text-sm">Foto der Säule anhängen (Google Drive)</button><p id="cv-fmsg" class="mt-1 text-xs text-slate-500 dark:text-slate-400 text-left empty:hidden">${c && c.files && c.files.length ? c.files.length + ' Foto in Google Drive' : ''}</p></div>
+    <p id="cv-msg" class="text-sm text-red-600 dark:text-red-400 text-left empty:hidden"></p>
+    <div class="grid grid-cols-2 gap-2.5"><button type="button" data-cvs="${c ? 'del' : 'close'}" class="h-12 rounded-2xl border border-slate-300 dark:border-slate-700 text-sm font-semibold ${c ? 'text-red-600 dark:text-red-400' : ''}">${c ? 'Löschen' : 'Abbrechen'}</button><button type="button" data-cvs="save" class="h-12 rounded-2xl bg-emerald-600 text-white text-sm font-semibold">Speichern</button></div>`;
+  $('cv-sheet').classList.remove('hidden');
+}
+$('cv-sheet').addEventListener('click', async (e) => {
+  if (e.target === $('cv-sheet')) { $('cv-sheet').classList.add('hidden'); return; }
+  const b = e.target.closest('[data-cvs]'); if (!b) return; const act = b.dataset.cvs, lab = getLab();
+  if (act === 'close') $('cv-sheet').classList.add('hidden');
+  else if (act === 'pick') $('cv-file').click();
+  else if (act === 'del') { if (confirm('Diese Ladekurve löschen?')) { lab.curves = lab.curves.filter(x => x.id !== cvEdit); setLab(lab); $('cv-sheet').classList.add('hidden'); } }
+  else if (act === 'save') {
+    const n = (id) => deDec($(id).value), m = $('cv-msg'), s0 = n('cv-s0'), s1 = n('cv-s1'), kwh = n('cv-kwh'), min = n('cv-min'), mx = n('cv-max');
+    if (!(s0 >= 0 && s1 <= 100 && s1 > s0)) { m.textContent = 'Bitte Start- und Ende-% eintragen (Ende größer als Start).'; return; }
+    if (!(kwh > 0 && min > 0 && mx > 0)) { m.textContent = 'Bitte Energie, Dauer und Max-Leistung eintragen.'; return; }
+    const pts = {}; document.querySelectorAll('[data-cvp]').forEach(i => { const v = deDec(i.value); if (v > 0 && v < 400) pts[i.dataset.cvp] = v; });
+    const oldC = cvEdit ? lab.curves.find(x => x.id === cvEdit) : null; Object.entries((oldC && oldC.pts) || {}).forEach(([k, v]) => { if (Number(k) % 10) pts[k] = v; });   // Zwischenpunkte (z. B. 81 %) behalten
+    const t90 = n('cv-t90'), t100 = n('cv-t100'), tail = [];
+    if (t90 > 0 && s1 < 90) tail.push({ a: s1, b: 90, min: t90 }); if (t100 > 0 && (s1 <= 90)) tail.push({ a: Math.max(90, s1), b: 100, min: t100 }); else if (t100 > 0 && s1 < 100) tail.push({ a: s1, b: 100, min: t100 });
+    const old = cvEdit ? lab.curves.find(x => x.id === cvEdit) : null, opt = (id) => { const v = n(id); return Number.isFinite(v) ? v : undefined; };
+    const c = { id: old ? old.id : labId(), name: $('cv-name').value.trim().slice(0, 24) || 'Kurve', date: $('cv-date').value || wxIso(new Date()), s0, s1, kwh, min, maxKw: mx, avgKw: opt('cv-avg'), hi100: opt('cv-hi'), tStart: opt('cv-t0'), tEnd: opt('cv-t1'), tOut: opt('cv-to'), loss: opt('cv-loss'), pts, tail: tail.length ? tail : undefined, files: old && old.files ? old.files : undefined };
+    Object.keys(c).forEach(k => c[k] === undefined && delete c[k]);
+    let tokP = null; if (cvPend.length) { if (!window.cloud?.isSignedIn()) { m.textContent = 'Für das Foto bitte bei Google anmelden.'; return; } tokP = window.cloud.driveToken(); tokP.catch(() => { }); }
+    lab.curves = old ? lab.curves.map(x => x.id === old.id ? c : x) : lab.curves.concat(c); cvSel = c.id; setLab(lab); $('cv-sheet').classList.add('hidden');
+    if (cvPend.length) { try { const up = await dvUploadFor({ id: c.id, date: c.date + 'T12:00:00Z', title: 'Ladekurve ' + c.name, category: 'Ladekurve', amount: 0 }, cvPend.slice(), tokP); const l2 = getLab(); l2.curves = l2.curves.map(x => x.id === c.id ? { ...x, files: (x.files || []).concat(up) } : x); setLab(l2); } catch (er) { if (er && er.status === 401) window.cloud.driveForget(); alert('Foto-Upload fehlgeschlagen: ' + dvErrText(er)); } cvPend.length = 0; }
+  }
+});
+$('cv-file').addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; if (f) { cvPend.length = 0; cvPend.push(f); $('cv-fmsg').textContent = f.name + ' · wird beim Speichern hochgeladen'; } e.target.value = ''; });
+
+/* ---- Verbrauchsrekorde ---- */
+const REC_COND = ['Klima aus', 'Klima an', 'Heizung', 'Tempomat', 'trocken', 'Regen', 'Winterreifen', 'Stau'];
+let recRoute = 'all', recEdit = null;
+function recChips(r) { return [r.tOut != null ? 'Außen ' + fmt(r.tOut, 0) + ' °C' : '', r.tBat != null ? 'Akku ' + fmt(r.tBat, 0) + ' °C' : '', r.v ? 'Ø ' + fmt(r.v, 0) + ' km/h' : ''].concat(r.cond || []).filter(Boolean).map(t => `<span class="inline-flex h-[22px] items-center rounded-md bg-slate-100 dark:bg-slate-800 px-1.5 text-[11px] text-slate-600 dark:text-slate-300">${esc(t)}</span>`).join(''); }
+const CUP = '<svg class="h-[22px] w-[22px]" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></svg>';
+/* ---- Höhenprofil je Strecke: Route über OSRM (OpenStreetMap), Höhen über Open-Meteo (Copernicus DEM 90 m); wird einmal geladen und mit der Strecke gespeichert (lab.routes) ---- */
+const HP_MASS = 2100, HP_ETA = 0.9, HP_RECUP = 0.8;                          // kg inkl. Fahrer; Antriebswirkungsgrad bergauf; bergab genutzter Anteil (Rollen + Rekuperation)
+const rtKey = (route) => recKey(route);
+const recSeason = (r) => r.season === 'wi' || r.season === 'so' ? r.season : ((m) => m >= 4 && m <= 10 ? 'so' : 'wi')(Number(String((r && r.date) || wxIso(new Date())).slice(5, 7)));   // ohne Angabe: April–Oktober Sommer
+const SEA_L = { so: 'Sommer', wi: 'Winter' }, SEA_I = { so: '☀️', wi: '❄️' };
+const recDirKey = (r) => recKey(r.route) + '|' + (r.dir === 'ba' ? 'ba' : 'ab') + '|' + recSeason(r);
+let recGeo = { a: null, b: null, via: null, prof: null, busy: false, err: '' }, recDirSel = {}, recSeaSel = {};
+/* Speicherform ohne verschachtelte Arrays (Firestore erlaubt keine Arrays in Arrays): { km, up, dn, d: [km …], h: [m …] }; im Speicher zusätzlich pts = [[km, m] …] */
+function hpN(p) { if (!p) return null; if (Array.isArray(p.pts)) return p; const d = Array.isArray(p.d) ? p.d : [], h = Array.isArray(p.h) ? p.h : []; return d.length > 1 && d.length === h.length ? { ...p, pts: d.map((x, i) => [x, h[i]]) } : null; }
+function hpStore(p) { p = hpN(p); return p ? { km: p.km, up: p.up, dn: p.dn, d: p.pts.map(x => x[0]), h: p.pts.map(x => x[1]) } : undefined; }
+(function hpMigrate() { const o = load(KEY_LAB, null); if (!o || !o.routes || typeof o.routes !== 'object') return; let ch = false;
+  Object.values(o.routes).forEach(m => { if (m && m.prof && Array.isArray(m.prof.pts)) { m.prof = hpStore(m.prof); ch = true; } }); if (ch) save(KEY_LAB, o); })();
+function hpRev(p) { return { ...p, up: p.dn, dn: p.up, pts: p.pts.map(([d, h]) => [Math.round((p.km - d) * 100) / 100, h]).reverse() }; }
+function hpCost(p) { const kwh = (h) => HP_MASS * 9.81 * h / 3.6e6; return p.km > 0 ? (kwh(p.up) / HP_ETA - kwh(p.dn) * HP_RECUP) / p.km * 100 : 0; }   // zusätzliche kWh/100 km durch die Höhe
+async function hpLoad(a, b, via) {
+  const wp = [a, via, b].filter(Boolean).map(p => p.lon.toFixed(5) + ',' + p.lat.toFixed(5)).join(';');
+  const rr = await fetch('https://router.project-osrm.org/route/v1/driving/' + wp + '?overview=full&geometries=geojson'); if (!rr.ok) throw new Error('Route nicht gefunden (' + rr.status + ')');
+  const rj = await rr.json(), rt = rj.routes && rj.routes[0]; if (!rt) throw new Error('Keine Route gefunden');
+  const cs = rt.geometry.coordinates.map(([lon, lat]) => ({ lat, lon })), cum = [0];
+  for (let i = 1; i < cs.length; i++) cum.push(cum[i - 1] + geoDist(cs[i - 1], cs[i]));
+  const tot = cum[cum.length - 1], N = Math.min(100, Math.max(2, cs.length)), smp = []; let j = 0;
+  for (let k = 0; k < N; k++) { const t = tot * k / (N - 1); while (j < cum.length - 2 && cum[j + 1] < t) j++; const f = cum[j + 1] > cum[j] ? (t - cum[j]) / (cum[j + 1] - cum[j]) : 0; smp.push({ d: t, lat: cs[j].lat + (cs[j + 1 < cs.length ? j + 1 : j].lat - cs[j].lat) * f, lon: cs[j].lon + (cs[j + 1 < cs.length ? j + 1 : j].lon - cs[j].lon) * f }); }
+  const er = await fetch('https://api.open-meteo.com/v1/elevation?latitude=' + smp.map(s => s.lat.toFixed(5)).join(',') + '&longitude=' + smp.map(s => s.lon.toFixed(5)).join(','));
+  if (!er.ok) throw new Error('Höhen nicht verfügbar (' + er.status + ')'); const ej = await er.json(), el = ej.elevation || [];
+  const hs = el.map((h, i) => (Number(el[i - 1] ?? h) + Number(h) * 2 + Number(el[i + 1] ?? h)) / 4);   // leicht geglättet gegen Rasterrauschen
+  let up = 0, dn = 0; for (let i = 1; i < hs.length; i++) { const dh = hs[i] - hs[i - 1]; if (dh > 0) up += dh; else dn -= dh; }
+  return { km: Math.round(tot / 10) / 100, up: Math.round(up), dn: Math.round(dn), pts: smp.map((s, i) => [Math.round(s.d / 10) / 100, Math.round(hs[i])]) };
+}
+function hpSvg(p, la = 'A', lb = 'B', mini = false) {
+  const W = 296, H = mini ? 56 : 110, L = mini ? 0 : 30, T = mini ? 4 : 14, B = mini ? 2 : 20, hs = p.pts.map(x => x[1]);
+  let y0 = Math.min(...hs), y1 = Math.max(...hs); const pad = Math.max(10, (y1 - y0) * 0.15); y0 = Math.floor((y0 - pad) / 10) * 10; y1 = Math.ceil((y1 + pad) / 10) * 10;
+  const X = (d) => L + d / (p.km || 1) * (W - L - 4), Y = (h) => T + (1 - (h - y0) / (y1 - y0 || 1)) * (H - T - B);
+  const d = 'M' + p.pts.map(([x, h]) => X(x).toFixed(1) + ' ' + Y(h).toFixed(1)).join(' L'), area = d + ` L${X(p.km).toFixed(1)} ${H - B} L${X(0).toFixed(1)} ${H - B} Z`;
+  if (mini) return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true" class="mt-1 w-full" style="height:${H}px"><path d="${area}" fill="#34d399" fill-opacity=".18"/><path d="${d}" fill="none" stroke="#34d399" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>`;
+  const mx = p.pts.reduce((a, x) => x[1] > a[1] ? x : a, p.pts[0]), st = Math.max(10, Math.ceil((y1 - y0) / 3 / 10) * 10), ticks = []; for (let v = Math.ceil(y0 / st) * st; v <= y1; v += st) ticks.push(v);
+  const xs = [0, 5, 10, 15, 20, 30, 40, 50, 75, 100, 150, 200].filter(v => v <= p.km).filter((v, i, a) => a.length <= 5 || v % 10 === 0 || v === 0 || v === 5 || v === 15).slice(0, 6);
+  const f = p.pts[0], l = p.pts[p.pts.length - 1];
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Höhenprofil ${la} nach ${lb}" class="w-full"><defs><linearGradient id="hpg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#34d399" stop-opacity=".35"/><stop offset="1" stop-color="#34d399" stop-opacity="0"/></linearGradient></defs>`
+    + ticks.map(v => `<line x1="${L}" x2="${W - 4}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="currentColor" class="text-slate-200 dark:text-slate-800"/><text x="${L - 4}" y="${(Y(v) + 3.5).toFixed(1)}" text-anchor="end" font-size="9.5" fill="#94a3b8">${v}</text>`).join('')
+    + xs.map(v => `<text x="${X(v).toFixed(1)}" y="${H - 4}" text-anchor="middle" font-size="9.5" fill="#94a3b8">${v} km</text>`).join('')
+    + `<path d="${area}" fill="url(#hpg)"/><path d="${d}" fill="none" stroke="#34d399" stroke-width="2" stroke-linejoin="round"/>`
+    + `<circle cx="${X(0)}" cy="${Y(f[1]).toFixed(1)}" r="3.5" fill="currentColor" class="text-slate-700 dark:text-slate-100"/><text x="${X(0) + 5}" y="${(Y(f[1]) + 13).toFixed(1)}" font-size="9.5" fill="#94a3b8">${la}</text>`
+    + `<circle cx="${X(p.km)}" cy="${Y(l[1]).toFixed(1)}" r="3.5" fill="currentColor" class="text-slate-700 dark:text-slate-100"/><text x="${X(p.km) - 5}" y="${(Y(l[1]) + 13).toFixed(1)}" text-anchor="end" font-size="9.5" fill="#94a3b8">${lb}</text>`
+    + `<text x="${Math.min(W - 24, Math.max(L + 20, X(mx[0]))).toFixed(1)}" y="${(Y(mx[1]) - 5).toFixed(1)}" text-anchor="middle" font-size="9.5" font-weight="600" fill="#10b981">${mx[1]} m</text></svg>`;
+}
+/* Ortssuche: gespeicherte Orte + Photon (OpenStreetMap, für Suche beim Tippen gedacht), Ergebnisse nahe Start/Zuhause bevorzugt */
+const hpPhLabel = (f) => { const q = f.properties || {}, st = [q.street, q.housenumber].filter(Boolean).join(' '), town = q.city || q.town || q.village || q.district || q.county || '';
+  const main = q.name && q.name !== town ? q.name : (st || town || q.name || ''); return { main, sub: [q.name && q.name !== town && st ? st : '', [q.postcode, town].filter(Boolean).join(' '), q.state && q.country !== 'Deutschland' ? q.country : ''].filter(x => x && x !== main).join(', ') }; };
+async function hpSearch(t, n = 5) {
+  const bias = recGeo.a || getTPlaces().find(p => p.kind === 'home') || null;
+  const r = await fetch('https://photon.komoot.io/api/?lang=de&limit=' + n + '&q=' + encodeURIComponent(t) + (bias ? '&lat=' + bias.lat.toFixed(3) + '&lon=' + bias.lon.toFixed(3) : ''));
+  if (!r.ok) throw new Error('Ortssuche nicht erreichbar'); const j = await r.json();
+  return (j.features || []).map(f => { const l = hpPhLabel(f); return { lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0], label: l.main, sub: l.sub }; }).filter(x => x.label);
+}
+async function hpResolve(txt) {
+  const t = String(txt || '').trim(); if (!t) return null;
+  const pl = getTPlaces().find(p => p.name && p.name.toLowerCase() === t.toLowerCase()); if (pl) return { lat: pl.lat, lon: pl.lon, label: pl.name, sub: 'Gespeicherter Ort' };
+  const g = geoOf(t); if (g) return { ...g, label: placeAt(t)?.name || t, sub: 'Koordinaten' };
+  const res = await hpSearch(t, 1); if (!res.length) throw new Error('„' + t + '“ nicht gefunden'); return res[0];
+}
+let hpSugT = 0, hpSugN = 0;
+function hpStatus(w, ok, txt) { const el = $('rec-st-' + w); if (!el) return; el.className = 'mt-1 text-xs text-left ' + (ok === true ? 'text-emerald-600 dark:text-emerald-400' : ok === false ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400'); el.textContent = txt || ''; }
+function hpSugHide(w) { const el = $('rec-sug-' + w); if (el) { el.innerHTML = ''; el.classList.add('hidden'); } }
+function hpSuggest(w) {
+  clearTimeout(hpSugT); const inp = $('rec-' + w), t = inp ? inp.value.trim() : ''; recGeo[w + 'Dirty'] = true;
+  if (t.length < 2 || geoOf(t)) { hpSugHide(w); hpStatus(w, null, geoOf(t) ? 'Koordinaten erkannt – Feld verlassen zum Übernehmen' : ''); return; }
+  const tl = t.toLowerCase(), own = getTPlaces().filter(p => p.name && p.name.toLowerCase().includes(tl)).slice(0, 4).map(p => ({ lat: p.lat, lon: p.lon, label: p.name, sub: 'Gespeicherter Ort' }));
+  const show = (list, more) => { const el = $('rec-sug-' + w); if (!el) return; recGeo['sug' + w] = list;
+    el.innerHTML = list.map((x, i) => `<button type="button" data-sug="${w}:${i}" class="flex w-full items-start gap-2 px-3 py-2 text-left active:bg-slate-100 dark:active:bg-slate-800"><svg class="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg><span class="min-w-0"><span class="block truncate text-sm font-medium">${esc(x.label)}</span>${x.sub ? `<span class="block truncate text-[11px] text-slate-500 dark:text-slate-400">${esc(x.sub)}</span>` : ''}</span></button>`).join('')
+      + (more ? `<p class="px-3 py-2 text-xs text-slate-500 dark:text-slate-400 text-left">${more}</p>` : '');
+    el.classList.toggle('hidden', !list.length && !more); };
+  show(own, 'Suche …'); const n = ++hpSugN;
+  hpSugT = setTimeout(async () => { try { const res = await hpSearch(t); if (n !== hpSugN) return; show(own.concat(res), res.length || own.length ? '' : 'Nichts gefunden – anders schreiben, z. B. mit Ort oder PLZ'); } catch (e) { if (n === hpSugN) show(own, 'Suche nicht erreichbar – Koordinaten (lat,lon) gehen immer'); } }, 400);
+}
+function hpPick(w, pt) {
+  recGeo[w] = pt; recGeo[w + 'Dirty'] = false; recGeo.err = ''; hpSugN++; clearTimeout(hpSugT); hpSugHide(w);
+  const inp = $('rec-' + w); if (inp) inp.value = hpLabel(pt); hpStatus(w, true, '✓ ' + [pt.label, pt.sub].filter(Boolean).join(' · ')); hpRefresh();
+}
+const hpLabel = (p) => { if (!p) return ''; const pl = placeAt(p.lat + ',' + p.lon); return p.label || (pl && pl.name) || (p.lat.toFixed(4) + ', ' + p.lon.toFixed(4)); };
+function hpBox() {
+  const el = $('rec-hp'); if (!el) return; const g = recGeo;
+  if (!g.a || !g.b) { el.innerHTML = '<p class="text-xs text-slate-500 dark:text-slate-400 text-left">Mit Start und Ziel lädt die App das Höhenprofil der Route.</p>'; return; }
+  el.innerHTML = g.busy ? '<p class="text-sm text-slate-500 dark:text-slate-400 text-left">Höhenprofil wird geladen …</p>'
+    : g.err ? `<p class="text-sm text-red-600 dark:text-red-400 text-left">${esc(g.err)}</p><button type="button" data-rs="hpload" class="mt-1 text-xs font-semibold text-sky-600 dark:text-sky-300">Erneut versuchen ›</button>`
+    : g.prof ? `<div class="flex items-baseline justify-between gap-2 text-xs"><b class="text-sm whitespace-nowrap">Profil geladen</b><span class="text-[11px] text-slate-500 dark:text-slate-400 whitespace-nowrap">${fmt(g.prof.km, 1)} km · ↑ ${g.prof.up} m · ↓ ${g.prof.dn} m</span></div>${hpSvg(g.prof, 'A', 'B', true)}`
+    : '';
+  el.innerHTML += (g.via || g.viaOpen ? '' : `<button type="button" data-rs="via" class="mt-1 text-xs font-semibold text-sky-600 dark:text-sky-300">Andere Route? Zwischenpunkt setzen ›</button>`);
+}
+async function hpRefresh() {
+  const g = recGeo; if (!g.a || !g.b) { g.prof = null; hpBox(); return; }
+  g.busy = true; g.err = ''; hpBox();
+  try { g.prof = await hpLoad(g.a, g.b, g.via); } catch (e) { g.prof = null; g.err = 'Höhenprofil nicht geladen: ' + ((e && e.message) || 'kein Internet?'); }
+  g.busy = false; hpBox(); recHint();
+}
+async function hpField(which) {
+  const inp = $('rec-' + which); if (!inp) return; const t = inp.value.trim(); const cur = recGeo[which];
+  if (!t) { recGeo[which] = null; hpSugHide(which); hpStatus(which, null, ''); hpRefresh(); return; } if (cur && hpLabel(cur) === t && !recGeo[which + 'Dirty']) return;
+  hpStatus(which, null, 'Suche …');
+  try { hpPick(which, await hpResolve(t)); } catch (e) { recGeo[which] = null; hpSugHide(which); hpStatus(which, false, ((e && e.message) || 'Nicht gefunden') + ' – bitte einen Vorschlag aus der Liste wählen'); hpRefresh(); }
+}
+
+/* ---- Langzeitverbrauch: Ablesungen „Seit Kauf“ aus dem Bordcomputer (lab.lt), Verlauf über die Jahre ---- */
+let ltEdit = null;
+function ltApp() { try { const rs = getReadings(); if (!rs.length) return null; const t = consumptionTotals(rs, rs.map((_, i) => i)); return t && t.km >= 100 ? t.kwh100 : null; } catch (e) { return null; } }
+/** WLTP ohne Ladeverluste: eigener Wert aus den Einstellungen, sonst WLTP − 8 % (geschätzt) */
+function wltpNet() { const s = getSettings(), n = Number(s.wltpNet); if (n > 0) return { v: n, est: false }; const w = Number(s.wltp) > 0 ? Number(s.wltp) : 16; return { v: Math.round(w * 0.92 * 10) / 10, est: true }; }
+function ltSvg(es, app, wl) {
+  const W = 296, H = 124, L = 32, R = 12, T = 16, B = 20, t0 = Date.parse(es[0].date), t1 = Date.parse(es[es.length - 1].date), span = Math.max(1, t1 - t0);
+  const vs = es.map(e => e.k100).concat(app != null ? [app] : [], wl != null ? [wl] : []); let y0 = Math.floor(Math.min(...vs) - 0.6), y1 = Math.ceil(Math.max(...vs) + 0.6); if (y1 - y0 < 2) y1 = y0 + 2;
+  const X = (d) => es.length < 2 ? (L + W - R) / 2 : L + (Date.parse(d) - t0) / span * (W - L - R), Y = (v) => T + (1 - (v - y0) / (y1 - y0)) * (H - T - B);
+  const st = y1 - y0 > 6 ? 2 : 1, tk = []; for (let v = y0; v <= y1; v += st) tk.push(v);
+  const multiYear = new Date(es[0].date).getFullYear() !== new Date(es[es.length - 1].date).getFullYear();
+  const lbl = (d) => new Date(d + 'T12:00:00').toLocaleDateString('de-DE', multiYear ? { month: '2-digit', year: '2-digit' } : { day: '2-digit', month: '2-digit' });
+  const xi = es.length <= 5 ? es.map((_, i) => i) : [0, Math.round((es.length - 1) / 2), es.length - 1];
+  /* Wert-Beschriftungen ausdünnen: zuerst letzter, höchster, niedrigster und erster Wert, dann die übrigen –
+     nur wenn kein anderes Label näher als 30 px daneben steht (bzw. vertikal klar getrennt ist) */
+  const lab = new Set(), placed = [], n = es.length, iMax = es.reduce((a, e, i) => e.k100 > es[a].k100 ? i : a, 0), iMin = es.reduce((a, e, i) => e.k100 < es[a].k100 ? i : a, 0);
+  [n - 1, iMax, iMin, 0].concat(es.map((_, i) => n - 2 - i).filter(i => i > 0)).forEach(i => { if (lab.has(i)) return; const x = X(es[i].date), y = Y(es[i].k100);
+    if (placed.every(p => Math.abs(p.x - x) >= 30 || Math.abs(p.y - y) >= 14)) { lab.add(i); placed.push({ x, y }); } });
+  return `<svg viewBox="0 0 ${W} ${H}" class="mt-1 w-full" role="img" aria-label="Langzeitverbrauch über die Zeit">`
+    + tk.map(v => `<line x1="${L}" x2="${W - R}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="currentColor" class="text-slate-200 dark:text-slate-800"/><text x="${L - 6}" y="${(Y(v) + 3.5).toFixed(1)}" text-anchor="end" font-size="9.5" fill="#94a3b8">${v}</text>`).join('')
+    + (app != null ? `<line x1="${L}" x2="${W - R}" y1="${Y(app).toFixed(1)}" y2="${Y(app).toFixed(1)}" stroke="#38bdf8" stroke-dasharray="4 3"/><text x="${W - R}" y="${(Y(app) + (wl != null && app < wl ? 11 : -4)).toFixed(1)}" text-anchor="end" font-size="9" fill="#0ea5e9">App: ${fmt(app, 1)} (ab Steckdose)</text>` : '')
+    + (wl != null ? `<line x1="${L}" x2="${W - R}" y1="${Y(wl).toFixed(1)}" y2="${Y(wl).toFixed(1)}" stroke="#a78bfa" stroke-width="1.6" stroke-dasharray="2 3"/><text x="${L + 2}" y="${(Y(wl) + (app != null && app > wl ? 11 : -4)).toFixed(1)}" font-size="9" fill="#8b5cf6">WLTP ohne Verluste ${fmt(wl, 1)}</text>` : '')
+    + (es.length > 1 ? `<polyline points="${es.map(e => X(e.date).toFixed(1) + ',' + Y(e.k100).toFixed(1)).join(' ')}" fill="none" stroke="#10b981" stroke-width="2.4" stroke-linejoin="round"/>` : '')
+    + es.map((e, i) => `<circle cx="${X(e.date).toFixed(1)}" cy="${Y(e.k100).toFixed(1)}" r="${n > 30 ? 2.2 : 3.5}" fill="#10b981"/>${lab.has(i) ? `<text x="${Math.min(W - R - 8, Math.max(L + 10, X(e.date))).toFixed(1)}" y="${(Y(e.k100) + (app != null && Math.abs(Y(e.k100) - 4 - Y(app)) < 12 ? 14 : -8)).toFixed(1)}" text-anchor="middle" font-size="9.5" fill="currentColor" class="text-slate-500 dark:text-slate-300">${fmt(e.k100, 1)}</text>` : ''}`).join('')
+    + xi.map(i => `<text x="${Math.min(W - R - 6, Math.max(L + 6, X(es[i].date))).toFixed(1)}" y="${H - 5}" text-anchor="middle" font-size="9.5" fill="#94a3b8">${lbl(es[i].date)}</text>`).join('') + '</svg>';
+}
+function ltCard(list) {
+  const es = (list || []).filter(e => e.k100 > 0 && e.date).sort((a, b) => a.date.localeCompare(b.date) || (a.km || 0) - (b.km || 0)), app = ltApp(), wn = wltpNet();
+  if (!es.length) return `<p class="rounded-3xl bg-white dark:bg-slate-900 p-4 text-sm text-slate-600 dark:text-slate-300 text-left">Noch keine Ablesung. Lies im Auto unter Fahrdaten den Langzeitspeicher „Seit Kauf“ ab und trage den Verbrauch über „+“ ein – am besten alle paar Wochen. So siehst du, wie sich dein Langzeitverbrauch über die Jahre entwickelt.${app != null ? ` Die App rechnet aus deinen Ladungen aktuell ${fmt(app, 1)} kWh/100 km ab Steckdose.` : ''}</p>`;
+  const cur = es[es.length - 1], prev = es[es.length - 2], dl = prev ? cur.k100 - prev.k100 : null, first = es[0];
+  const dChip = dl == null ? '' : `<span class="ml-auto shrink-0 rounded-lg px-2 py-0.5 text-xs font-semibold ${dl > 0.05 ? 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300' : dl < -0.05 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}">${dl > 0 ? '+' : dl < 0 ? '−' : '±'}${fmt(Math.abs(dl), 1)} seit ${labD(prev.date).slice(0, 6)}</span>`;
+  const rows = es.slice().reverse().map((e, i, a) => { const p = a[i + 1], d = p ? e.k100 - p.k100 : null;
+    return `<button type="button" data-lt="${esc(e.id)}" class="grid w-full grid-cols-[1.2fr_1fr_0.8fr_0.6fr] items-baseline gap-1.5 border-t border-slate-100 dark:border-slate-800 py-2.5 text-left text-[13px] active:bg-slate-50 dark:active:bg-slate-800/50"><span>${labD(e.date)}</span><span class="text-xs text-slate-500 dark:text-slate-400" title="${e.kmEst ? 'geschätzt – wird genau, sobald das Fahrtenbuch für diesen Tag importiert ist' : ''}">${e.km ? (e.kmEst ? '≈ ' : '') + fmt(e.km, 0) + ' km' : e.kmEst ? 'folgt' : '–'}</span><b class="text-right tabular-nums">${fmt(e.k100, 1)}</b><span class="text-right text-[11px] ${d == null ? 'text-slate-400' : d > 0.05 ? 'text-amber-600 dark:text-amber-400' : d < -0.05 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500'}">${d == null ? 'Start' : (d > 0 ? '+' : d < 0 ? '−' : '±') + fmt(Math.abs(d), 1)}</span></button>`; }).join('');
+  return `<div class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 space-y-2">
+    <div class="flex items-baseline justify-between gap-2"><p class="text-sm text-slate-500 dark:text-slate-400 text-left">Langzeitverbrauch seit Kauf</p><span class="text-xs text-slate-500">${labD(cur.date)}</span></div>
+    <div class="flex items-baseline gap-2"><span class="font-barlow text-[44px] font-bold leading-none text-emerald-600 dark:text-emerald-400">${fmt(cur.k100, 1)}</span><span class="text-sm text-slate-500 dark:text-slate-400">kWh/100 km</span>${dChip}</div>
+    <p class="text-xs text-slate-500 dark:text-slate-400 text-left">Bordcomputer „Seit Kauf“${cur.km ? ' · ' + fmt(cur.km, 0) + ' km' : ''}${first !== cur && first.km && cur.km ? ' · ' + fmt(cur.km - first.km, 0) + ' km seit der ersten Ablesung' : ''}${cur.v ? ' · Ø ' + fmt(cur.v, 0) + ' km/h' : ''}</p>
+    ${(() => { const d = cur.k100 - wn.v, pc = d / wn.v * 100; return `<p class="rounded-xl bg-slate-100 dark:bg-slate-800/70 px-3 py-2 text-xs text-slate-600 dark:text-slate-300 text-left">Deine ${fmt(cur.k100, 1)} liegen <b class="${d > 0.05 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}">${fmt(Math.abs(d), 1)} kWh/100 km (${fmt(Math.abs(pc), 0)} %) ${d > 0.05 ? 'über' : d < -0.05 ? 'unter' : 'genau auf'}</b> dem WLTP ohne Ladeverluste (${fmt(wn.v, 1)}${wn.est ? ', geschätzt' : ''}).</p>`; })()}
+    ${ltSvg(es, null, wn.v)}
+    <p class="text-[11px] text-slate-500 dark:text-slate-400 text-left">Grün: deine Ablesungen. Lila gepunktet: WLTP ohne Ladeverluste${wn.est ? ' (WLTP − 8 %, eigenen Wert unter Einstellungen → Laden & Akku eintragen)' : ''} – der passende Vergleich, weil auch der Bordcomputer ohne Ladeverluste misst.</p></div>
+    <div class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm px-4 pb-1.5 pt-2"><div class="grid grid-cols-[1.2fr_1fr_0.8fr_0.6fr] gap-1.5 py-1.5 text-[11px] text-slate-500 dark:text-slate-400"><span>Datum</span><span>km-Stand</span><span class="text-right">kWh/100</span><span class="text-right">Δ</span></div>${rows}</div>`;
+}
+function openLtSheet(id) {
+  const e = id ? (getLab().lt || []).find(x => x.id === id) : null; ltEdit = e ? e.id : null; const app = ltApp(), km0 = (() => { try { return lastKnownKm(); } catch (_) { return null; } })();
+  $('rec-sheet-box').innerHTML = `<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div><p class="text-lg font-bold">${e ? 'Ablesung bearbeiten' : 'Langzeitverbrauch festhalten'}</p>
+    <p class="text-xs text-slate-500 dark:text-slate-400 text-left">Im Auto: Fahrdaten → „Seit Kauf“ (Langzeitspeicher) ablesen</p>
+    <div class="grid grid-cols-[1.35fr_1fr_1fr] gap-2"><div class="min-w-0"><label for="lt-date" class="text-xs text-slate-500 dark:text-slate-400">Datum</label><input id="lt-date" type="date" value="${esc(e ? e.date : wxIso(new Date()))}" class="${inCls} !px-1.5 text-[13px]"></div>${fld('lt-km', 'km-Stand', e ? e.km : (km0 || undefined), '20.401', 'numeric').replace('>km-Stand</label>', '>km-Stand</label><button type="button" data-kmfetch data-kmfor="lt-km" title="Aktuellen km-Stand vom Auto holen" aria-label="Aktuellen km-Stand vom Auto holen" class="kmf ml-1 align-middle relative inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[15px] font-bold leading-none text-emerald-600 dark:text-emerald-400 active:scale-90 transition after:absolute after:-inset-2.5">↻</button>')}${fld('lt-k', 'kWh/100 km', e ? e.k100 : undefined, '15,3')}${fld('lt-v', 'Ø km/h', e ? e.v : undefined, 'optional', 'numeric')}${fld('lt-h', 'Fahrzeit h', e ? e.h : undefined, 'optional')}<div class="min-w-0"><label for="lt-note" class="text-xs text-slate-500 dark:text-slate-400">Notiz</label><input id="lt-note" type="text" maxlength="80" value="${esc((e && e.note) || '')}" placeholder="…" class="${inCls}"></div></div>
+    <p class="rounded-xl bg-slate-100 dark:bg-slate-800/70 px-3 py-2 text-xs text-slate-600 dark:text-slate-300 text-left">Vergleich: WLTP ohne Ladeverluste <b>${fmt(wltpNet().v, 1)}</b>${wltpNet().est ? ' (geschätzt)' : ''}${app != null ? ` · App ab Steckdose <b>${fmt(app, 1)}</b>` : ''}</p>
+    <p id="lt-msg" class="text-sm text-red-600 dark:text-red-400 text-left empty:hidden"></p>
+    <div class="grid grid-cols-2 gap-2.5"><button type="button" data-lts="${e ? 'del' : 'close'}" class="h-12 rounded-2xl border border-slate-300 dark:border-slate-700 text-sm font-semibold ${e ? 'text-red-600 dark:text-red-400' : ''}">${e ? 'Löschen' : 'Abbrechen'}</button><button type="button" data-lts="save" class="h-12 rounded-2xl bg-emerald-600 text-white text-sm font-semibold">Speichern</button></div>`;
+  $('rec-sheet').classList.remove('hidden');
+}
+$('rec-sheet').addEventListener('click', (ev) => {
+  const b = ev.target.closest('[data-lts]'); if (!b) return; const act = b.dataset.lts, lab = getLab(); lab.lt = lab.lt || [];
+  if (act === 'del') { if (!confirm('Diese Ablesung löschen?')) return; lab.lt = lab.lt.filter(x => x.id !== ltEdit); setLab(lab); }
+  else if (act === 'save') {
+    const k = deDec($('lt-k').value), km = deDec(String($('lt-km').value).replace(/\./g, '')), opt = (id) => { const v = deDec($(id).value); return Number.isFinite(v) && v > 0 ? v : undefined; };
+    if (!(k > 5 && k < 50)) { $('lt-msg').textContent = 'Bitte den Verbrauch in kWh/100 km eintragen (z. B. 15,3).'; return; }
+    const e = { id: ltEdit || labId(), date: $('lt-date').value || wxIso(new Date()), km: Number.isFinite(km) && km > 0 ? Math.round(km) : undefined, k100: Math.round(k * 10) / 10, v: opt('lt-v'), h: opt('lt-h'), note: $('lt-note').value.trim() || undefined };
+    Object.keys(e).forEach(x => e[x] === undefined && delete e[x]);
+    lab.lt = ltEdit ? lab.lt.map(x => x.id === ltEdit ? e : x) : lab.lt.concat(e); recRoute = 'lt'; setLab(lab);
+  }
+  $('rec-sheet').classList.add('hidden');
+});
+
+/* ---- Akku-Temperatur: schnelle Notizen (lab.bt = [{ id, at (ISO), t °C, out? °C, ctx? 'fahrt'|'geparkt'|'laden' }]), Verlauf Akku vs. Außen ---- */
+const BT_CTX = [['fahrt', 'nach Fahrt'], ['geparkt', 'geparkt'], ['laden', 'vor Laden']];
+let btVal = null, btCtx = null, btRange = '30', btOut = { t: 0, v: null }, btLastSaved = null;
+async function btOutside() {
+  if (Date.now() - btOut.t < 15 * 60000) return btOut.v; const l = wxLoc(); if (!l) return null;
+  try { const r = await fetch('https://api.open-meteo.com/v1/forecast?latitude=' + l.lat + '&longitude=' + l.lon + '&current=temperature_2m&timezone=auto'); const j = await r.json(); const v = j && j.current ? Number(j.current.temperature_2m) : null; btOut = { t: Date.now(), v: Number.isFinite(v) ? v : null }; } catch (e) { btOut = { t: Date.now() - 14 * 60000, v: null }; }
+  return btOut.v;
+}
+function btSvg(es) {
+  const W = 296, H = 132, L = 30, R = 8, T = 10, B = 20, now = Date.now(), span = btRange === '30' ? 30 : btRange === '365' ? 365 : null;
+  const t0 = span ? now - span * 864e5 : Math.min(...es.map(e => Date.parse(e.at))), t1 = now, xs = (t) => L + (t - t0) / Math.max(1, t1 - t0) * (W - L - R);
+  const vs = es.flatMap(e => [e.t].concat(Number.isFinite(e.out) ? [e.out] : [])); let y0 = Math.floor(Math.min(0, ...vs) / 10) * 10, y1 = Math.ceil(Math.max(30, ...vs) / 10) * 10;
+  const Y = (v) => T + (1 - (v - y0) / (y1 - y0)) * (H - T - B), tk = []; for (let v = y0; v <= y1; v += 10) tk.push(v);
+  const line = (k) => { const p = es.filter(e => Number.isFinite(e[k])); return p.length > 1 ? p.map(e => xs(Date.parse(e.at)).toFixed(1) + ',' + Y(e[k]).toFixed(1)).join(' ') : ''; };
+  const fmtX = (t) => new Date(t).toLocaleDateString('de-DE', span === 30 ? { day: '2-digit', month: '2-digit' } : { month: '2-digit', year: '2-digit' });
+  const la = line('t'), lo = line('out');
+  return `<svg viewBox="0 0 ${W} ${H}" class="w-full" role="img" aria-label="Verlauf Akku- und Außentemperatur">`
+    + tk.map(v => `<line x1="${L}" x2="${W - R}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="currentColor" class="text-slate-200 dark:text-slate-800"/><text x="${L - 5}" y="${(Y(v) + 3.5).toFixed(1)}" text-anchor="end" font-size="9.5" fill="#94a3b8">${v}°</text>`).join('')
+    + (lo ? `<polyline points="${lo}" fill="none" stroke="#38bdf8" stroke-width="1.6" stroke-dasharray="4 3"/>` : '')
+    + (la ? `<polyline points="${la}" fill="none" stroke="#f97316" stroke-width="2.4" stroke-linejoin="round"/>` : '')
+    + es.map(e => `<circle cx="${xs(Date.parse(e.at)).toFixed(1)}" cy="${Y(e.t).toFixed(1)}" r="2.4" fill="#f97316"/>`).join('')
+    + [t0, (t0 + t1) / 2, t1].map((t, i) => `<text x="${xs(t).toFixed(1)}" y="${H - 5}" text-anchor="${i === 0 ? 'start' : i === 2 ? 'end' : 'middle'}" font-size="9.5" fill="#94a3b8">${fmtX(t)}</text>`).join('') + '</svg>';
+}
+const btTripTxt = (e) => { const t = e.trip; if (!t) return ''; if (t.k === 'fahrt') return (t.ago != null ? t.ago + ' min nach ' : 'nach ') + (t.min ? t.min + ' min' : '') + (t.km ? ' / ' + t.km + ' km' : '') + ' Fahrt'; return t.h ? t.h + ' h geparkt' : ''; };
+/* Plausibilität: weicht ein Wert um ≥ 6 °C vom zeitlich vorherigen ab, nur Hinweis (Wert bleibt gespeichert) */
+const BT_JUMP = 6;
+function btJump(en, list) {
+  const t0 = Date.parse(en.at); let prev = null;
+  for (const x of list || []) { if (x === en || x.id === en.id || !Number.isFinite(x.t) || !x.at) continue; const tx = Date.parse(x.at); if (tx < t0 && (!prev || tx > Date.parse(prev.at))) prev = x; }
+  if (!prev) return null; const d = Math.round((en.t - prev.t) * 10) / 10; return Math.abs(d) >= BT_JUMP ? { prev, d } : null;
+}
+const btJumpD = (j) => (j.d > 0 ? '+' : '−') + fmt(Math.abs(j.d), 0) + '°';
+const btJumpTxt = (en, j) => `⚠️ ${btJumpD(j)} zum letzten Wert (${fmt(j.prev.t, 0)} °C) – bitte prüfen.`;
+function btCard(list) {
+  const all = (list || []).filter(e => Number.isFinite(e.t) && e.at).sort((a, b) => Date.parse(a.at) - Date.parse(b.at)), last = all[all.length - 1];
+  if (btVal == null) btVal = last ? Math.round(last.t) : 15;
+  const span = btRange === '30' ? 30 : btRange === '365' ? 365 : null, es = span ? all.filter(e => Date.parse(e.at) >= Date.now() - span * 864e5) : all;
+  const pill = (on) => on ? 'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300 border-transparent' : 'border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300';
+  const now = new Date(), stepB = 'flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-800 text-3xl font-semibold active:scale-90 transition select-none';
+  let h = `<div id="btq-card" class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 space-y-3">
+    <div class="flex items-baseline justify-between gap-2"><p class="text-sm text-slate-500 dark:text-slate-400 text-left">Akku-Temperatur jetzt</p><span class="text-xs text-slate-500">${now.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })} · ${hhmm(now.getTime())}</span></div>
+    <div class="flex items-center gap-2.5"><button type="button" data-bt="-1" aria-label="1 Grad weniger" class="${stepB}">−</button><span class="flex-1 text-center font-barlow text-[56px] font-bold leading-none text-orange-500 dark:text-orange-400 tabular-nums"><span id="btq-val">${btVal}</span> <span class="text-[28px]">°C</span></span><button type="button" data-bt="1" aria-label="1 Grad mehr" class="${stepB}">+</button></div>
+    <div class="flex gap-1.5">${BT_CTX.map(([k, l]) => `<button type="button" data-btctx="${k}" aria-pressed="${btCtx === k}" class="flex-1 rounded-full border py-1.5 text-xs font-semibold ${pill(btCtx === k)}">${l}</button>`).join('')}</div>
+    <div class="flex items-center gap-2"><span id="btq-out" class="min-w-0 text-xs text-slate-500 dark:text-slate-400 text-left">${btOut.v != null ? 'Außen ' + fmt(btOut.v, 0) + ' °C · automatisch' : wxLoc() ? 'Außen wird geladen …' : 'Außen: Standort unter Einstellungen → Wetter'}</span><button type="button" data-bt="save" class="ml-auto h-11 shrink-0 rounded-2xl bg-emerald-600 px-6 text-sm font-semibold text-white active:scale-95 transition">Speichern</button></div>
+    ${btLastSaved ? `<div class="flex items-center justify-between gap-2 text-xs"><span class="text-left"><span class="text-emerald-600 dark:text-emerald-400">✓ ${fmt(btLastSaved.t, 0)} °C um ${hhmm(Date.parse(btLastSaved.at))} gespeichert</span>${(() => { const j = btJump(btLastSaved, getLab().bt); return j ? '<span class="block text-amber-600 dark:text-amber-400">' + btJumpTxt(btLastSaved, j) + '</span>' : ''; })()}</span><button type="button" data-bt="undo" class="font-semibold text-sky-600 dark:text-sky-300">Rückgängig</button></div>` : ''}</div>`;
+  h += `<div class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 space-y-1.5"><div class="flex items-center justify-between gap-2"><p class="text-sm font-bold">Verlauf</p><div class="flex rounded-lg bg-slate-100 dark:bg-slate-800 p-0.5 text-[11px] font-semibold">${[['30', '30 T'], ['365', '1 J'], ['all', 'Alle']].map(([k, l]) => `<button type="button" data-btr="${k}" class="rounded-md px-2 py-0.5 ${btRange === k ? 'bg-white dark:bg-slate-600 shadow-sm' : 'text-slate-500 dark:text-slate-400'}">${l}</button>`).join('')}</div></div>`
+    + (es.length ? btSvg(es) + `<div class="flex items-center gap-3.5 text-[11px] text-slate-500 dark:text-slate-400"><span><span class="inline-block h-[3px] w-3 bg-orange-500 align-middle"></span> Akku</span><span><span class="inline-block w-3 border-t-2 border-dashed border-sky-400 align-middle"></span> Außen</span><span class="ml-auto">${es.length} ${es.length === 1 ? 'Wert' : 'Werte'}</span></div>`
+      : `<p class="py-4 text-sm text-slate-500 dark:text-slate-400 text-left">${all.length ? 'Keine Werte in diesem Zeitraum.' : 'Noch keine Werte. Temperatur oben einstellen und speichern – die App merkt sich den letzten Wert, beim nächsten Mal reicht oft ein Tipp.'}</p>`) + '</div>';
+  if (all.length) h += `<details data-btlist ${btListOpen ? 'open' : ''} class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm px-4 py-3"><summary class="cursor-pointer text-sm font-semibold">Alle Einträge (${all.length})</summary><div class="mt-2">${all.slice().reverse().slice(0, 200).map(e => { const j = btJump(e, all); return `<div data-btedit="${esc(e.id)}" role="button" tabindex="0" aria-label="Eintrag bearbeiten" class="flex cursor-pointer items-center gap-2 border-t border-slate-100 dark:border-slate-800 py-2 text-[13px] active:bg-slate-50 dark:active:bg-slate-800/50"><span class="w-[92px] shrink-0 tabular-nums">${new Date(e.at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' })} ${hhmm(Date.parse(e.at))}</span><b class="w-12 shrink-0 tabular-nums text-orange-600 dark:text-orange-400">${fmt(e.t, 0)} °C</b><span class="min-w-0 flex-1 truncate text-xs text-slate-500 dark:text-slate-400">${j ? `<span class="text-amber-600 dark:text-amber-400" title="${fmt(Math.abs(j.d), 0)}° ${j.d > 0 ? 'über' : 'unter'} dem vorherigen Wert (${fmt(j.prev.t, 0)} °C) – bitte prüfen">⚠️ ${j.d > 0 ? '+' : '−'}${fmt(Math.abs(j.d), 0)}°</span> ` : ''}${[Number.isFinite(e.out) ? 'außen ' + fmt(e.out, 0) + ' °C' : '', ((BT_CTX.find(c => c[0] === e.ctx) || [])[1] || '') + (e.ctxAuto ? ' (auto)' : ''), btTripTxt(e)].filter(Boolean).join(' · ')}</span><button type="button" data-btdel="${esc(e.id)}" aria-label="Eintrag löschen" class="shrink-0 px-1.5 text-slate-400 active:text-red-500">✕</button></div>`; }).join('')}</div></details>`;
+  if (btOut.v == null && wxLoc() && Date.now() - btOut.t > 15 * 60000) btOutside().then(v => { const el = $('btq-out'); if (el) el.textContent = v != null ? 'Außen ' + fmt(v, 0) + ' °C · automatisch' : 'Außen nicht verfügbar'; });
+  return h;
+}
+$('rec-list').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-bt]'), c = e.target.closest('[data-btctx]'), r = e.target.closest('[data-btr]'), d = e.target.closest('[data-btdel]');
+  if (c) { btCtx = btCtx === c.dataset.btctx ? null : c.dataset.btctx; renderRecs(); return; }
+  if (r) { btRange = r.dataset.btr; renderRecs(); return; }
+  if (d) { if (!confirm('Diesen Eintrag löschen?')) return; const lab = getLab(); lab.bt = (lab.bt || []).filter(x => x.id !== d.dataset.btdel); setLab(lab); return; }
+  const ed = e.target.closest('[data-btedit]'); if (ed) { openBtSheet(ed.dataset.btedit); return; }
+  if (!b) return; const a = b.dataset.bt;
+  if (a === '1' || a === '-1') { btVal = Math.max(-30, Math.min(70, btVal + Number(a))); $('btq-val').textContent = btVal; btLastSaved = null; return; }
+  if (a === 'save') {
+    const out = await btOutside(), lab = getLab(), en = { id: labId(), at: new Date().toISOString(), t: btVal };
+    if (Number.isFinite(out)) en.out = Math.round(out * 10) / 10; if (btCtx) en.ctx = btCtx;
+    lab.bt = (lab.bt || []).concat(en); btLastSaved = en; btCtx = null; setLab(lab); return;
+  }
+  if (a === 'undo' && btLastSaved) { const lab = getLab(), id = btLastSaved.id; lab.bt = (lab.bt || []).filter(x => x.id !== id); btLastSaved = null; setLab(lab); }
+});
+/* Akku °C: Eintrag nachträglich bearbeiten (Datum, Uhrzeit, Akku, Außen, Anlass) */
+let btEdit = null, btEditCtx = null;
+var btListOpen = btListOpen || false;
+$('rec-list').addEventListener('toggle', (e) => { if (e.target.matches && e.target.matches('[data-btlist]')) btListOpen = e.target.open; }, true);
+function openBtSheet(id) {
+  const e = (getLab().bt || []).find(x => x.id === id); if (!e) return; btEdit = e.id; btEditCtx = e.ctx || null;
+  const d = new Date(e.at), pad = (n) => String(n).padStart(2, '0');
+  const pill = (k, l) => `<button type="button" data-btsctx="${k}" class="flex-1 rounded-full border py-2 text-xs font-semibold ${btEditCtx === k ? 'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300 border-transparent' : 'border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300'}">${l}</button>`;
+  $('rec-sheet-box').innerHTML = `<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div><p class="text-lg font-bold">Akku-Temperatur bearbeiten</p>
+    <div class="grid grid-cols-2 gap-2"><div class="min-w-0"><label for="bts-date" class="text-xs text-slate-500 dark:text-slate-400">Datum</label><input id="bts-date" type="date" value="${wxIso(d)}" class="${inCls}"></div><div class="min-w-0"><label for="bts-time" class="text-xs text-slate-500 dark:text-slate-400">Uhrzeit</label><input id="bts-time" type="time" value="${pad(d.getHours())}:${pad(d.getMinutes())}" class="${inCls}"></div>
+      ${fld('bts-t', 'Akku °C', e.t, '12', 'text')}${fld('bts-out', 'Außen °C', Number.isFinite(e.out) ? e.out : undefined, 'optional', 'text')}</div>
+    <div><p class="text-xs text-slate-500 dark:text-slate-400">Anlass${e.ctxAuto ? ' (automatisch aus dem Fahrtenbuch)' : ''}</p><div id="bts-ctx" class="mt-1 flex gap-1.5">${BT_CTX.map(([k, l]) => pill(k, l)).join('')}</div></div>
+    <p id="bts-msg" class="text-sm text-red-600 dark:text-red-400 text-left empty:hidden"></p>
+    <div class="grid grid-cols-2 gap-2.5"><button type="button" data-bts="del" class="h-12 rounded-2xl border border-slate-300 dark:border-slate-700 text-sm font-semibold text-red-600 dark:text-red-400">Löschen</button><button type="button" data-bts="save" class="h-12 rounded-2xl bg-emerald-600 text-white text-sm font-semibold">Speichern</button></div>
+    <button type="button" data-bts="close" class="h-11 w-full rounded-2xl text-sm font-semibold text-slate-500 dark:text-slate-400">Abbrechen</button>`;
+  $('rec-sheet').classList.remove('hidden');
+}
+$('rec-sheet').addEventListener('click', (ev) => {
+  const c = ev.target.closest('[data-btsctx]');
+  if (c) { btEditCtx = btEditCtx === c.dataset.btsctx ? null : c.dataset.btsctx; $('bts-ctx').querySelectorAll('[data-btsctx]').forEach(x => { const on = x.dataset.btsctx === btEditCtx;
+    ['bg-orange-100', 'text-orange-700', 'dark:bg-orange-950', 'dark:text-orange-300', 'border-transparent'].forEach(k => x.classList.toggle(k, on)); ['border-slate-300', 'dark:border-slate-700', 'text-slate-600', 'dark:text-slate-300'].forEach(k => x.classList.toggle(k, !on)); }); return; }
+  const b = ev.target.closest('[data-bts]'); if (!b) return; const act = b.dataset.bts, lab = getLab(); lab.bt = lab.bt || [];
+  if (act === 'del') { if (!confirm('Diesen Eintrag löschen?')) return; lab.bt = lab.bt.filter(x => x.id !== btEdit); setLab(lab); }
+  else if (act === 'save') {
+    const t = deDec($('bts-t').value), out = deDec($('bts-out').value), at = new Date(($('bts-date').value || '') + 'T' + ($('bts-time').value || '12:00'));
+    if (!Number.isFinite(t) || t < -30 || t > 70) { $('bts-msg').textContent = 'Bitte eine Akku-Temperatur zwischen −30 und 70 °C eintragen.'; return; }
+    if (isNaN(at)) { $('bts-msg').textContent = 'Bitte Datum und Uhrzeit prüfen.'; return; }
+    if ($('bts-out').value.trim() && !(Number.isFinite(out) && out > -40 && out < 50)) { $('bts-msg').textContent = 'Außentemperatur bitte als Zahl (oder leer lassen).'; return; }
+    lab.bt = lab.bt.map(x => { if (x.id !== btEdit) return x; const o = { ...x, t: Math.round(t * 10) / 10 };
+      if (Number.isFinite(out)) o.out = Math.round(out * 10) / 10; else delete o.out;
+      if (at.toISOString() !== new Date(x.at).toISOString().replace(/:\d\d\.\d+Z$/, ':00.000Z') && Math.abs(at - new Date(x.at)) >= 60000) { o.at = at.toISOString(); delete o.trip; if (o.ctxAuto) { delete o.ctx; delete o.ctxAuto; } }
+      if (btEditCtx !== (o.ctx || null)) { if (btEditCtx) o.ctx = btEditCtx; else delete o.ctx; delete o.ctxAuto; }
+      return o; });
+    setLab(lab); try { btFillTrips(); } catch (e) { } try { renderBtm(); } catch (e) { }
+  }
+  $('rec-sheet').classList.add('hidden');
+});
+/* Start: kleine Akku-Temperatur-Karte (links der Verbrauchs-Prognose im Wisch-Bereich). Speichert in dieselbe Liste wie Rekorde → Akku °C (lab.bt). */
+let btmVal = null, btmCtx = 'geparkt', btmSaved = null, btmMsg = '';
+function renderBtm() {
+  const el = $('btm-card'); if (!el) return;
+  const all = (getLab().bt || []).filter(e => Number.isFinite(e.t) && e.at).sort((a, b) => Date.parse(a.at) - Date.parse(b.at)), last = all[all.length - 1];
+  if (btmVal == null) btmVal = last ? Math.round(last.t) : 15;
+  const now = new Date(), stepB = 'flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-800 text-2xl font-semibold active:scale-90 transition select-none';
+  const pill = (on) => on ? 'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300 border-transparent' : 'border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300';
+  const btmJ = btmSaved ? btJump(btmSaved, all) : null;
+  const info = btmMsg ? btmMsg : btmJ ? `<span class="text-amber-600 dark:text-amber-400">${btJumpTxt(btmSaved, btmJ)}</span>` : btmSaved ? `<span class="text-emerald-600 dark:text-emerald-400">✓ ${fmt(btmSaved.t, 0)} °C um ${hhmm(Date.parse(btmSaved.at))} gespeichert</span>`
+    : [btOut.v != null ? 'Außen ' + fmt(btOut.v, 0) + ' °C' : '', last ? 'zuletzt ' + fmt(last.t, 0) + ' °C · ' + new Date(last.at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }) : 'noch kein Wert'].filter(Boolean).join(' · ');
+  el.innerHTML = `<div class="flex items-baseline justify-between gap-2"><p class="font-barlow text-xl font-bold uppercase tracking-[0.08em] leading-6">Akku-Temperatur</p><span class="flex shrink-0 gap-3"><button type="button" data-btm="tasks" class="text-xs font-semibold text-sky-700 dark:text-sky-300">📥 Tasks</button><button type="button" data-btm="open" class="text-xs font-semibold text-sky-700 dark:text-sky-300">Verlauf ›</button></span></div>
+    <div class="mt-2 flex items-center gap-2.5"><button type="button" data-btm="-1" aria-label="1 Grad weniger" class="${stepB}">−</button><span class="flex-1 text-center font-barlow text-[50px] font-bold leading-none text-orange-500 dark:text-orange-400 tabular-nums"><span id="btm-val">${btmVal}</span> <span class="text-[24px]">°C</span></span><button type="button" data-btm="1" aria-label="1 Grad mehr" class="${stepB}">+</button></div>
+    <div class="mt-2.5 flex gap-1.5">${BT_CTX.map(([k, l]) => `<button type="button" data-btmctx="${k}" aria-pressed="${btmCtx === k}" class="flex-1 rounded-full border py-1.5 text-xs font-semibold ${pill(btmCtx === k)}">${l}</button>`).join('')}</div>
+    <div class="min-h-2 flex-1"></div>
+    <div class="flex items-center gap-2"><span class="min-w-0 ${btmJ || /⚠️/.test(btmMsg) ? 'line-clamp-2' : 'truncate'} text-xs leading-4 text-left text-slate-500 dark:text-slate-400">${info}</span>${btmSaved ? '<button type="button" data-btm="undo" class="ml-auto h-10 shrink-0 rounded-2xl bg-slate-200 dark:bg-slate-800 px-4 text-sm font-semibold text-sky-700 dark:text-sky-300 active:scale-95 transition">Rückgängig</button>' : '<button type="button" data-btm="save" class="ml-auto h-10 shrink-0 rounded-2xl bg-emerald-600 px-5 text-sm font-semibold text-white active:scale-95 transition">Speichern</button>'}</div>`;
+}
+$('btm-card').addEventListener('click', async (e) => {
+  const c = e.target.closest('[data-btmctx]'); if (c) { btmCtx = btmCtx === c.dataset.btmctx ? null : c.dataset.btmctx; renderBtm(); return; }
+  const b = e.target.closest('[data-btm]'); if (!b) return; const a = b.dataset.btm;
+  if (a === '1' || a === '-1') { btmVal = Math.max(-30, Math.min(70, btmVal + Number(a))); $('btm-val').textContent = btmVal; if (btmSaved || btmMsg) { btmSaved = null; btmMsg = ''; renderBtm(); } return; }
+  if (a === 'open') { NAV_GO.akkutemp ? NAV_GO.akkutemp() : showView('recs'); return; }
+  if (a === 'tasks') { gtImport(false); return; }
+  if (a === 'save') {
+    b.disabled = true; const out = await btOutside(), lab = getLab(), en = { id: labId(), at: new Date().toISOString(), t: btmVal };
+    if (Number.isFinite(out)) en.out = Math.round(out * 10) / 10; if (btmCtx) en.ctx = btmCtx;
+    lab.bt = (lab.bt || []).concat(en); btmSaved = en; btmCtx = 'geparkt'; btmMsg = ''; setLab(lab); renderBtm(); return;
+  }
+  if (a === 'undo' && btmSaved) { const lab = getLab(), id = btmSaved.id; lab.bt = (lab.bt || []).filter(x => x.id !== id); btmSaved = null; setLab(lab); renderBtm(); }
+});
+/* Start: Langzeitverbrauch-Karte (ganz links im Wisch-Bereich, links der Akku-Temperatur). ±0,1 kWh/100 km, Datum antippbar,
+   km-Stand vom Auto (stündlicher Zwischenstand; beim Speichern einmal frisch geholt). Speichert in lab.lt wie Rekorde → Langzeit. */
+let ltmVal = null, ltmDate = null, ltmSaved = null, ltmMsg = '';
+function ltmCarKm() {                                                               // { km, at } aus dem letzten Abruf beim Auto
+  const c = load(KEY_WXO + 'S', null), d = c && c.d;
+  if (carKmCache && (!d || carKmCache.t >= c.t)) return { km: carKmCache.km, at: carKmCache.at || new Date(carKmCache.t).toISOString() };
+  return d && d.odometerKm != null ? { km: Math.round(d.odometerKm), at: d.capturedAt || new Date(c.t).toISOString() } : null;
+}
+function renderLtm() {
+  const el = $('ltm-card'); if (!el) return;
+  const all = (getLab().lt || []).filter(e => e.k100 > 0 && e.date).sort((a, b) => a.date.localeCompare(b.date) || (a.km || 0) - (b.km || 0)), last = all[all.length - 1];
+  if (ltmVal == null) ltmVal = last ? last.k100 : 16;
+  const today = wxIso(new Date()); if (!ltmDate) ltmDate = today;
+  const car = apiEnabled() && ltmDate === today ? ltmCarKm() : null, kmTxt = ltmDate !== today ? '<span class="font-normal text-slate-500 dark:text-slate-400">wird geschätzt</span>' : car ? fmt(car.km, 0) + ' km' : (() => { const k = (() => { try { return lastKnownKm(); } catch (_) { return null; } })(); return k ? '≈ ' + fmt(k, 0) + ' km' : 'km folgt'; })();
+  const carAt = car && car.at ? new Date(car.at) : null, carSub = car ? (carAt ? (wxIso(carAt) === today ? hhmm(carAt.getTime()) : carAt.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })) : '') : '';
+  const stepB = 'flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-800 text-2xl font-semibold active:scale-90 transition select-none';
+  const chip = (a, l, on) => `<button type="button" data-ltm="${a}" class="rounded-full border px-3 py-1.5 text-xs font-semibold ${on ? 'border-transparent bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300'} active:scale-95 transition">${l}</button>`;
+  const d = last ? Math.round((ltmVal - last.k100) * 10) / 10 : null;
+  const info = ltmMsg ? ltmMsg : ltmSaved ? `<span class="text-emerald-600 dark:text-emerald-400">✓ ${fmt(ltmSaved.k100, 1)} gespeichert${ltmSaved.km ? ' · ' + fmt(ltmSaved.km, 0) + ' km' : ''}</span>`
+    : last ? `zuletzt ${fmt(last.k100, 1)} · ${new Date(last.date + 'T12:00:00').toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}${d ? ` · <span class="${d > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}">${d > 0 ? '+' : '−'}${fmt(Math.abs(d), 1)}</span>` : ''}` : 'noch keine Ablesung';
+  const dTxt = ltmDate === today ? 'Heute' : new Date(ltmDate + 'T12:00:00').toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
+  el.innerHTML = `<div class="flex items-baseline justify-between gap-2"><p class="font-barlow text-xl font-bold uppercase tracking-[0.08em] leading-6">Langzeitverbrauch</p><span class="flex shrink-0 gap-3"><button type="button" data-ltm="tasks" class="text-xs font-semibold text-sky-700 dark:text-sky-300">📥 Tasks</button><button type="button" data-ltm="open" class="text-xs font-semibold text-sky-700 dark:text-sky-300">Verlauf ›</button></span></div>
+    <div class="mt-2 flex items-center gap-2.5"><button type="button" data-ltm="-0.1" aria-label="0,1 weniger" class="${stepB}">−</button><span class="flex-1 text-center font-barlow font-bold leading-none text-emerald-600 dark:text-emerald-400 tabular-nums"><span id="ltm-val" class="text-[50px]">${fmt(ltmVal, 1)}</span> <span class="text-[18px]">kWh/100</span></span><button type="button" data-ltm="0.1" aria-label="0,1 mehr" class="${stepB}">+</button></div>
+    <div class="mt-2.5 grid grid-cols-2 gap-1.5"><label class="relative min-w-0 rounded-xl bg-slate-100 dark:bg-slate-800/70 px-2.5 py-1.5"><p class="text-[10.5px] text-left text-slate-500 dark:text-slate-400">Datum ✎</p><p class="truncate text-[13px] font-semibold">${dTxt}</p><input id="ltm-date" type="date" max="${today}" value="${ltmDate}" aria-label="Datum der Ablesung" class="absolute inset-0 h-full w-full cursor-pointer opacity-0"></label>
+      <button type="button" data-ltm="km" class="min-w-0 rounded-xl bg-slate-100 dark:bg-slate-800/70 px-2.5 py-1.5 text-left active:scale-[.98] transition"><p class="truncate text-[10.5px] text-slate-500 dark:text-slate-400">km-Stand${apiEnabled() && ltmDate === today ? ' <span class="text-emerald-600 dark:text-emerald-400">↻</span>' : ''}</p><p class="truncate text-[13px] font-semibold tabular-nums">${kmTxt} <span class="text-[10.5px] font-normal text-slate-500 dark:text-slate-400">${carSub}</span></p></button></div>
+    <div class="min-h-2 flex-1"></div>
+    <div class="flex items-center gap-2"><span class="min-w-0 truncate text-xs leading-4 text-left text-slate-500 dark:text-slate-400">${info}</span>${ltmSaved ? '<button type="button" data-ltm="undo" class="ml-auto h-10 shrink-0 rounded-2xl bg-slate-200 dark:bg-slate-800 px-4 text-sm font-semibold text-sky-700 dark:text-sky-300 active:scale-95 transition">Rückgängig</button>' : '<button type="button" data-ltm="save" class="ml-auto h-10 shrink-0 rounded-2xl bg-emerald-600 px-5 text-sm font-semibold text-white active:scale-95 transition">Speichern</button>'}</div>`;
+}
+$('ltm-card').addEventListener('change', (e) => { if (e.target.id === 'ltm-date') { ltmDate = e.target.value || wxIso(new Date()); ltmSaved = null; ltmMsg = ''; renderLtm(); } });
+$('ltm-card').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-ltm]'); if (!b) return; const a = b.dataset.ltm;
+  if (a === '0.1' || a === '-0.1') { ltmVal = Math.max(5, Math.min(49.9, Math.round((ltmVal + Number(a)) * 10) / 10)); if (ltmSaved || ltmMsg) { ltmSaved = null; ltmMsg = ''; renderLtm(); } else $('ltm-val').textContent = fmt(ltmVal, 1); return; }
+  if (a === 'open') { recRoute = 'lt'; showView('recs'); return; }
+  if (a === 'tasks') { gtImport(false); return; }
+  if (a === 'km') { if (ltmDate !== wxIso(new Date())) return; if (!apiEnabled()) { ltmMsg = 'Keine Fahrzeugdaten eingerichtet'; renderLtm(); return; } b.disabled = true; ltmMsg = 'km-Stand wird geholt …'; renderLtm();
+    try { await fetchCarKm(); ltmMsg = ''; } catch (er) { ltmMsg = '<span class="text-red-600 dark:text-red-400">km-Stand nicht verfügbar</span>'; } renderLtm(); return; }
+  if (a === 'save') {
+    b.disabled = true; const date = ltmDate || wxIso(new Date()), today = date === wxIso(new Date()), en = { id: labId(), date, at: today ? new Date().toISOString() : date + 'T12:00:00', k100: Math.round(ltmVal * 10) / 10 };
+    if (today && apiEnabled()) { try { en.km = (await fetchCarKm()).km; } catch (er) { const c = ltmCarKm(); if (c && Date.now() - Date.parse(c.at) < 6 * 3600e3) en.km = c.km; } }
+    if (!(en.km > 0)) { const k = await gtKmAt(en.at).catch(() => ({ km: null, est: true })); if (k.km > 0) en.km = k.km; if (k.est || !(k.km > 0)) en.kmEst = true; }
+    const lab = getLab(); lab.lt = (lab.lt || []).concat(en); ltmSaved = en; ltmMsg = ''; ltmDate = null; setLab(lab); renderLtm(); return;
+  }
+  if (a === 'undo' && ltmSaved) { const lab = getLab(), id = ltmSaved.id; lab.lt = (lab.lt || []).filter(x => x.id !== id); ltmSaved = null; setLab(lab); renderLtm(); }
+});
+/* =====================================================================
+   Akku-Temperatur per Sprachbefehl: Gemini/Android Auto legt eine Aufgabe in Google Tasks an („Akku 12 Grad“, „Akkutemperatur minus 3 nach Fahrt“).
+   Die App liest offene Aufgaben, die mit „Akku“ beginnen, übernimmt Wert + Zeitpunkt (Aufgabe angelegt) in lab.bt – wie Akku °C –, ergänzt die
+   Außentemperatur dieser Stunde und hakt die Aufgabe ab. Berechtigung: Google Tasks (zusammen mit Drive, ein Google-Fenster).
+   Automatisch beim Öffnen von Start, solange der Google-Zugriff noch gültig ist; sonst per Tipp auf „📥 Tasks“.
+   ===================================================================== */
+const GT_NUM = { null: 0, eins: 1, ein: 1, zwei: 2, drei: 3, vier: 4, fünf: 5, sechs: 6, sieben: 7, acht: 8, neun: 9, zehn: 10, elf: 11, zwölf: 12, dreizehn: 13, vierzehn: 14, fünfzehn: 15, sechzehn: 16, siebzehn: 17, achtzehn: 18, neunzehn: 19, zwanzig: 20, dreißig: 30, vierzig: 40, fünfzig: 50 };
+function gtWordNum(t) {                                                             // „einundzwanzig“ → 21
+  t = t.toLowerCase(); if (GT_NUM[t] != null) return GT_NUM[t];
+  const m = /^(\w+?)und(zwanzig|dreißig|vierzig|fünfzig)$/.exec(t); return m && GT_NUM[m[1]] != null ? GT_NUM[m[1]] + GT_NUM[m[2]] : null;
+}
+/** „Akku 12 Grad“, „12° Akku Nachfahrt“, „Akkutemperatur: -3,5 °C nach Fahrt“, „Akku minus drei geparkt“ → { t, ctx } oder null.
+    Reihenfolge egal (Gemini schreibt die Zahl gern vorne), Zahl als Ziffer oder Wort, Anlass auch zusammengeschrieben („Nachfahrt“, „vorladen“). */
+function gtParse(title) {
+  const s0 = String(title || '').trim().toLowerCase().replace(/−/g, '-'); if (!/akku/.test(s0)) return null;
+  const s = ' ' + s0.replace(/akku\s*-?\s*(temperatur|temp\.?)?/g, ' ').replace(/[:=]/g, ' ') + ' ';
+  let v = null, m = /(?:^|[^\d,.])(minus\s*|-\s*)?(\d{1,2}(?:[.,]\d)?)(?![\d.,])/.exec(s);
+  if (m) v = (m[1] ? -1 : 1) * Number(m[2].replace(',', '.'));
+  else { const w = /(?:^|\s)(minus\s+)?([a-zäöüß]+)/g; let x; while ((x = w.exec(s))) { const n = gtWordNum(x[2]); if (n != null) { v = (x[1] ? -1 : 1) * n; break; } } }
+  if (v == null || !Number.isFinite(v) || v < -30 || v > 70) return null;
+  const ctx = /nach\s*(der\s*)?fahrt|gefahren/.test(s) ? 'fahrt' : /geparkt|parken|im stand/.test(s) ? 'geparkt' : /vor\s*(dem\s*)?laden|laden/.test(s) ? 'laden' : null;
+  return { t: Math.round(v * 10) / 10, ctx };
+}
+/** „Langzeit 13,1“, „Langzeit dreizehn Komma eins“ → kWh/100 km oder null */
+function gtParseLt(title) {
+  const s0 = String(title || '').trim().toLowerCase(); if (!/lang\s*zeit/.test(s0)) return null;
+  const s = s0.replace(/lang\s*zeit(verbrauch)?/g, ' ').replace(/kilowattstunden|kwh|pro|\/|100|km|kilometer/g, ' ');
+  let v = null; const m = /(\d{1,2})(?:\s*[.,]\s*(\d))?(?![\d])/.exec(s);
+  if (m) v = Number(m[1] + (m[2] ? '.' + m[2] : ''));
+  else { const w = /([a-zäöüß]+)(?:\s+(?:komma|punkt)\s+([a-zäöüß]+|\d))?/g; let x; while ((x = w.exec(s))) { const a = gtWordNum(x[1]); if (a == null) continue; const b = x[2] == null ? 0 : /\d/.test(x[2]) ? Number(x[2]) : gtWordNum(x[2]); v = a + (b != null && b < 10 ? b / 10 : 0); break; } }
+  return v != null && v > 5 && v < 50 ? Math.round(v * 10) / 10 : null;
+}
+/** Genauer km-Stand zu einem Zeitpunkt aus dem Fahrtenbuch (MyŠkoda): während einer Fahrt zwischen Start- und Ziel-km interpoliert,
+    zwischen zwei Fahrten (Auto stand) der Ziel-km der vorherigen Fahrt. Nur wenn Fahrten vor UND nach dem Zeitpunkt vorliegen – sonst null. */
+function tripKmAt(iso) {
+  const t = Date.parse(iso), ts = getTrips().filter(x => Number.isFinite(x.o1) && x.s && x.e); if (!Number.isFinite(t) || !ts.length) return null;
+  const S = (x) => Date.parse(x.s), E = (x) => Date.parse(x.e);
+  const inT = ts.find(x => S(x) <= t && t <= E(x));
+  if (inT) { const o0 = Number.isFinite(inT.o0) ? inT.o0 : inT.o1 - (inT.km || 0); return Math.round(o0 + (inT.o1 - o0) * (t - S(inT)) / Math.max(1, E(inT) - S(inT))); }
+  let before = null, after = null; ts.forEach(x => { if (E(x) < t && (!before || E(x) > E(before))) before = x; if (S(x) > t && (!after || S(x) < S(after))) after = x; });
+  return before && after ? before.o1 : null;
+}
+/** km-Stand zu einem Zeitpunkt: { km, est } – Fahrtenbuch (genau) → heute vom Auto → zwischen zwei Ladungen interpoliert (geschätzt) */
+async function gtKmAt(iso) {
+  const tk = tripKmAt(iso); if (tk > 0) return { km: tk, est: false };
+  if (wxIso(new Date(iso)) === wxIso(new Date()) && apiEnabled()) { try { return { km: (await fetchCarKm()).km, est: false }; } catch (e) { } }
+  const rs = getReadings().filter(r => r.odometerKm > 0).map(r => ({ t: Date.parse(r.date), km: r.odometerKm })).filter(x => Number.isFinite(x.t)).sort((a, b) => a.t - b.t), t = Date.parse(iso);
+  const i = rs.findIndex(x => x.t >= t); if (i <= 0) return { km: null, est: true }; const a = rs[i - 1], b = rs[i];
+  return { km: Math.round(a.km + (b.km - a.km) * (t - a.t) / Math.max(1, b.t - a.t)), est: true };
+}
+/** Fahrt zu einem Zeitpunkt aus dem Fahrtenbuch: während einer Fahrt oder bis 45 min danach → { ctx: 'fahrt', min, km };
+    letzte Fahrt länger als 2 h her → { ctx: 'geparkt' }. Nur wenn das Fahrtenbuch über den Zeitpunkt hinaus reicht (sonst null = noch unbekannt). */
+function tripCtxAt(iso) {
+  const t = Date.parse(iso), ts = getTrips().filter(x => x.s && x.e); if (!Number.isFinite(t) || !ts.length) return null;
+  const S = (x) => Date.parse(x.s), E = (x) => Date.parse(x.e); if (!ts.some(x => S(x) > t || (S(x) <= t && t <= E(x)))) return null;   // Fahrtenbuch reicht noch nicht bis hierher
+  const inT = ts.find(x => S(x) <= t && t <= E(x));
+  if (inT) return { ctx: 'fahrt', min: Math.max(1, Math.round((t - S(inT)) / 60000)), km: inT.km > 0 ? Math.round(inT.km * (t - S(inT)) / Math.max(1, E(inT) - S(inT))) : undefined };
+  const before = ts.filter(x => E(x) < t).sort((a, b) => E(b) - E(a))[0]; if (!before) return null;
+  const gap = (t - E(before)) / 60000;
+  if (gap <= 45) return { ctx: 'fahrt', min: Math.round((E(before) - S(before)) / 60000), km: before.km > 0 ? Math.round(before.km) : undefined, ago: Math.round(gap) };
+  return gap >= 120 ? { ctx: 'geparkt', parkedH: Math.round(gap / 60) } : null;
+}
+/** Akku °C: Anlass und Fahrt automatisch aus dem Fahrtenbuch ergänzen (eigener Anlass bleibt), auch nachträglich nach dem Import */
+function btFillTrips() {
+  const lab = getLab(); if (!Array.isArray(lab.bt)) return 0; let n = 0;
+  lab.bt = lab.bt.map(e => { if (!e.at || e.trip) return e; const c = tripCtxAt(e.at); if (!c) return e;
+    const o = { ...e, trip: { k: c.ctx } }; if (c.min) o.trip.min = c.min; if (c.km) o.trip.km = c.km; if (c.ago != null) o.trip.ago = c.ago; if (c.parkedH) o.trip.h = c.parkedH;
+    if (!o.ctx) { o.ctx = c.ctx; o.ctxAuto = true; } n++; return o; });
+  if (n) setLab(lab); return n;
+}
+/** Nachträglich: Langzeit-Ablesungen per Sprachbefehl ohne (genauen) km-Stand bekommen ihn aus dem Fahrtenbuch, sobald es importiert ist */
+function ltFillKm() {
+  const lab = getLab(); if (!Array.isArray(lab.lt)) return 0; let n = 0;
+  lab.lt = lab.lt.map(e => { if (!e.at || !(e.kmEst || !(e.km > 0))) return e; const km = tripKmAt(e.at); if (!(km > 0)) return e; n++; const o = { ...e, km }; delete o.kmEst; return o; });
+  if (n) setLab(lab); return n;
+}
+/** Außentemperatur zu einem Zeitpunkt der letzten Tage (stündlich, Open-Meteo) */
+async function gtOutAt(iso) {
+  const l = wxLoc(); if (!l) return null;
+  const d0 = wxIso(new Date(iso)), old = Date.now() - Date.parse(iso) > 6 * 864e5;   // älter als 6 Tage: Wetter-Archiv
+  try { const r = await fetch(old ? 'https://archive-api.open-meteo.com/v1/archive?latitude=' + l.lat + '&longitude=' + l.lon + '&hourly=temperature_2m&start_date=' + d0 + '&end_date=' + d0 + '&timezone=auto'
+      : 'https://api.open-meteo.com/v1/forecast?latitude=' + l.lat + '&longitude=' + l.lon + '&hourly=temperature_2m&past_days=7&forecast_days=1&timezone=auto'); const j = await r.json();
+    const d = new Date(iso), k = wxIso(d) + 'T' + String(d.getHours()).padStart(2, '0') + ':00', i = j.hourly.time.indexOf(k); return i >= 0 && j.hourly.temperature_2m[i] != null ? Math.round(j.hourly.temperature_2m[i] * 10) / 10 : null; } catch (e) { return null; }
+}
+let gtBusy = false;
+function renderVcStatus() {
+  const el = $('vc-status'); if (!el) return; const last = load('enyaq.gtLast', null), signed = window.cloud?.isSignedIn?.();
+  el.innerHTML = !signed ? '<span class="text-amber-600 dark:text-amber-400">●</span> Bitte zuerst bei Google anmelden'
+    : '<span class="text-emerald-600 dark:text-emerald-400">●</span> Google Tasks ' + (window.cloud.driveReady() ? 'verbunden' : 'eingerichtet') + (last ? ' · zuletzt ' + fmtDate(last) : '');
+}
+async function gtImport(silent) {
+  if (gtBusy) return; if (!window.cloud?.isSignedIn()) { if (!silent) { btmMsg = 'Für Google Tasks bitte anmelden.'; renderBtm(); } return; }
+  if (silent && !window.cloud.driveReady()) return;
+  gtBusy = true; if (!silent) { btmMsg = 'Google Tasks wird gelesen …'; renderBtm(); }
+  try {
+    const api = 'https://tasks.googleapis.com/tasks/v1';
+    let tok = await window.cloud.driveToken(), H = { Authorization: 'Bearer ' + tok }, lr = await fetch(api + '/users/@me/lists?maxResults=20', { headers: H });
+    const why = async (r) => { try { const j = await r.json(), e = j.error || {}, d = (e.details || []).find(x => x.reason) || {}, er = (e.errors || [])[0] || {}; return { reason: d.reason || er.reason || e.status || '', msg: e.message || '' }; } catch (x) { return { reason: '', msg: '' }; } };
+    if (lr.status === 401 || lr.status === 403) {
+      let w = await why(lr);
+      /* Zugriffstoken stammt noch aus der Zeit vor der Tasks-Berechtigung (nur Drive): neu anfordern – öffnet einmal das Google-Fenster */
+      if (lr.status === 401 || /insufficient|SCOPE/i.test(w.reason + ' ' + w.msg)) {
+        if (silent) throw new Error('Tasks-Berechtigung fehlt');
+        window.cloud.driveForget(); tok = await window.cloud.driveToken(true); H = { Authorization: 'Bearer ' + tok };
+        lr = await fetch(api + '/users/@me/lists?maxResults=20', { headers: H }); if (!lr.ok) w = await why(lr);
+      }
+      if (!lr.ok) throw new Error(/SERVICE_DISABLED|accessNotConfigured|has not been used|disabled/i.test(w.reason + ' ' + w.msg) ? 'Die Google Tasks API ist im Google-Projekt noch nicht aktiviert (Cloud Console → APIs & Dienste → Bibliothek → Google Tasks API).'
+        : /insufficient|SCOPE/i.test(w.reason + ' ' + w.msg) ? 'Die Tasks-Berechtigung wurde nicht erteilt – im Google-Fenster bitte den Haken bei Google Tasks setzen.' : 'Kein Zugriff (' + (w.reason || lr.status) + ')' + (w.msg ? ': ' + w.msg.slice(0, 120) : ''));
+    } else if (!lr.ok) throw new Error('Google Tasks ' + lr.status);
+    const lists = (await lr.json()).items || [], lab = getLab(); lab.bt = lab.bt || []; lab.lt = lab.lt || []; const have = new Set(lab.bt.concat(lab.lt).map(e => e.src).filter(Boolean)); let n = 0, nl = 0, skip = 0; const flag = [];
+    for (const L of lists) {
+      const tr = await fetch(api + '/lists/' + encodeURIComponent(L.id) + '/tasks?showCompleted=false&maxResults=100', { headers: H }); if (!tr.ok) continue;
+      for (const t of ((await tr.json()).items || [])) {
+        if (L.title === GT_LIST) continue;                                            // gespiegelte Fälligkeiten nicht einlesen
+        const lv = gtParseLt(t.title), v = lv == null ? gtParse(t.title) : null; if (lv == null && !v) continue; const src = 'gt:' + t.id;
+        if (lv != null) {                                                             // Langzeitverbrauch (Bordcomputer „Seit Kauf“)
+          if (!have.has(src)) { const at = t.updated || new Date().toISOString(), k = await gtKmAt(at), e = { id: labId(), date: wxIso(new Date(at)), at, k100: lv, src, note: 'per Sprachbefehl' }; if (k.km > 0) e.km = k.km; if (k.est || !(k.km > 0)) e.kmEst = true; lab.lt.push(e); have.add(src); nl++; }
+        } else if (!have.has(src)) {
+          const at = t.updated || new Date().toISOString(), en = { id: labId(), at, t: v.t, src }; if (v.ctx) en.ctx = v.ctx;
+          const out = await gtOutAt(at); if (Number.isFinite(out)) en.out = out;
+          lab.bt.push(en); have.add(src); n++; flag.push(en);
+        } else skip++;
+        await fetch(api + '/lists/' + encodeURIComponent(L.id) + '/tasks/' + encodeURIComponent(t.id), { method: 'PATCH', headers: { ...H, 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'completed' }) }).catch(() => { });
+      }
+    }
+    if (n || nl) { lab.bt.sort((a, b) => Date.parse(a.at) - Date.parse(b.at)); setLab(lab); if (n) btmVal = null; try { btFillTrips(); ltFillKm(); } catch (e) { } }
+    btmMsg = n || nl ? '✓ ' + [n ? n + ' Akku' : '', nl ? nl + ' Langzeit' : ''].filter(Boolean).join(' + ') + ' aus Google Tasks' : silent ? '' : 'Keine neuen „Akku …“- oder „Langzeit …“-Aufgaben.';
+    const jumps = flag.map(en => [en, btJump(en, lab.bt)]).filter(x => x[1]);                    // nur Hinweis, Werte bleiben gespeichert
+    if (jumps.length) btmMsg += ' · <span class="text-amber-600 dark:text-amber-400">' + (jumps.length === 1 ? '⚠️ ' + fmt(jumps[0][0].t, 0) + ' °C, ' + btJumpD(jumps[0][1]) + ' – bitte prüfen' : '⚠️ ' + jumps.length + '× ≥ ' + BT_JUMP + '° Sprung – im Verlauf prüfen') + '</span>';
+    save('enyaq.gtLast', new Date().toISOString()); try { renderVcStatus(); } catch (e) { }
+    renderBtm(); try { renderLtm(); } catch (e) { } if (n && currentView === 'recs') renderRecs();
+  } catch (e) { if (!silent) { btmMsg = '⚠️ Google Tasks: kein Zugriff'; renderBtm();
+      $('au-sheet-box').innerHTML = '<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div><p class="text-lg font-bold">Google Tasks</p><p class="text-sm text-left">' + esc(e.message || String(e)) + '</p><button type="button" data-cc="close" class="h-12 w-full rounded-2xl border border-slate-300 dark:border-slate-700 text-sm font-semibold">Schließen</button>';
+      $('au-sheet').classList.remove('hidden'); } }
+  finally { gtBusy = false; }
+}
+/* =====================================================================
+   Fälligkeiten → Google Tasks (Liste „EnyaqStrom“): jede offene Fälligkeit als Aufgabe (mit Datum, sonst ohne), Titel/Notiz/Datum werden
+   bei Änderungen nachgezogen; erledigt/gelöscht → Aufgabe entfernt. In Google Tasks abgehakt → hier „Erledigt“ (Wiederholung setzt neu an).
+   Verknüpfung über r.gtId (am Datensatz, also auf allen Geräten gleich), r.gtSig = zuletzt übertragener Stand. Laufzeiten werden nicht gespiegelt.
+   ===================================================================== */
+const GT_LIST = 'EnyaqStrom';
+const gtMirrorOn = () => !!getSettings().gtMirror;
+function gtTaskOf(r) {
+  const km = r.dueKm > 0 ? 'Fällig bei ' + fmt(r.dueKm, 0) + ' km' : '', rep = isRepeating(r) ? remRepeatText(r) : '';
+  const notes = [km, rep, r.note || '', 'Aus EnyaqStrom – hier abhaken = in der App erledigt.'].filter(Boolean).join('\n');
+  const t = { title: r.title, notes }; if (r.dueDate) t.due = r.dueDate + 'T00:00:00.000Z'; return t;
+}
+const gtSigOf = (t) => [t.title, t.notes, t.due || ''].join('|');
+let gtMirBusy = false, gtMirT = null;
+const gtMirrorSoon = () => { if (!gtMirrorOn()) return; clearTimeout(gtMirT); gtMirT = setTimeout(() => gtMirror(true), 1500); };
+async function gtMirror(silent) {
+  const msg = (t) => { const el = $('gt-sync-msg'); if (el) el.textContent = t; };
+  if (gtMirBusy || !gtMirrorOn()) return; if (!window.cloud?.isSignedIn()) { if (!silent) msg('Bitte zuerst bei Google anmelden.'); return; }
+  if (silent && !window.cloud.driveReady()) return;
+  gtMirBusy = true; if (!silent) msg('Gleiche mit Google Tasks ab …');
+  try {
+    const tok = await window.cloud.driveToken(), H = { Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' }, api = 'https://tasks.googleapis.com/tasks/v1';
+    const J = async (r) => { if (!r.ok) throw new Error('Google Tasks ' + r.status); return r.status === 204 ? {} : r.json(); };
+    /* Liste finden oder anlegen (ID geräteübergreifend in den Einstellungen) */
+    let lid = getSettings().gtList;
+    const lists = (await J(await fetch(api + '/users/@me/lists?maxResults=100', { headers: H }))).items || [];
+    if (!lid || !lists.some(l => l.id === lid)) { const f = lists.find(l => l.title === GT_LIST); lid = f ? f.id : (await J(await fetch(api + '/users/@me/lists', { method: 'POST', headers: H, body: JSON.stringify({ title: GT_LIST }) }))).id; nagSet({ gtList: lid }); }
+    const L = api + '/lists/' + encodeURIComponent(lid) + '/tasks';
+    const tasks = (await J(await fetch(L + '?showCompleted=true&showHidden=true&maxResults=100', { headers: H }))).items || [], byId = new Map(tasks.map(t => [t.id, t]));
+    let list = getReminders(), changed = false, nNew = 0, nUpd = 0, nDel = 0, nDone = 0;
+    const put = (r, upd) => { list = list.map(x => String(x.id) === String(r.id) ? cleanRem({ ...x, ...upd }) : x); changed = true; };
+    /* 1. In Google Tasks abgehakt → hier erledigt (wie „Erledigt“ ohne Kosten) */
+    for (const r of list.filter(r => !isRun(r) && !r.doneAt && r.gtId)) {
+      const t = byId.get(r.gtId); if (!t || t.status !== 'completed') continue;
+      const at = t.completed ? new Date(t.completed) : new Date(), km = lastKnownKm(), log = remLog(r).map(e => { const o = { at: e.at }; if (e.km > 0) o.km = e.km; if (e.cost > 0) o.cost = e.cost; return o; }).concat(km > 0 ? { at: at.toISOString(), km: Math.round(km) } : { at: at.toISOString() }).slice(-REM_LOG_MAX);
+      const upd = { lastDoneAt: at.toISOString(), lastDoneKm: km ?? undefined, log };
+      if (isRepeating(r)) { upd.startDate = ymd(at); upd.startKm = km ?? undefined; if (hasRepTime(r)) upd.dueDate = ymd(remStep(at, r)); if (r.repeatKm > 0 && km != null) upd.dueKm = km + r.repeatKm; upd.gtSig = undefined; }   // neue Fälligkeit → Aufgabe wird wieder geöffnet
+      else { upd.doneAt = at.toISOString(); }
+      put(r, upd); nDone++;
+    }
+    /* 2. Offene Fälligkeiten anlegen bzw. aktualisieren */
+    for (const r of list.filter(r => !isRun(r) && !r.doneAt)) {
+      const want = gtTaskOf(r), sig = gtSigOf(want), t = r.gtId ? byId.get(r.gtId) : null;
+      if (!t) { const c = await J(await fetch(L, { method: 'POST', headers: H, body: JSON.stringify(want) })); put(r, { gtId: c.id, gtSig: sig }); nNew++; }
+      else if (r.gtSig !== sig || t.status === 'completed') { await J(await fetch(L + '/' + encodeURIComponent(t.id), { method: 'PATCH', headers: H, body: JSON.stringify({ ...want, status: 'needsAction', completed: null }) })); put(r, { gtSig: sig }); nUpd++; }
+    }
+    /* 3. Aufgaben ohne offene Fälligkeit (erledigt, gelöscht, zur Laufzeit geworden) entfernen */
+    const keep = new Set(list.filter(r => !isRun(r) && !r.doneAt && r.gtId).map(r => r.gtId));
+    for (const t of tasks) if (!keep.has(t.id) && /Aus EnyaqStrom/.test(t.notes || '')) { await fetch(L + '/' + encodeURIComponent(t.id), { method: 'DELETE', headers: H }).catch(() => { }); nDel++; }
+    list.filter(r => (isRun(r) || r.doneAt) && r.gtId).forEach(r => put(r, { gtId: undefined, gtSig: undefined }));
+    if (changed) { gtMirSkip = true; commitReminders(list); gtMirSkip = false; try { renderReminders(); } catch (e) { } }
+    msg('✓ Abgeglichen ' + hhmm(Date.now()) + (nNew + nUpd + nDel + nDone ? ' · ' + [nNew ? nNew + ' neu' : '', nUpd ? nUpd + ' geändert' : '', nDone ? nDone + ' in Tasks erledigt' : '', nDel ? nDel + ' entfernt' : ''].filter(Boolean).join(', ') : ' · alles aktuell'));
+  } catch (e) { msg('Fehler: ' + (e.message || e)); }
+  finally { gtMirBusy = false; }
+}
+let gtMirSkip = false;
+$('set-gt-mirror').addEventListener('change', (e) => { setQuickSetting('gtMirror', e.target.checked || undefined); if (e.target.checked) gtMirror(false); else $('gt-sync-msg').textContent = 'Aus – bestehende Aufgaben bleiben in Google Tasks, bis du die Liste dort löschst.'; });
+$('gt-sync').addEventListener('click', () => { if (!gtMirrorOn()) { $('set-gt-mirror').checked = true; setQuickSetting('gtMirror', true); } gtMirror(false); });
+$('vc-fetch').addEventListener('click', () => gtImport(false));
+setTimeout(() => { gtImport(true); gtMirror(true); try { ltFillKm(); btFillTrips(); } catch (e) { } }, 3000); document.addEventListener('visibilitychange', () => { if (!document.hidden) { gtImport(true); gtMirror(true); } });
+renderBtm(); renderLtm();
+if (wxLoc() && !$('wxo-card').classList.contains('hidden')) { /* Prognose sichtbar: Beobachter setzt die Startkarte */ } else dashSwipeTo(dashDefaultIdx(), false);
+dashSwipeSync();
+if (btOut.v == null && wxLoc()) btOutside().then(() => { if (!btmSaved) renderBtm(); }).catch(() => { });
+
+
+// ───── src/15-reifen-wunsch.js ─────
+/* =====================================================================
+   Reifen: Profiltiefe je Satz (Sommer/Allwetter/Winter), 4 Reifen × 3 Messpunkte (außen, mitte, innen) in mm.
+   lab.tires = [{ id, set: 'so'|'aw'|'wi', date, km?, v: { VL: [a, m, i], VR, HL, HR }, note? }]
+   ===================================================================== */
+const TIRE_SETS = [['so', '☀️ Sommer'], ['aw', '🌦️ Allwetter'], ['wi', '❄️ Winter']], TIRE_POS = ['VL', 'VR', 'HL', 'HR'];
+const TIRE_NAME = { VL: 'vorne links', VR: 'vorne rechts', HL: 'hinten links', HR: 'hinten rechts' }, TIRE_COL = { VL: '#38bdf8', VR: '#a78bfa', HL: '#f97316', HR: '#facc15' };
+const TIRE_PT = ['außen', 'mitte', 'innen'];
+let tireSet = null, tireSel = null, tireEdit = null;
+const tAvg = (a) => { const v = (a || []).filter(Number.isFinite); return v.length ? v.reduce((s, x) => s + x, 0) / v.length : null; };
+const tCol = (v) => v == null ? '#64748b' : v >= 5 ? '#10b981' : v >= 4 ? '#eab308' : v >= 3 ? '#f97316' : '#ef4444';
+const tFmt = (v) => v == null ? '–' : fmt(v, 1);
+function tireList(set) { return (getLab().tires || []).filter(m => m.set === set && m.date).sort((a, b) => a.date.localeCompare(b.date) || (a.km || 0) - (b.km || 0)); }
+function tirePrognosis(ms) {                                                     // linearer Verschleiß je Reifen (erste → letzte Messung), wann 3 mm erreicht
+  if (ms.length < 2) return null; const f = ms[0], l = ms[ms.length - 1], dd = (Date.parse(l.date) - Date.parse(f.date)) / 864e5, dk = f.km > 0 && l.km > 0 ? l.km - f.km : null; if (!(dd > 20)) return null;
+  let worst = null;
+  TIRE_POS.forEach(p => { const a = tAvg(f.v[p]), b = tAvg(l.v[p]); if (a == null || b == null || !(a - b > 0.05)) return; const rate = (a - b) / dd, rest = b - 3; if (rest <= 0) { worst = { p, days: 0, km: 0 }; return; }
+    const days = rest / rate, km = dk > 0 ? rest / ((a - b) / dk) : null; if (!worst || days < worst.days) worst = { p, days, km, perK: dk > 0 ? (a - b) / dk * 10000 : null }; });
+  if (!worst) return null; worst.date = new Date(Date.parse(l.date) + worst.days * 864e5); worst.atKm = worst.km != null && l.km ? l.km + worst.km : null; return worst;
+}
+function tireChart(ms) {
+  const W = 296, H = 118, L = 24, R = 52, T = 8, B = 18, t0 = Date.parse(ms[0].date), t1 = Math.max(Date.parse(ms[ms.length - 1].date), t0 + 864e5);
+  const X = (d) => ms.length < 2 ? (L + W - R) / 2 : L + (Date.parse(d) - t0) / (t1 - t0) * (W - L - R), Y = (v) => T + (1 - (v - 1) / 8) * (H - T - B);
+  let g = [2, 4, 6, 8].map(v => `<line x1="${L}" x2="${W - R}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="currentColor" class="text-slate-200 dark:text-slate-800"/><text x="${L - 4}" y="${(Y(v) + 3.5).toFixed(1)}" text-anchor="end" font-size="9" fill="#94a3b8">${v}</text>`).join('');
+  g += `<line x1="${L}" x2="${W - R}" y1="${Y(3).toFixed(1)}" y2="${Y(3).toFixed(1)}" stroke="#f97316" stroke-dasharray="3 3"/><text x="${W - R + 4}" y="${(Y(3) + 3).toFixed(1)}" font-size="8.5" fill="#f97316">3 empf.</text>`
+    + `<line x1="${L}" x2="${W - R}" y1="${Y(1.6).toFixed(1)}" y2="${Y(1.6).toFixed(1)}" stroke="#ef4444" stroke-dasharray="3 3"/><text x="${W - R + 4}" y="${(Y(1.6) + 3).toFixed(1)}" font-size="8.5" fill="#ef4444">1,6 Pflicht</text>`;
+  TIRE_POS.forEach(p => { const pts = ms.map(m => [X(m.date), tAvg(m.v[p])]).filter(x => x[1] != null), op = tireSel && tireSel !== p ? 0.18 : 1;
+    if (pts.length > 1) g += `<polyline points="${pts.map(([x, v]) => x.toFixed(1) + ',' + Y(v).toFixed(1)).join(' ')}" fill="none" stroke="${TIRE_COL[p]}" stroke-width="${tireSel === p ? 2.8 : 2}" opacity="${op}" stroke-linejoin="round"/>`;
+    g += pts.map(([x, v]) => `<circle cx="${x.toFixed(1)}" cy="${Y(v).toFixed(1)}" r="2.6" fill="${TIRE_COL[p]}" opacity="${op}"/>`).join(''); });
+  const lab = (d) => new Date(d + 'T12:00:00').toLocaleDateString('de-DE', { month: '2-digit', year: '2-digit' });
+  const xi = ms.length <= 4 ? ms.map((_, i) => i) : [0, Math.round((ms.length - 1) / 2), ms.length - 1];
+  g += xi.map(i => `<text x="${X(ms[i].date).toFixed(1)}" y="${H - 4}" text-anchor="middle" font-size="9" fill="#94a3b8">${lab(ms[i].date)}</text>`).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" class="w-full" role="img" aria-label="Profiltiefe je Reifen über die Zeit">${g}</svg>`;
+}
+function renderTires() {
+  const el = $('tire-body'); if (!el) return; const all = getLab().tires || [];
+  if (!tireSet) { const last = all.slice().sort((a, b) => String(b.date).localeCompare(String(a.date)))[0]; tireSet = last ? last.set : 'so'; }
+  $('tire-seg').innerHTML = TIRE_SETS.map(([k, l]) => `<button type="button" data-tset="${k}" class="flex-1 py-1.5 rounded-lg text-[13px] font-medium whitespace-nowrap ${tireSet === k ? 'bg-white dark:bg-slate-700 shadow-sm' : 'text-slate-600 dark:text-slate-400'}">${l}</button>`).join('');
+  const ms = tireList(tireSet), last = ms[ms.length - 1];
+  if (!last) { el.innerHTML = `<p class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 text-sm text-slate-600 dark:text-slate-300 text-left">Für den ${TIRE_SETS.find(s => s[0] === tireSet)[1].split(' ')[1]}satz gibt es noch keine Messung. Über „+ Messung“ die Profiltiefe aller vier Reifen eintragen – je Reifen außen, mitte und innen, immer an denselben Stellen (z. B. Hauptrille an der Ventil-Position). Werte vom Kauf mit dem damaligen Datum nachtragen.</p>`; return; }
+  const next = new Date(Date.parse(last.date + 'T12:00:00')); next.setMonth(next.getMonth() + 6); const due = next < new Date();
+  const tile = (p) => { const v = last.v[p] || [], a = tAvg(v), prev = ms.length > 1 ? tAvg(ms[ms.length - 2].v[p]) : null;
+    return `<button type="button" data-tire="${p}" class="flex h-[96px] w-full flex-col items-center justify-center rounded-2xl border-[1.5px] bg-slate-100 dark:bg-slate-800 px-1 ${tireSel === p ? 'ring-2 ring-offset-0' : ''}" style="border-color:${tCol(a)};${tireSel === p ? '--tw-ring-color:' + TIRE_COL[p] : ''}">
+      <span class="text-[10.5px] text-slate-500 dark:text-slate-400">${TIRE_NAME[p]}</span>
+      <span class="font-barlow text-[26px] font-bold leading-none" style="color:${tCol(a)}">${tFmt(a)}<span class="text-[13px]"> mm</span></span>
+      <span class="mt-1 flex gap-[3px] text-[10px] tabular-nums">${[0, 1, 2].map(i => `<span class="rounded bg-white dark:bg-slate-900 px-1" title="${TIRE_PT[i]}">${tFmt(v[i])}</span>`).join('')}</span>
+      ${prev != null && a != null ? `<span class="mt-0.5 text-[9.5px] text-slate-500 dark:text-slate-400">${a - prev > 0.04 ? '+' : a - prev < -0.04 ? '−' : '±'}${fmt(Math.abs(a - prev), 1)} seit letzter</span>` : ''}</button>`; };
+  const car = `<div class="relative h-[204px] w-[102px]"><img src="/Bilder/enyaq-top.webp" alt="Enyaq von oben" width="474" height="944" draggable="false" class="h-full w-full select-none object-contain">`
+    + [['left', 23.5, 'VL'], ['right', 23.5, 'VR'], ['left', 76.5, 'HL'], ['right', 76.5, 'HR']].map(([sd, y, p]) => `<span class="absolute h-[34px] w-[7px] -translate-y-1/2 rounded-[3px] shadow" style="${sd}:3px;top:${y}%;background:${tCol(tAvg(last.v[p]))}"></span>`).join('') + '</div>';
+  const pg = tirePrognosis(ms);
+  let h = `<div class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 space-y-2">
+    <div class="flex items-baseline justify-between gap-2 text-xs text-slate-500 dark:text-slate-400"><span class="text-left">${labD(last.date)}${last.km ? ' · ' + fmt(last.km, 0) + ' km' : ''}</span><span class="shrink-0 font-semibold ${due ? 'text-red-600 dark:text-red-400' : 'text-amber-600 dark:text-amber-400'}">${due ? 'Messung fällig' : 'nächste: ' + next.toLocaleDateString('de-DE', { month: 'short', year: 'numeric' })}</span></div>
+    <div class="grid grid-cols-[1fr_102px_1fr] items-center gap-x-1.5"><div class="space-y-3">${tile('VL')}${tile('HL')}</div><div class="flex justify-center">${car}</div><div class="space-y-3">${tile('VR')}${tile('HR')}</div></div>
+    <p class="text-[11px] text-slate-500 dark:text-slate-400 text-center">je Reifen außen · mitte · innen · Antippen hebt den Reifen im Verlauf hervor</p></div>`;
+  h += `<div class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 space-y-1.5"><div class="flex items-baseline justify-between"><p class="text-sm font-bold">Verlauf${pg ? ' &amp; Prognose' : ''}</p><span class="text-[11px] text-slate-500 dark:text-slate-400">Ø je Reifen in mm</span></div>
+    ${tireChart(ms)}<div class="flex gap-3 text-[11px] text-slate-500 dark:text-slate-400">${TIRE_POS.map(p => `<span><span class="inline-block h-[3px] w-2.5 align-middle" style="background:${TIRE_COL[p]}"></span> ${p}</span>`).join('')}</div>
+    ${pg ? `<p class="rounded-xl bg-slate-100 dark:bg-slate-800/70 px-3 py-2 text-xs text-slate-600 dark:text-slate-300 text-left">${pg.days === 0 ? `<b>${TIRE_NAME[pg.p]}</b> ist bereits bei 3 mm oder darunter.` : `Am schnellsten nutzt sich <b>${TIRE_NAME[pg.p]}</b> ab${pg.perK ? ' (' + fmt(pg.perK, 1) + ' mm je 10.000 km)' : ''}. 3 mm voraussichtlich ${pg.atKm ? 'bei <b>~' + fmt(Math.round(pg.atKm / 1000) * 1000, 0) + ' km</b> (' : '<b>'}${pg.date.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })}${pg.atKm ? ')' : '</b>'}.`}</p>` : `<p class="text-[11px] text-slate-500 dark:text-slate-400 text-left">Ab der zweiten Messung zeigt die App, welcher Reifen sich am schnellsten abnutzt und wann 3 mm erreicht sind.</p>`}</div>`;
+  if (tireSel) h += `<div class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm px-4 py-3"><p class="text-sm font-bold text-left">${TIRE_NAME[tireSel][0].toUpperCase() + TIRE_NAME[tireSel].slice(1)}</p><div class="mt-1 grid grid-cols-[1.3fr_1fr_1fr_1fr_1fr] gap-1 text-[11px] text-slate-500 dark:text-slate-400"><span>Datum</span><span class="text-right">außen</span><span class="text-right">mitte</span><span class="text-right">innen</span><span class="text-right">Ø</span></div>${ms.slice().reverse().map(m => `<div class="grid grid-cols-[1.3fr_1fr_1fr_1fr_1fr] gap-1 border-t border-slate-100 dark:border-slate-800 py-1.5 text-[13px] tabular-nums"><span>${labD(m.date)}</span>${[0, 1, 2].map(i => `<span class="text-right">${tFmt((m.v[tireSel] || [])[i])}</span>`).join('')}<b class="text-right" style="color:${tCol(tAvg(m.v[tireSel]))}">${tFmt(tAvg(m.v[tireSel]))}</b></div>`).join('')}</div>`;
+  h += `<details class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm px-4 py-3"><summary class="cursor-pointer text-sm font-semibold">Alle Messungen (${ms.length})</summary><div class="mt-2">${ms.slice().reverse().map(m => `<button type="button" data-tm="${esc(m.id)}" class="flex w-full items-center gap-2 border-t border-slate-100 dark:border-slate-800 py-2 text-left text-[13px]"><span class="w-[84px] shrink-0">${labD(m.date)}</span><span class="min-w-0 flex-1 truncate text-xs text-slate-500 dark:text-slate-400">${m.km ? fmt(m.km, 0) + ' km · ' : ''}${TIRE_POS.map(p => p + ' ' + tFmt(tAvg(m.v[p]))).join(' · ')}</span><span class="shrink-0 text-slate-400">›</span></button>`).join('')}</div></details>`;
+  el.innerHTML = h;
+}
+function openTireSheet(id) {
+  const lab = getLab(), m = id ? (lab.tires || []).find(x => x.id === id) : null; tireEdit = m ? m.id : null;
+  const set = m ? m.set : tireSet || 'so', prev = tireList(set).filter(x => !m || x.id !== m.id).pop(), km0 = (() => { try { return lastKnownKm(); } catch (_) { return null; } })();
+  const cell = (p, i) => { const v = m ? (m.v[p] || [])[i] : undefined, ph = prev ? (prev.v[p] || [])[i] : undefined;
+    return `<input data-tv="${p}:${i}" type="text" inputmode="decimal" autocomplete="off" aria-label="${TIRE_NAME[p]} ${TIRE_PT[i]}" value="${v != null ? String(v).replace('.', ',') : ''}" placeholder="${ph != null ? String(ph).replace('.', ',') : ''}" class="w-full min-w-0 rounded-lg border border-slate-300 dark:border-slate-700 bg-transparent px-0.5 py-2.5 text-center text-[15px] tabular-nums focus:outline-none focus:ring-2 focus:ring-emerald-500">`; };
+  const blk = (p) => `<div class="rounded-2xl bg-slate-100 dark:bg-slate-800/70 p-2"><p class="text-xs font-semibold text-left">${TIRE_NAME[p]}</p><div class="mt-1 grid grid-cols-3 gap-1">${[0, 1, 2].map(i => cell(p, i)).join('')}</div><div class="mt-0.5 grid grid-cols-3 gap-1 text-center text-[10px] text-slate-500 dark:text-slate-400">${TIRE_PT.map(t => `<span>${t}</span>`).join('')}</div></div>`;
+  $('tire-sheet-box').innerHTML = `<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div><p class="text-lg font-bold">${m ? 'Messung bearbeiten' : 'Profiltiefe messen'}</p>
+    <div id="tire-set-in" class="flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 text-[13px]">${TIRE_SETS.map(([k, l]) => `<button type="button" data-tsin="${k}" class="flex-1 rounded-lg py-1.5 font-medium ${k === set ? 'bg-white dark:bg-slate-600 shadow-sm' : 'text-slate-500 dark:text-slate-400'}">${l}</button>`).join('')}</div>
+    <div class="grid grid-cols-[1.35fr_1fr] gap-2"><div class="min-w-0"><label for="tire-date" class="text-xs text-slate-500 dark:text-slate-400">Datum</label><input id="tire-date" type="date" value="${esc(m ? m.date : wxIso(new Date()))}" class="${inCls} !px-1.5 text-[13px]"></div>${fld('tire-km', 'km-Stand', m ? m.km : (km0 || undefined), '', 'numeric').replace('>km-Stand</label>', '>km-Stand</label><button type="button" data-kmfetch data-kmfor="tire-km" title="Aktuellen km-Stand vom Auto holen" aria-label="Aktuellen km-Stand vom Auto holen" class="kmf ml-1 align-middle relative inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[15px] font-bold leading-none text-emerald-600 dark:text-emerald-400 active:scale-90 transition">↻</button>')}</div>
+    <p class="text-[11px] text-slate-500 dark:text-slate-400 text-left">mm mit Komma, z. B. 6,8. ${prev ? 'Grau = letzte Messung (' + labD(prev.date) + ').' : ''} Immer an denselben Stellen messen.</p>
+    <div class="grid grid-cols-2 gap-2">${blk('VL')}${blk('VR')}${blk('HL')}${blk('HR')}</div>
+    <div><label for="tire-note" class="text-xs text-slate-500 dark:text-slate-400">Notiz</label><input id="tire-note" type="text" maxlength="100" value="${esc((m && m.note) || '')}" placeholder="z. B. nach Reifenwechsel, Reifen getauscht" class="${inCls}"></div>
+    <p id="tire-msg" class="text-sm text-red-600 dark:text-red-400 text-left empty:hidden"></p>
+    <div class="grid grid-cols-2 gap-2.5"><button type="button" data-tss="${m ? 'del' : 'close'}" class="h-12 rounded-2xl border border-slate-300 dark:border-slate-700 text-sm font-semibold ${m ? 'text-red-600 dark:text-red-400' : ''}">${m ? 'Löschen' : 'Abbrechen'}</button><button type="button" data-tss="save" class="h-12 rounded-2xl bg-emerald-600 text-white text-sm font-semibold">Speichern</button></div>`;
+  $('tire-sheet').classList.remove('hidden');
+}
+$('tire-seg').addEventListener('click', (e) => { const b = e.target.closest('[data-tset]'); if (b) { tireSet = b.dataset.tset; tireSel = null; renderTires(); } });
+$('tire-body').addEventListener('click', (e) => { const t = e.target.closest('[data-tire]'); if (t) { tireSel = tireSel === t.dataset.tire ? null : t.dataset.tire; renderTires(); return; } const m = e.target.closest('[data-tm]'); if (m) openTireSheet(m.dataset.tm); });
+$('tire-add').addEventListener('click', () => openTireSheet(null));
+$('tire-sheet').addEventListener('click', (e) => {
+  if (e.target === $('tire-sheet')) { $('tire-sheet').classList.add('hidden'); return; }
+  const si = e.target.closest('[data-tsin]'); if (si) { si.parentElement.querySelectorAll('[data-tsin]').forEach(x => { const on = x === si; x.classList.toggle('bg-white', on); x.classList.toggle('dark:bg-slate-600', on); x.classList.toggle('shadow-sm', on); x.classList.toggle('text-slate-500', !on); x.classList.toggle('dark:text-slate-400', !on); }); return; }
+  const b = e.target.closest('[data-tss]'); if (!b) return; const act = b.dataset.tss, lab = getLab(); lab.tires = lab.tires || [];
+  if (act === 'close') { $('tire-sheet').classList.add('hidden'); return; }
+  if (act === 'del') { if (!confirm('Diese Messung löschen?')) return; lab.tires = lab.tires.filter(x => x.id !== tireEdit); setLab(lab); $('tire-sheet').classList.add('hidden'); return; }
+  const v = {}; let n = 0, bad = false;
+  TIRE_POS.forEach(p => { v[p] = [0, 1, 2].map(i => { const t = document.querySelector(`[data-tv="${p}:${i}"]`).value.trim(); if (t === '') return null; const x = deDec(t); if (!(x >= 0 && x <= 15)) { bad = true; return null; } n++; return Math.round(x * 10) / 10; }); });
+  if (bad) { $('tire-msg').textContent = 'Bitte Profiltiefen in mm zwischen 0 und 15 eintragen (z. B. 6,8).'; return; }
+  if (!n) { $('tire-msg').textContent = 'Bitte mindestens einen Messwert eintragen.'; return; }
+  const km = deDec(String($('tire-km').value).replace(/\./g, '')), set = document.querySelector('#tire-set-in .bg-white')?.dataset.tsin || 'so';
+  const m = { id: tireEdit || labId(), set, date: $('tire-date').value || wxIso(new Date()), v };
+  if (Number.isFinite(km) && km > 0) m.km = Math.round(km); const note = $('tire-note').value.trim(); if (note) m.note = note;
+  lab.tires = tireEdit ? lab.tires.map(x => x.id === tireEdit ? m : x) : lab.tires.concat(m); tireSet = set; setLab(lab); $('tire-sheet').classList.add('hidden');
+});
+
+/* =====================================================================
+   Wunschliste (Zubehör): lab.wish = [{ id, title, desc?, price?, prio: 'hoch'|'mittel'|'niedrig', when?, links?: [url], note?, bought? (JJJJ-MM-TT) }]
+   ===================================================================== */
+const WISH_PRIO = [['hoch', '#ef4444', 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300'], ['mittel', '#f59e0b', 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300'], ['niedrig', '#64748b', 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200']];
+const WISH_WHEN = ['❄️ vor dem Winter', '☀️ vor dem Sommer', '🧳 vor dem Urlaub', '🎁 Geschenkidee'];
+let wishTab = 'open', wishEdit = null, wishLinks = [];
+const wHost = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (e) { return u; } };
+const wUrl = (t) => { t = String(t || '').trim(); if (!t) return null; if (!/^https?:\/\//i.test(t) && /^[\w-]+(\.[\w-]+)+(\/|$)/.test(t)) t = 'https://' + t; try { const u = new URL(t); return /^https?:$/.test(u.protocol) ? u.href : null; } catch (e) { return null; } };
+const LINK_I = '<svg class="h-3 w-3 shrink-0" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>';
+function renderWish() {
+  const el = $('wish-body'); if (!el) return; const all = getLab().wish || [], open = all.filter(w => !w.bought), done = all.filter(w => w.bought);
+  const rank = (p) => WISH_PRIO.findIndex(x => x[0] === p);
+  $('wish-seg').innerHTML = [['open', 'Offen · ' + open.length], ['done', 'Gekauft · ' + done.length]].map(([k, l]) => `<button type="button" data-wtab="${k}" class="flex-1 py-1.5 rounded-lg text-[13px] font-medium ${wishTab === k ? 'bg-white dark:bg-slate-700 shadow-sm' : 'text-slate-600 dark:text-slate-400'}">${l}</button>`).join('');
+  const list = wishTab === 'open' ? open.slice().sort((a, b) => rank(a.prio) - rank(b.prio) || String(a.id).localeCompare(String(b.id))) : done.slice().sort((a, b) => String(b.bought).localeCompare(String(a.bought)));
+  const sum = list.reduce((s, w) => s + (w.price > 0 ? w.price : 0), 0);
+  const chip = (t, cls) => `<span class="inline-flex h-[22px] items-center gap-1 rounded-md px-1.5 text-[11px] ${cls}">${t}</span>`;
+  let h = list.length ? `<div class="flex items-baseline justify-between px-1 text-xs text-slate-500 dark:text-slate-400"><span>${wishTab === 'open' ? 'Summe offen' : 'Summe gekauft'}</span><b class="text-base text-slate-900 dark:text-slate-100 tabular-nums">${eur(sum)}</b></div>` : '';
+  h += list.map(w => { const pr = WISH_PRIO.find(x => x[0] === w.prio) || WISH_PRIO[1];
+    return `<div data-wish="${esc(w.id)}" role="button" tabindex="0" class="flex cursor-pointer gap-2.5 rounded-2xl bg-white dark:bg-slate-900 shadow-sm p-3 active:scale-[0.99] transition">
+      <button type="button" data-wbuy="${esc(w.id)}" aria-label="${w.bought ? 'Wieder auf offen setzen' : 'Als gekauft markieren'}" class="mt-0.5 flex h-[24px] w-[24px] shrink-0 items-center justify-center rounded-lg border-2 ${w.bought ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-300 dark:border-slate-600'}">${w.bought ? '<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg>' : ''}</button>
+      <span class="min-w-0 flex-1 space-y-1"><span class="flex items-baseline justify-between gap-2"><b class="min-w-0 text-[14.5px] ${w.bought ? 'text-slate-500 line-through decoration-1' : ''} text-left">${esc(w.title)}</b>${w.price > 0 ? `<b class="shrink-0 text-[14.5px] tabular-nums">${eur(w.price)}</b>` : ''}</span>
+      ${w.desc ? `<span class="block text-xs text-slate-500 dark:text-slate-400 text-left">${esc(w.desc)}</span>` : ''}
+      <span class="flex flex-wrap gap-1">${w.bought ? chip('✓ gekauft ' + labD(w.bought), 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300') : chip(`<span style="color:${pr[1]}">●</span> ${pr[0]}`, 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300')}${w.when && !w.bought ? chip(esc(w.when), 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300') : ''}${(w.links || []).map(u => `<a href="${esc(u)}" target="_blank" rel="noopener" data-wlink class="inline-flex h-[22px] max-w-full items-center gap-1 rounded-md bg-sky-50 dark:bg-slate-800 px-1.5 text-[11px] text-sky-700 dark:text-sky-300">${LINK_I}<span class="truncate">${esc(wHost(u))}</span></a>`).join('')}</span>
+      ${w.note ? `<span class="block text-[11px] text-slate-500 dark:text-slate-400 text-left">${esc(w.note)}</span>` : ''}</span></div>`; }).join('');
+  if (!list.length) h = `<p class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 text-sm text-slate-600 dark:text-slate-300 text-left">${wishTab === 'open' ? 'Noch keine Wünsche. Über „+“ Zubehör eintragen, das du dir irgendwann zulegen möchtest – mit Preis, Wichtigkeit und Links zum Shop.' : 'Noch nichts gekauft. Kästchen bei einem Wunsch antippen, wenn du ihn gekauft hast.'}</p>`;
+  else if (wishTab === 'open') h += '<p class="text-center text-[11px] text-slate-500 dark:text-slate-400">Kästchen antippen = als gekauft markieren (auf Wunsch gleich als Kosten buchen)</p>';
+  el.innerHTML = h;
+}
+/* Gekauft-Dialog: Abbrechen lässt den Wunsch unverändert offen */
+let wishBuyId = null;
+function openWishBuy(w) {
+  wishBuyId = w.id; const btn = 'h-12 w-full rounded-2xl text-sm font-semibold active:scale-[0.98] transition';
+  $('wish-sheet-box').innerHTML = `<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div><p class="text-lg font-bold text-left">„${esc(w.title)}“ gekauft?</p>
+    <p class="text-sm text-slate-600 dark:text-slate-300 text-left">Der Wunsch wandert zu „Gekauft“.${w.price > 0 ? ' Du kannst ihn gleich als Kosten buchen (' + eur(w.price) + ', heute) – den Betrag passt du bei Bedarf in der Historie an.' : ''}</p>
+    ${w.price > 0 ? `<button type="button" data-wb="cost" class="${btn} bg-emerald-600 text-white">Gekauft + als Kosten buchen</button>` : ''}
+    <button type="button" data-wb="only" class="${btn} ${w.price > 0 ? 'bg-slate-200 dark:bg-slate-800' : 'bg-emerald-600 text-white'}">${w.price > 0 ? 'Nur als gekauft markieren' : 'Als gekauft markieren'}</button>
+    <button type="button" data-wb="cancel" class="${btn} border border-slate-300 dark:border-slate-700">Abbrechen</button>`;
+  $('wish-sheet').classList.remove('hidden');
+}
+function wishLinksPaint() {
+  $('wish-links').innerHTML = wishLinks.map((u, i) => `<div class="flex h-10 items-center gap-2 rounded-xl bg-slate-100 dark:bg-slate-800 px-3 text-[13px] text-sky-700 dark:text-sky-300">${LINK_I}<span class="min-w-0 flex-1 truncate">${esc(u.replace(/^https?:\/\/(www\.)?/, ''))}</span><button type="button" data-wlx="${i}" aria-label="Link entfernen" class="shrink-0 px-1 text-slate-400">✕</button></div>`).join('');
+}
+function openWishSheet(id) {
+  const w = id ? (getLab().wish || []).find(x => x.id === id) : null; wishEdit = w ? w.id : null; wishLinks = (w && w.links || []).slice();
+  $('wish-sheet-box').innerHTML = `<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div><p class="text-lg font-bold">${w ? 'Wunsch bearbeiten' : 'Wunsch hinzufügen'}</p>
+    <div><label for="wish-title" class="text-xs text-slate-500 dark:text-slate-400">Was?</label><input id="wish-title" type="text" maxlength="60" value="${esc((w && w.title) || '')}" placeholder="z. B. Gummimatten Winter" class="${inCls}"></div>
+    <div><label for="wish-desc" class="text-xs text-slate-500 dark:text-slate-400">Kurzbeschreibung (optional)</label><input id="wish-desc" type="text" maxlength="80" value="${esc((w && w.desc) || '')}" placeholder="z. B. Original Škoda, 4-teilig" class="${inCls}"></div>
+    <div class="grid grid-cols-[0.8fr_1.2fr] gap-2">${fld('wish-price', 'ca. Preis €', w ? w.price : undefined, 'optional')}<div class="min-w-0"><label for="wish-when" class="text-xs text-slate-500 dark:text-slate-400">Wann?</label><input id="wish-when" list="wish-whens" type="text" maxlength="30" value="${esc((w && w.when) || '')}" placeholder="optional" class="${inCls}"><datalist id="wish-whens">${WISH_WHEN.map(x => `<option value="${esc(x)}"></option>`).join('')}</datalist></div></div>
+    <div><p class="text-xs text-slate-500 dark:text-slate-400">Wichtigkeit</p><div id="wish-prio" class="mt-1 flex gap-1.5">${WISH_PRIO.map(([k, c, cls]) => `<button type="button" data-wprio="${k}" class="flex-1 rounded-full border py-1.5 text-xs font-semibold ${((w && w.prio) || 'mittel') === k ? cls + ' border-transparent' : 'border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300'}">${k}</button>`).join('')}</div></div>
+    <div><p class="text-xs text-slate-500 dark:text-slate-400">Links</p><div id="wish-links" class="mt-1 space-y-1.5"></div>
+      <button type="button" data-ws="paste" class="mt-1.5 flex h-10 w-full items-center justify-center rounded-xl border border-dashed border-slate-400 dark:border-slate-600 text-[13px] text-slate-600 dark:text-slate-300">+ Link einfügen (aus Zwischenablage)</button>
+      <div id="wish-lrow" class="mt-1.5 hidden flex gap-2"><input id="wish-lin" type="url" inputmode="url" autocomplete="off" placeholder="https://…" class="${inCls} !mt-0"><button type="button" data-ws="addl" class="shrink-0 rounded-xl bg-slate-200 dark:bg-slate-800 px-3 text-sm font-semibold">OK</button></div>
+      <p id="wish-lmsg" class="mt-1 text-xs text-left text-slate-500 dark:text-slate-400 empty:hidden"></p></div>
+    <div><label for="wish-note" class="text-xs text-slate-500 dark:text-slate-400">Notiz</label><input id="wish-note" type="text" maxlength="120" value="${esc((w && w.note) || '')}" placeholder="z. B. Größe, Farbe, Alternative" class="${inCls}"></div>
+    <p id="wish-msg" class="text-sm text-red-600 dark:text-red-400 text-left empty:hidden"></p>
+    <div class="grid grid-cols-2 gap-2.5"><button type="button" data-ws="${w ? 'del' : 'close'}" class="h-12 rounded-2xl border border-slate-300 dark:border-slate-700 text-sm font-semibold ${w ? 'text-red-600 dark:text-red-400' : ''}">${w ? 'Löschen' : 'Abbrechen'}</button><button type="button" data-ws="save" class="h-12 rounded-2xl bg-emerald-600 text-white text-sm font-semibold">Speichern</button></div>`;
+  wishLinksPaint(); $('wish-sheet').classList.remove('hidden');
+}
+function wishAddLink(t) {
+  const u = wUrl(t), m = $('wish-lmsg'); if (!u) { m.textContent = 'Das sieht nicht nach einem Link aus. Bitte die Adresse unten einfügen.'; $('wish-lrow').classList.remove('hidden'); return false; }
+  if (!wishLinks.includes(u)) wishLinks.push(u); wishLinksPaint(); m.textContent = '✓ ' + wHost(u) + ' hinzugefügt'; $('wish-lin').value = ''; return true;
+}
+$('wish-seg').addEventListener('click', (e) => { const b = e.target.closest('[data-wtab]'); if (b) { wishTab = b.dataset.wtab; renderWish(); } });
+$('wish-add').addEventListener('click', () => openWishSheet(null));
+$('wish-body').addEventListener('click', (e) => {
+  if (e.target.closest('[data-wlink]')) return;                                   // Link öffnet den Shop, nicht das Formular
+  const bb = e.target.closest('[data-wbuy]');
+  if (bb) {
+    const lab = getLab(), w = (lab.wish || []).find(x => x.id === bb.dataset.wbuy); if (!w) return;
+    if (w.bought) { lab.wish = lab.wish.map(x => x.id === w.id ? (({ bought, ...r }) => r)(x) : x); setLab(lab); return; }
+    openWishBuy(w); return;                                                       // erst nach Bestätigung im Dialog als gekauft markieren
+  }
+  const c = e.target.closest('[data-wish]'); if (c) openWishSheet(c.dataset.wish);
+});
+$('wish-sheet').addEventListener('click', async (e) => {
+  if (e.target === $('wish-sheet')) { wishBuyId = null; $('wish-sheet').classList.add('hidden'); return; }
+  const pr = e.target.closest('[data-wprio]'); if (pr) { pr.parentElement.querySelectorAll('[data-wprio]').forEach(x => { const on = x === pr, cls = WISH_PRIO.find(p => p[0] === x.dataset.wprio)[2].split(' '); cls.concat('border-transparent').forEach(c => x.classList.toggle(c, on)); ['border-slate-300', 'dark:border-slate-700', 'text-slate-600', 'dark:text-slate-300'].forEach(c => x.classList.toggle(c, !on)); x.dataset.on = on ? '1' : ''; }); return; }
+  const wb = e.target.closest('[data-wb]');
+  if (wb) {
+    const act = wb.dataset.wb, id = wishBuyId; wishBuyId = null; $('wish-sheet').classList.add('hidden'); if (act === 'cancel') return;
+    const lab = getLab(), w = (lab.wish || []).find(x => x.id === id); if (!w || w.bought) return;
+    lab.wish = lab.wish.map(x => x.id === w.id ? { ...x, bought: wxIso(new Date()) } : x); setLab(lab);
+    if (act === 'cost' && w.price > 0) { const cat = getCategories().includes('Zubehör') ? 'Zubehör' : 'Sonstiges';
+      commitCosts(getCosts().concat({ id: Date.now(), date: new Date().toISOString(), title: w.title.slice(0, 80), amount: Math.round(w.price * 100) / 100, category: cat })); }
+    return;
+  }
+  const lx = e.target.closest('[data-wlx]'); if (lx) { wishLinks.splice(Number(lx.dataset.wlx), 1); wishLinksPaint(); return; }
+  const b = e.target.closest('[data-ws]'); if (!b) return; const act = b.dataset.ws, lab = getLab(); lab.wish = lab.wish || [];
+  if (act === 'paste') { let t = ''; try { t = await navigator.clipboard.readText(); } catch (er) { } if (t && wishAddLink(t)) return; $('wish-lrow').classList.remove('hidden'); $('wish-lmsg').textContent = t ? $('wish-lmsg').textContent : 'Zwischenablage nicht lesbar – Link hier einfügen:'; $('wish-lin').focus(); return; }
+  if (act === 'addl') { wishAddLink($('wish-lin').value); return; }
+  if (act === 'close') { $('wish-sheet').classList.add('hidden'); return; }
+  if (act === 'del') { if (!confirm('Diesen Wunsch löschen?')) return; lab.wish = lab.wish.filter(x => x.id !== wishEdit); setLab(lab); $('wish-sheet').classList.add('hidden'); return; }
+  const title = $('wish-title').value.trim(); if (!title) { $('wish-msg').textContent = 'Bitte angeben, was du dir wünschst.'; return; }
+  const lt = $('wish-lin').value.trim(); if (lt && !wishAddLink(lt)) return;
+  const price = deDec($('wish-price').value), prioEl = document.querySelector('#wish-prio [data-wprio].border-transparent');
+  const old = wishEdit ? lab.wish.find(x => x.id === wishEdit) : null;
+  const w = { id: wishEdit || labId(), title: title.slice(0, 60), prio: prioEl ? prioEl.dataset.wprio : 'mittel' };
+  const desc = $('wish-desc').value.trim(), when = $('wish-when').value.trim(), note = $('wish-note').value.trim();
+  if (desc) w.desc = desc; if (Number.isFinite(price) && price > 0) w.price = Math.round(price * 100) / 100; if (when) w.when = when; if (wishLinks.length) w.links = wishLinks.slice(); if (note) w.note = note; if (old && old.bought) w.bought = old.bought;
+  lab.wish = old ? lab.wish.map(x => x.id === old.id ? w : x) : lab.wish.concat(w); setLab(lab); $('wish-sheet').classList.add('hidden');
+});
+$('wish-sheet').addEventListener('keydown', (e) => { if (e.target.id === 'wish-lin' && e.key === 'Enter') { e.preventDefault(); wishAddLink(e.target.value); } });
+
+function renderRecs() {
+  const lab = getLab(), byRoute = new Map();
+  lab.recs.forEach(r => { const k = recDirKey(r), o = byRoute.get(k); if (!o || r.k100 < o.k100) byRoute.set(k, r); });   // je Strecke ein Eintrag (ältere Doppelte: der beste zählt)
+  const recs = [...byRoute.values()].sort((a, b) => a.route.localeCompare(b.route, 'de'));
+  if (!['all', 'speed', 'lt', 'bt'].includes(recRoute)) recRoute = 'all';
+  const chip = (k, l) => `<button type="button" data-rr="${esc(k)}" class="h-8 shrink-0 whitespace-nowrap rounded-full px-3 text-xs font-semibold ${recRoute === k ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900' : 'border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300'}">${esc(l)}</button>`;
+  const rc = $('rec-chips'); rc.className = 'flex bg-slate-200 dark:bg-slate-800 rounded-xl p-1';
+  rc.innerHTML = [['all', 'Rekorde'], ['speed', 'Tempomat'], ['lt', 'Langzeit'], ['bt', 'Akku °C']].map(([k2, l]) => `<button type="button" data-rr="${k2}" class="flex-1 py-1.5 rounded-lg text-[13px] font-medium whitespace-nowrap ${recRoute === k2 ? 'bg-white dark:bg-slate-700 shadow-sm' : 'text-slate-600 dark:text-slate-400'}">${l}</button>`).join('');
+  $('rec-add').setAttribute('aria-label', recRoute === 'speed' ? 'Neue Messreihe' : recRoute === 'lt' ? 'Neue Ablesung' : recRoute === 'bt' ? 'Akku-Temperatur notieren' : 'Neuer Rekord');
+  let h = '';
+  if (recRoute === 'all') {
+    const groups = new Map(); recs.forEach(r => { const k = recKey(r.route); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); });
+    h = [...groups.entries()].sort((a, b) => a[1][0].route.localeCompare(b[1][0].route, 'de')).map(([k, rs]) => {
+      const meta = lab.routes[k] || {}, ab = rs.find(r => r.dir !== 'ba'), ba = rs.find(r => r.dir === 'ba'), two = !!(meta.both || (ab && ba));
+      const dir = two ? (recDirSel[k] || (ab ? 'ab' : 'ba')) : (ab ? 'ab' : 'ba'), inDir = rs.filter(x => (x.dir === 'ba' ? 'ba' : 'ab') === dir), nowSea = recSeason({});
+      const sea = recSeaSel[k] || (inDir.some(x => recSeason(x) === nowSea) ? nowSea : inDir.length ? recSeason(inDir[0]) : nowSea);
+      const pick = (dd, ss) => rs.find(x => (x.dir === 'ba' ? 'ba' : 'ab') === dd && recSeason(x) === ss), r = pick(dir, sea), other = pick(dir === 'ba' ? 'ab' : 'ba', sea);
+      const tb = (on) => on ? 'bg-white dark:bg-slate-600 shadow-sm' : 'text-slate-500 dark:text-slate-400';
+      const tabs = `<span class="flex items-stretch rounded-xl bg-slate-100 dark:bg-slate-800 p-1 text-xs font-semibold">${two ? [['ab', 'Hinweg'], ['ba', 'Rückweg']].map(([v, l]) => `<span role="button" tabindex="0" data-rdir="${v}" data-rk="${esc(k)}" class="flex-[1.6] rounded-lg py-1.5 text-center ${tb(v === dir)}">${l}</span>`).join('') + '<span class="mx-1 my-1 w-px bg-slate-300 dark:bg-slate-600" aria-hidden="true"></span>' : ''}${['so', 'wi'].map(v => { const x = pick(dir, v); return `<span role="button" tabindex="0" data-rsea="${v}" data-rk="${esc(k)}" aria-label="${SEA_L[v]}" class="flex flex-1 items-center justify-center gap-1 rounded-lg py-1.5 ${tb(v === sea)}"><span class="text-[14px] leading-none ${v === sea ? '' : 'opacity-60'}">${SEA_I[v]}</span></span>`; }).join('')}</span>`;
+      const seaSeg = `<span class="flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 text-xs font-semibold">${['so', 'wi'].map(v => { const x = pick(dir, v); return `<span role="button" tabindex="0" data-rsea="${v}" data-rk="${esc(k)}" class="flex-1 rounded-lg py-1.5 text-center ${v === sea ? 'bg-white dark:bg-slate-600 shadow-sm' : 'text-slate-500 dark:text-slate-400'}">${SEA_I[v]} ${SEA_L[v]}${x ? ' · <span class="tabular-nums">' + fmt(x.k100, 1) + '</span>' : ''}</span>`; }).join('')}</span>`;
+      const mp = hpN(meta.prof), prof = mp ? (dir === 'ba' ? hpRev(mp) : mp) : null, la = dir === 'ba' ? 'B' : 'A', lb = dir === 'ba' ? 'A' : 'B';
+      const seg = two ? `<span class="flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 text-xs font-semibold">${[['ab', 'Hin · A → B'], ['ba', 'Rück · B → A']].map(([v, l]) => `<span role="button" tabindex="0" data-rdir="${v}" data-rk="${esc(k)}" class="flex-1 rounded-lg py-1.5 text-center ${v === dir ? 'bg-white dark:bg-slate-600 shadow-sm' : 'text-slate-500 dark:text-slate-400'}">${l}</span>`).join('')}</span>` : '';
+      const cost = prof ? hpCost(prof) : null, costO = prof ? hpCost(hpRev(prof)) : null, tile = (l, v) => `<span class="rounded-xl bg-slate-100 dark:bg-slate-800/70 px-0.5 py-1.5 text-center"><span class="block text-[10.5px] text-slate-500 dark:text-slate-400">${l}</span><span class="block text-[14px] font-bold tabular-nums">${v}</span></span>`;
+      const net = prof ? prof.pts[prof.pts.length - 1][1] - prof.pts[0][1] : 0, mxh = prof ? Math.max(...prof.pts.map(x => x[1])) : 0;
+      const body = r ? `<span class="flex items-center gap-3"><span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-600 dark:bg-amber-950 dark:text-amber-400">${CUP}</span><span><span class="block font-barlow text-[30px] font-bold leading-none text-emerald-600 dark:text-emerald-400">${fmt(r.k100, 1)} <span class="font-sans text-[13px] font-medium text-slate-500 dark:text-slate-400">kWh/100 km</span></span><span class="block text-xs text-slate-500 dark:text-slate-400">Bestwert · ${labD(r.date)}${other ? ' · ' + (dir === 'ba' ? 'Hinweg ' : 'Rückweg ') + fmt(other.k100, 1) : ''}</span></span></span>`
+        : `<span class="block rounded-xl bg-slate-100 dark:bg-slate-800/70 px-3 py-2.5 text-sm text-slate-600 dark:text-slate-300 text-left">Für ${two ? (dir === 'ba' ? 'den Rückweg' : 'den Hinweg') + ' im' : 'den'} ${SEA_L[sea]} noch kein Bestwert. Antippen zum Eintragen.</span>`;
+      return `<div role="button" tabindex="0" data-rec="${esc(r ? r.id : '')}" data-newdir="${dir}" data-newsea="${sea}" data-route="${esc(rs[0].route)}" class="block w-full cursor-pointer rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 text-left active:scale-[0.99] transition space-y-2.5">
+        <span class="flex items-baseline justify-between gap-2"><span class="min-w-0 truncate text-[15px] font-bold">${esc(rs[0].route)}</span><span class="shrink-0 text-xs text-slate-500 dark:text-slate-400">${prof ? fmt(prof.km, 1) + ' km' : r && r.km ? fmt(r.km, 0) + ' km' : ''}</span></span>
+        ${tabs}${body}
+        ${meta.a && meta.b ? `<span class="block text-[11px] text-slate-500 dark:text-slate-400 truncate">${esc(hpLabel(dir === 'ba' ? meta.b : meta.a))} → ${meta.via ? 'über ' + esc(hpLabel(meta.via)) + ' → ' : ''}${esc(hpLabel(dir === 'ba' ? meta.a : meta.b))}</span>` : ''}
+        ${prof ? hpSvg(prof, la, lb) + `<span class="grid grid-cols-4 gap-1.5">${tile('Anstieg', '↑ ' + prof.up + ' m')}${tile('Gefälle', '↓ ' + prof.dn + ' m')}${tile('Netto', (net > 0 ? '+' : net < 0 ? '−' : '') + Math.abs(net) + ' m')}${tile('Höchster', mxh + ' m')}</span>`
+          + `<span class="block rounded-xl bg-slate-100 dark:bg-slate-800/70 px-3 py-2 text-xs leading-relaxed text-slate-600 dark:text-slate-300 text-left"><b class="text-slate-900 dark:text-slate-100">Höhe ${cost >= 0 ? 'kostet' : 'spart'} hier ≈ ${fmt(Math.abs(cost), 1)} kWh/100 km</b> (${dir === 'ba' ? 'Hinweg' : 'Rückweg'} ≈ ${fmt(costO, 1)}).${r ? ` Höhenbereinigt wäre dein Bestwert ≈ <b class="text-emerald-600 dark:text-emerald-400">${fmt(r.k100 - cost, 1)}</b> – damit mit flachen Strecken vergleichbar.` : ''}</span>` : ''}
+        ${r && recChips(r) ? `<span class="flex flex-wrap gap-1">${recChips(r)}</span>` : ''}${r && r.note ? `<span class="block text-xs text-slate-500 dark:text-slate-400 text-left">${esc(r.note)}</span>` : ''}
+        ${prof ? '<span class="block text-[10px] text-slate-400 dark:text-slate-500 text-left">Route: OSRM · Suche: Photon · © OpenStreetMap · Höhen: Open-Meteo (Copernicus DEM 90 m) · grobe Schätzung (2,1 t, 90 % Antrieb bergauf, 80 % bergab genutzt durch Rollen + Rekuperation)</span>' : ''}</div>`; }).join('')
+      || '<p class="rounded-3xl bg-white dark:bg-slate-900 p-4 text-sm text-slate-600 dark:text-slate-300 text-left">Noch keine Rekorde. Trage über „+“ deinen Bestwert je Strecke ein, mit Start und Ziel für das Höhenprofil. Ein neuer Eintrag für dieselbe Strecke und Richtung ersetzt den alten.</p>';
+  } else if (recRoute === 'lt') h = ltCard(lab.lt);
+  else if (recRoute === 'bt') h = btCard(lab.bt);
+  else h = speedCard(lab.speeds);
+  $('rec-list').innerHTML = h;
+}
+/* ---- Tempomat-Messreihen: mehrere je Bedingung (Sommer/Winter/Übergang, Klima an/aus) ---- */
+const SPD_SEASONS = ['Sommer', 'Übergang', 'Winter'], SPD_V = [80, 90, 100, 110, 120, 130, 140], SPD_COL = ['#f59e0b', '#38bdf8', '#a78bfa', '#34d399', '#f472b6', '#94a3b8'];
+let spdSel = null, spdEdit = null;
+const spdLabel = (s) => [s.season, s.klima ? 'Klima ' + s.klima : '', s.note].filter(Boolean).join(' · ') + (s.tOut != null ? ' · ' + fmt(s.tOut, 0) + ' °C' : '');
+function speedCard(list) {
+  const ss = (list || []).filter(s => (s.rows || []).some(r => r.k > 0));
+  if (!ss.length) return '<p class="rounded-3xl bg-white dark:bg-slate-900 p-4 text-sm text-slate-600 dark:text-slate-300 text-left">Noch keine Messreihe. Über „+“ Verbräuche bei konstantem Tempo eintragen, je Jahreszeit und Klima.</p>';
+  if (!ss.some(s => s.id === spdSel)) spdSel = ss[0].id;
+  const sp = ss.find(s => s.id === spdSel), ci = (s) => SPD_COL[list.indexOf(s) % SPD_COL.length];
+  const rows = sp.rows.filter(r => r.v > 0 && r.k > 0).sort((a, b) => a.v - b.v);
+  const mx = Math.max(...rows.map(r => r.k)), mn = Math.min(...rows.map(r => r.k)), colr = (k) => { const t = mx > mn ? (k - mn) / (mx - mn) : 0; return t < .2 ? '#10b981' : t < .45 ? '#22c55e' : t < .65 ? '#eab308' : t < .85 ? '#f59e0b' : '#ef4444'; };
+  const net = AVILOO.nom * avSoh(lastKnownKm() || 0) / 100;
+  let h = `<div class="flex flex-wrap gap-1.5">${ss.map(s => `<button type="button" data-spsel="${esc(s.id)}" class="inline-flex h-[30px] items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold ${s === sp ? '' : 'border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300'}"${s === sp ? ` style="background:${ci(s)}26;color:${ci(s)}"` : ''}><span class="h-2 w-2 rounded-full" style="background:${ci(s)}"></span>${esc([s.season, s.klima ? 'Klima ' + s.klima : ''].filter(Boolean).join(' · '))}</button>`).join('')}</div>
+    <div class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4"><div class="flex items-baseline justify-between gap-2"><p class="min-w-0 text-sm font-bold text-left">${esc(spdLabel(sp))}</p><button type="button" data-spd="${esc(sp.id)}" class="shrink-0 text-xs font-semibold text-sky-600 dark:text-sky-300">Bearbeiten</button></div>
+    <div class="mt-3 grid items-end gap-1.5" style="grid-template-columns:repeat(${rows.length},minmax(0,1fr));height:110px">${rows.map(r => `<div class="flex flex-col items-center gap-1 text-[11px]"><b class="tabular-nums">${fmt(r.k, r.k % 1 ? 1 : 0)}</b><span class="w-full rounded-t-md" style="height:${Math.round(r.k / mx * 80)}px;background:${colr(r.k)}"></span></div>`).join('')}</div>
+    <div class="mt-1 grid gap-1.5 text-center text-[11px] text-slate-500 dark:text-slate-400" style="grid-template-columns:repeat(${rows.length},minmax(0,1fr))">${rows.map((r, i) => `<span>${r.v}${i === rows.length - 1 ? ' km/h' : ''}</span>`).join('')}</div>
+    <p class="mt-2 text-[11px] text-slate-500 dark:text-slate-400 text-left">kWh/100 km bei konstantem Tempo. Reichweite mit ${fmt(net, 0)} kWh: ${rows.map(r => r.v + ' km/h ≈ ' + fmt(Math.round(net / r.k * 100 / 5) * 5, 0) + ' km').join(' · ')}</p></div>`;
+  if (ss.length > 1) {                                                          // Vergleich aller Messreihen je Tempo
+    const vs = [...new Set(ss.flatMap(s => s.rows.filter(r => r.k > 0).map(r => r.v)))].sort((a, b) => a - b);
+    h += `<div class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4"><p class="text-sm font-bold text-left">Vergleich</p><div class="mt-2 overflow-x-auto no-sb"><table class="w-full text-sm tabular-nums"><thead><tr class="text-[11px] text-slate-500 dark:text-slate-400"><th class="py-1 pr-2 text-left font-medium">km/h</th>${ss.map(s => `<th class="py-1 px-1 text-right font-medium"><span class="inline-block h-2 w-2 rounded-full align-middle" style="background:${ci(s)}"></span> ${esc(s.season.slice(0, 2) + '.' + (s.klima ? ' K. ' + s.klima : ''))}</th>`).join('')}</tr></thead><tbody>${vs.map(v => { const vals = ss.map(s => (s.rows.find(r => r.v === v) || {}).k), lo = Math.min(...vals.filter(x => x > 0));
+      return `<tr class="border-t border-slate-100 dark:border-slate-800"><td class="py-1.5 pr-2 text-left text-slate-500 dark:text-slate-400">${v}</td>${vals.map(x => `<td class="py-1.5 px-1 text-right ${x === lo && vals.filter(y => y > 0).length > 1 ? 'font-bold text-emerald-600 dark:text-emerald-400' : ''}">${x > 0 ? fmt(x, 1) : '–'}</td>`).join('')}</tr>`; }).join('')}</tbody></table></div><p class="mt-1 text-[11px] text-slate-500 dark:text-slate-400 text-left">kWh/100 km; grün = niedrigster Wert je Tempo.</p></div>`;
+  }
+  return h;
+}
+$('rec-chips').addEventListener('click', (e) => { const b = e.target.closest('[data-rr]'); if (b) { recRoute = b.dataset.rr; renderRecs(); } });
+$('rec-list').addEventListener('click', (e) => {
+  const s = e.target.closest('[data-spsel]'); if (s) { spdSel = s.dataset.spsel; renderRecs(); return; }
+  const lt = e.target.closest('[data-lt]'); if (lt) { openLtSheet(lt.dataset.lt); return; }
+  const dt = e.target.closest('[data-rdir]'); if (dt) { recDirSel[dt.dataset.rk] = dt.dataset.rdir; renderRecs(); return; }
+  const ds = e.target.closest('[data-rsea]'); if (ds) { recSeaSel[ds.dataset.rk] = ds.dataset.rsea; renderRecs(); return; }
+  const it = e.target.closest('[data-rec]'); if (it) { if (it.dataset.rec) openRecSheet(it.dataset.rec); else openRecSheet(null, { route: it.dataset.route, dir: it.dataset.newdir, season: it.dataset.newsea }); return; }
+  const sp = e.target.closest('[data-spd]'); if (sp) openSpdSheet(sp.dataset.spd);
+});
+segSwipe($('rec-list'), $('rec-chips'));                                    // Rekorde: Strecken | Tempomat | Langzeit per Wischen
+$('rec-add').addEventListener('click', () => recRoute === 'speed' ? openSpdSheet(null) : recRoute === 'lt' ? openLtSheet(null) : recRoute === 'bt' ? $('btq-card')?.scrollIntoView({ behavior: 'smooth', block: 'center' }) : openRecSheet(null));
+const recTown = (a) => { const m = /\d{5} ([^,]+)/.exec(String(a || '')); return m ? m[1].split('-')[0].trim() : ''; };
+function openRecSheet(id, pre) {
+  const lab = getLab(), r = id ? lab.recs.find(x => x.id === id) : null, d = pre || r || {}; recEdit = r ? r.id : null;
+  const routes = [...new Set(lab.recs.map(x => x.route))], meta = (d.route && lab.routes[recKey(d.route)]) || {};
+  recGeo = { a: meta.a || null, b: meta.b || null, via: meta.via || null, prof: hpN(meta.prof), both: !!meta.both || d.dir === 'ba', busy: false, err: '' };
+  $('rec-sheet-box').innerHTML = `<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div><p class="text-lg font-bold">${r ? 'Rekord bearbeiten' : 'Rekord eintragen'}</p>
+    <div><label for="rec-route" class="text-xs text-slate-500 dark:text-slate-400">Strecke</label><input id="rec-route" list="rec-routes" type="text" maxlength="40" value="${esc(d.route || '')}" placeholder="z. B. Arbeitsweg oder A6 Tempomat 110" class="${inCls}"><datalist id="rec-routes">${routes.map(x => `<option value="${esc(x)}"></option>`).join('')}</datalist></div>
+    <div class="relative"><label for="rec-a" class="text-xs text-slate-500 dark:text-slate-400">Start (A)</label><input id="rec-a" type="text" autocomplete="off" enterkeyhint="done" value="${esc(hpLabel(recGeo.a))}" placeholder="Ort, Adresse oder lat,lon" class="${inCls}"><div id="rec-sug-a" class="hidden mt-1 max-h-60 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-lg divide-y divide-slate-100 dark:divide-slate-800"></div><p id="rec-st-a" class="mt-1 text-xs text-left text-emerald-600 dark:text-emerald-400 empty:hidden">${hpLabel(recGeo.a) ? '✓ ' + esc(hpLabel(recGeo.a)) : ''}</p></div>
+    <div class="relative"><label for="rec-b" class="text-xs text-slate-500 dark:text-slate-400">Ziel (B)</label><input id="rec-b" type="text" autocomplete="off" enterkeyhint="done" value="${esc(hpLabel(recGeo.b))}" placeholder="Ort, Adresse oder lat,lon" class="${inCls}"><div id="rec-sug-b" class="hidden mt-1 max-h-60 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-lg divide-y divide-slate-100 dark:divide-slate-800"></div><p id="rec-st-b" class="mt-1 text-xs text-left text-emerald-600 dark:text-emerald-400 empty:hidden">${hpLabel(recGeo.b) ? '✓ ' + esc(hpLabel(recGeo.b)) : ''}</p></div>
+    <div id="rec-via-row" class="${recGeo.via ? '' : 'hidden'}"><div class="relative"><label for="rec-via" class="text-xs text-slate-500 dark:text-slate-400">Zwischenpunkt (optional)</label><input id="rec-via" type="text" autocomplete="off" enterkeyhint="done" value="${esc(hpLabel(recGeo.via))}" placeholder="Ort, Adresse oder lat,lon" class="${inCls}"><div id="rec-sug-via" class="hidden mt-1 max-h-60 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-lg divide-y divide-slate-100 dark:divide-slate-800"></div><p id="rec-st-via" class="mt-1 text-xs text-left text-emerald-600 dark:text-emerald-400 empty:hidden">${hpLabel(recGeo.via) ? '✓ ' + esc(hpLabel(recGeo.via)) : ''}</p></div></div>
+    <p class="-mt-1 text-[11px] text-slate-500 dark:text-slate-400 text-left">Beim Tippen erscheinen Vorschläge (deine Orte und Adressen) – einen antippen. Oder eine Fahrt aus dem Fahrtenbuch übernehmen.</p>
+    <div id="rec-hp" class="rounded-xl bg-slate-100 dark:bg-slate-800/70 px-3 py-2.5"></div>
+    <label class="flex items-center gap-2.5 text-sm"><input id="rec-both" type="checkbox" ${recGeo.both ? 'checked' : ''} class="h-5 w-5 accent-emerald-600">Rückweg B → A mit eigenem Bestwert führen</label>
+    <div id="rec-dir-row" class="${recGeo.both ? '' : 'hidden'}"><p class="text-xs text-slate-500 dark:text-slate-400">Richtung</p><div id="rec-dir" class="mt-1 flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 text-sm">${[['ab', 'A → B · Hin'], ['ba', 'B → A · Rück']].map(([v, l]) => `<button type="button" data-dirv="${v}" class="flex-1 rounded-lg py-1.5 font-medium ${(d.dir === 'ba' ? 'ba' : 'ab') === v ? 'bg-white dark:bg-slate-600 shadow-sm' : 'text-slate-500 dark:text-slate-400'}">${l}</button>`).join('')}</div></div>
+    <div><p class="text-xs text-slate-500 dark:text-slate-400">Jahreszeit</p><div id="rec-sea" class="mt-1 flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 text-sm">${['so', 'wi'].map(v => `<button type="button" data-seav="${v}" class="flex-1 rounded-lg py-1.5 font-medium ${recSeason(d) === v ? 'bg-white dark:bg-slate-600 shadow-sm' : 'text-slate-500 dark:text-slate-400'}">${SEA_I[v]} ${SEA_L[v]}</button>`).join('')}</div></div>
+    <div class="grid grid-cols-[1.35fr_0.8fr_1fr] gap-2"><div class="min-w-0"><label for="rec-date" class="text-xs text-slate-500 dark:text-slate-400">Datum</label><input id="rec-date" type="date" value="${esc(d.date || wxIso(new Date()))}" class="${inCls} !px-1.5 text-[13px]"></div>${fld('rec-km', 'km', d.km, '17')}${fld('rec-k', 'kWh/100 km', d.k100, '10,8')}${fld('rec-to', 'Außen °C', d.tOut, '18', 'text')}${fld('rec-tb', 'Akku °C', d.tBat, 'optional', 'text')}${fld('rec-v', 'Ø km/h', d.v, 'optional', 'numeric')}</div>
+    <div><p class="text-xs text-slate-500 dark:text-slate-400">Bedingungen</p><div id="rec-cond" class="mt-1 flex flex-wrap gap-1.5">${REC_COND.map(c => { const on = (d.cond || []).includes(c); return `<button type="button" data-cond="${esc(c)}" aria-pressed="${on}" class="h-8 rounded-full border px-3 text-xs font-semibold ${on ? 'border-emerald-600 bg-emerald-600/15 text-emerald-700 dark:text-emerald-300' : 'border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300'}">${esc(c)}</button>`; }).join('')}</div></div>
+    <div><label for="rec-note" class="text-xs text-slate-500 dark:text-slate-400">Notiz</label><input id="rec-note" type="text" maxlength="120" value="${esc(d.note || '')}" placeholder="z. B. Rekuperation B, Eco-Modus" class="${inCls}"></div>
+    <p id="rec-hint" class="rounded-xl bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-xs text-amber-800 dark:text-amber-300 text-left empty:hidden"></p>
+    ${r ? '' : '<button type="button" data-rs="trip" class="text-sm font-semibold text-sky-600 dark:text-sky-300">Aus dem Fahrtenbuch übernehmen ›</button><div id="rec-trips" class="hidden space-y-1"></div>'}
+    <p id="rec-msg" class="text-sm text-red-600 dark:text-red-400 text-left empty:hidden"></p>
+    <div class="grid grid-cols-2 gap-2.5"><button type="button" data-rs="${r ? 'del' : 'close'}" class="h-12 rounded-2xl border border-slate-300 dark:border-slate-700 text-sm font-semibold ${r ? 'text-red-600 dark:text-red-400' : ''}">${r ? 'Löschen' : 'Abbrechen'}</button><button type="button" data-rs="save" class="h-12 rounded-2xl bg-emerald-600 text-white text-sm font-semibold">Speichern</button></div>`;
+  $('rec-sheet').classList.remove('hidden'); hpBox(); recHint();
+}
+/* Richtung im Formular wechseln: Werte des Rekords dieser Richtung laden (oder leeren), statt den offenen Rekord umzuhängen */
+function recSwitchDir() {
+  const rt = ($('rec-route')?.value || '').trim(), key = recKey(rt) + '|' + recDirVal() + '|' + recSeaVal(), r = getLab().recs.find(x => recDirKey(x) === key) || null;
+  recEdit = r ? r.id : null; const v = (x) => x == null ? '' : String(x).replace('.', ',');
+  $('rec-date').value = r ? r.date : wxIso(new Date()); if (r && r.km) $('rec-km').value = v(r.km);
+  [['rec-k', 'k100'], ['rec-to', 'tOut'], ['rec-tb', 'tBat'], ['rec-v', 'v']].forEach(([id, k]) => { $(id).value = r ? v(r[k]) : ''; }); $('rec-note').value = r ? (r.note || '') : '';
+  document.querySelectorAll('#rec-cond [data-cond]').forEach(c => { const on = !!(r && (r.cond || []).includes(c.dataset.cond)); c.setAttribute('aria-pressed', on); ['border-emerald-600', 'bg-emerald-600/15', 'text-emerald-700', 'dark:text-emerald-300'].forEach(x => c.classList.toggle(x, on)); ['border-slate-300', 'dark:border-slate-700', 'text-slate-600', 'dark:text-slate-300'].forEach(x => c.classList.toggle(x, !on)); });
+  const t = $('rec-sheet-box').querySelector('p.text-lg'); if (t) t.textContent = r ? 'Rekord bearbeiten' : 'Rekord eintragen';
+  const lb = $('rec-sheet-box').querySelector('[data-rs="del"],[data-rs="close"]'); if (lb) { lb.dataset.rs = r ? 'del' : 'close'; lb.textContent = r ? 'Löschen' : 'Abbrechen'; lb.classList.toggle('text-red-600', !!r); lb.classList.toggle('dark:text-red-400', !!r); }
+  $('rec-msg').textContent = '';
+}
+const recSeaVal = () => document.querySelector('#rec-sea .bg-white')?.dataset.seav === 'wi' ? 'wi' : 'so';
+const recDirVal = () => ($('rec-both')?.checked && document.querySelector('#rec-dir .bg-white')?.dataset.dirv === 'ba') ? 'ba' : 'ab';
+function recHint() {
+  const rt = ($('rec-route')?.value || '').trim(), k = deDec($('rec-k')?.value), h = $('rec-hint'); if (!h) return;
+  const dk = recKey(rt) + '|' + recDirVal() + '|' + recSeaVal(), lbl = '„' + rt + '“ (' + ($('rec-both')?.checked ? (recDirVal() === 'ba' ? 'Rück, ' : 'Hin, ') : '') + SEA_L[recSeaVal()] + ')', own = recEdit ? getLab().recs.find(r => r.id === recEdit) : null, others = getLab().recs.filter(r => recDirKey(r) === dk && r.id !== recEdit), best = others.length ? Math.min(...others.map(r => r.k100)) : (own && recDirKey(own) === dk ? own.k100 : null);
+  h.textContent = !rt || !(k > 0) || best == null ? (rt && k > 0 ? 'Erster Eintrag für ' + lbl : '') : k < best ? 'Neuer Bestwert für ' + lbl + ' – ersetzt ' + fmt(best, 1) : k > best ? 'Achtung: Bisheriger Bestwert ' + fmt(best, 1) + ' ist besser. Speichern ersetzt ihn trotzdem.' : '';
+}
+$('rec-sheet').addEventListener('input', (e) => { const m = /^rec-(a|b|via)$/.exec(e.target.id || ''); if (m) hpSuggest(m[1]); else recHint(); });
+$('rec-sheet').addEventListener('pointerdown', (e) => { if (e.target.closest('[data-sug]')) e.preventDefault(); });   // Fokus im Feld lassen, damit kein „change“ vor der Auswahl feuert
+$('rec-sheet').addEventListener('keydown', (e) => { const m = /^rec-(a|b|via)$/.exec(e.target.id || ''); if (m && e.key === 'Enter') { e.preventDefault(); const l = recGeo['sug' + m[1]]; if (l && l.length && !$('rec-sug-' + m[1]).classList.contains('hidden')) hpPick(m[1], l[0]); else e.target.blur(); } });
+$('rec-sheet').addEventListener('change', (e) => {
+  const id = e.target.id;
+  if (id === 'rec-a') hpField('a'); else if (id === 'rec-b') hpField('b'); else if (id === 'rec-via') hpField('via');
+  else if (id === 'rec-both') { recGeo.both = e.target.checked; $('rec-dir-row').classList.toggle('hidden', !e.target.checked); recHint(); }
+  else if (id === 'rec-route' && !recGeo.a && !recGeo.b) { const m = getLab().routes[recKey(e.target.value)]; if (m && m.a && m.b) { Object.assign(recGeo, { a: m.a, b: m.b, via: m.via || null, prof: hpN(m.prof), both: !!m.both }); $('rec-a').value = hpLabel(m.a); $('rec-b').value = hpLabel(m.b); $('rec-both').checked = !!m.both; $('rec-dir-row').classList.toggle('hidden', !m.both); hpBox(); recHint(); } }
+});
+$('rec-sheet').addEventListener('click', (e) => {
+  if (e.target === $('rec-sheet')) { $('rec-sheet').classList.add('hidden'); return; }
+  const c = e.target.closest('[data-cond]'); if (c) { const on = c.getAttribute('aria-pressed') !== 'true'; c.setAttribute('aria-pressed', on); ['border-emerald-600', 'bg-emerald-600/15', 'text-emerald-700', 'dark:text-emerald-300'].forEach(x => c.classList.toggle(x, on)); ['border-slate-300', 'dark:border-slate-700', 'text-slate-600', 'dark:text-slate-300'].forEach(x => c.classList.toggle(x, !on)); return; }
+  const sg = e.target.closest('[data-sug]'); if (sg) { const [w, i] = sg.dataset.sug.split(':'); const pt = (recGeo['sug' + w] || [])[+i]; if (pt) hpPick(w, pt); return; }
+  const dv = e.target.closest('[data-dirv]'); if (dv) { dv.parentElement.querySelectorAll('[data-dirv]').forEach(x => { const on = x === dv; x.classList.toggle('bg-white', on); x.classList.toggle('dark:bg-slate-600', on); x.classList.toggle('shadow-sm', on); x.classList.toggle('text-slate-500', !on); x.classList.toggle('dark:text-slate-400', !on); }); recSwitchDir(); recHint(); return; }
+  const sv = e.target.closest('[data-seav]'); if (sv) { sv.parentElement.querySelectorAll('[data-seav]').forEach(x => { const on = x === sv; x.classList.toggle('bg-white', on); x.classList.toggle('dark:bg-slate-600', on); x.classList.toggle('shadow-sm', on); x.classList.toggle('text-slate-500', !on); x.classList.toggle('dark:text-slate-400', !on); }); recSwitchDir(); recHint(); return; }
+  const tp = e.target.closest('[data-trip]'); if (tp) { const t = getTrips().find(x => String(x.id) === tp.dataset.trip); if (t) { const g0 = geoOf(t.p0), g1 = geoOf(t.p1); if (g0 && g1 && !recGeo.a && !recGeo.b) { recGeo.a = { ...g0, label: placeAt(t.p0)?.name || recTown(t.a0) || '' }; recGeo.b = { ...g1, label: placeAt(t.p1)?.name || recTown(t.a1) || '' }; $('rec-a').value = hpLabel(recGeo.a); $('rec-b').value = hpLabel(recGeo.b); hpStatus('a', true, '✓ ' + hpLabel(recGeo.a) + ' · aus Fahrt'); hpStatus('b', true, '✓ ' + hpLabel(recGeo.b) + ' · aus Fahrt'); hpRefresh(); } $('rec-date').value = wxIso(new Date(t.s)); $('rec-km').value = String(t.km).replace('.', ','); if (t.k100) $('rec-k').value = String(t.k100).replace('.', ','); if (t.v) $('rec-v').value = String(Math.round(t.v)); $('rec-trips').classList.add('hidden'); recHint(); } return; }
+  const b = e.target.closest('[data-rs]'); if (!b) return; const act = b.dataset.rs, lab = getLab();
+  if (act === 'close') $('rec-sheet').classList.add('hidden');
+  else if (act === 'via') { recGeo.viaOpen = true; $('rec-via-row').classList.remove('hidden'); hpBox(); setTimeout(() => { $('rec-via')?.focus(); $('rec-via-row').scrollIntoView({ block: 'center', behavior: 'smooth' }); }, 50); }
+  else if (act === 'hpload') hpRefresh();
+  else if (act === 'trip') { const box = $('rec-trips'), ts = getTrips().filter(t => t.km >= 3 && t.k100 > 0).sort((a, b) => Date.parse(b.s) - Date.parse(a.s)).slice(0, 12);
+    box.innerHTML = ts.length ? ts.map(t => `<button type="button" data-trip="${esc(String(t.id))}" class="flex w-full items-center justify-between gap-2 rounded-xl bg-slate-100 dark:bg-slate-800 px-3 py-2 text-left text-sm"><span class="min-w-0 truncate">${new Date(t.s).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })} · ${fmt(t.km, 0)} km${t.v ? ' · Ø ' + fmt(t.v, 0) + ' km/h' : ''}${recTown(t.a0) && recTown(t.a1) ? ' · ' + esc(recTown(t.a0)) + ' → ' + esc(recTown(t.a1)) : ''}</span><b class="shrink-0 tabular-nums">${fmt(t.k100, 1)}</b></button>`).join('') : '<p class="text-xs text-slate-500">Keine Fahrten im Fahrtenbuch.</p>'; box.classList.toggle('hidden'); }
+  else if (act === 'del') { if (confirm('Diesen Rekord löschen?')) { lab.recs = lab.recs.filter(x => x.id !== recEdit); setLab(lab); $('rec-sheet').classList.add('hidden'); } }
+  else if (act === 'save') {
+    const m = $('rec-msg'), route = $('rec-route').value.trim().slice(0, 40), k = deDec($('rec-k').value), opt = (id) => { const v = deDec($(id).value); return Number.isFinite(v) ? v : undefined; };
+    if (!route) { m.textContent = 'Bitte eine Strecke angeben.'; return; } if (!(k > 3 && k < 60)) { m.textContent = 'Bitte den Verbrauch in kWh/100 km eintragen (z. B. 10,8).'; return; }
+    const cond = [...document.querySelectorAll('#rec-cond [data-cond]')].filter(x => x.getAttribute('aria-pressed') === 'true').map(x => x.dataset.cond);
+    const r = { id: recEdit || labId(), route, date: $('rec-date').value || wxIso(new Date()), km: opt('rec-km'), k100: Math.round(k * 10) / 10, tOut: opt('rec-to'), tBat: opt('rec-tb'), v: opt('rec-v'), cond: cond.length ? cond : undefined, note: $('rec-note').value.trim() || undefined, dir: recDirVal() === 'ba' ? 'ba' : undefined, season: recSeaVal() };
+    Object.keys(r).forEach(x => r[x] === undefined && delete r[x]);
+    if (recGeo.busy) { m.textContent = 'Höhenprofil lädt noch – bitte kurz warten.'; return; }
+    const rk = recKey(route), old = lab.routes[rk] || {};
+    if (recGeo.a && recGeo.b) lab.routes = { ...lab.routes, [rk]: { a: recGeo.a, b: recGeo.b, via: recGeo.via || undefined, prof: hpStore(recGeo.prof || old.prof), both: !!recGeo.both || undefined } };
+    else if (!recGeo.a && !recGeo.b && old.a) { const o2 = { ...lab.routes }; if (lab.recs.every(x => recKey(x.route) !== rk || x.id === r.id)) delete o2[rk]; lab.routes = o2; }
+    else if (old.a) lab.routes = { ...lab.routes, [rk]: { ...old, both: !!recGeo.both || undefined } };
+    Object.values(lab.routes).forEach(o => Object.keys(o).forEach(x => o[x] === undefined && delete o[x]));
+    lab.recs = lab.recs.filter(x => x.id !== r.id && recDirKey(x) !== recDirKey(r)).concat(r); recRoute = 'all'; setLab(lab); $('rec-sheet').classList.add('hidden');   // je Strecke genau ein Eintrag
+  }
+});
+function openSpdSheet(id) {
+  const sp = id ? getLab().speeds.find(x => x.id === id) : null; spdEdit = sp ? sp.id : null;
+  const seg = (name, opts, cur) => `<div data-seg="${name}" class="flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 text-sm">${opts.map(o => `<button type="button" data-v="${esc(o)}" class="flex-1 rounded-lg py-1.5 font-medium ${o === cur ? 'bg-white dark:bg-slate-600 shadow-sm' : 'text-slate-500 dark:text-slate-400'}">${esc(o)}</button>`).join('')}</div>`;
+  $('rec-sheet-box').innerHTML = `<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div><p class="text-lg font-bold">${sp ? 'Messreihe bearbeiten' : 'Tempomat-Messreihe eintragen'}</p>
+    <div><p class="text-xs text-slate-500 dark:text-slate-400">Jahreszeit</p><div class="mt-1">${seg('season', SPD_SEASONS, sp ? sp.season : 'Winter')}</div></div>
+    <div><p class="text-xs text-slate-500 dark:text-slate-400">Klima / Heizung</p><div class="mt-1">${seg('klima', ['an', 'aus'], sp ? sp.klima : 'an')}</div></div>
+    <div class="grid grid-cols-[1fr_0.6fr] gap-2"><div class="min-w-0"><label for="spd-note" class="text-xs text-slate-500 dark:text-slate-400">Zusatz</label><input id="spd-note" type="text" maxlength="30" value="${esc((sp && sp.note) || '')}" placeholder="z. B. eben, Winterreifen" class="${inCls}"></div>${fld('spd-to', 'Außen °C', sp ? sp.tOut : undefined, 'optional', 'text')}</div>
+    <p class="text-xs text-slate-500 dark:text-slate-400 text-left">kWh/100 km bei konstantem Tempo (leer lassen, was du nicht gemessen hast)</p>
+    <div class="grid grid-cols-4 gap-2">${SPD_V.map(v => fld('spd-' + v, v + ' km/h', sp ? (sp.rows.find(r => r.v === v) || {}).k : undefined, '', 'decimal')).join('')}</div>
+    <p id="spd-msg" class="text-sm text-red-600 dark:text-red-400 text-left empty:hidden"></p>
+    <div class="grid grid-cols-2 gap-2.5"><button type="button" data-ss="${sp ? 'del' : 'close'}" class="h-12 rounded-2xl border border-slate-300 dark:border-slate-700 text-sm font-semibold ${sp ? 'text-red-600 dark:text-red-400' : ''}">${sp ? 'Löschen' : 'Abbrechen'}</button><button type="button" data-ss="save" class="h-12 rounded-2xl bg-emerald-600 text-white text-sm font-semibold">Speichern</button></div>`;
+  $('rec-sheet').classList.remove('hidden');
+}
+$('rec-sheet').addEventListener('click', (e) => {
+  const sb = e.target.closest('[data-seg] [data-v]'); if (sb) { sb.parentElement.querySelectorAll('[data-v]').forEach(x => { const on = x === sb; x.classList.toggle('bg-white', on); x.classList.toggle('dark:bg-slate-600', on); x.classList.toggle('shadow-sm', on); x.classList.toggle('text-slate-500', !on); x.classList.toggle('dark:text-slate-400', !on); }); return; }
+  const b = e.target.closest('[data-ss]'); if (!b) return; const act = b.dataset.ss, lab = getLab();
+  if (act === 'del') { if (!confirm('Diese Messreihe löschen?')) return; lab.speeds = lab.speeds.filter(x => x.id !== spdEdit); spdSel = null; setLab(lab); }
+  else if (act === 'save') {
+    const pick = (n) => { const x = document.querySelector(`[data-seg="${n}"] .bg-white`); return x ? x.dataset.v : ''; };
+    const rows = SPD_V.map(v => ({ v, k: deDec($('spd-' + v).value) })).filter(r => r.k > 3 && r.k < 60);
+    if (!rows.length) { $('spd-msg').textContent = 'Bitte mindestens einen Verbrauch eintragen.'; return; }
+    const to = deDec($('spd-to').value), sp = { id: spdEdit || labId(), season: pick('season') || 'Sommer', klima: pick('klima') || 'an', note: $('spd-note').value.trim() || undefined, tOut: Number.isFinite(to) ? to : undefined, rows };
+    Object.keys(sp).forEach(k => sp[k] === undefined && delete sp[k]);
+    lab.speeds = spdEdit ? lab.speeds.map(x => x.id === spdEdit ? sp : x) : lab.speeds.concat(sp); spdSel = sp.id; recRoute = 'speed'; setLab(lab);
+  }
+  $('rec-sheet').classList.add('hidden');
+});
+
+
+// ───── src/16-routenplaner.js ─────
+/* =====================================================================
+   Strecken-Prognose: Route (OSRM) + Höhen (Open-Meteo) + Wetter entlang der Strecke (Temperatur, Regen, Wind zur Ankunftszeit je Abschnitt).
+   Physik je Abschnitt (akkuseitig, ohne Ladeverluste): Rollen + Luft (cw 0,257 · 2,56 m², Luftdichte nach Temperatur), Steigung (bergab mit
+   Rekuperation), Anfahren/Bremsen nach Tempo, Nebenverbraucher, Heizung/Klima + kalter Akku, Nässe (mehr Rollwiderstand).
+   Persönlicher Faktor: lernt aus den selbst eingetragenen Realwerten gemerkter Fahrten (lab.fc), neue Fahrten zählen mehr (Halbwertszeit 180 Tage).
+   ===================================================================== */
+const RT_P = { m: 2050, crr: 0.0095, cw: 0.257, A: 2.56, eta: 0.87, rec: 0.65, aux: 0.35, mp: 75 };
+const RT = { a: null, b: null, res: null, busy: false, err: '', tab: 'plan', n: 0, route: {}, wx: {}, sugN: 0, sugT: 0, sug: {} };
+const KEY_RT = 'enyaq.rtLast';
+const rtFmtP = (v) => (v >= 0.05 ? '+' : v <= -0.05 ? '−' : '±') + fmt(Math.abs(v), 1) + ' %';
+const rtDev = (p, r) => (p - r) / r * 100;
+function rtFactor(skipId, override) {
+  const list = getLab().fc.map(x => override && x.id === override.id ? override : x).filter(x => x.id !== skipId && x.real > 0 && x.raw100 > 0);
+  let s = 2, w0 = 2; list.forEach(x => { const age = Math.max(0, (Date.now() - Date.parse(x.dep)) / 864e5), w = Math.pow(0.5, age / 180) * Math.max(0.2, Math.min(1, (x.km || 0) / 100)); s += w * Math.min(1.4, Math.max(0.7, x.real / x.raw100)); w0 += w; });
+  return Math.round(s / w0 * 1000) / 1000;
+}
+async function rtRoute(a, b, v) {
+  const wp = [a, v, b].filter(Boolean), key = wp.map(p => p.lat.toFixed(4) + ',' + p.lon.toFixed(4)).join(';'); if (RT.route[key]) return RT.route[key];
+  const rr = await fetch('https://router.project-osrm.org/route/v1/driving/' + wp.map(p => p.lon.toFixed(5) + ',' + p.lat.toFixed(5)).join(';') + '?overview=false&steps=true&geometries=geojson');
+  if (!rr.ok) throw new Error('Route nicht gefunden (' + rr.status + ')'); const rj = await rr.json(), rt = rj.routes && rj.routes[0]; if (!rt) throw new Error('Keine Route gefunden');
+  const raw = [];                                                                 // Teilstücke: { a, b, len, v, mw }
+  (rt.legs || []).forEach(l => (l.steps || []).forEach(s => { const c = (s.geometry && s.geometry.coordinates) || [], v = s.duration > 0 ? s.distance / s.duration : 13, mw = /(^|[;\s])A\s?\d/.test(s.ref || '') || v > 24;
+    for (let i = 1; i < c.length; i++) { const p = { lat: c[i - 1][1], lon: c[i - 1][0] }, q = { lat: c[i][1], lon: c[i][0] }, len = geoDist(p, q); if (len > 0) raw.push({ p, q, len, v: Math.max(3, v), mw }); } }));
+  const tot = raw.reduce((s, x) => s + x.len, 0); if (!(tot > 100)) throw new Error('Strecke zu kurz');
+  const N = Math.max(12, Math.min(240, Math.round(tot / 1000))), L = tot / N, segs = []; let j = 0, off = 0;
+  const at = (k, o) => { const r = raw[k], f = r.len ? o / r.len : 0; return { lat: r.p.lat + (r.q.lat - r.p.lat) * f, lon: r.p.lon + (r.q.lon - r.p.lon) * f }; };
+  let pos = at(0, 0); const pts = [pos];
+  for (let i = 0; i < N; i++) { let need = L, t = 0, mwl = 0;
+    while (need > 1e-6 && j < raw.length) { const r = raw[j], take = Math.min(need, r.len - off); t += take / r.v; if (r.mw) mwl += take; need -= take; off += take; if (off >= r.len - 1e-6) { j++; off = 0; } }
+    const end = j < raw.length ? at(j, off) : raw[raw.length - 1].q, y = Math.sin((end.lon - pos.lon) * Math.PI / 180) * Math.cos(end.lat * Math.PI / 180), x = Math.cos(pos.lat * Math.PI / 180) * Math.sin(end.lat * Math.PI / 180) - Math.sin(pos.lat * Math.PI / 180) * Math.cos(end.lat * Math.PI / 180) * Math.cos((end.lon - pos.lon) * Math.PI / 180);
+    segs.push({ len: L, v: L / Math.max(t, 0.1), mw: mwl / L > 0.5, brg: (Math.atan2(y, x) * 180 / Math.PI + 360) % 360, lat: (pos.lat + end.lat) / 2, lon: (pos.lon + end.lon) / 2, d: (i + 0.5) * L }); pos = end; pts.push(end); }
+  const el = [];
+  for (let k = 0; k < pts.length; k += 100) { const ch = pts.slice(k, k + 100), er = await fetch('https://api.open-meteo.com/v1/elevation?latitude=' + ch.map(s => s.lat.toFixed(5)).join(',') + '&longitude=' + ch.map(s => s.lon.toFixed(5)).join(','));
+    if (!er.ok) throw new Error('Höhen nicht verfügbar (' + er.status + ')'); el.push(...((await er.json()).elevation || []).map(Number)); }
+  const h = el.map((v, i) => (Number(el[i - 1] ?? v) + v * 2 + Number(el[i + 1] ?? v)) / 4);
+  const res = { km: tot / 1000, segs, pts, h: h.length === pts.length ? h : pts.map(() => 0), noH: h.length !== pts.length };
+  RT.route[key] = res; return res;
+}
+async function rtWeather(route, dep) {
+  const n = Math.max(2, Math.min(8, Math.round(route.km / 30) + 1)), idx = [...new Set(Array.from({ length: n }, (_, i) => Math.round(i * (route.segs.length - 1) / (n - 1))))];
+  const key = idx.map(i => route.segs[i].lat.toFixed(2) + ',' + route.segs[i].lon.toFixed(2)).join(';'), c = RT.wx[key];
+  let data = c && Date.now() - c.t < 30 * 60e3 ? c.d : null;
+  if (!data) { const r = await fetch('https://api.open-meteo.com/v1/forecast?latitude=' + idx.map(i => route.segs[i].lat.toFixed(3)).join(',') + '&longitude=' + idx.map(i => route.segs[i].lon.toFixed(3)).join(',') + '&hourly=temperature_2m,precipitation,wind_speed_10m,wind_direction_10m,relative_humidity_2m,dew_point_2m&wind_speed_unit=ms&timezone=auto&past_days=1&forecast_days=16');
+    if (!r.ok) throw new Error('Wetter nicht verfügbar'); const j = await r.json(); data = Array.isArray(j) ? j : [j]; RT.wx[key] = { t: Date.now(), d: data }; }
+  return { pts: idx.map((si, k) => ({ d: route.segs[si].d, h: data[k] && data[k].hourly })) };
+}
+function rtWxAt(wx, d, ms) {
+  if (!wx) return null; let best = wx.pts[0]; wx.pts.forEach(p => { if (Math.abs(p.d - d) < Math.abs(best.d - d)) best = p; }); const h = best.h; if (!h || !h.time) return null;
+  const t = new Date(ms), k = t.getFullYear() + '-' + pad2(t.getMonth() + 1) + '-' + pad2(t.getDate()) + 'T' + pad2(t.getHours()) + ':00', i = h.time.indexOf(k); if (i < 0) return null;
+  return { T: Number(h.temperature_2m[i]), rain: Number(h.precipitation[i]) || 0, ws: Number(h.wind_speed_10m[i]) || 0, wd: Number(h.wind_direction_10m[i]) || 0, rh: h.relative_humidity_2m ? Number(h.relative_humidity_2m[i]) : NaN, td: h.dew_point_2m ? Number(h.dew_point_2m[i]) : NaN };
+}
+/* Mitfahrer-Zuschlag („Freundin-Zuschlag“): ab 2 Personen pauschal +12 % – sie friert im Winter (24 °C + Sitzheizung) und will es im Sommer noch kühler.
+   In der App nicht eigens ausgewiesen, steckt im Chip Heizung/Klima. */
+const FREUNDIN_ZUSCHLAG = 0.12;
+/* Freisicht (beschlagene Scheiben nach dem Parken): bei hoher Luftfeuchte bzw. Taupunkt nahe der Außentemperatur und unter 14 °C läuft zu Beginn jeder
+   Etappe einige Minuten Gebläse + Klimakompressor + Heizung. Grob 0,25–0,6 kWh, mit Mitfahrern mehr (Atemfeuchte). */
+function rtFog(w, pers) {
+  if (!w || !(w.T < 14)) return 0; const sp = Number.isFinite(w.td) ? w.T - w.td : null, rh = Number.isFinite(w.rh) ? w.rh : null;
+  const lvl = (rh != null && rh >= 92) || (sp != null && sp <= 1.5) ? 1 : (rh != null && rh >= 85) || (sp != null && sp <= 3) ? 0.6 : 0; if (!lvl) return 0;
+  return lvl * Math.min(0.6, 0.25 + 0.03 * Math.max(0, 12 - w.T)) * (pers >= 2 ? 1.25 : 1);
+}
+const RT_STANDBY = 0.05;                                                          // kW Ruhestrom beim Parken am Ziel (Hin & zurück; zählt im Akkustand mit)
+function rtCalc(legs, o) {
+  const m = RT_P.m + RT_P.mp * (o.pers - 1), g = 9.81, cap = batteryKwh(), f = 1 + o.tempo / 100, J = 3.6e6;
+  const bat = (x) => x > 0 ? x / RT_P.eta : x * RT_P.rec;
+  let t = 0, E = { base: 0, slope: 0, wind: 0, rain: 0, heat: 0 }, cum = [0], Ts = [], rainKm = 0, hwSum = 0, noWx = false, h = [], turn = null, durDrive = 0, d0 = 0, pts = [], dkm = [], tt = [], dk = 0, fogE = [];
+  legs.forEach((lg, li) => {
+    const route = lg.route, wx = lg.wx;
+    if (li) { t += o.stay * 3600; turn = { i: cum.length - 1, t: durDrive }; }
+    h = h.length ? h.concat(route.h.slice(1)) : route.h.slice(); if (!pts.length) { pts.push(route.pts[0]); dkm.push(0); tt.push(0); }
+    route.segs.forEach((s, i) => {
+      const v = (s.mw ? o.vab / 3.6 : s.v) * f, dt = s.len / v, ww = rtWxAt(wx, s.d, o.dep + t * 1000), w = ww || { T: 10, rain: 0, ws: 0, wd: 0 }; if (!ww) noWx = true;
+      const rho = 1.293 * 273.15 / (273.15 + w.T), hw = w.ws * 0.7 * Math.cos((w.wd - s.brg) * Math.PI / 180), dh = route.h[i + 1] - route.h[i], Fs = m * g * dh;
+      const aero = (u) => 0.5 * rho * RT_P.cw * RT_P.A * u * Math.abs(u), wet = w.rain >= 0.3 ? 1.2 : 1;
+      const F0 = RT_P.crr * m * g + aero(v), Fw = RT_P.crr * m * g + aero(v + hw), Fr = RT_P.crr * wet * m * g + aero(v + hw);
+      const stops = v < 11 ? 2 : v < 17 ? 1 : v < 22 ? 0.3 : 0.03, acc = stops * s.len / 1000 * 0.5 * m * v * v * (1 / RT_P.eta - RT_P.rec);
+      const e0 = bat(F0 * s.len), e1 = bat(F0 * s.len + Fs), e2 = bat(Fw * s.len + Fs), e3 = bat(Fr * s.len + Fs);
+      const pH = w.T < 18 ? 0.09 * (18 - w.T) : w.T > 24 ? 0.08 * (w.T - 24) : 0, cold = Math.max(0, e3) * 0.004 * Math.max(0, 15 - w.T);
+      const eb = (e0 + acc) / J + RT_P.aux * dt / 3600, es = (e1 - e0) / J, ew = (e2 - e1) / J, er = (e3 - e2) / J, eh = pH * dt / 3600 + cold / J + (i === 0 ? 0.5 * Math.max(0, 15 - w.T) / 15 + (fogE[li] = rtFog(ww, o.pers)) + (li ? RT_STANDBY * o.stay : 0) : 0);
+      E.base += eb; E.slope += es; E.wind += ew; E.rain += er; E.heat += eh; cum.push(cum[cum.length - 1] + eb + es + ew + er + eh);
+      t += dt; durDrive += dt; dk += s.len / 1000; pts.push(route.pts[i + 1]); dkm.push(dk); tt.push(t); Ts.push(w.T); if (w.rain >= 0.3) rainKm += s.len / 1000; hwSum += hw * s.len;
+    });
+    d0 += route.km;
+  });
+  if (o.pers >= 2) { E.heat += cum[cum.length - 1] * FREUNDIN_ZUSCHLAG; cum = cum.map(c => c * (1 + FREUNDIN_ZUSCHLAG)); }
+  const k = rtFactor(), raw = cum[cum.length - 1], kwh = raw * k, km = d0, socAt = (c) => o.soc - c * k / cap * 100;
+  let up = 0, dn = 0; for (let i = 1; i < h.length; i++) { const d = h[i] - h[i - 1]; if (d > 0) up += d; else dn -= d; }
+  return { km, dur: durDrive, tEnd: t, raw, k, kwh, k100: kwh / km * 100, raw100: raw / km * 100, E: Object.fromEntries(Object.entries(E).map(([a, v]) => [a, v * k])), soc: cum.map(socAt),
+    pts, dkm, tt, cumK: cum.map(c => c * k), fog: fogE.reduce((a, x) => a + (x || 0), 0) * k * (o.pers >= 2 ? 1 + FREUNDIN_ZUSCHLAG : 1), socA: socAt(raw), turn: turn ? { i: turn.i, soc: socAt(cum[turn.i]), t: turn.t, km: legs[0].route.km } : null, up: Math.round(up), dn: Math.round(dn), tMin: Math.min(...Ts), tMax: Math.max(...Ts), tAvg: Ts.reduce((a, x) => a + x, 0) / Ts.length, rainKm, hw: hwSum / (km * 1000), noWx, noH: legs.some(l => l.route.noH), h };
+}
+function rtSvg(r) {
+  const W = 312, H = 104, B = 4, n = r.h.length, X = (i) => i / (n - 1) * W;
+  let y0 = Math.min(...r.h), y1 = Math.max(...r.h); const pad = Math.max(15, (y1 - y0) * 0.2); y0 -= pad; y1 += pad;
+  const Yh = (v) => B + (1 - (v - y0) / (y1 - y0 || 1)) * (H - 2 * B), Ys = (v) => B + (1 - (Math.max(-5, Math.min(100, v)) - 0) / 100) * (H - 2 * B);
+  const ln = r.h.map((v, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Yh(v).toFixed(1)).join(' '), sl = r.soc.map((v, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Ys(v).toFixed(1)).join(' ');
+  const res = Ys(WXO_RES), last = r.soc[r.soc.length - 1], tx = r.turn ? X(r.turn.i) : null, SS = r.stops || [];
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="mt-2 w-full" style="height:${H}px" aria-hidden="true"><defs><linearGradient id="rtg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#64748b" stop-opacity=".5"/><stop offset="1" stop-color="#64748b" stop-opacity=".05"/></linearGradient></defs>`
+    + `<path d="${ln} L${W} ${H} L0 ${H} Z" fill="url(#rtg)"/><path d="${ln}" fill="none" stroke="#94a3b8" stroke-width="1.6" vector-effect="non-scaling-stroke"/>`
+    + `<line x1="0" x2="${W}" y1="${res.toFixed(1)}" y2="${res.toFixed(1)}" stroke="#f87171" stroke-dasharray="3 4" stroke-width="1" vector-effect="non-scaling-stroke"/>`
+    + (tx != null ? `<line x1="${tx.toFixed(1)}" x2="${tx.toFixed(1)}" y1="0" y2="${H}" stroke="#f472b6" stroke-dasharray="2 3" stroke-width="1" vector-effect="non-scaling-stroke"/>` : '')
+    + `<path d="${sl}" fill="none" stroke="#34d399" stroke-width="2.4" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`
+    + SS.map(st => `<line x1="${X(st.j).toFixed(1)}" x2="${X(st.j).toFixed(1)}" y1="${Ys(st.sArr).toFixed(1)}" y2="${Ys(st.tgt).toFixed(1)}" stroke="#fbbf24" stroke-width="2.4" stroke-dasharray="2 3" vector-effect="non-scaling-stroke"/>`).join('')
+    + `<circle cx="${X(n - 1) - 3}" cy="${Ys(last).toFixed(1)}" r="3.5" fill="${last < WXO_RES ? '#f87171' : '#34d399'}"/></svg>`
+    + `<div class="flex justify-between text-[10px] text-slate-500 dark:text-slate-400"><span>${Math.round(r.h[0])} m</span>${r.turn ? `<span class="text-pink-400">◆ Ziel ${Math.round(r.turn.soc)} %</span>` : ''}${SS.length === 1 ? `<span class="text-amber-500">⚡ ${Math.round(SS[0].sArr)} → ${SS[0].tgt} %</span>` : SS.length ? `<span class="text-amber-500">⚡ ${SS.length} Stopps</span>` : ''}<span class="text-red-400">${WXO_RES} % Reserve</span><span>${Math.round(r.h[n - 1])} m</span></div>`;
+}
+function rtRenderRes() {
+  const el = $('rt-res'), ab = $('rt-abrp'); if (!el) return; const r = RT.res;
+  ab.classList.toggle('hidden', !r || RT.busy);
+  if (RT.busy) { el.innerHTML = '<div class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 text-sm text-slate-500 dark:text-slate-400 text-left">Route, Höhen und Wetter werden geladen …</div>'; return; }
+  if (RT.err) { el.innerHTML = `<div class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 text-sm text-red-600 dark:text-red-400 text-left">${esc(RT.err)}<button type="button" data-rt="retry" class="mt-1 block text-xs font-semibold text-sky-600 dark:text-sky-300">Erneut versuchen ›</button></div>`; return; }
+  if (!r) { el.innerHTML = '<p class="px-1 text-xs text-slate-500 dark:text-slate-400 text-left">Start und Ziel eingeben – die App rechnet mit Route, Höhenprofil, Wetter und Wind zur Abfahrtszeit, kalibriert mit deinen eingetragenen Fahrten.</p>'; return; }
+  const eta = new Date(RT.o.dep + r.tEnd * 1000), dur = Math.round(r.dur / 60), lo = r.socA < WXO_RES - 0.5 && !(RT.ch && RT.ch.busy), tw = r.turn;
+  const chip = (i, sg, v, t) => `<span class="inline-flex items-center gap-1 whitespace-nowrap rounded-[10px] bg-slate-100 dark:bg-slate-800 px-2 py-1 text-[12px]" title="${t}"><span aria-hidden="true">${i}</span>${(sg ? (v >= 0 ? '+' : '−') : '') + fmt(Math.abs(v), 1)}</span>`;
+  el.innerHTML = `<div class="rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
+    <div class="flex items-end justify-between gap-3"><div class="min-w-0"><p class="text-[11px] uppercase tracking-[0.06em] text-slate-500 dark:text-slate-400">Verbrauch</p><p class="font-barlow text-[40px] font-bold leading-none text-emerald-500 dark:text-emerald-400">${fmt(r.kwh, 1)}<span class="text-lg"> kWh</span></p><p class="mt-0.5 text-xs text-left text-slate-500 dark:text-slate-400">${fmt(r.k100, 1)} kWh/100 km · ${fmt(r.km, 0)} km · ${Math.floor(dur / 60)} h ${pad2(dur % 60)}${r.stops && r.stops.length ? ' inkl. Laden' : ''}</p></div>
+      <div class="shrink-0 text-right"><p class="text-[11px] uppercase tracking-[0.06em] text-slate-500 dark:text-slate-400">${tw ? 'Zurück' : 'Ankunft'}</p><p class="font-barlow text-[40px] font-bold leading-none ${lo ? 'text-red-500' : ''}">${r.socA < 0 ? '0' : Math.round(r.socA)}<span class="text-lg"> %</span></p><p class="mt-0.5 text-xs text-slate-500 dark:text-slate-400">~ ${hhmm(eta.getTime())} Uhr</p></div></div>
+    ${tw ? `<p class="mt-2 rounded-xl bg-slate-100 dark:bg-slate-800 px-3 py-2 text-xs text-left"><span class="text-pink-500">◆</span> Am Ziel ~ ${hhmm(RT.o.dep + tw.t * 1000)} Uhr mit <b>${Math.round(tw.soc)} %</b> · ${fmt(tw.km, 0)} km je Richtung · ohne Laden am Ziel</p>` : ''}
+    ${lo ? `<p class="mt-2 rounded-xl bg-red-500/10 px-3 py-2 text-xs text-red-600 dark:text-red-300 text-left">${(r.stops && r.stops.length ? 'Auch mit Ladestopps knapp' : r.socA < 0 ? 'Reicht nicht ohne Laden' : (tw ? 'Rückkehr' : 'Ankunft') + ' unter ' + WXO_RES + ' %') + (r.stops && r.stops.length ? ' – länger laden oder voller starten.' : ' – Ladestopp siehe unten oder voller starten.')}</p>` : ''}
+    ${rtSvg(r)}
+    <div class="mt-1 flex justify-between gap-2 text-[11px] text-slate-500 dark:text-slate-400"><span><span class="text-emerald-500">━</span> Akku</span><span>Höhe · ↑ ${r.up} m ↓ ${r.dn} m</span></div>
+    <div class="mt-2.5 flex flex-wrap gap-1.5">${chip('🛣️', false, r.E.base, 'Rollen, Luft, Anfahren, Nebenverbraucher – flach, windstill, trocken')}${chip('⛰️', true, r.E.slope, 'Steigungen minus Rekuperation bergab')}${chip('💨', true, r.E.wind, (r.hw > 0.2 ? 'Gegenwind' : r.hw < -0.2 ? 'Rückenwind' : 'Wind') + ' im Schnitt ' + fmt(Math.abs(r.hw) * 3.6, 0) + ' km/h')}${chip('🔥', true, r.E.heat, (r.fog > 0.05 ? 'Heizung/Klima, Freisicht (≈ ' + fmt(r.fog, 1) + ' kWh) und kalter Akku, ' : 'Heizung/Klima und kalter Akku, ') + fmt(r.tMin, 0) + ' bis ' + fmt(r.tMax, 0) + ' °C')}${Math.abs(r.E.rain) >= 0.05 ? chip('🌧️', true, r.E.rain, 'Nässe auf ' + fmt(r.rainKm, 0) + ' km') : ''}</div>
+    <p class="mt-2 text-[11px] text-slate-500 dark:text-slate-400 text-left">${fmt(r.tAvg, 0)} °C · ${r.hw > 0.2 ? 'Gegenwind' : r.hw < -0.2 ? 'Rückenwind' : 'kaum Wind'}${r.rainKm >= 1 ? ' · Regen' : ''}${r.fog > 0.05 ? ' · Freisicht nötig (feucht)' : ''} · persönlicher Faktor ${fmt(r.k, 2)}${r.noWx ? ' · ⚠️ teils ohne Wettervorhersage (10 °C angenommen)' : ''}${r.noH ? ' · ⚠️ ohne Höhenprofil' : ''}</p></div>`;
+  el.innerHTML += rtStopCard() ? '<div class="mt-3">' + rtStopCard() + '</div>' : '';
+}
+/* ---- Ladestopp: Schnelllader an der Route aus dem Ladesäulenregister der Bundesnetzagentur (ArcGIS-Dienst, CC BY 4.0), Ladezeit aus der eigenen
+   DC-Ladekurve (begrenzt durch die Säulenleistung), Preis aus den Ladekarten (passender Betreiber vor günstigster DC-Karte). Ein Stopp; reicht er nicht, Hinweis. ---- */
+const RT_ARC = 'https://services-eu1.arcgis.com/TJm8oSvOdJUQvQT5/arcgis/rest/services/Ladesaeulen/FeatureServer/0/query';
+const RT_CH = { cache: {}, sort: 'fast', mine: false };
+const rtOpName = (s) => String(s || '').replace(/\s+(GmbH|AG|SE|KG|mbH|e\.\s?V\.|Co\.|&|und|GmbH\s*&\s*Co\.?\s*KG)\b.*$/i, '').replace(/\s{2,}/g, ' ').trim();
+async function rtArcBox(x0, y0, x1, y1, where) {
+  const out = [];
+  for (let page = 0; page < 5; page++) {
+    const u = RT_ARC + '?where=' + encodeURIComponent(where) + '&geometry=' + [x0, y0, x1, y1].map(v => v.toFixed(4)).join(',') + '&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=*&returnGeometry=true&outSR=4326&resultRecordCount=2000&resultOffset=' + page * 2000 + '&f=json';
+    const r = await fetch(u); if (!r.ok) throw new Error('Ladesäulenregister nicht erreichbar (' + r.status + ')'); const j = await r.json(); if (j.error) throw new Error(j.error.message || 'Abfrage fehlgeschlagen');
+    out.push(...(j.features || [])); if (!j.exceededTransferLimit || !(j.features || []).length) break;
+  }
+  return out;
+}
+async function rtChargers(r) {
+  const key = r.pts.length + ':' + r.pts[0].lat.toFixed(3) + ',' + r.pts[0].lon.toFixed(3) + ':' + r.pts[r.pts.length - 1].lat.toFixed(3) + ',' + r.pts[r.pts.length - 1].lon.toFixed(3) + ':' + Math.round(r.km);
+  if (RT_CH.cache[key]) return RT_CH.cache[key];
+  const boxes = []; let i0 = 0;
+  for (let i = 1; i < r.pts.length; i++) if (r.dkm[i] - r.dkm[i0] >= 40 || i === r.pts.length - 1) { const p = r.pts.slice(i0, i + 1); boxes.push([Math.min(...p.map(q => q.lon)) - 0.045, Math.min(...p.map(q => q.lat)) - 0.03, Math.max(...p.map(q => q.lon)) + 0.045, Math.max(...p.map(q => q.lat)) + 0.03]); i0 = i; }
+  let feats;
+  try { feats = (await Promise.all(boxes.map(b => rtArcBox(...b, "Typ='Schnellladeeinrichtung'")))).flat(); }
+  catch (e) { feats = (await Promise.all(boxes.map(b => rtArcBox(...b, '1=1')))).flat(); }
+  const sites = new Map(), seen = new Set();
+  feats.forEach(f => { const a = f.attributes || {}, g = f.geometry || {}, fid = a.OBJECTID ?? a.ObjectId ?? a.FID ?? a.ID ?? JSON.stringify(a); if (seen.has(fid)) return; seen.add(fid); lat = Number(g.y ?? a.coordinates_latitude), lon = Number(g.x ?? a.coordinates_longitude); if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+    if (a.Status && /außer|stillgelegt|geplant|defekt/i.test(a.Status)) return;
+    const plugs = Array.from({ length: 10 }, (_, i) => a['Steckersystem_Ladepunkt' + (i + 1)]).filter(v => typeof v === 'string' && v.trim());
+    let n = 0, kw = 0; plugs.forEach(v => { if (!/combo|ccs/i.test(v)) return; n++; for (const m of v.matchAll(/\((\d+(?:[.,]\d+)?)\s*kw\)/gi)) kw = Math.max(kw, Number(m[1].replace(',', '.'))); });
+    const st = Number(String(a.max_electric_power_station || '').replace(',', '.'));
+    if (!plugs.length && /schnell/i.test(a.Typ || '')) { n = Number(a.Anzahl_Ladepunkte) || 1; kw = st || 50; }
+    if (!n) return; if (!kw) kw = st > 0 ? Math.min(st, 350) : 50; if (st > 0 && st < kw) kw = st; if (kw < 50) return;
+    const op = rtOpName(a.Betreiber || a.operator_companyName || 'Ladesäule'), k = lat.toFixed(3) + ',' + lon.toFixed(3) + '|' + op.toLowerCase(), cur = sites.get(k);
+    if (cur) { cur.n += n; cur.kw = Math.max(cur.kw, kw); }
+    else sites.set(k, { id: k, lat, lon, op, place: [a.Ort, [a['Straße'] || a.Strasse, a.Hausnummer].filter(Boolean).join(' ')].filter(Boolean).join(', '), n, kw }); });
+  const out = [...sites.values()]; RT_CH.cache[key] = out; return out;
+}
+function rtSegDist(p, a, b) {                                                   // Abstand Punkt–Strecke in m (lokal eben) und Lage f (0 = a, 1 = b)
+  const ky = 111320, kx = 111320 * Math.cos(p.lat * Math.PI / 180), ax = (a.lon - p.lon) * kx, ay = (a.lat - p.lat) * ky, bx = (b.lon - p.lon) * kx, by = (b.lat - p.lat) * ky, dx = bx - ax, dy = by - ay, L = dx * dx + dy * dy;
+  const f = L > 0 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / L)) : 0; return { m: Math.hypot(ax + f * dx, ay + f * dy), f };
+}
+/* Ladezeit-Tabelle je Säulenleistung: M[p] = Minuten von 0 bis p %, aus der neuesten DC-Ladekurve (auf deren gemessene Dauer geeicht), begrenzt durch die Säule.
+   Kurve wird einmal je Planung gewählt (rtCurveInit), damit die Tabelle nicht für jeden Rechenschritt neu entsteht. */
+let RT_CT = {}, RT_CV = null;
+function rtCurveInit() { const cs = getLab().curves.slice().sort((x, y) => String(y.date).localeCompare(String(x.date))); RT_CV = cs.find(x => x.kwh > 0 && x.s1 > x.s0) || null; RT_CT = {}; }
+function rtCT(kwCap) {
+  const kc = kwCap >= 150 ? 150 : kwCap >= 100 ? 100 : kwCap >= 75 ? 75 : 50; if (RT_CT[kc]) return RT_CT[kc];
+  const c = RT_CV, cap = batteryKwh(); let per, pw, k = 1;
+  if (c) { per = c.kwh / (c.s1 - c.s0); pw = (p) => cvPow(c, p); let raw = 0; for (let p = c.s0; p < c.s1; p++) raw += per / pw(p + 0.5) * 60; k = c.min > 0 && raw > 0 ? c.min / raw : 1; }
+  else { per = cap / 100; pw = (p) => p < 50 ? 95 : p < 80 ? 70 : 30; }
+  const M = [0]; for (let p = 0; p < 100; p++) { const w = Math.min(pw(p + 0.5), kc); M.push(M[p] + per / Math.max(3, w) * 60 * (c ? Math.max(c && p >= c.s0 && p < c.s1 ? k : 1, k) : 1)); }
+  return (RT_CT[kc] = M);
+}
+const rtChargeMin = (a, b, kwCap) => { const M = rtCT(kwCap), f = (x) => { x = Math.max(0, Math.min(100, x)); const i = Math.floor(x); return i >= 100 ? M[100] : M[i] + (M[i + 1] - M[i]) * (x - i); }; return Math.max(0, f(b) - f(a)); };
+function rtCardFor(op) {
+  const cards = getProviders(), o = op.toLowerCase(), own = cards.find(n => { const w = n.toLowerCase().split(/[\s\-–·]+/)[0]; return w.length >= 3 && (o.includes(w) || w.includes(o.split(' ')[0])); });
+  const pr = (n) => { try { const p = pvPrices(n); return p.dc || p.hist || null; } catch (e) { return null; } };
+  if (own && pr(own)) return { name: own, eur: pr(own), own: true };
+  let best = null; cards.forEach(n => { const v = pr(n); if (v && (!best || v < best.eur)) best = { name: n, eur: v, own: false }; }); return best;
+}
+/* Lage der Lader an der Route (bei Hin & zurück je Weg einmal), nach Position sortiert. Je 4 km Strecke bleiben die 3 besten Lader (Leistung × Ladepunkte, wenig Umweg) –
+   in Städten stehen sonst hunderte Säulen im Korridor, die für die Planung nichts bringen. */
+function rtPos(r, sites) {
+  const last = r.pts.length - 1, ranges = r.turn ? [[1, r.turn.i, 'Hinweg'], [r.turn.i + 1, last - 1, 'Rückweg']] : [[1, last - 1, '']], out = [];
+  const lat0 = Math.min(...r.pts.map(p => p.lat)) - 0.04, lat1 = Math.max(...r.pts.map(p => p.lat)) + 0.04;
+  sites.forEach(s => { if (s.lat < lat0 || s.lat > lat1) return; ranges.forEach(([i0, i1, leg]) => {
+    let j = -1, dm = 1e9; for (let i = i0; i <= i1; i++) { const p = r.pts[i]; if (Math.abs(p.lat - s.lat) > 0.06 && Math.abs(r.pts[i - 1].lat - s.lat) > 0.06) continue; const d = rtSegDist(s, r.pts[i - 1], p); if (d.m < dm) { dm = d.m; j = d.f > 0.5 ? i : i - 1; } }
+    if (j < 1 || j >= last || dm > 3000) return; const off = dm / 1000; out.push({ ...s, cid: s.id + '|' + leg, leg, j, off, det: off < 0.4 ? 0 : off * 2 / 40 * 60 + 2 });
+  }); });
+  const score = (c) => Math.min(c.kw, 150) * Math.min(c.n, 4) - c.det * 40, buckets = new Map();
+  out.forEach(c => { const k = c.leg + Math.floor(r.dkm[c.j] / 4); if (!buckets.has(k)) buckets.set(k, []); buckets.get(k).push(c); });
+  const keep = []; buckets.forEach(l => keep.push(...l.sort((a, b) => score(b) - score(a)).slice(0, 3)));
+  keep.forEach(c => { c.card = rtCardFor(c.op); });
+  return keep.sort((a, b) => a.j - b.j);
+}
+const RT_MINARR = 7, RT_TGT = [50, 60, 70, 80];
+const rtPen = (c) => (c.n <= 1 ? 8 : c.n === 2 ? 3 : 0) + 3;                       // Wartezeit-Risiko bei wenigen Ladepunkten + 3 min je Stopp (Anfahren, Anstecken)
+/* Ladeplan rückwärts (dynamische Programmierung): F[k][o] = geringste Kosten bis zum Ziel, wenn man Lader k mit Ladeziel o verlässt.
+   Kosten = Ladezeit + Umweg + Zuschläge (schnell) bzw. Euro (günstig). Einmal gerechnet, liefert die Tabelle den Plan und jede Alternative sofort. */
+function rtDP(r, pos, by) {
+  const cap = batteryKwh(), last = r.pts.length - 1, need = (j) => (r.cumK[last] - r.cumK[j]) / cap * 100, n = pos.length;
+  const opts = pos.map(c => { const fin = Math.ceil(need(c.j) + WXO_RES + 1); return (fin <= 90 ? [fin] : []).concat(RT_TGT.filter(t => t < fin)); });
+  const w = (c, sA, T) => { const min = rtChargeMin(sA, T, c.kw), eur = c.card ? (T - sA) / 100 * cap / 0.93 * c.card.eur : null; return { min, eur, cost: by === 'cheap' ? (eur ?? 99) + (min + c.det) * 0.02 : min + c.det + rtPen(c) }; };
+  const arr = (s, j0, c) => s - (r.cumK[c.j] - r.cumK[j0]) / cap * 100 - c.off * 2 * 0.2 / cap * 100;
+  const F = pos.map(() => []), NX = pos.map(() => []);
+  const bestFrom = (soc, j0, k0, out) => { let best = Infinity, arg = null;
+    for (let m = k0; m < n; m++) { const c = pos[m]; if (c.j <= j0) continue; const sA = arr(soc, j0, c); if (sA < RT_MINARR) break;
+      opts[m].forEach((T, oi) => { if (T < sA + 5 || F[m][oi] === Infinity) return; const x = w(c, sA, T), v = x.cost + F[m][oi]; if (out) out.push({ m, oi, sA, x, v }); if (v < best) { best = v; arg = { m, oi, sA, x }; } }); }
+    return { best, arg }; };
+  for (let k = n - 1; k >= 0; k--) opts[k].forEach((T, oi) => { if (T - need(pos[k].j) >= WXO_RES) { F[k][oi] = 0; NX[k][oi] = null; return; } const b = bestFrom(T, pos[k].j, k + 1); F[k][oi] = b.best; NX[k][oi] = b.arg; });
+  const chain = (a) => { const out = []; while (a) { const c = pos[a.m], T = opts[a.m][a.oi]; out.push({ ...c, sArr: a.sA, tgt: T, min: a.x.min, eur: a.x.eur, tot: a.x.min + c.det }); a = NX[a.m][a.oi]; } return out; };
+  const idx = new Map(pos.map((c, i) => [c.cid, i]));
+  return {
+    plan(soc, j0) { if (soc - need(j0) >= WXO_RES) return []; const b = bestFrom(soc, j0, 0); return b.arg ? chain(b.arg) : null; },
+    alts(soc, j0) { const all = []; bestFrom(soc, j0, 0, all); const per = new Map(); all.forEach(a => { const o = per.get(a.m); if (!o || a.v < o.v) per.set(a.m, a); }); return [...per.values()].map(a => ({ v: a.v, plan: chain(a) })); },
+    idx
+  };
+}
+function rtApplyStops(base, stops) {
+  if (!stops || !stops.length) return base; const soc = base.soc.slice(); let add = 0, k = 0, tadd = 0;
+  for (let i = 0; i < soc.length; i++) { while (k < stops.length && i > stops[k].j) { add += stops[k].tgt - stops[k].sArr; k++; } soc[i] += add; }
+  stops.forEach(s => { s.at = RT.o.dep + (base.tt[s.j] + tadd) * 1000; tadd += s.tot * 60; });
+  const tot = stops.reduce((a, s) => a + s.tot, 0), d = stops.reduce((a, s) => a + s.tgt - s.sArr, 0);
+  return { ...base, soc, socA: base.socA + d, turn: base.turn ? { ...base.turn, soc: soc[base.turn.i] } : null, stops, tEnd: base.tEnd + tot * 60, dur: base.dur + tot * 60 };
+}
+async function rtFindStops(n) {
+  const b = RT.base; if (!b || Math.min(...b.soc.slice(1)) >= WXO_RES - 0.5) { RT.ch = null; return; }
+  RT.ch = { busy: true }; rtRenderRes();
+  try { const sites = await rtChargers(b); if (n !== RT.n) return; await new Promise(res => setTimeout(res, 0)); rtCurveInit();
+    const pos = rtPos(b, sites), dp = { fast: rtDP(b, pos, 'fast') }, stops = dp.fast.plan(RT.o.soc, 0);
+    RT.ch = { pos, dp, none: !stops || !stops.length, sites: sites.length }; RT.res = rtApplyStops(b, stops); }
+  catch (e) { if (n !== RT.n) return; RT.ch = { err: (e && e.message) || 'Ladesäulen nicht geladen' }; }
+  rtRenderRes();
+}
+function rtStopCard() {
+  const ch = RT.ch; if (!ch) return ''; const box = 'rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4 border border-amber-400/40', r = RT.res, S = (r && r.stops) || [];
+  const head = (t, rr) => `<div class="flex items-baseline justify-between gap-2"><p class="text-[11px] font-semibold uppercase tracking-[0.06em] text-amber-600 dark:text-amber-400">⚡ ${t}</p>${rr || ''}</div>`;
+  const foot = '<p class="mt-2 text-[10px] text-slate-500 dark:text-slate-400 text-left">Daten: Ladesäulenregister der Bundesnetzagentur (CC BY 4.0)</p>';
+  if (ch.busy) return `<div class="${box}">${head('Ladestopp-Vorschlag')}<p class="mt-1.5 text-sm text-slate-500 dark:text-slate-400 text-left">Suche Schnelllader an der Route …</p></div>`;
+  if (ch.err) return `<div class="${box}">${head('Ladestopp-Vorschlag')}<p class="mt-1.5 text-sm text-red-600 dark:text-red-400 text-left">${esc(ch.err)}</p><button type="button" data-rt="stops" class="mt-1 text-xs font-semibold text-sky-600 dark:text-sky-300">Erneut versuchen ›</button></div>`;
+  if (!S.length) return `<div class="${box}">${head('Ladestopp-Vorschlag')}<p class="mt-1.5 text-sm text-slate-600 dark:text-slate-300 text-left">${ch.sites ? 'Mit den Ladern an der Route nicht zu schaffen – die Abstände zwischen den Schnellladern sind zu groß. Voller starten?' : 'Keine Schnelllader (ab 50 kW, CCS) nahe der Route gefunden.'}</p>${foot}</div>`;
+  const tile = (l, v, s) => `<div class="min-w-0 flex-1 rounded-xl bg-slate-100 dark:bg-slate-800 px-2.5 py-1.5"><p class="text-[10px] uppercase tracking-[0.06em] text-slate-500 dark:text-slate-400">${l}</p><p class="text-[15px] font-bold whitespace-nowrap">${v}</p>${s ? `<p class="truncate text-[10px] text-slate-500 dark:text-slate-400">${s}</p>` : ''}</div>`;
+  const sub = (c) => `${esc(c.place || '')}${c.place ? ' · ' : ''}${c.n}× ${fmt(c.kw, 0)} kW · ${c.off < 0.4 ? 'direkt an der Route' : '+' + Math.round(c.det) + ' min Umweg'}`;
+  if (S.length === 1) { const c = S[0];
+    return `<div class="${box}">${head('Ladestopp-Vorschlag', `<span class="text-[11px] text-slate-500 dark:text-slate-400 whitespace-nowrap">${c.leg ? c.leg + ' · ' : ''}km ${fmt(r.dkm[c.j], 0)} von ${fmt(r.km, 0)}</span>`)}
+    <div class="mt-2 flex items-center gap-2.5"><span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-100 dark:bg-amber-950 text-xl" aria-hidden="true">⚡</span><div class="min-w-0"><p class="truncate text-[15px] font-bold">${esc(c.op)}</p><p class="truncate text-xs text-slate-500 dark:text-slate-400">${sub(c)}</p></div></div>
+    <div class="mt-2.5 flex gap-1.5">${tile('Laden', Math.round(c.sArr) + ' → ' + c.tgt + ' %', '~ ' + hhmm(c.at) + ' Uhr')}${tile('Dauer', Math.round(c.min) + ' min', 'Ladekurve')}${tile('Kosten', c.eur != null ? '≈ ' + fmt(c.eur, 2) + ' €' : '–', c.card ? esc(c.card.name) : 'Preis in Ladekarten')}</div>
+    <div class="mt-2.5 flex items-center justify-end text-[13px]"><button type="button" data-rtalt="0" class="font-semibold text-sky-600 dark:text-sky-300">Alternativen ›</button></div>${foot}</div>`; }
+  const tm = S.reduce((a, c) => a + c.tot, 0), eu = S.every(c => c.eur != null) ? S.reduce((a, c) => a + c.eur, 0) : null;
+  return `<div class="${box}">${head('Ladeplan · ' + S.length + ' Stopps', `<span class="text-[11px] text-slate-500 dark:text-slate-400 whitespace-nowrap">${Math.round(tm)} min${eu != null ? ' · ≈ ' + fmt(eu, 2) + ' €' : ''}</span>`)}
+    ${S.map((c, i) => `<div class="mt-2.5 flex items-start gap-2.5 ${i ? 'border-t border-slate-100 dark:border-slate-800 pt-2.5' : ''}"><span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-950 text-sm font-bold text-amber-700 dark:text-amber-300">${i + 1}</span>
+      <div class="min-w-0 flex-1"><div class="flex items-baseline justify-between gap-2"><p class="truncate text-[14px] font-bold">${esc(c.op)}</p><span class="shrink-0 text-[11px] text-slate-500 dark:text-slate-400">${c.leg ? c.leg + ' · ' : ''}km ${fmt(r.dkm[c.j], 0)} · ${hhmm(c.at)}</span></div><p class="truncate text-[11px] text-slate-500 dark:text-slate-400">${sub(c)}</p>
+      <div class="mt-1 flex items-center justify-between gap-2 text-[12.5px]"><span class="whitespace-nowrap"><b>${Math.round(c.sArr)} → ${c.tgt} %</b> · ${Math.round(c.min)} min${c.eur != null ? ' · ≈ ' + fmt(c.eur, 2) + ' €' : ''}</span><button type="button" data-rtalt="${i}" class="shrink-0 font-semibold text-sky-600 dark:text-sky-300">Ändern ›</button></div></div></div>`).join('')}${foot}</div>`;
+}
+/* Alternativen für Stopp k: frühere Stopps bleiben, für jeden möglichen Lader wird der Rest neu geplant */
+function rtAltList(k) {
+  const b = RT.base, S = RT.res.stops || [], pre = S.slice(0, k), st = pre.length ? { j: pre[pre.length - 1].j, soc: pre[pre.length - 1].tgt } : { j: 0, soc: RT.o.soc };
+  const by = RT_CH.sort, dp = RT.ch.dp[by] || (RT.ch.dp[by] = rtDP(b, RT.ch.pos, by));
+  const out = dp.alts(st.soc, st.j).map(a => { const plan = pre.concat(a.plan); return { c: a.plan[0], plan, tot: plan.reduce((x, y) => x + y.tot, 0), eur: plan.every(x => x.eur != null) ? plan.reduce((x, y) => x + y.eur, 0) : null }; });
+  return out.sort((a, b2) => by === 'cheap' ? ((a.eur ?? 1e9) - (b2.eur ?? 1e9)) || a.tot - b2.tot : (a.tot + a.plan.reduce((x, y) => x + rtPen(y), 0)) - (b2.tot + b2.plan.reduce((x, y) => x + rtPen(y), 0)) || (a.eur ?? 1e9) - (b2.eur ?? 1e9)).slice(0, 40);
+}
+function rtAltSheet() {
+  const ch = RT.ch; if (!ch || !ch.pos) return; const box = $('au-sheet-box'), k = RT.altK || 0, multi = (RT.res.stops || []).length > 1;
+  let list = rtAltList(k); if (RT_CH.mine) list = list.filter(x => x.c.card && x.c.card.own); RT.altList = list;
+  const chip = (key, l, on) => `<button type="button" data-rta="${key}" class="whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold ${on ? 'bg-emerald-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'}">${l}</button>`;
+  const pill = (t, warn) => `<span class="whitespace-nowrap rounded-lg px-1.5 py-0.5 text-[11px] ${warn ? 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300' : 'bg-slate-100 dark:bg-slate-800'}">${t}</span>`;
+  const row = (x, i) => { const c = x.c, on = c.cid === RT.altSel, more = x.plan.length - k - 1;
+    return `<button type="button" data-rtc="${i}" class="flex w-full items-center gap-3 border-t border-slate-100 dark:border-slate-800 py-2.5 text-left first:border-t-0"><span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${on ? 'border-emerald-500' : 'border-slate-400 dark:border-slate-600'}">${on ? '<span class="h-2 w-2 rounded-full bg-emerald-500"></span>' : ''}</span>
+      <span class="min-w-0 flex-1"><span class="flex items-baseline justify-between gap-2"><b class="truncate text-[14px]">${esc(c.op)}${c.place ? ' <span class="font-normal text-slate-500 dark:text-slate-400">· ' + esc(c.place.split(',')[0]) + '</span>' : ''}</b><b class="shrink-0 text-[13px]">${c.eur != null ? fmt(c.eur, 2) + ' €' : '–'}</b></span>
+      <span class="block text-[11px] text-slate-500 dark:text-slate-400">${c.leg ? c.leg + ' · ' : ''}km ${fmt(RT.base.dkm[c.j], 0)} · Ankunft mit ${Math.round(c.sArr)} % · bis ${c.tgt} %</span>
+      <span class="mt-1 flex flex-wrap gap-1">${pill(c.n + '× ' + fmt(c.kw, 0) + ' kW')}${pill(Math.round(c.min) + ' min')}${pill(c.off < 0.4 ? 'an der Route' : '+' + Math.round(c.det) + ' min Umweg')}${more > 0 ? pill('danach ' + more + ' weitere' + (more > 1 ? ' Stopps' : 'r Stopp') + ' · gesamt ' + Math.round(x.tot) + ' min') : multi ? pill('kein weiterer Stopp nötig') : ''}${c.card && !c.card.own ? pill('Preis: ' + esc(c.card.name), true) : ''}${!c.card ? pill('kein Preis', true) : ''}${c.n <= 2 ? pill('nur ' + c.n + ' Ladepunkt' + (c.n > 1 ? 'e' : ''), true) : ''}</span></span></button>`; };
+  box.innerHTML = `<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div>
+    <div class="flex items-start justify-between gap-2"><div><p class="text-lg font-bold">${multi ? 'Wo laden? · Stopp ' + (k + 1) : 'Wo laden?'}</p><p class="text-xs text-slate-500 dark:text-slate-400 text-left">ab 50 kW · CCS · bis 3 km neben der Route${multi ? ' · spätere Stopps werden neu geplant' : ''}</p></div><button type="button" data-rta="close" aria-label="Schließen" class="px-1 text-xl text-slate-400">✕</button></div>
+    <div class="flex gap-1.5 overflow-x-auto">${chip('fast', 'Schnellste Ankunft', RT_CH.sort === 'fast')}${chip('cheap', 'Günstigste', RT_CH.sort === 'cheap')}${chip('mine', 'Meine Karten', RT_CH.mine)}</div>
+    <div class="max-h-[52vh] overflow-y-auto">${list.length ? list.map(row).join('') : '<p class="py-3 text-sm text-slate-500 dark:text-slate-400 text-left">Kein passender Lader.</p>'}</div>
+    <p class="text-[10px] text-slate-500 dark:text-slate-400 text-left">Daten: Ladesäulenregister der Bundesnetzagentur (CC BY 4.0) · Preise aus deinen Ladekarten · Ladezeit aus deiner DC-Ladekurve</p>
+    <button type="button" data-rta="take" class="h-12 w-full rounded-2xl bg-emerald-600 text-sm font-semibold text-white active:scale-95 transition">Diesen Stopp übernehmen</button>`;
+  box.dataset.rtid = ''; $('au-sheet').classList.remove('hidden');
+}
+$('au-sheet').addEventListener('click', (e) => {
+  const c = e.target.closest('[data-rtc]'), a = e.target.closest('[data-rta]'); if (!c && !a) return;
+  if (c) { const x = RT.altList[Number(c.dataset.rtc)]; if (x) { RT.altSel = x.c.cid; RT.altPlan = x.plan; } rtAltSheetMark(); return; }
+  const k = a.dataset.rta;
+  if (k === 'close') { $('au-sheet').classList.add('hidden'); return; }
+  if (k === 'fast' || k === 'cheap') { RT_CH.sort = k; rtAltSheet(); return; }
+  if (k === 'mine') { RT_CH.mine = !RT_CH.mine; rtAltSheet(); return; }
+  if (k === 'take') { if (RT.altPlan) { RT.res = rtApplyStops(RT.base, RT.altPlan.map(s => ({ ...s }))); rtRenderRes(); } $('au-sheet').classList.add('hidden'); }
+});
+function rtAltSheetMark() { document.querySelectorAll('#au-sheet-box [data-rtc]').forEach(b => { const x = RT.altList[Number(b.dataset.rtc)], on = x && x.c.cid === RT.altSel, dot = b.firstElementChild; dot.className = 'flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ' + (on ? 'border-emerald-500' : 'border-slate-400 dark:border-slate-600'); dot.innerHTML = on ? '<span class="h-2 w-2 rounded-full bg-emerald-500"></span>' : ''; }); }
+function rtParams() {
+  const dv = $('rt-dep').value, dep = dv ? new Date(dv).getTime() : Date.now(), soc = Math.max(1, Math.min(100, Number($('rt-soc').value) || 80));
+  return { dep: isNaN(dep) ? Date.now() : dep, soc, pers: Number($('rt-pers').value) || 1, tempo: Number($('rt-tempo').value) || 0, vab: Number($('rt-vab').value) || 120, round: RT.round, stay: Number($('rt-stay').value) || 3 };
+}
+async function rtRun() {
+  const n = ++RT.n; $('rt-save-msg').classList.add('hidden');
+  if (!RT.a || !RT.b) { RT.res = null; RT.err = ''; RT.busy = false; rtRenderRes(); return; }
+  RT.busy = true; RT.err = ''; rtRenderRes(); const o = rtParams();
+  try { const pairs = o.round ? [[RT.a, RT.b], [RT.b, RT.a]] : [[RT.a, RT.b]], legs = [];
+    for (const [x, y] of pairs) { const route = await rtRoute(x, y, RT.v); let wx = null; try { wx = await rtWeather(route, o.dep); } catch (e) { } legs.push({ route, wx }); }
+    if (n !== RT.n) return; RT.o = o; RT.res = RT.base = rtCalc(legs, o); RT.ch = null; }
+  catch (e) { if (n !== RT.n) return; RT.res = null; RT.err = 'Prognose nicht möglich: ' + ((e && e.message) || 'kein Internet?'); }
+  RT.busy = false; rtRenderRes(); if (RT.res) rtFindStops(n);
+  try { const pk = (p) => p ? { label: p.label, lat: Math.round(p.lat * 1e5) / 1e5, lon: Math.round(p.lon * 1e5) / 1e5 } : null;   // Planung geräteübergreifend (Einstellungen → Cloud)
+    const v = { a: pk(RT.a), b: pk(RT.b), v: pk(RT.v), pers: o.pers, tempo: o.tempo, vab: o.vab, round: !!o.round, stay: o.stay, soc: o.soc, dep: new Date(o.dep).toISOString(), at: new Date().toISOString() }, cur = getSettings().rtLast;
+    const same = cur && JSON.stringify({ ...cur, at: 0 }) === JSON.stringify({ ...v, at: 0 }); save(KEY_RT, v); if (!same) { setQuickSetting('rtLast', v); pushRoutes(); } } catch (e) { }
+}
+function rtSugHide(w) { const el = $('rt-sug-' + w); el.innerHTML = ''; el.classList.add('hidden'); }
+function rtSugShow(w, list, more) {
+  const el = $('rt-sug-' + w); RT.sug[w] = list;
+  el.innerHTML = list.map((x, i) => `<button type="button" data-rtsug="${w}:${i}" class="block w-full px-3 py-2 text-left active:bg-slate-100 dark:active:bg-slate-800"><span class="block truncate text-sm">${esc(x.label)}</span>${x.sub ? `<span class="block truncate text-[11px] text-slate-500 dark:text-slate-400">${esc(x.sub)}</span>` : ''}</button>`).join('')
+    + (more ? `<p class="px-3 py-2 text-xs text-slate-500 dark:text-slate-400 text-left">${more}</p>` : '');
+  el.classList.toggle('hidden', !list.length && !more);
+}
+function rtSuggest(w) {
+  clearTimeout(RT.sugT); const t = $('rt-' + w).value.trim(); RT[w] = null;
+  const tl = t.toLowerCase(), own = getTPlaces().filter(p => p.name && Number.isFinite(p.lat) && (!tl || p.name.toLowerCase().includes(tl))).slice(0, 4).map(p => ({ lat: p.lat, lon: p.lon, label: p.name, sub: 'Gespeicherter Ort' }));
+  if (t.length < 2) { rtSugShow(w, own, ''); return; }
+  rtSugShow(w, own, 'Suche …'); const n = ++RT.sugN;
+  RT.sugT = setTimeout(async () => { try { const res = await hpSearch(t); if (n === RT.sugN) rtSugShow(w, own.concat(res), res.length || own.length ? '' : 'Nichts gefunden'); } catch (e) { if (n === RT.sugN) rtSugShow(w, own, 'Ortssuche nicht erreichbar'); } }, 350);
+}
+function rtPick(w, p) { RT[w] = p; $('rt-' + w).value = p.label; rtSugHide(w); RT.sugN++; rtRun(); }
+function rtViaUi() { const on = !!(RT.v || RT.vOpen); $('rt-v-w').classList.toggle('hidden', !on); $('rt-v-add').classList.toggle('hidden', on); $('rt-v').value = RT.v ? RT.v.label : $('rt-v').value; }
+$('rt-v-add').addEventListener('click', () => { RT.vOpen = true; rtViaUi(); $('rt-v').focus(); });
+$('rt-v-x').addEventListener('click', () => { const had = !!RT.v; RT.v = null; RT.vOpen = false; $('rt-v').value = ''; rtSugHide('v'); rtViaUi(); if (had) rtRun(); });
+['a', 'b', 'v'].forEach(w => {
+  const inp = $('rt-' + w);
+  inp.addEventListener('input', () => rtSuggest(w)); inp.addEventListener('focus', () => { inp.select(); rtSuggest(w); });
+  inp.addEventListener('blur', () => setTimeout(async () => { rtSugHide(w); const t = inp.value.trim(); if (RT[w] || !t) return; try { rtPick(w, await hpResolve(t)); } catch (e) { RT.err = (e && e.message) || 'Ort nicht gefunden'; RT.res = null; rtRenderRes(); } }, 200));
+  $('rt-sug-' + w).addEventListener('mousedown', (e) => e.preventDefault());
+  $('rt-sug-' + w).addEventListener('click', (e) => { const b = e.target.closest('[data-rtsug]'); if (!b) return; const [ww, i] = b.dataset.rtsug.split(':'); const p = RT.sug[ww] && RT.sug[ww][Number(i)]; if (p) rtPick(ww, p); });
+});
+$('rt-swap').addEventListener('click', () => { [RT.a, RT.b] = [RT.b, RT.a]; $('rt-a').value = RT.a ? RT.a.label : ''; $('rt-b').value = RT.b ? RT.b.label : ''; rtRun(); });
+['rt-dep', 'rt-pers', 'rt-tempo', 'rt-vab'].forEach(id => $(id).addEventListener('change', rtRun));
+let rtStayLast = '3';
+$('rt-stay').addEventListener('change', (e) => { if (e.target.value === 'off') { e.target.value = rtStayLast; RT.round = false; rtRoundUi(); } else rtStayLast = e.target.value; rtRun(); });   // „nur hin“ schaltet Hin & zurück aus
+function rtRoundUi() { const b = $('rt-rt'), on = !!RT.round; b.setAttribute('aria-pressed', String(on)); ['bg-pink-100', 'text-pink-700', 'dark:bg-pink-950', 'dark:text-pink-300'].forEach(c => b.classList.toggle(c, on)); ['bg-slate-100', 'dark:bg-slate-800'].forEach(c => b.classList.toggle(c, !on)); b.classList.toggle('hidden', on); $('rt-stay-w').classList.toggle('hidden', !on); $('rt-stay-w').classList.toggle('flex', on); }
+$('rt-rt').addEventListener('click', () => { RT.round = !RT.round; rtRoundUi(); rtRun(); });
+$('rt-soc').addEventListener('change', rtRun);
+$('rt-soc-full').addEventListener('click', (e) => { e.preventDefault(); $('rt-soc').value = '100'; rtRun(); });   // Tipp aufs Batterie-Symbol: voller Akku
+$('rt-res').addEventListener('click', (e) => { if (e.target.closest('[data-rt="retry"]')) rtRun(); if (e.target.closest('[data-rt="stops"]')) rtFindStops(RT.n); const al = e.target.closest('[data-rtalt]'); if (al) { RT.altK = Number(al.dataset.rtalt); const cur = (RT.res.stops || [])[RT.altK]; RT.altSel = cur ? cur.cid : null; RT.altPlan = RT.res.stops; rtAltSheet(); } });
+$('rt-save').addEventListener('click', () => {
+  const r = RT.res, o = RT.o; if (!r) return; const cap = batteryKwh(), k = deDec($('rt-abrp-k').value), s = deDec($('rt-abrp-s').value), msg = $('rt-save-msg');
+  if (k !== undefined && !(k > 3 && k < 60)) { msg.textContent = 'ABRP-Verbrauch bitte in kWh/100 km (z. B. 19,1).'; msg.className = 'mt-1.5 text-xs text-left text-red-600 dark:text-red-400'; return; }
+  if (s !== undefined && !(s >= -20 && s < o.soc)) { msg.textContent = 'ABRP-Ankunft bitte in % und kleiner als der Start-Akku.'; msg.className = 'mt-1.5 text-xs text-left text-red-600 dark:text-red-400'; return; }
+  const en = { id: labId(), dep: new Date(o.dep).toISOString(), a: { label: RT.a.label, lat: RT.a.lat, lon: RT.a.lon }, b: { label: RT.b.label, lat: RT.b.lat, lon: RT.b.lon }, ...(RT.v ? { v: { label: RT.v.label, lat: RT.v.lat, lon: RT.v.lon } } : {}), km: Math.round(r.km * 10) / 10,
+    k100: Math.round(r.k100 * 100) / 100, raw100: Math.round(r.raw100 * 100) / 100, kwh: Math.round(r.kwh * 10) / 10, soc0: o.soc, socA: Math.round(r.socA), k: r.k, pers: o.pers, tempo: o.tempo, vab: o.vab, tAvg: Math.round(r.tAvg * 10) / 10 }; if (o.round) { en.round = true; en.stay = o.stay; } if (r.stops && r.stops.length) en.stop = r.stops.map(x => ({ op: x.op, km: Math.round(r.dkm[x.j]), from: Math.round(x.sArr), to: x.tgt }));
+  if (k !== undefined) en.abrp = k; else if (s !== undefined) { en.abrpSoc = s; en.abrp = Math.round((o.soc - s) / 100 * cap / r.km * 100 * 100) / 100; }
+  const lab = getLab(); lab.fc = (lab.fc || []).concat(en); setLab(lab); $('rt-abrp-k').value = ''; $('rt-abrp-s').value = '';
+  msg.textContent = '✓ Gemerkt – nach der Fahrt unter „Abgleich“ den echten Verbrauch eintragen.'; msg.className = 'mt-1.5 text-xs text-left text-emerald-600 dark:text-emerald-400'; rtTabs();
+});
+function rtTabs() {
+  const n = getLab().fc.length;
+  $('rt-tabs').innerHTML = [['plan', 'Prognose'], ['cmp', 'Abgleich' + (n ? ' (' + n + ')' : '')]].map(([k, l]) => `<button type="button" data-rttab="${k}" class="flex-1 py-1.5 rounded-lg text-[13px] font-medium ${RT.tab === k ? 'bg-white dark:bg-slate-700 shadow-sm' : 'text-slate-600 dark:text-slate-400'}">${l}</button>`).join('');
+  $('rt-plan').classList.toggle('hidden', RT.tab !== 'plan'); $('rt-cmp').classList.toggle('hidden', RT.tab !== 'cmp'); if (RT.tab === 'cmp') rtRenderCmp();
+}
+$('rt-tabs').addEventListener('click', (e) => { const b = e.target.closest('[data-rttab]'); if (!b) return; RT.tab = b.dataset.rttab; rtTabs(); });
+function rtStats(list) {
+  const done = list.filter(x => x.real > 0), both = done.filter(x => x.abrp > 0);
+  const avg = (l, f) => l.length ? l.reduce((s, x) => s + Math.abs(rtDev(f(x), x.real)), 0) / l.length : null;
+  let wa = 0, wb = 0; both.forEach(x => { const a = Math.abs(x.k100 - x.real), b = Math.abs(x.abrp - x.real); if (a < b) wa++; else if (b < a) wb++; });
+  return { done, both, app: avg(done, x => x.k100), appB: avg(both, x => x.k100), abrp: avg(both, x => x.abrp), wa, wb };
+}
+function rtRenderCmp() {
+  const el = $('rt-cmp'), list = getLab().fc.slice().sort((a, b) => Date.parse(b.dep) - Date.parse(a.dep)), st = rtStats(list), k = rtFactor();
+  const card = 'rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm';
+  if (!list.length) { el.innerHTML = `<div class="${card} p-4 text-sm text-slate-600 dark:text-slate-300 text-left">Noch keine gemerkten Fahrten. Unter „Prognose“ eine Strecke berechnen, optional den ABRP-Wert eintragen und „Fahrt merken“ tippen. Nach der Fahrt hier den echten Verbrauch vom Bordcomputer eintragen.</div>`; return; }
+  const tot = st.wa + st.wb, pa = tot ? st.wa / tot * 100 : 50;
+  const head = `<div class="${card} p-4"><div class="flex items-baseline justify-between gap-2"><p class="text-[11px] uppercase tracking-[0.06em] text-slate-500 dark:text-slate-400">Wer liegt näher dran?</p><span class="text-[11px] text-slate-500 dark:text-slate-400 whitespace-nowrap">${st.done.length} ${st.done.length === 1 ? 'Fahrt' : 'Fahrten'}${st.both.length ? ' · ' + st.both.length + ' mit ABRP' : ''}</span></div>
+    ${st.done.length ? `<div class="mt-2 flex items-center gap-3"><div class="flex-1"><p class="font-barlow text-[30px] font-bold leading-none text-emerald-500 dark:text-emerald-400">${fmt(st.app, 1)} %</p><p class="text-[11px] text-slate-500 dark:text-slate-400">Ø Abweichung App</p></div><span class="font-barlow text-lg font-bold text-slate-400 dark:text-slate-600">vs</span><div class="flex-1 text-right"><p class="font-barlow text-[30px] font-bold leading-none text-violet-500 dark:text-violet-400">${st.abrp == null ? '–' : fmt(st.abrp, 1) + ' %'}</p><p class="text-[11px] text-slate-500 dark:text-slate-400">Ø Abweichung ABRP</p></div></div>
+    ${st.both.length ? `<div class="mt-2 flex h-2 overflow-hidden rounded-full"><span style="width:${pa}%" class="bg-emerald-500"></span><span style="width:${100 - pa}%" class="bg-violet-500"></span></div><div class="mt-1 flex justify-between text-[11px] text-slate-500 dark:text-slate-400"><span>App näher: ${st.wa}×</span><span>ABRP näher: ${st.wb}×</span></div>${st.appB != null && st.both.length !== st.done.length ? `<p class="mt-1 text-[11px] text-slate-500 dark:text-slate-400 text-left">Nur Fahrten mit ABRP-Wert: App Ø ${fmt(st.appB, 1)} %</p>` : ''}` : ''}`
+    : '<p class="mt-2 text-sm text-slate-600 dark:text-slate-300 text-left">Noch kein Realwert eingetragen.</p>'}
+    <p class="mt-2.5 border-t border-slate-100 dark:border-slate-800 pt-2 text-[11px] text-slate-500 dark:text-slate-400 text-left">📈 Persönlicher Faktor der App: <b class="text-slate-700 dark:text-slate-200">${fmt(k, 2)}</b> · lernt aus jedem eingetragenen Realwert</p></div>`;
+  const pill = 'flex-1 whitespace-nowrap rounded-lg bg-slate-100 dark:bg-slate-800 px-1.5 py-1';
+  const row = (x) => { const d = new Date(x.dep), dl = d.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' }), tt = esc(x.a.label + (x.round ? ' ⇄ ' : ' → ') + x.b.label + (x.v ? ' (über ' + x.v.label + ')' : ''));
+    if (!(x.real > 0)) return `<button type="button" data-rtrow="${esc(x.id)}" class="flex w-full items-center justify-between gap-2 border-t border-slate-100 dark:border-slate-800 py-2.5 text-left first:border-t-0"><span class="min-w-0"><span class="block truncate text-[13px]">${tt}</span><span class="block text-[11px] text-slate-500 dark:text-slate-400">${dl} · App ${fmt(x.k100, 1)}${x.abrp ? ' · ABRP ' + fmt(x.abrp, 1) : ''}</span></span><span class="shrink-0 rounded-lg bg-amber-100 dark:bg-amber-950 px-2 py-1 text-[12px] font-semibold text-amber-700 dark:text-amber-300">✍️ Real eintragen</span></button>`;
+    const a = Math.abs(x.k100 - x.real), b = x.abrp ? Math.abs(x.abrp - x.real) : null, dot = b == null ? 'bg-slate-400 dark:bg-slate-600' : a < b ? 'bg-emerald-500' : b < a ? 'bg-violet-500' : 'bg-slate-400';
+    return `<button type="button" data-rtrow="${esc(x.id)}" class="block w-full border-t border-slate-100 dark:border-slate-800 py-2.5 text-left first:border-t-0"><span class="flex items-center justify-between gap-2"><span class="min-w-0"><span class="block truncate text-[13px]">${tt}</span><span class="block text-[11px] text-slate-500 dark:text-slate-400">${dl} · ${fmt(x.km, 0)} km</span></span><span class="h-2.5 w-2.5 shrink-0 rounded-full ${dot}"></span></span>
+      <span class="mt-1.5 flex gap-1.5 text-[11.5px] tabular-nums"><span class="${pill}"><span class="text-emerald-600 dark:text-emerald-400">App</span> ${fmt(x.k100, 1)} <span class="text-slate-500 dark:text-slate-400">${rtFmtP(rtDev(x.k100, x.real))}</span></span><span class="${pill}"><span class="text-violet-600 dark:text-violet-400">ABRP</span> ${x.abrp ? fmt(x.abrp, 1) + ' <span class="text-slate-500 dark:text-slate-400">' + rtFmtP(rtDev(x.abrp, x.real)) + '</span>' : '–'}</span><span class="${pill} !flex-[0.8]"><span class="text-amber-600 dark:text-amber-400">Real</span> <b>${fmt(x.real, 1)}</b></span></span></button>`; };
+  el.innerHTML = head + `<div class="${card} px-4 py-1.5">${list.map(row).join('')}</div>`;
+}
+$('rt-cmp').addEventListener('click', (e) => { const b = e.target.closest('[data-rtrow]'); if (b) rtSheet(b.dataset.rtrow); });
+function rtSheet(id) {
+  const x = getLab().fc.find(e => e.id === id); if (!x) return; const box = $('au-sheet-box'), d = new Date(x.dep);
+  const inp = (fid, val, unit, ph, cls = '') => `<label class="flex min-w-0 flex-1 items-center rounded-xl bg-slate-100 dark:bg-slate-800 px-3 py-2.5 ${cls}"><input id="${fid}" type="text" inputmode="decimal" autocomplete="off" value="${val == null ? '' : String(val).replace('.', ',')}" placeholder="${ph}" class="w-full min-w-0 bg-transparent text-base focus:outline-none"><span class="shrink-0 text-[11px] text-slate-500 dark:text-slate-400">${unit}</span></label>`;
+  const tile = (l, c, v, extra = '') => `<div class="flex-1 rounded-2xl bg-slate-100 dark:bg-slate-800 px-3 py-2 ${extra}"><p class="text-[10.5px] font-semibold uppercase tracking-[0.06em] ${c}">${l}</p><p class="font-barlow text-[26px] font-bold leading-none" data-rtv="${l}">${v}</p></div>`;
+  box.innerHTML = `<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div>
+    <div class="flex items-start justify-between gap-2"><div class="min-w-0"><p class="text-lg font-bold">Wie war die Fahrt?</p><p class="truncate text-xs text-slate-500 dark:text-slate-400">${esc(x.a.label)} ${x.round ? '⇄' : '→'} ${esc(x.b.label)} · ${d.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' })} · ${fmt(x.km, 0)} km</p></div><button type="button" data-rts="close" aria-label="Schließen" class="px-1 text-xl text-slate-400">✕</button></div>
+    <div class="flex gap-2">${tile('App', 'text-emerald-600 dark:text-emerald-400', fmt(x.k100, 1))}${tile('ABRP', 'text-violet-600 dark:text-violet-400', x.abrp ? fmt(x.abrp, 1) : '–')}${tile('Real', 'text-amber-600 dark:text-amber-400', x.real ? fmt(x.real, 1) : '–', 'ring-2 ring-amber-400')}</div>
+    <div><p class="text-sm font-semibold">Echter Verbrauch</p><p class="text-xs text-slate-500 dark:text-slate-400 text-left">${x.round ? 'Hin- und Rückfahrt zusammen – am einfachsten den Akkustand bei Rückkehr eintragen („Seit Start“ setzt sich beim Parken zurück)' : 'Bordcomputer → „Seit Start“, nach Ankunft ablesen – oder den Akkustand bei Ankunft'}</p>
+      <div class="mt-1.5 flex gap-2">${inp('rts-real', x.real, 'kWh/100 km', 'z. B. 18,9', 'ring-2 ring-emerald-500')}${x.stop ? '' : inp('rts-soc', x.realSoc, x.round ? '% zurück' : '% Ankunft', '–')}</div></div>
+    <div><p class="text-sm font-semibold">ABRP-Prognose</p>${x.stop ? '' : `<p class="text-xs text-slate-500 dark:text-slate-400 text-left">Akkustand bei Ankunft laut ABRP – oder den Verbrauch, falls bekannt</p>`}<div class="mt-1.5 flex gap-2">${inp('rts-abrp', x.abrp, 'kWh/100 km', 'optional')}${x.stop ? '' : inp('rts-abrps', x.abrpSoc, x.round ? '% zurück' : '% Ankunft', '–')}</div></div>
+    <div id="rts-prev" class="rounded-2xl bg-slate-100 dark:bg-slate-800 px-3 py-2.5 text-[13px] text-left"></div>
+    <p id="rts-msg" class="hidden text-xs text-left text-red-600 dark:text-red-400"></p>
+    <button type="button" data-rts="save" class="h-12 w-full rounded-2xl bg-emerald-600 text-sm font-semibold text-white active:scale-95 transition">Speichern</button>
+    <button type="button" data-rts="del" class="w-full py-1 text-xs font-semibold text-red-600 dark:text-red-400">Gemerkte Fahrt löschen</button>`;
+  box.dataset.rtid = id; $('au-sheet').classList.remove('hidden'); rtSheetPrev();
+  ['rts-real', 'rts-soc', 'rts-abrp'].forEach(f => $(f) && $(f).addEventListener('input', rtSheetPrev));
+  if ($('rts-abrps')) $('rts-abrps').addEventListener('input', () => { const v = deDec($('rts-abrps').value); if (v !== undefined && v < x.soc0) $('rts-abrp').value = String(Math.round((x.soc0 - v) / 100 * batteryKwh() / x.km * 100 * 10) / 10).replace('.', ','); rtSheetPrev(); });   // ABRP-Ankunft % → kWh/100 km
+  if ($('rts-abrp') && $('rts-abrps')) $('rts-abrp').addEventListener('input', () => { $('rts-abrps').value = ''; });
+}
+function rtSheetVals() {
+  const x = getLab().fc.find(e => e.id === $('au-sheet-box').dataset.rtid); if (!x) return null; const cap = batteryKwh();
+  const real = deDec($('rts-real').value), soc = $('rts-soc') ? deDec($('rts-soc').value) : undefined, abrp = deDec($('rts-abrp').value), abrpSoc = $('rts-abrps') ? deDec($('rts-abrps').value) : undefined;
+  const r = real !== undefined ? real : soc !== undefined && soc < x.soc0 ? Math.round((x.soc0 - soc) / 100 * cap / x.km * 100 * 100) / 100 : undefined;
+  return { x, real: r, soc, abrp, abrpSoc, rawReal: real };
+}
+function rtSheetPrev() {
+  const v = rtSheetVals(); if (!v) return; const { x, real, abrp } = v, el = $('rts-prev'), box = $('au-sheet-box');
+  box.querySelector('[data-rtv="Real"]').textContent = real > 0 ? fmt(real, 1) : '–'; box.querySelector('[data-rtv="ABRP"]').textContent = abrp > 0 ? fmt(abrp, 1) : '–';
+  if (!(real > 0)) { el.innerHTML = '<span class="text-slate-500 dark:text-slate-400">Echten Verbrauch oder Akku bei Ankunft eintragen – dann siehst du, wer näher lag.</span>'; return; }
+  const da = rtDev(x.k100, real), db = abrp > 0 ? rtDev(abrp, real) : null, k0 = rtFactor(x.id), k1 = rtFactor(null, { ...x, real });
+  const win = db == null ? '' : Math.abs(da) < Math.abs(db) ? '🏁 Die App lag diesmal näher' : Math.abs(db) < Math.abs(da) ? '🏁 ABRP lag diesmal näher' : '🏁 Gleichstand';
+  el.innerHTML = `<div class="flex justify-between gap-2"><span><span class="text-emerald-600 dark:text-emerald-400">App</span> <b>${rtFmtP(da)}</b></span>${db == null ? '' : `<span><span class="text-violet-600 dark:text-violet-400">ABRP</span> <b>${rtFmtP(db)}</b></span>`}</div>
+    <p class="mt-1 text-xs text-left text-slate-500 dark:text-slate-400">${win ? win + ' · ' : ''}${Math.abs(k1 - k0) >= 0.005 ? 'persönlicher Faktor ' + fmt(k0, 2) + ' → ' + fmt(k1, 2) : 'persönlicher Faktor bleibt ' + fmt(k1, 2)}</p>`;
+}
+$('au-sheet').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-rts]'); if (!b) return; const act = b.dataset.rts, id = $('au-sheet-box').dataset.rtid;
+  if (act === 'close') { $('au-sheet').classList.add('hidden'); return; }
+  if (act === 'del') { if (!confirm('Diese gemerkte Fahrt löschen?')) return; const lab = getLab(); lab.fc = lab.fc.filter(x => x.id !== id); setLab(lab); $('au-sheet').classList.add('hidden'); rtTabs(); return; }
+  const v = rtSheetVals(); if (!v) return; const msg = $('rts-msg');
+  if (v.rawReal !== undefined && !(v.rawReal > 3 && v.rawReal < 60)) { msg.textContent = 'Echten Verbrauch bitte in kWh/100 km eingeben (z. B. 18,9).'; msg.classList.remove('hidden'); return; }
+  if (v.soc !== undefined && !(v.soc >= -20 && v.soc < v.x.soc0)) { msg.textContent = 'Akku bei Ankunft muss unter dem Start-Akku (' + v.x.soc0 + ' %) liegen.'; msg.classList.remove('hidden'); return; }
+  if (v.abrpSoc !== undefined && !(v.abrpSoc >= -20 && v.abrpSoc < v.x.soc0)) { msg.textContent = 'ABRP-Ankunft muss unter dem Start-Akku (' + v.x.soc0 + ' %) liegen.'; msg.classList.remove('hidden'); return; }
+  if (v.abrp !== undefined && !(v.abrp > 3 && v.abrp < 60)) { msg.textContent = 'ABRP-Wert bitte als Akkustand in % oder in kWh/100 km eingeben.'; msg.classList.remove('hidden'); return; }
+  const lab = getLab(); lab.fc = lab.fc.map(x => { if (x.id !== id) return x; const n = { ...x }; delete n.real; delete n.realSoc; delete n.abrp;
+    if (v.real > 0) n.real = v.real; if (v.soc !== undefined) n.realSoc = v.soc; if (v.abrp > 0) n.abrp = v.abrp; delete n.abrpSoc; if (v.abrp > 0 && v.abrpSoc !== undefined) n.abrpSoc = v.abrpSoc; return n; });
+  setLab(lab); $('au-sheet').classList.add('hidden'); rtTabs();
+});
+/* Planung von einem anderen Gerät übernehmen, wenn hier nichts gerade bearbeitet wird */
+function rtCloudPlan() {
+  const l = getSettings().rtLast, ae = document.activeElement; if (!l || !l.a || !l.b || (ae && /^rt-/.test(ae.id))) return;
+  const same = (p, q) => p && q && Math.abs(p.lat - q.lat) < 1e-4 && Math.abs(p.lon - q.lon) < 1e-4; if (same(RT.a, l.a) && same(RT.b, l.b) && (!!RT.v === !!l.v && (!l.v || same(RT.v, l.v))) && !!RT.round === !!l.round) return;
+  RT.a = l.a; RT.b = l.b; RT.v = l.v || null; RT.vOpen = false; rtViaUi(); RT.round = !!l.round; $('rt-a').value = l.a.label; $('rt-b').value = l.b.label; if (l.pers) $('rt-pers').value = String(l.pers); if (l.stay) { $('rt-stay').value = String(l.stay); rtStayLast = $('rt-stay').value; } rtRoundUi(); if (RT.tab === 'plan') rtRun();
+}
+function rtShow() {
+  rtTabs();
+  if (!RT.a && !RT.b) { const l = getSettings().rtLast || load(KEY_RT, null) || {}, home = getTPlaces().find(p => p.kind === 'home' && Number.isFinite(p.lat));
+    RT.a = l.a || (home ? { lat: home.lat, lon: home.lon, label: home.name } : null); RT.b = l.b || null; RT.v = l.v || null; rtViaUi();
+    $('rt-a').value = RT.a ? RT.a.label : ''; $('rt-b').value = RT.b ? RT.b.label : '';
+    if (l.pers) $('rt-pers').value = String(l.pers); if (l.dep && Date.parse(l.dep) > Date.now() - 3600e3) { const d = new Date(l.dep); $('rt-dep').value = d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + 'T' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()); } RT.round = !!l.round; if (l.stay) { $('rt-stay').value = String(l.stay); rtStayLast = $('rt-stay').value; } rtRoundUi(); if (l.tempo != null) $('rt-tempo').value = String(l.tempo); if (l.vab) $('rt-vab').value = String(l.vab); }
+  const now = new Date(); now.setMinutes(Math.ceil(now.getMinutes() / 15) * 15, 0, 0);
+  if (!$('rt-dep').value || new Date($('rt-dep').value).getTime() < Date.now() - 3600e3) $('rt-dep').value = now.getFullYear() + '-' + pad2(now.getMonth() + 1) + '-' + pad2(now.getDate()) + 'T' + pad2(now.getHours()) + ':' + pad2(now.getMinutes());
+  if (!$('rt-soc').value) { $('rt-soc').value = '80'; wxoSoc().then(s => { if (s != null && $('rt-soc').value === '80') { $('rt-soc').value = String(Math.round(s)); if (RT.res || RT.busy) rtRun(); } }).catch(() => { }); }
+  if (RT.tab === 'plan') rtRun();
+}
+
+/* ---- Push-Benachrichtigung der Eis-Warnung: Gerät anmelden (Push-Adresse in enyaqStrom/<uid>/settings/push), Testnachricht über /api/ice-push ---- */
+const VAPID_PUBLIC = 'BHJg47_9-WGwpnQQkZCKyGtmbned4D9fOyJ-EsYRKqD6dizXoA60UIYNjR1_vL-y0yxFN8PAuYsjQhKLEHcC128';
+const devId = () => { let id = load('enyaq.devId', null); if (!id) { id = 'd' + labId(); save('enyaq.devId', id); } return id; };
+const pushOk = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+const pushMsg = (t, bad) => { const el = $('ice-push-msg'); if (el) { el.textContent = t || ''; el.classList.toggle('text-red-600', !!bad); el.classList.toggle('dark:text-red-400', !!bad); } };
+const b64u = (s) => { const p = '='.repeat((4 - s.length % 4) % 4), b = atob((s + p).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(b, c => c.charCodeAt(0)); };
+async function pushState() { if (!pushOk()) return null; try { const reg = await navigator.serviceWorker.ready; return await reg.pushManager.getSubscription(); } catch (e) { return null; } }
+async function fillIcePush() {
+  const cb = $('set-ice-push'); if (!cb) return; if (!pushOk()) { cb.checked = false; cb.disabled = true; pushMsg('Dieser Browser unterstützt keine Push-Nachrichten.'); return; }
+  const sub = await pushState(); cb.checked = !!sub && Notification.permission === 'granted' && load('enyaq.icePush', false);
+  if (!$('ice-push-msg').textContent) pushMsg(Notification.permission === 'denied' ? 'Benachrichtigungen sind für diese App blockiert – in den Android-Einstellungen erlauben.' : '');
+}
+async function icePushOn() {
+  if (!window.cloud?.isSignedIn()) throw new Error('Bitte zuerst bei Google anmelden.');
+  const perm = await Notification.requestPermission(); if (perm !== 'granted') throw new Error('Benachrichtigungen nicht erlaubt.');
+  const reg = await navigator.serviceWorker.ready; let sub = await reg.pushManager.getSubscription();
+  if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64u(VAPID_PUBLIC) });
+  await window.cloud.setPush(devId(), { sub: JSON.stringify(sub.toJSON()), at: new Date().toISOString(), ua: (navigator.userAgentData && navigator.userAgentData.platform) || (/(Android|iPhone|Windows|Mac)/.exec(navigator.userAgent) || [''])[0] });
+  save('enyaq.icePush', true);
+}
+async function icePushOff() { save('enyaq.icePush', false); try { await window.cloud.setPush(devId(), null); } catch (e) { } try { const s = await pushState(); if (s) await s.unsubscribe(); } catch (e) { } }
+$('set-ice-push').addEventListener('change', async (e) => {
+  const cb = e.target; cb.disabled = true;
+  try { if (cb.checked) { pushMsg('Wird eingerichtet …'); await icePushOn(); pushMsg('✓ Dieses Gerät bekommt die Eis-Warnung abends.'); } else { await icePushOff(); pushMsg('Aus für dieses Gerät.'); } }
+  catch (er) { cb.checked = false; save('enyaq.icePush', false); pushMsg((er && er.message) || 'Einrichten fehlgeschlagen.', true); }
+  cb.disabled = false;
+});
+$('ice-test').addEventListener('click', async () => {
+  const b = $('ice-test'); b.disabled = true; pushMsg('Sende …');
+  try {
+    if (!load('enyaq.icePush', false) || !(await pushState())) { await icePushOn(); $('set-ice-push').checked = true; }
+    const r = await fetch('/api/ice-push', { method: 'POST', headers: { ...(await authHeaders()), 'Content-Type': 'application/json' }, body: JSON.stringify({ test: true }) }), j = await r.json().catch(() => ({}));
+    if (r.status === 503 && j.error === 'not_configured') pushMsg('Server noch nicht eingerichtet – in Vercel fehlen: ' + (j.need || []).join(', ') + '.', true);
+    else if (r.status === 404) pushMsg('Kein Gerät angemeldet – Schalter oben einschalten.', true);
+    else if (!r.ok) pushMsg('Fehler: ' + (j.error || r.status), true);
+    else pushMsg(j.ok ? '✓ Gesendet an ' + j.ok + ' Gerät' + (j.ok > 1 ? 'e' : '') + (j.gone ? ' (' + j.gone + ' abgemeldet)' : '') + ' – kommt gleich an.' : 'Nicht zugestellt – Gerät bitte neu anmelden (Schalter aus und an).', !j.ok);
+  } catch (er) { pushMsg((er && er.message) || 'Senden fehlgeschlagen.', true); }
+  b.disabled = false;
+});
+
+/* ---- Routenplaner-Daten geräteübergreifend: eigenes Dokument enyaqStrom/<uid>/settings/routes = { list: gemerkte Fahrten (lab.fc), del: Löschungen, rtLast: Planung }.
+   Unabhängig vom großen Einstellungs-Dokument; Zusammenführen je Fahrt (neuester Stand gewinnt), Planung nach Zeitstempel. ---- */
+const labNoFc = (o) => { if (!o) return o; const c = { ...o }; delete c.fc; return c; };
+let rtPushT = 0;
+function pushRoutes() { clearTimeout(rtPushT); rtPushT = setTimeout(() => { if (!window.cloud?.isSignedIn()) return; const L = load(KEY_LAB, null) || {}, rl = getSettings().rtLast;
+  window.cloud.setRoutes({ list: L.fc || [], del: L.del || {}, rtLast: rl || null }).catch(e => { try { window.onCloudStatus?.({ error: 'Routenplaner speichern: ' + (e.message || e) }); } catch (er) { } }); }, 800); }
+window.onCloudRoutes = (d, first) => {
+  const L = load(KEY_LAB, null) || {}, loc = L.fc || [], rem = d && Array.isArray(d.list) ? d.list : [], del = { ...(L.del || {}) };
+  Object.entries((d && d.del) || {}).forEach(([k, t]) => { if (!(del[k] >= t)) del[k] = t; });
+  const m = new Map(); [loc, rem].forEach(l => l.forEach(x => { if (!x || !x.id) return; const c = m.get(String(x.id)); if (!c || (x.u || 0) > (c.u || 0)) m.set(String(x.id), x); }));
+  const fc = [...m.values()].filter(x => !(del[String(x.id)] >= (x.u || 0))), canon = (l) => JSON.stringify(l.slice().sort((a, b) => String(a.id).localeCompare(String(b.id))));
+  let push = !d || canon(fc) !== canon(rem);
+  if (canon(fc) !== canon(loc)) { save(KEY_LAB, { ...L, fc, del }); try { if (currentView === 'route') rtTabs(); } catch (e) { } }
+  const lr = getSettings().rtLast, cr = d && d.rtLast;                       // Planung: neuerer Stand gewinnt
+  if (cr && (!lr || String(cr.at || '') > String(lr.at || ''))) { const st = load(KEY_SETTINGS, {}) || {}; st.rtLast = cr; save(KEY_SETTINGS, st); try { if (currentView === 'route') rtCloudPlan(); } catch (e) { } }
+  else if (lr && (!cr || String(lr.at || '') > String(cr.at || ''))) push = true;
+  if (push) pushRoutes();
+};
+
+if (window.__noStorage) {                                                       // Hinweis: Browser-Speicher gesperrt
+  const d = document.createElement('div'); d.setAttribute('role', 'alert');
+  d.className = 'fixed inset-x-3 top-3 z-[70] rounded-2xl bg-amber-500 text-slate-950 px-4 py-3 text-sm shadow-xl text-left';
+  d.innerHTML = '<b>Browser-Speicher gesperrt.</b> Die App läuft, kann aber nichts dauerhaft auf diesem Gerät speichern. Öffne sie direkt in Chrome (nicht in einer anderen App) und erlaube unter Website-Einstellungen → Cookies und Websitedaten diese Seite. <button type="button" class="ml-1 underline font-semibold">Ausblenden</button>';
+  d.querySelector('button').addEventListener('click', () => d.remove()); document.body.appendChild(d);
+}
