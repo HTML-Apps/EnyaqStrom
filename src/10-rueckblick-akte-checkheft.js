@@ -515,10 +515,10 @@ async function renderTempChart() {
    z. B. 08.06.–31.12., 01.01.–07.06. bzw. die jeweiligen 5.000 km. Berechnet wird alles aus den vorhandenen Daten; gemerkt wird nur, welche Rückblicke schon gesehen wurden.
    ===================================================================== */
 const WR_KM = 5000, WR_HOUSEHOLD = 1500, WR_F = "font-family:'Barlow Condensed','Arial Narrow',system-ui,sans-serif";   // km je Rückblick; Jahresstrom Single-Haushalt (Richtwert, kWh)
-const wltpVal = () => { const v = Number(getSettings().wltp); return v > 5 && v < 40 ? v : 16; };
+const wltpVal = () => { const v = Number(getSettings().wltp); return v > 5 && v < 40 ? v : carProf().wltp; };
 const wrD = (ms) => { const d = new Date(ms); return String(d.getDate()).padStart(2, '0') + '.' + String(d.getMonth() + 1).padStart(2, '0') + '.'; };
 const wrDY = (ms) => wrD(ms) + new Date(ms).getFullYear();
-const wrTitle = () => ((getSettings().title || DEFAULT_TITLE).split('|')[0].trim() || 'Enyaq') + ' Wrapped';
+const wrTitle = () => ((getSettings().title || DEFAULT_TITLE).split('|')[0].trim() || carShort()) + ' Wrapped';
 /** Vergleichs-Benziner aus Einstellungen → Fahrtenbuch (Standard: 7,0 l/100 km, 1,75 €/l) */
 const cmpCar = () => { const s = getSettings(), l = Number(s.cmpL), e = Number(s.cmpEur), g = Number(s.cmpCo2); return { name: (s.cmpCar || '').trim() || 'ein Benziner', l: l > 1 && l < 30 ? l : 7, eur: e > 0.5 && e < 5 ? e : 1.75, g: g >= 0 && g < 2000 ? g : 0 }; };
 const CO2_L = 2.37;                                                                   // kg CO₂ je Liter Benzin (Verbrennung)

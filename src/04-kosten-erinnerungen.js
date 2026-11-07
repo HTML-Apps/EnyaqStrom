@@ -516,7 +516,7 @@ function buildIcs(list) {
   list.filter(r => r.dueDate).forEach(r => {
     const desc = [r.note, r.dueKm ? 'Auch fällig bei ' + fmt(r.dueKm, 0) + ' km.' : '', isRepeating(r) ? 'Intervall: ' + remRepeatText(r).replace(/^wiederholt /, '') + '.' : '', 'Aus der App Enyaq Ladekosten.'].filter(Boolean).join('\n');
     lines.push('BEGIN:VEVENT', 'UID:enyaq-rem-' + r.id + '@enyaq-ladekosten', 'DTSTAMP:' + stamp, 'DTSTART;VALUE=DATE:' + compact(r.dueDate), 'DTEND;VALUE=DATE:' + compact(ymd(addDays(parseYMD(r.dueDate), 1))),
-      'SUMMARY:' + icsEsc('Enyaq: ' + r.title), 'DESCRIPTION:' + icsEsc(desc), 'TRANSP:TRANSPARENT',
+      'SUMMARY:' + icsEsc(carShort() + ': ' + r.title), 'DESCRIPTION:' + icsEsc(desc), 'TRANSP:TRANSPARENT',
       'BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:' + icsEsc(r.title), 'TRIGGER:-P6DT15H', 'END:VALARM',
       'BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:' + icsEsc(r.title), 'TRIGGER:-PT15H', 'END:VALARM', 'END:VEVENT');
   });

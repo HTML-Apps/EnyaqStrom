@@ -216,9 +216,10 @@ $('tc-seg').addEventListener('click', (e) => { const b = e.target.closest('[data
 /* =====================================================================
    Alterung im Vergleich (Berichte → Akku): Aviloo-Benchmark Enyaq iV (FLASH-Tests, n = 20.303), Median-SoH 95,14 % / 92,67 % / 91,04 %
    bei 50.000 / 100.000 / 150.000 km. Bis 50.000 km Potenzkurve (Verlust ∝ km^0,6, früher Abfall), danach linear zwischen den Stützpunkten,
-   über 150.000 km mit der letzten Steigung fortgeschrieben. Eigener SoH = nutzbare kWh (K × η) ÷ Werksangabe 52 kWh netto.
+   über 150.000 km mit der letzten Steigung fortgeschrieben. Eigener SoH = nutzbare kWh (K × η) ÷ Werksangabe netto aus dem Fahrzeugprofil; Garantie ebenso.
+   Benchmark-Kurve nur für den Enyaq iV (Profil av), sonst nur eigene Schätzung + Garantie.
    ===================================================================== */
-const AVILOO = { n: 20303, nom: 52, pts: [[0, 100], [50000, 95.14], [100000, 92.67], [150000, 91.04]], warr: { yrs: 8, km: 160000, soh: 70 } };
+const AVILOO = { n: 20303, pts: [[0, 100], [50000, 95.14], [100000, 92.67], [150000, 91.04]], get nom() { return carProf().net; }, get warr() { const c = carProf(); return { yrs: c.wYrs, km: c.wKm, soh: c.wSoh }; } };
 function avSoh(km) {
   const P = AVILOO.pts; if (!(km > 0)) return 100;
   if (km <= P[1][0]) return 100 - (100 - P[1][1]) * Math.pow(km / P[1][0], 0.6);
@@ -234,6 +235,12 @@ function avPoints(rows) {                                                       
 function renderAviloo(rows, fit, ok) {
   const el = $('av-body'); if (!el) return;
   const km = lastKnownKm(), mySoh = ok ? fit.K * BAT.eta / AVILOO.nom * 100 : null, myCi = ok ? fit.ci * BAT.eta / AVILOO.nom * 100 : null, exp = km ? avSoh(km) : null;
+  if (!carProf().av) {                                                          // kein Benchmark für dieses Modell: eigene Schätzung + Garantie
+    const c = carProf(), w = AVILOO.warr;
+    el.innerHTML = `<p class="mt-2 text-sm text-slate-600 dark:text-slate-300 text-left">Für den ${esc(c.name)} gibt es noch keine Vergleichskurve (Aviloo). ${mySoh != null ? 'Dein Akku (Schätzung): <b class="text-emerald-600 dark:text-emerald-400">' + fmt(mySoh, 1) + ' %</b> von ' + fmt(c.net, 1) + ' kWh netto.' : 'Deine eigene Schätzung erscheint, sobald genug Ladungen vorliegen.'}</p>`
+      + `<p class="mt-3 rounded-2xl bg-slate-100 dark:bg-slate-800/70 p-3 text-xs text-slate-600 dark:text-slate-300 text-left"><b class="text-slate-900 dark:text-white">Garantie:</b> ${w.yrs} Jahre bzw. ${fmt(w.km, 0)} km, Mindestkapazität laut Garantiebedingungen (üblich ${w.soh} %).</p>`;
+    return;
+  }
   const pts = avPoints(rows); if (ok && km && !pts.length) pts.push({ km, soh: mySoh, ci: myCi, n: fit.n });
   /* Diagramm (SVG): x 0–160.000 km, y 86–100 % */
   const W = 320, H = 170, L = 34, R = 10, T = 10, B = 26, X = (k) => L + k / 160000 * (W - L - R), Y = (v) => T + (100 - Math.max(86, Math.min(100, v))) / 14 * (H - T - B);
@@ -254,7 +261,7 @@ function renderAviloo(rows, fit, ok) {
   const w = AVILOO.warr, atW = avSoh(w.km);
   el.innerHTML = head + svg
     + `<p class="mt-4 text-sm font-medium text-left">Prognose (typischer Verlauf)</p><table class="mt-1 w-full text-sm"><thead><tr class="text-xs text-slate-500 dark:text-slate-400"><th class="text-left font-normal">bei</th><th class="text-right font-normal">SoH</th><th class="text-right font-normal">netto</th><th class="text-right font-normal">Reichweite</th></tr></thead><tbody>${prog}</tbody></table>`
-    + `<p class="mt-3 rounded-2xl bg-slate-100 dark:bg-slate-800/70 p-3 text-xs text-slate-600 dark:text-slate-300 text-left"><b class="text-slate-900 dark:text-white">Garantie:</b> ${w.yrs} Jahre bzw. ${fmt(w.km, 0)} km, Mindestkapazität laut Škoda-Garantiebedingungen (üblich ${w.soh} %). Ein typischer Enyaq liegt bei ${fmt(w.km, 0)} km noch bei etwa ${fmt(atW, 0)} %, also rund ${fmt(atW - w.soh, 0)} Punkte darüber.</p>`
+    + `<p class="mt-3 rounded-2xl bg-slate-100 dark:bg-slate-800/70 p-3 text-xs text-slate-600 dark:text-slate-300 text-left"><b class="text-slate-900 dark:text-white">Garantie:</b> ${w.yrs} Jahre bzw. ${fmt(w.km, 0)} km, Mindestkapazität laut Garantiebedingungen (üblich ${w.soh} %). Ein typischer Enyaq liegt bei ${fmt(w.km, 0)} km noch bei etwa ${fmt(atW, 0)} %, also rund ${fmt(atW - w.soh, 0)} Punkte darüber.</p>`
     + `<p class="mt-2 text-[11px] text-slate-500 dark:text-slate-400 text-left">Benchmark: Aviloo FLASH-Tests, ${fmt(AVILOO.n, 0)} Enyaq iV, Median ${AVILOO.pts.slice(1).map(p => fmt(p[1], 2) + ' % bei ' + fmt(p[0] / 1000, 0) + '.000 km').join(', ')}. Deine Schätzung = nutzbare kWh (η ${Math.round(BAT.eta * 100)} %) ÷ ${AVILOO.nom} kWh Werksangabe und deshalb nur grob vergleichbar. Aussagekräftiger ist, ob deine Punkte über die Jahre der Kurve folgen. Reichweite mit deinem Ø-Verbrauch.</p>`;
 }
 /* Berichte → Akku → mehr: Komfortenergie der laufenden Heizsaison (ab 1. Oktober): Summe, Kosten, je Vorheizen nach Außentemperatur,

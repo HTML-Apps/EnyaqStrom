@@ -4,7 +4,7 @@
    Rekuperation), Anfahren/Bremsen nach Tempo, Nebenverbraucher, Heizung/Klima + kalter Akku, Nässe (mehr Rollwiderstand).
    Persönlicher Faktor: lernt aus den selbst eingetragenen Realwerten gemerkter Fahrten (lab.fc), neue Fahrten zählen mehr (Halbwertszeit 180 Tage).
    ===================================================================== */
-const RT_P = { m: 2050, crr: 0.0095, cw: 0.257, A: 2.56, eta: 0.87, rec: 0.65, aux: 0.35, mp: 75 };
+const rtPhys = () => { const c = carProf(); return { m: c.m, crr: c.crr, cw: c.cw, A: c.A, eta: c.eta, rec: c.rec, aux: c.aux, mp: 75 }; };   // aus dem Fahrzeugprofil
 const RT = { a: null, b: null, res: null, busy: false, err: '', tab: 'plan', n: 0, route: {}, wx: {}, sugN: 0, sugT: 0, sug: {} };
 const KEY_RT = 'enyaq.rtLast';
 const rtFmtP = (v) => (v >= 0.05 ? '+' : v <= -0.05 ? '−' : '±') + fmt(Math.abs(v), 1) + ' %';
@@ -61,7 +61,7 @@ function rtFog(w, pers) {
 }
 const RT_STANDBY = 0.05;                                                          // kW Ruhestrom beim Parken am Ziel (Hin & zurück; zählt im Akkustand mit)
 function rtCalc(legs, o) {
-  const m = RT_P.m + RT_P.mp * (o.pers - 1), g = 9.81, cap = batteryKwh(), f = 1 + o.tempo / 100, J = 3.6e6;
+  const RT_P = rtPhys(), m = RT_P.m + RT_P.mp * (o.pers - 1), g = 9.81, cap = batteryKwh(), f = 1 + o.tempo / 100, J = 3.6e6;
   const bat = (x) => x > 0 ? x / RT_P.eta : x * RT_P.rec;
   let t = 0, E = { base: 0, slope: 0, wind: 0, rain: 0, heat: 0 }, cum = [0], Ts = [], rainKm = 0, hwSum = 0, noWx = false, h = [], turn = null, durDrive = 0, d0 = 0, pts = [], dkm = [], tt = [], dk = 0, fogE = [];
   legs.forEach((lg, li) => {

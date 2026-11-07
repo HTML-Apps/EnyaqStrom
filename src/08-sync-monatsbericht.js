@@ -407,8 +407,8 @@ const bdUnit = (n, one, many) => n + ' <span class="text-xl">' + (n === 1 ? one 
 let bdShown = 0, bdHidden = 0;
 async function showBirthday() {
   const b = bdInfo(); if (!b || !$('wr-ov').classList.contains('hidden')) return;
-  const set = getSettings(), name = (set.model || '').trim() || 'Enyaq';
-  $('bd-name').textContent = name.split(/\s+/)[0] || 'Enyaq';
+  const set = getSettings(), name = (set.model || '').trim() || carProf().short;
+  $('bd-name').textContent = name.split(/\s+/)[0] || carProf().short;
   $('bd-date').textContent = (b.late ? 'Nachträglich · ' : '') + b.day.toLocaleDateString('de-DE', { day: 'numeric', month: 'long', year: 'numeric' });
   save(KEY_BDSEEN, b.key);
   $('bd-own').innerHTML = bdUnit(b.years, 'Jahr', 'Jahre');

@@ -94,8 +94,23 @@ function segPaint(sel, active) {
     b.classList.toggle('bg-white', on); b.classList.toggle('dark:bg-slate-700', on); b.classList.toggle('shadow-sm', on);
   });
 }
-const DEFAULT_BATTERY_KWH = 52;   // Standardwert (nutzbare Kapazität Enyaq iV 50); einstellbar unter Einstellungen
-const batteryKwh = () => { const v = Number(getSettings().battery); return v > 0 ? v : DEFAULT_BATTERY_KWH; };
+/* Fahrzeugprofil (Einstellungen → Fahrzeug und Laden → Fahrzeugtyp): alles, was vom Auto abhängt – Standardwerte für Akku, Ladeleistung und WLTP,
+   Fahrphysik im Routenplaner, Akku-Garantie und ob es den Aviloo-Vergleich gibt. Einzelne technische Werte lassen sich in settings.carT
+   überschreiben. Ohne Auswahl gilt der Enyaq iV 50 (= bisheriges Verhalten). Epiq: Werte laut EV Database (netto 51,7 kWh, 1.618 kg EU-Leergewicht,
+   AC 11 kW, WLTP 13,7); cw und Stirnfläche sind Schätzwerte, bis Škoda sie nennt. */
+const CAR_PRESETS = {
+  enyaq50: { name: 'Škoda Enyaq iV 50', short: 'Enyaq', net: 52, ac: 7, wltp: 16, wltpHint: 'ca. 15,8 bis 16,1', m: 2050, crr: 0.0095, cw: 0.257, A: 2.56, eta: 0.87, rec: 0.65, aux: 0.35, wYrs: 8, wKm: 160000, wSoh: 70, av: true },
+  epiq55: { name: 'Škoda Epiq 55', short: 'Epiq', net: 51.7, ac: 11, wltp: 13.7, wltpHint: 'ca. 13,7', m: 1620, crr: 0.0095, cw: 0.27, A: 2.4, eta: 0.87, rec: 0.65, aux: 0.35, wYrs: 8, wKm: 160000, wSoh: 70, av: false, est: true },
+};
+const CAR_TECH = { m: [800, 4000], cw: [0.15, 0.5], A: [1.5, 4], wYrs: [1, 15], wKm: [10000, 500000], wSoh: [50, 90] };   // überschreibbar, mit gültigem Bereich
+function carProf(s = getSettings()) {
+  const key = CAR_PRESETS[s.car] ? s.car : 'enyaq50', o = { ...CAR_PRESETS[key], key }, t = s.carT || {};
+  Object.keys(CAR_TECH).forEach(k => { const v = Number(t[k]); if (v > 0) o[k] = v; }); return o;
+}
+const carName = () => { const s = getSettings(), b = (s.brand || '').trim(), m = (s.model || '').trim(); return m ? (b && !m.startsWith(b) ? b + ' ' + m : m) : carProf().name; };
+const carShort = () => ((getSettings().model || '').trim().split(/\s+/)[0]) || carProf().short;
+const DEFAULT_BATTERY_KWH = 52;   // nur noch Rückfallwert für alte Einträge ohne Kapazität; Standard kommt aus dem Fahrzeugprofil
+const batteryKwh = () => { const v = Number(getSettings().battery); return v > 0 ? v : carProf().net; };
 /** Vorbelegung: letzter bekannter km-Stand als grauer Hinweis (Platzhalter), Akku Ende standardmäßig 80 %. */
 /* =====================================================================
    Erfassen-Optik: editierbare Segmentanzeige, Trommel-Kilometerzähler, Akku mit zwei Reglern.

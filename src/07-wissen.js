@@ -235,10 +235,10 @@ $('kb-mg').addEventListener('click', async (e) => {
 $('kb-mg-share').addEventListener('click', async (e) => {
   const kb = getKb(), l = kb.items.filter(x => isMg(x) && mgSt(x) !== 'erledigt').sort((a, b) => String(a.seen || '').localeCompare(String(b.seen || '')));
   let km = null; try { const c = ltmCarKm(); km = c && c.km; } catch (er) { }
-  const t = 'Škoda Enyaq – Mängelliste' + (km ? ' (km ' + fmt(km, 0) + ')' : '') + ', Stand ' + mgDate(wxIso(new Date())) + '\n\n' + l.map((x, i) => [(i + 1) + '. ' + x.title + ' (' + mgArt(x)[2] + (mgSt(x) === 'gemeldet' ? ', bereits gemeldet' : '') + ')',
+  const t = carName() + ' – Mängelliste' + (km ? ' (km ' + fmt(km, 0) + ')' : '') + ', Stand ' + mgDate(wxIso(new Date())) + '\n\n' + l.map((x, i) => [(i + 1) + '. ' + x.title + ' (' + mgArt(x)[2] + (mgSt(x) === 'gemeldet' ? ', bereits gemeldet' : '') + ')',
     '   seit ' + (x.seen ? mgDate(x.seen) : '–') + (x.km ? ' / ' + fmt(x.km, 0) + ' km' : '') + ((x.occ || []).length ? ' · ' + (x.occ.length + 1) + '× aufgetreten' : ''),
     x.text ? '   ' + x.text.replace(/\n+/g, ' ').slice(0, 300) : '', (x.files || []).map(f => '   Foto: ' + dvLink(f.id)).join('\n')].filter(Boolean).join('\n')).join('\n\n');
-  try { if (navigator.share) await navigator.share({ title: 'Mängelliste Enyaq', text: t }); else { await navigator.clipboard.writeText(t); e.target.textContent = 'Kopiert ✓'; setTimeout(() => { e.target.textContent = '📋 Werkstatt-Liste'; }, 1800); } } catch (er) { }
+  try { if (navigator.share) await navigator.share({ title: 'Mängelliste ' + carShort(), text: t }); else { await navigator.clipboard.writeText(t); e.target.textContent = 'Kopiert ✓'; setTimeout(() => { e.target.textContent = '📋 Werkstatt-Liste'; }, 1800); } } catch (er) { }
 });
 $('kb-cancel').addEventListener('click', () => { if (kbCur != null && getKb().items.some(y => String(y.id) === String(kbCur))) openKb(kbCur); else $('kb-dialog').classList.add('hidden'); });
 $('kb-dialog').addEventListener('click', async (e) => {

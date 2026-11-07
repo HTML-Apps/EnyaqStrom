@@ -3,7 +3,7 @@
    im Dokument enyaqStrom/<uid>/settings/prefs, gleiche Regel wie Anbieter und Kategorien. Die PIN bleibt nur auf dem Gerät.
    Erster Abgleich: Was die Cloud hat, gilt; fehlt dort etwas und ist lokal vorhanden, wird es hochgeladen. Danach gilt die Cloud (Änderung auf einem Gerät wirkt auf allen).
    ===================================================================== */
-const SYNC_SET_KEYS = ['title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAcKwh', 'certDcKwh', 'certKm', 'wltpNet', 'ccEnd', 'wxoCut', 'dashFirst', 'carN', 'carSec', 'wxIcons', 'nRep', 'nTrips', 'nBakYm', 'nBakAt', 'nBakSnz', 'gtMirror', 'gtList', 'iceDep', 'iceWe', 'icePark', 'iceMin', 'iceK', 'cmpCar', 'cmpL', 'cmpEur', 'cmpCo2'];
+const SYNC_SET_KEYS = ['title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAcKwh', 'certDcKwh', 'certKm', 'wltpNet', 'ccEnd', 'wxoCut', 'dashFirst', 'car', 'carT', 'carN', 'carSec', 'wxIcons', 'nRep', 'nTrips', 'nBakYm', 'nBakAt', 'nBakSnz', 'gtMirror', 'gtList', 'iceDep', 'iceWe', 'icePark', 'iceMin', 'iceK', 'cmpCar', 'cmpL', 'cmpEur', 'cmpCo2'];
 /** Einstellungen für die Cloud: feste Reihenfolge, ohne leere Werte (Firestore verbietet undefined). null = nichts vorhanden. */
 function syncSet(src) {
   const o = {}; if (src && typeof src === 'object') SYNC_SET_KEYS.forEach(k => { const v = src[k]; if (v != null && v !== '' && !(typeof v === 'number' && !isFinite(v))) o[k] = v; });

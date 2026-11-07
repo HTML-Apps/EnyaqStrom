@@ -251,6 +251,7 @@ function fillSettings() {
   $('set-cmp-car').value = s.cmpCar || ''; $('set-cmp-l').value = s.cmpL ? String(s.cmpL).replace('.', ',') : ''; $('set-cmp-eur').value = s.cmpEur ? String(s.cmpEur).replace('.', ',') : ''; $('set-cmp-co2').value = s.cmpCo2 ? String(s.cmpCo2) : '';
   $('set-price').value = String(s.price).replace('.', ',');
   $('set-battery').value = String(batteryKwh()).replace('.', ',');
+  $('set-car').value = carProf(s).key; const ct = s.carT || {}; Object.keys(CAR_TECH).forEach(k => { $('set-ct-' + k).value = ct[k] > 0 ? String(ct[k]).replace('.', ',') : ''; }); carFormHints();
   $('set-title').value = s.title || DEFAULT_TITLE;
   $('set-brand').value = s.brand || ''; $('set-model').value = s.model || ''; $('set-plate').value = s.plate || ''; $('set-year').value = s.year || ''; $('set-vin').value = s.vin || '';
   $('set-power').value = String(chargePowerKw()).replace('.', ',');
@@ -304,6 +305,11 @@ $('set-year').addEventListener('input', (e) => {
 $('btn-save-settings').addEventListener('click', () => {
   const price = parseNum($('set-price').value);
   if (!isFinite(price) || price < 0) { alert('Bitte einen gültigen Strompreis eingeben (z. B. 0,307).'); return; }
+  const carT = {}; for (const k of Object.keys(CAR_TECH)) {                       // technische Werte: leer = Wert des Fahrzeugtyps
+    const raw = $('set-ct-' + k).value.trim(); if (!raw) continue; const v = parseNum(['cw', 'A'].includes(k) ? raw : raw.replace(/[.\s]/g, '')), [lo, hi] = CAR_TECH[k];
+    if (!(v >= lo && v <= hi)) { alert('Bitte einen Wert zwischen ' + fmt(lo, lo < 1 ? 2 : 0) + ' und ' + fmt(hi, hi < 1 ? 2 : 0) + ' eintragen oder das Feld leer lassen.'); $('set-ct-' + k).focus(); return; }
+    carT[k] = v;
+  }
   const battery = parseNum($('set-battery').value);
   if (!isFinite(battery) || battery < 10 || battery > 200) { alert('Bitte eine gültige Nettokapazität in kWh eingeben (z. B. 52).'); return; }
   const power = parseNum($('set-power').value);
@@ -336,7 +342,7 @@ $('btn-save-settings').addEventListener('click', () => {
     if (+m[2] < 1990 || +m[2] * 12 + +m[1] > now.getFullYear() * 12 + now.getMonth() + 1) { alert('Das Baujahr ' + yr + ' kann nicht stimmen: Es muss zwischen 01/1990 und ' + String(now.getMonth() + 1).padStart(2, '0') + '/' + now.getFullYear() + ' liegen.'); $('set-year').focus(); return; }
   }
   const txt = (id, n) => $(id).value.trim().replace(/\s+/g, ' ').slice(0, n) || undefined;
-  if (save(KEY_SETTINGS, { title: $('set-title').value.trim() || DEFAULT_TITLE, brand: txt('set-brand', 30), model: txt('set-model', 40), plate: (txt('set-plate', 15) || '').toUpperCase() || undefined, year: yr || undefined, vin: vin || undefined, price, battery, power, remDays, remKm, purchase, wltp: wl, wltpNet: wln !== undefined ? Math.round(wln * 100) / 100 : undefined, purchaseKm: pk !== undefined ? Math.round(pk) : undefined, purchasePrice: pp !== undefined ? Math.round(pp * 100) / 100 : undefined, commuteKm: getSettings().commuteKm || undefined, ccEnd: getSettings().ccEnd || undefined, gtMirror: getSettings().gtMirror || undefined, gtList: getSettings().gtList || undefined, rtLast: getSettings().rtLast || undefined, iceDep: getSettings().iceDep || undefined, iceWe: getSettings().iceWe || undefined, icePark: getSettings().icePark || undefined, iceMin: getSettings().iceMin || undefined, iceK: getSettings().iceK || undefined, nRep: getSettings().nRep || undefined, nTrips: getSettings().nTrips || undefined, nBakYm: getSettings().nBakYm || undefined, nBakAt: getSettings().nBakAt || undefined, nBakSnz: getSettings().nBakSnz || undefined, wxIcons: getSettings().wxIcons || undefined, carN: getSettings().carN ?? undefined, carSec: getSettings().carSec ?? undefined, wxoCut: getSettings().wxoCut ?? undefined, dashFirst: getSettings().dashFirst || undefined, refLo: rlo, refHi: rhi, nextHu, nextService, certAcKwh: certAcKwh !== undefined ? Math.round(certAcKwh * 10) / 10 : undefined, certDcKwh: certDcKwh !== undefined ? Math.round(certDcKwh * 10) / 10 : undefined, certKm: certKm !== undefined ? Math.round(certKm) : undefined })) {   // commuteKm: im Steuerhelfer (Berichte → Fahrten) gepflegt
+  if (save(KEY_SETTINGS, { title: $('set-title').value.trim() || DEFAULT_TITLE, car: $('set-car').value !== 'enyaq50' ? $('set-car').value : undefined, carT: Object.keys(carT).length ? carT : undefined, brand: txt('set-brand', 30), model: txt('set-model', 40), plate: (txt('set-plate', 15) || '').toUpperCase() || undefined, year: yr || undefined, vin: vin || undefined, price, battery, power, remDays, remKm, purchase, wltp: wl, wltpNet: wln !== undefined ? Math.round(wln * 100) / 100 : undefined, purchaseKm: pk !== undefined ? Math.round(pk) : undefined, purchasePrice: pp !== undefined ? Math.round(pp * 100) / 100 : undefined, commuteKm: getSettings().commuteKm || undefined, ccEnd: getSettings().ccEnd || undefined, gtMirror: getSettings().gtMirror || undefined, gtList: getSettings().gtList || undefined, rtLast: getSettings().rtLast || undefined, iceDep: getSettings().iceDep || undefined, iceWe: getSettings().iceWe || undefined, icePark: getSettings().icePark || undefined, iceMin: getSettings().iceMin || undefined, iceK: getSettings().iceK || undefined, nRep: getSettings().nRep || undefined, nTrips: getSettings().nTrips || undefined, nBakYm: getSettings().nBakYm || undefined, nBakAt: getSettings().nBakAt || undefined, nBakSnz: getSettings().nBakSnz || undefined, wxIcons: getSettings().wxIcons || undefined, carN: getSettings().carN ?? undefined, carSec: getSettings().carSec ?? undefined, wxoCut: getSettings().wxoCut ?? undefined, dashFirst: getSettings().dashFirst || undefined, refLo: rlo, refHi: rhi, nextHu, nextService, certAcKwh: certAcKwh !== undefined ? Math.round(certAcKwh * 10) / 10 : undefined, certDcKwh: certDcKwh !== undefined ? Math.round(certDcKwh * 10) / 10 : undefined, certKm: certKm !== undefined ? Math.round(certKm) : undefined })) {   // commuteKm: im Steuerhelfer (Berichte → Fahrten) gepflegt
     renderReminderBadges(); renderHeroStats(); pushPrefs();
     $('settings-msg').classList.remove('hidden'); setTimeout(() => $('settings-msg').classList.add('hidden'), 2500);
   }
@@ -359,3 +365,20 @@ $('wipe-ok').addEventListener('click', () => {
   }
 });
 
+
+/* Fahrzeugtyp: Hinweise und graue Platzhalter aus dem gewählten Profil; beim Wechsel Akku/Ladeleistung mitziehen, wenn sie noch dem alten Standard entsprechen. */
+let carFormKey = null;
+function carFormHints() {
+  const c = CAR_PRESETS[$('set-car').value] || CAR_PRESETS.enyaq50, f = (v) => String(v).replace('.', ',');
+  if (carFormKey && carFormKey !== $('set-car').value) {
+    const o = CAR_PRESETS[carFormKey];
+    if (parseNum($('set-battery').value) === o.net) $('set-battery').value = f(c.net);
+    if (parseNum($('set-power').value) === o.ac) $('set-power').value = f(c.ac);
+  }
+  carFormKey = $('set-car').value;
+  $('set-battery').placeholder = f(c.net); $('set-power').placeholder = f(c.ac);
+  $('set-wltp-hint').textContent = 'Für den Vergleich im Rückblick. ' + c.name + ': ' + c.wltpHint + '. Leer = ' + fmt(c.wltp, 1) + '.';
+  Object.keys(CAR_TECH).forEach(k => { $('set-ct-' + k).placeholder = k === 'wKm' ? fmt(c[k], 0) : f(c[k]); });
+  $('set-car-hint').textContent = 'Setzt Standardwerte für Akku, Ladeleistung, WLTP, Routenplaner und Akku-Garantie.' + (c.est ? ' cw-Wert und Stirnfläche sind vorläufige Schätzwerte.' : '');
+}
+$('set-car').addEventListener('change', carFormHints);

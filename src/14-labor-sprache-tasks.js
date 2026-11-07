@@ -264,7 +264,7 @@ async function hpField(which) {
 let ltEdit = null;
 function ltApp() { try { const rs = getReadings(); if (!rs.length) return null; const t = consumptionTotals(rs, rs.map((_, i) => i)); return t && t.km >= 100 ? t.kwh100 : null; } catch (e) { return null; } }
 /** WLTP ohne Ladeverluste: eigener Wert aus den Einstellungen, sonst WLTP − 8 % (geschätzt) */
-function wltpNet() { const s = getSettings(), n = Number(s.wltpNet); if (n > 0) return { v: n, est: false }; const w = Number(s.wltp) > 0 ? Number(s.wltp) : 16; return { v: Math.round(w * 0.92 * 10) / 10, est: true }; }
+function wltpNet() { const s = getSettings(), n = Number(s.wltpNet); if (n > 0) return { v: n, est: false }; const w = Number(s.wltp) > 0 ? Number(s.wltp) : carProf(s).wltp; return { v: Math.round(w * 0.92 * 10) / 10, est: true }; }
 function ltSvg(es, app, wl) {
   const W = 296, H = 124, L = 32, R = 12, T = 16, B = 20, t0 = Date.parse(es[0].date), t1 = Date.parse(es[es.length - 1].date), span = Math.max(1, t1 - t0);
   const vs = es.map(e => e.k100).concat(app != null ? [app] : [], wl != null ? [wl] : []); let y0 = Math.floor(Math.min(...vs) - 0.6), y1 = Math.ceil(Math.max(...vs) + 0.6); if (y1 - y0 < 2) y1 = y0 + 2;

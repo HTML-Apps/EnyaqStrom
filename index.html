@@ -182,7 +182,7 @@
   @media (prefers-reduced-motion: reduce) { #bd-conf i, #bdg-conf i { animation: none; top: var(--y, 10%); } #bd-card, #bdg-card { animation: none; } }
 </style>
 <!-- Tailwind fertig gebaut (npm run css) – am Ende des Kopfs wie früher das CDN, damit die Reihenfolge der Regeln gleich bleibt -->
-<link rel="stylesheet" href="/app.css?v=237">
+<link rel="stylesheet" href="/app.css?v=238">
 </head>
 <body class="bg-black text-slate-100 min-h-screen">
 
@@ -1132,6 +1132,15 @@
           <input id="set-title" type="text" inputmode="text" autocapitalize="sentences" placeholder="z. B. Skoda Enyaq | Ladekosten" autocomplete="off" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500">
         </div>
         <div class="py-4 first:pt-4 last:pb-0">
+          <label for="set-car" class="block text-sm font-medium text-slate-700 dark:text-slate-300">Fahrzeugtyp</label>
+          <select id="set-car" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"><option value="enyaq50">Škoda Enyaq iV 50</option><option value="epiq55">Škoda Epiq 55</option></select>
+          <p id="set-car-hint" class="mt-1.5 text-xs text-left text-slate-500 dark:text-slate-400">Setzt Standardwerte für Akku, Ladeleistung, WLTP, Routenplaner und Akku-Garantie.</p>
+          <details class="mt-2"><summary class="cursor-pointer text-sm font-semibold text-sky-600 dark:text-sky-400">Technische Werte anpassen</summary>
+            <div class="mt-2 grid grid-cols-3 gap-2"><div><label for="set-ct-m" class="text-xs text-slate-500 dark:text-slate-400">Gewicht [kg]</label><input id="set-ct-m" type="text" inputmode="numeric" autocomplete="off" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div><div><label for="set-ct-cw" class="text-xs text-slate-500 dark:text-slate-400">cw-Wert</label><input id="set-ct-cw" type="text" inputmode="decimal" autocomplete="off" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div><div><label for="set-ct-A" class="text-xs text-slate-500 dark:text-slate-400">Stirnfl. [m²]</label><input id="set-ct-A" type="text" inputmode="decimal" autocomplete="off" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div><div><label for="set-ct-wYrs" class="text-xs text-slate-500 dark:text-slate-400">Garantie [J.]</label><input id="set-ct-wYrs" type="text" inputmode="numeric" autocomplete="off" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div><div><label for="set-ct-wKm" class="text-xs text-slate-500 dark:text-slate-400">Garantie [km]</label><input id="set-ct-wKm" type="text" inputmode="numeric" autocomplete="off" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div><div><label for="set-ct-wSoh" class="text-xs text-slate-500 dark:text-slate-400">Mind. SoH [%]</label><input id="set-ct-wSoh" type="text" inputmode="numeric" autocomplete="off" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div></div>
+            <p class="mt-1.5 text-xs text-left text-slate-500 dark:text-slate-400">Gewicht mit Fahrer (EU-Leergewicht), cw und Stirnfläche für den Routenplaner, Garantie für Berichte → Akku. Leer = Wert des Fahrzeugtyps (grau).</p>
+          </details>
+        </div>
+        <div class="py-4 first:pt-4 last:pb-0">
           <div class="grid grid-cols-2 gap-3">
             <div><label for="set-brand" class="block text-sm font-medium text-slate-700 dark:text-slate-300">Marke</label><input id="set-brand" type="text" maxlength="30" autocomplete="off" autocapitalize="words" placeholder="z. B. Škoda" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
             <div><label for="set-model" class="block text-sm font-medium text-slate-700 dark:text-slate-300">Modell</label><input id="set-model" type="text" maxlength="40" autocomplete="off" autocapitalize="words" placeholder="z. B. Enyaq iV 50" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
@@ -1178,7 +1187,7 @@
         <div class="py-4 first:pt-4 last:pb-0">
           <label for="set-wltp" class="block text-sm font-medium text-slate-700 dark:text-slate-300">WLTP-Verbrauch [kWh/100 km]</label>
           <input id="set-wltp" type="text" inputmode="decimal" placeholder="z. B. 16,0" autocomplete="off" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500">
-          <p class="mt-1.5 text-xs text-slate-500 dark:text-slate-400">Für den Vergleich im Rückblick. Škoda Enyaq iV 50: ca. 15,8 bis 16,1. Leer = 16,0.</p>
+          <p id="set-wltp-hint" class="mt-1.5 text-xs text-slate-500 dark:text-slate-400">Für den Vergleich im Rückblick. Škoda Enyaq iV 50: ca. 15,8 bis 16,1. Leer = 16,0.</p>
         </div>
         <div class="py-4 first:pt-4 last:pb-0">
           <label for="set-wltp-net" class="block text-sm font-medium text-slate-700 dark:text-slate-300">WLTP-Verbrauch ohne Ladeverluste [kWh/100 km]</label>
@@ -1790,7 +1799,7 @@
   </div>
 </nav>
 
-<script src="/app.js?v=237"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
+<script src="/app.js?v=238"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
 <script type="module">
 /* Firebase (modular SDK). Die Konfiguration ist kein Geheimnis – geschützt wird über Auth + Firestore-Regeln. */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';

@@ -74,8 +74,8 @@ function renderChart() {
    Gespeichert wird nur ein Zeitstempel: { startedAt, baseReading, price }.
    Alle Live-Werte werden daraus berechnet -> stimmen auch nach Neuladen/Schließen der App.
    ===================================================================== */
-const DEFAULT_CHARGE_POWER_KW = 7;                         // Standardwert; einstellbar unter Einstellungen
-const chargePowerKw = () => { const v = Number(getSettings().power); return v > 0 ? v : DEFAULT_CHARGE_POWER_KW; };
+const DEFAULT_CHARGE_POWER_KW = 7;                         // alter Standard (Enyaq); heute aus dem Fahrzeugprofil, einstellbar unter Einstellungen
+const chargePowerKw = () => { const v = Number(getSettings().power); return v > 0 ? v : carProf().ac; };
 const LIVE_POLL_MS = 6 * 60 * 1000;                        // Abgleich mit dem Auto alle 6 Minuten (Škoda-Limit: 20 Anfragen/Stunde)
 const LIVE_SPEED = 1;            // 1 = Echtzeit. Zum Testen z. B. 60 setzen (1 Minute entspricht 1 Stunde Laden)
 const KEY_LIVE = 'enyaq.live';

@@ -97,8 +97,23 @@ function segPaint(sel, active) {
     b.classList.toggle('bg-white', on); b.classList.toggle('dark:bg-slate-700', on); b.classList.toggle('shadow-sm', on);
   });
 }
-const DEFAULT_BATTERY_KWH = 52;   // Standardwert (nutzbare Kapazität Enyaq iV 50); einstellbar unter Einstellungen
-const batteryKwh = () => { const v = Number(getSettings().battery); return v > 0 ? v : DEFAULT_BATTERY_KWH; };
+/* Fahrzeugprofil (Einstellungen → Fahrzeug und Laden → Fahrzeugtyp): alles, was vom Auto abhängt – Standardwerte für Akku, Ladeleistung und WLTP,
+   Fahrphysik im Routenplaner, Akku-Garantie und ob es den Aviloo-Vergleich gibt. Einzelne technische Werte lassen sich in settings.carT
+   überschreiben. Ohne Auswahl gilt der Enyaq iV 50 (= bisheriges Verhalten). Epiq: Werte laut EV Database (netto 51,7 kWh, 1.618 kg EU-Leergewicht,
+   AC 11 kW, WLTP 13,7); cw und Stirnfläche sind Schätzwerte, bis Škoda sie nennt. */
+const CAR_PRESETS = {
+  enyaq50: { name: 'Škoda Enyaq iV 50', short: 'Enyaq', net: 52, ac: 7, wltp: 16, wltpHint: 'ca. 15,8 bis 16,1', m: 2050, crr: 0.0095, cw: 0.257, A: 2.56, eta: 0.87, rec: 0.65, aux: 0.35, wYrs: 8, wKm: 160000, wSoh: 70, av: true },
+  epiq55: { name: 'Škoda Epiq 55', short: 'Epiq', net: 51.7, ac: 11, wltp: 13.7, wltpHint: 'ca. 13,7', m: 1620, crr: 0.0095, cw: 0.27, A: 2.4, eta: 0.87, rec: 0.65, aux: 0.35, wYrs: 8, wKm: 160000, wSoh: 70, av: false, est: true },
+};
+const CAR_TECH = { m: [800, 4000], cw: [0.15, 0.5], A: [1.5, 4], wYrs: [1, 15], wKm: [10000, 500000], wSoh: [50, 90] };   // überschreibbar, mit gültigem Bereich
+function carProf(s = getSettings()) {
+  const key = CAR_PRESETS[s.car] ? s.car : 'enyaq50', o = { ...CAR_PRESETS[key], key }, t = s.carT || {};
+  Object.keys(CAR_TECH).forEach(k => { const v = Number(t[k]); if (v > 0) o[k] = v; }); return o;
+}
+const carName = () => { const s = getSettings(), b = (s.brand || '').trim(), m = (s.model || '').trim(); return m ? (b && !m.startsWith(b) ? b + ' ' + m : m) : carProf().name; };
+const carShort = () => ((getSettings().model || '').trim().split(/\s+/)[0]) || carProf().short;
+const DEFAULT_BATTERY_KWH = 52;   // nur noch Rückfallwert für alte Einträge ohne Kapazität; Standard kommt aus dem Fahrzeugprofil
+const batteryKwh = () => { const v = Number(getSettings().battery); return v > 0 ? v : carProf().net; };
 /** Vorbelegung: letzter bekannter km-Stand als grauer Hinweis (Platzhalter), Akku Ende standardmäßig 80 %. */
 /* =====================================================================
    Erfassen-Optik: editierbare Segmentanzeige, Trommel-Kilometerzähler, Akku mit zwei Reglern.
@@ -775,6 +790,7 @@ function fillSettings() {
   $('set-cmp-car').value = s.cmpCar || ''; $('set-cmp-l').value = s.cmpL ? String(s.cmpL).replace('.', ',') : ''; $('set-cmp-eur').value = s.cmpEur ? String(s.cmpEur).replace('.', ',') : ''; $('set-cmp-co2').value = s.cmpCo2 ? String(s.cmpCo2) : '';
   $('set-price').value = String(s.price).replace('.', ',');
   $('set-battery').value = String(batteryKwh()).replace('.', ',');
+  $('set-car').value = carProf(s).key; const ct = s.carT || {}; Object.keys(CAR_TECH).forEach(k => { $('set-ct-' + k).value = ct[k] > 0 ? String(ct[k]).replace('.', ',') : ''; }); carFormHints();
   $('set-title').value = s.title || DEFAULT_TITLE;
   $('set-brand').value = s.brand || ''; $('set-model').value = s.model || ''; $('set-plate').value = s.plate || ''; $('set-year').value = s.year || ''; $('set-vin').value = s.vin || '';
   $('set-power').value = String(chargePowerKw()).replace('.', ',');
@@ -828,6 +844,11 @@ $('set-year').addEventListener('input', (e) => {
 $('btn-save-settings').addEventListener('click', () => {
   const price = parseNum($('set-price').value);
   if (!isFinite(price) || price < 0) { alert('Bitte einen gültigen Strompreis eingeben (z. B. 0,307).'); return; }
+  const carT = {}; for (const k of Object.keys(CAR_TECH)) {                       // technische Werte: leer = Wert des Fahrzeugtyps
+    const raw = $('set-ct-' + k).value.trim(); if (!raw) continue; const v = parseNum(['cw', 'A'].includes(k) ? raw : raw.replace(/[.\s]/g, '')), [lo, hi] = CAR_TECH[k];
+    if (!(v >= lo && v <= hi)) { alert('Bitte einen Wert zwischen ' + fmt(lo, lo < 1 ? 2 : 0) + ' und ' + fmt(hi, hi < 1 ? 2 : 0) + ' eintragen oder das Feld leer lassen.'); $('set-ct-' + k).focus(); return; }
+    carT[k] = v;
+  }
   const battery = parseNum($('set-battery').value);
   if (!isFinite(battery) || battery < 10 || battery > 200) { alert('Bitte eine gültige Nettokapazität in kWh eingeben (z. B. 52).'); return; }
   const power = parseNum($('set-power').value);
@@ -860,7 +881,7 @@ $('btn-save-settings').addEventListener('click', () => {
     if (+m[2] < 1990 || +m[2] * 12 + +m[1] > now.getFullYear() * 12 + now.getMonth() + 1) { alert('Das Baujahr ' + yr + ' kann nicht stimmen: Es muss zwischen 01/1990 und ' + String(now.getMonth() + 1).padStart(2, '0') + '/' + now.getFullYear() + ' liegen.'); $('set-year').focus(); return; }
   }
   const txt = (id, n) => $(id).value.trim().replace(/\s+/g, ' ').slice(0, n) || undefined;
-  if (save(KEY_SETTINGS, { title: $('set-title').value.trim() || DEFAULT_TITLE, brand: txt('set-brand', 30), model: txt('set-model', 40), plate: (txt('set-plate', 15) || '').toUpperCase() || undefined, year: yr || undefined, vin: vin || undefined, price, battery, power, remDays, remKm, purchase, wltp: wl, wltpNet: wln !== undefined ? Math.round(wln * 100) / 100 : undefined, purchaseKm: pk !== undefined ? Math.round(pk) : undefined, purchasePrice: pp !== undefined ? Math.round(pp * 100) / 100 : undefined, commuteKm: getSettings().commuteKm || undefined, ccEnd: getSettings().ccEnd || undefined, gtMirror: getSettings().gtMirror || undefined, gtList: getSettings().gtList || undefined, rtLast: getSettings().rtLast || undefined, iceDep: getSettings().iceDep || undefined, iceWe: getSettings().iceWe || undefined, icePark: getSettings().icePark || undefined, iceMin: getSettings().iceMin || undefined, iceK: getSettings().iceK || undefined, nRep: getSettings().nRep || undefined, nTrips: getSettings().nTrips || undefined, nBakYm: getSettings().nBakYm || undefined, nBakAt: getSettings().nBakAt || undefined, nBakSnz: getSettings().nBakSnz || undefined, wxIcons: getSettings().wxIcons || undefined, carN: getSettings().carN ?? undefined, carSec: getSettings().carSec ?? undefined, wxoCut: getSettings().wxoCut ?? undefined, dashFirst: getSettings().dashFirst || undefined, refLo: rlo, refHi: rhi, nextHu, nextService, certAcKwh: certAcKwh !== undefined ? Math.round(certAcKwh * 10) / 10 : undefined, certDcKwh: certDcKwh !== undefined ? Math.round(certDcKwh * 10) / 10 : undefined, certKm: certKm !== undefined ? Math.round(certKm) : undefined })) {   // commuteKm: im Steuerhelfer (Berichte → Fahrten) gepflegt
+  if (save(KEY_SETTINGS, { title: $('set-title').value.trim() || DEFAULT_TITLE, car: $('set-car').value !== 'enyaq50' ? $('set-car').value : undefined, carT: Object.keys(carT).length ? carT : undefined, brand: txt('set-brand', 30), model: txt('set-model', 40), plate: (txt('set-plate', 15) || '').toUpperCase() || undefined, year: yr || undefined, vin: vin || undefined, price, battery, power, remDays, remKm, purchase, wltp: wl, wltpNet: wln !== undefined ? Math.round(wln * 100) / 100 : undefined, purchaseKm: pk !== undefined ? Math.round(pk) : undefined, purchasePrice: pp !== undefined ? Math.round(pp * 100) / 100 : undefined, commuteKm: getSettings().commuteKm || undefined, ccEnd: getSettings().ccEnd || undefined, gtMirror: getSettings().gtMirror || undefined, gtList: getSettings().gtList || undefined, rtLast: getSettings().rtLast || undefined, iceDep: getSettings().iceDep || undefined, iceWe: getSettings().iceWe || undefined, icePark: getSettings().icePark || undefined, iceMin: getSettings().iceMin || undefined, iceK: getSettings().iceK || undefined, nRep: getSettings().nRep || undefined, nTrips: getSettings().nTrips || undefined, nBakYm: getSettings().nBakYm || undefined, nBakAt: getSettings().nBakAt || undefined, nBakSnz: getSettings().nBakSnz || undefined, wxIcons: getSettings().wxIcons || undefined, carN: getSettings().carN ?? undefined, carSec: getSettings().carSec ?? undefined, wxoCut: getSettings().wxoCut ?? undefined, dashFirst: getSettings().dashFirst || undefined, refLo: rlo, refHi: rhi, nextHu, nextService, certAcKwh: certAcKwh !== undefined ? Math.round(certAcKwh * 10) / 10 : undefined, certDcKwh: certDcKwh !== undefined ? Math.round(certDcKwh * 10) / 10 : undefined, certKm: certKm !== undefined ? Math.round(certKm) : undefined })) {   // commuteKm: im Steuerhelfer (Berichte → Fahrten) gepflegt
     renderReminderBadges(); renderHeroStats(); pushPrefs();
     $('settings-msg').classList.remove('hidden'); setTimeout(() => $('settings-msg').classList.add('hidden'), 2500);
   }
@@ -883,6 +904,23 @@ $('wipe-ok').addEventListener('click', () => {
   }
 });
 
+
+/* Fahrzeugtyp: Hinweise und graue Platzhalter aus dem gewählten Profil; beim Wechsel Akku/Ladeleistung mitziehen, wenn sie noch dem alten Standard entsprechen. */
+let carFormKey = null;
+function carFormHints() {
+  const c = CAR_PRESETS[$('set-car').value] || CAR_PRESETS.enyaq50, f = (v) => String(v).replace('.', ',');
+  if (carFormKey && carFormKey !== $('set-car').value) {
+    const o = CAR_PRESETS[carFormKey];
+    if (parseNum($('set-battery').value) === o.net) $('set-battery').value = f(c.net);
+    if (parseNum($('set-power').value) === o.ac) $('set-power').value = f(c.ac);
+  }
+  carFormKey = $('set-car').value;
+  $('set-battery').placeholder = f(c.net); $('set-power').placeholder = f(c.ac);
+  $('set-wltp-hint').textContent = 'Für den Vergleich im Rückblick. ' + c.name + ': ' + c.wltpHint + '. Leer = ' + fmt(c.wltp, 1) + '.';
+  Object.keys(CAR_TECH).forEach(k => { $('set-ct-' + k).placeholder = k === 'wKm' ? fmt(c[k], 0) : f(c[k]); });
+  $('set-car-hint').textContent = 'Setzt Standardwerte für Akku, Ladeleistung, WLTP, Routenplaner und Akku-Garantie.' + (c.est ? ' cw-Wert und Stirnfläche sind vorläufige Schätzwerte.' : '');
+}
+$('set-car').addEventListener('change', carFormHints);
 
 // ───── src/02-start-live-trends.js ─────
 /* =====================================================================
@@ -961,8 +999,8 @@ function renderChart() {
    Gespeichert wird nur ein Zeitstempel: { startedAt, baseReading, price }.
    Alle Live-Werte werden daraus berechnet -> stimmen auch nach Neuladen/Schließen der App.
    ===================================================================== */
-const DEFAULT_CHARGE_POWER_KW = 7;                         // Standardwert; einstellbar unter Einstellungen
-const chargePowerKw = () => { const v = Number(getSettings().power); return v > 0 ? v : DEFAULT_CHARGE_POWER_KW; };
+const DEFAULT_CHARGE_POWER_KW = 7;                         // alter Standard (Enyaq); heute aus dem Fahrzeugprofil, einstellbar unter Einstellungen
+const chargePowerKw = () => { const v = Number(getSettings().power); return v > 0 ? v : carProf().ac; };
 const LIVE_POLL_MS = 6 * 60 * 1000;                        // Abgleich mit dem Auto alle 6 Minuten (Škoda-Limit: 20 Anfragen/Stunde)
 const LIVE_SPEED = 1;            // 1 = Echtzeit. Zum Testen z. B. 60 setzen (1 Minute entspricht 1 Stunde Laden)
 const KEY_LIVE = 'enyaq.live';
@@ -2423,7 +2461,7 @@ function buildIcs(list) {
   list.filter(r => r.dueDate).forEach(r => {
     const desc = [r.note, r.dueKm ? 'Auch fällig bei ' + fmt(r.dueKm, 0) + ' km.' : '', isRepeating(r) ? 'Intervall: ' + remRepeatText(r).replace(/^wiederholt /, '') + '.' : '', 'Aus der App Enyaq Ladekosten.'].filter(Boolean).join('\n');
     lines.push('BEGIN:VEVENT', 'UID:enyaq-rem-' + r.id + '@enyaq-ladekosten', 'DTSTAMP:' + stamp, 'DTSTART;VALUE=DATE:' + compact(r.dueDate), 'DTEND;VALUE=DATE:' + compact(ymd(addDays(parseYMD(r.dueDate), 1))),
-      'SUMMARY:' + icsEsc('Enyaq: ' + r.title), 'DESCRIPTION:' + icsEsc(desc), 'TRANSP:TRANSPARENT',
+      'SUMMARY:' + icsEsc(carShort() + ': ' + r.title), 'DESCRIPTION:' + icsEsc(desc), 'TRANSP:TRANSPARENT',
       'BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:' + icsEsc(r.title), 'TRIGGER:-P6DT15H', 'END:VALARM',
       'BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:' + icsEsc(r.title), 'TRIGGER:-PT15H', 'END:VALARM', 'END:VEVENT');
   });
@@ -3090,9 +3128,10 @@ $('tc-seg').addEventListener('click', (e) => { const b = e.target.closest('[data
 /* =====================================================================
    Alterung im Vergleich (Berichte → Akku): Aviloo-Benchmark Enyaq iV (FLASH-Tests, n = 20.303), Median-SoH 95,14 % / 92,67 % / 91,04 %
    bei 50.000 / 100.000 / 150.000 km. Bis 50.000 km Potenzkurve (Verlust ∝ km^0,6, früher Abfall), danach linear zwischen den Stützpunkten,
-   über 150.000 km mit der letzten Steigung fortgeschrieben. Eigener SoH = nutzbare kWh (K × η) ÷ Werksangabe 52 kWh netto.
+   über 150.000 km mit der letzten Steigung fortgeschrieben. Eigener SoH = nutzbare kWh (K × η) ÷ Werksangabe netto aus dem Fahrzeugprofil; Garantie ebenso.
+   Benchmark-Kurve nur für den Enyaq iV (Profil av), sonst nur eigene Schätzung + Garantie.
    ===================================================================== */
-const AVILOO = { n: 20303, nom: 52, pts: [[0, 100], [50000, 95.14], [100000, 92.67], [150000, 91.04]], warr: { yrs: 8, km: 160000, soh: 70 } };
+const AVILOO = { n: 20303, pts: [[0, 100], [50000, 95.14], [100000, 92.67], [150000, 91.04]], get nom() { return carProf().net; }, get warr() { const c = carProf(); return { yrs: c.wYrs, km: c.wKm, soh: c.wSoh }; } };
 function avSoh(km) {
   const P = AVILOO.pts; if (!(km > 0)) return 100;
   if (km <= P[1][0]) return 100 - (100 - P[1][1]) * Math.pow(km / P[1][0], 0.6);
@@ -3108,6 +3147,12 @@ function avPoints(rows) {                                                       
 function renderAviloo(rows, fit, ok) {
   const el = $('av-body'); if (!el) return;
   const km = lastKnownKm(), mySoh = ok ? fit.K * BAT.eta / AVILOO.nom * 100 : null, myCi = ok ? fit.ci * BAT.eta / AVILOO.nom * 100 : null, exp = km ? avSoh(km) : null;
+  if (!carProf().av) {                                                          // kein Benchmark für dieses Modell: eigene Schätzung + Garantie
+    const c = carProf(), w = AVILOO.warr;
+    el.innerHTML = `<p class="mt-2 text-sm text-slate-600 dark:text-slate-300 text-left">Für den ${esc(c.name)} gibt es noch keine Vergleichskurve (Aviloo). ${mySoh != null ? 'Dein Akku (Schätzung): <b class="text-emerald-600 dark:text-emerald-400">' + fmt(mySoh, 1) + ' %</b> von ' + fmt(c.net, 1) + ' kWh netto.' : 'Deine eigene Schätzung erscheint, sobald genug Ladungen vorliegen.'}</p>`
+      + `<p class="mt-3 rounded-2xl bg-slate-100 dark:bg-slate-800/70 p-3 text-xs text-slate-600 dark:text-slate-300 text-left"><b class="text-slate-900 dark:text-white">Garantie:</b> ${w.yrs} Jahre bzw. ${fmt(w.km, 0)} km, Mindestkapazität laut Garantiebedingungen (üblich ${w.soh} %).</p>`;
+    return;
+  }
   const pts = avPoints(rows); if (ok && km && !pts.length) pts.push({ km, soh: mySoh, ci: myCi, n: fit.n });
   /* Diagramm (SVG): x 0–160.000 km, y 86–100 % */
   const W = 320, H = 170, L = 34, R = 10, T = 10, B = 26, X = (k) => L + k / 160000 * (W - L - R), Y = (v) => T + (100 - Math.max(86, Math.min(100, v))) / 14 * (H - T - B);
@@ -3128,7 +3173,7 @@ function renderAviloo(rows, fit, ok) {
   const w = AVILOO.warr, atW = avSoh(w.km);
   el.innerHTML = head + svg
     + `<p class="mt-4 text-sm font-medium text-left">Prognose (typischer Verlauf)</p><table class="mt-1 w-full text-sm"><thead><tr class="text-xs text-slate-500 dark:text-slate-400"><th class="text-left font-normal">bei</th><th class="text-right font-normal">SoH</th><th class="text-right font-normal">netto</th><th class="text-right font-normal">Reichweite</th></tr></thead><tbody>${prog}</tbody></table>`
-    + `<p class="mt-3 rounded-2xl bg-slate-100 dark:bg-slate-800/70 p-3 text-xs text-slate-600 dark:text-slate-300 text-left"><b class="text-slate-900 dark:text-white">Garantie:</b> ${w.yrs} Jahre bzw. ${fmt(w.km, 0)} km, Mindestkapazität laut Škoda-Garantiebedingungen (üblich ${w.soh} %). Ein typischer Enyaq liegt bei ${fmt(w.km, 0)} km noch bei etwa ${fmt(atW, 0)} %, also rund ${fmt(atW - w.soh, 0)} Punkte darüber.</p>`
+    + `<p class="mt-3 rounded-2xl bg-slate-100 dark:bg-slate-800/70 p-3 text-xs text-slate-600 dark:text-slate-300 text-left"><b class="text-slate-900 dark:text-white">Garantie:</b> ${w.yrs} Jahre bzw. ${fmt(w.km, 0)} km, Mindestkapazität laut Garantiebedingungen (üblich ${w.soh} %). Ein typischer Enyaq liegt bei ${fmt(w.km, 0)} km noch bei etwa ${fmt(atW, 0)} %, also rund ${fmt(atW - w.soh, 0)} Punkte darüber.</p>`
     + `<p class="mt-2 text-[11px] text-slate-500 dark:text-slate-400 text-left">Benchmark: Aviloo FLASH-Tests, ${fmt(AVILOO.n, 0)} Enyaq iV, Median ${AVILOO.pts.slice(1).map(p => fmt(p[1], 2) + ' % bei ' + fmt(p[0] / 1000, 0) + '.000 km').join(', ')}. Deine Schätzung = nutzbare kWh (η ${Math.round(BAT.eta * 100)} %) ÷ ${AVILOO.nom} kWh Werksangabe und deshalb nur grob vergleichbar. Aussagekräftiger ist, ob deine Punkte über die Jahre der Kurve folgen. Reichweite mit deinem Ø-Verbrauch.</p>`;
 }
 /* Berichte → Akku → mehr: Komfortenergie der laufenden Heizsaison (ab 1. Oktober): Summe, Kosten, je Vorheizen nach Außentemperatur,
@@ -3786,10 +3831,10 @@ $('kb-mg').addEventListener('click', async (e) => {
 $('kb-mg-share').addEventListener('click', async (e) => {
   const kb = getKb(), l = kb.items.filter(x => isMg(x) && mgSt(x) !== 'erledigt').sort((a, b) => String(a.seen || '').localeCompare(String(b.seen || '')));
   let km = null; try { const c = ltmCarKm(); km = c && c.km; } catch (er) { }
-  const t = 'Škoda Enyaq – Mängelliste' + (km ? ' (km ' + fmt(km, 0) + ')' : '') + ', Stand ' + mgDate(wxIso(new Date())) + '\n\n' + l.map((x, i) => [(i + 1) + '. ' + x.title + ' (' + mgArt(x)[2] + (mgSt(x) === 'gemeldet' ? ', bereits gemeldet' : '') + ')',
+  const t = carName() + ' – Mängelliste' + (km ? ' (km ' + fmt(km, 0) + ')' : '') + ', Stand ' + mgDate(wxIso(new Date())) + '\n\n' + l.map((x, i) => [(i + 1) + '. ' + x.title + ' (' + mgArt(x)[2] + (mgSt(x) === 'gemeldet' ? ', bereits gemeldet' : '') + ')',
     '   seit ' + (x.seen ? mgDate(x.seen) : '–') + (x.km ? ' / ' + fmt(x.km, 0) + ' km' : '') + ((x.occ || []).length ? ' · ' + (x.occ.length + 1) + '× aufgetreten' : ''),
     x.text ? '   ' + x.text.replace(/\n+/g, ' ').slice(0, 300) : '', (x.files || []).map(f => '   Foto: ' + dvLink(f.id)).join('\n')].filter(Boolean).join('\n')).join('\n\n');
-  try { if (navigator.share) await navigator.share({ title: 'Mängelliste Enyaq', text: t }); else { await navigator.clipboard.writeText(t); e.target.textContent = 'Kopiert ✓'; setTimeout(() => { e.target.textContent = '📋 Werkstatt-Liste'; }, 1800); } } catch (er) { }
+  try { if (navigator.share) await navigator.share({ title: 'Mängelliste ' + carShort(), text: t }); else { await navigator.clipboard.writeText(t); e.target.textContent = 'Kopiert ✓'; setTimeout(() => { e.target.textContent = '📋 Werkstatt-Liste'; }, 1800); } } catch (er) { }
 });
 $('kb-cancel').addEventListener('click', () => { if (kbCur != null && getKb().items.some(y => String(y.id) === String(kbCur))) openKb(kbCur); else $('kb-dialog').classList.add('hidden'); });
 $('kb-dialog').addEventListener('click', async (e) => {
@@ -4234,8 +4279,8 @@ const bdUnit = (n, one, many) => n + ' <span class="text-xl">' + (n === 1 ? one 
 let bdShown = 0, bdHidden = 0;
 async function showBirthday() {
   const b = bdInfo(); if (!b || !$('wr-ov').classList.contains('hidden')) return;
-  const set = getSettings(), name = (set.model || '').trim() || 'Enyaq';
-  $('bd-name').textContent = name.split(/\s+/)[0] || 'Enyaq';
+  const set = getSettings(), name = (set.model || '').trim() || carProf().short;
+  $('bd-name').textContent = name.split(/\s+/)[0] || carProf().short;
   $('bd-date').textContent = (b.late ? 'Nachträglich · ' : '') + b.day.toLocaleDateString('de-DE', { day: 'numeric', month: 'long', year: 'numeric' });
   save(KEY_BDSEEN, b.key);
   $('bd-own').innerHTML = bdUnit(b.years, 'Jahr', 'Jahre');
@@ -5291,10 +5336,10 @@ async function renderTempChart() {
    z. B. 08.06.–31.12., 01.01.–07.06. bzw. die jeweiligen 5.000 km. Berechnet wird alles aus den vorhandenen Daten; gemerkt wird nur, welche Rückblicke schon gesehen wurden.
    ===================================================================== */
 const WR_KM = 5000, WR_HOUSEHOLD = 1500, WR_F = "font-family:'Barlow Condensed','Arial Narrow',system-ui,sans-serif";   // km je Rückblick; Jahresstrom Single-Haushalt (Richtwert, kWh)
-const wltpVal = () => { const v = Number(getSettings().wltp); return v > 5 && v < 40 ? v : 16; };
+const wltpVal = () => { const v = Number(getSettings().wltp); return v > 5 && v < 40 ? v : carProf().wltp; };
 const wrD = (ms) => { const d = new Date(ms); return String(d.getDate()).padStart(2, '0') + '.' + String(d.getMonth() + 1).padStart(2, '0') + '.'; };
 const wrDY = (ms) => wrD(ms) + new Date(ms).getFullYear();
-const wrTitle = () => ((getSettings().title || DEFAULT_TITLE).split('|')[0].trim() || 'Enyaq') + ' Wrapped';
+const wrTitle = () => ((getSettings().title || DEFAULT_TITLE).split('|')[0].trim() || carShort()) + ' Wrapped';
 /** Vergleichs-Benziner aus Einstellungen → Fahrtenbuch (Standard: 7,0 l/100 km, 1,75 €/l) */
 const cmpCar = () => { const s = getSettings(), l = Number(s.cmpL), e = Number(s.cmpEur), g = Number(s.cmpCo2); return { name: (s.cmpCar || '').trim() || 'ein Benziner', l: l > 1 && l < 30 ? l : 7, eur: e > 0.5 && e < 5 ? e : 1.75, g: g >= 0 && g < 2000 ? g : 0 }; };
 const CO2_L = 2.37;                                                                   // kg CO₂ je Liter Benzin (Verbrennung)
@@ -5458,7 +5503,7 @@ try { renderWrapCard(); } catch (e) { }
    im Dokument enyaqStrom/<uid>/settings/prefs, gleiche Regel wie Anbieter und Kategorien. Die PIN bleibt nur auf dem Gerät.
    Erster Abgleich: Was die Cloud hat, gilt; fehlt dort etwas und ist lokal vorhanden, wird es hochgeladen. Danach gilt die Cloud (Änderung auf einem Gerät wirkt auf allen).
    ===================================================================== */
-const SYNC_SET_KEYS = ['title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAcKwh', 'certDcKwh', 'certKm', 'wltpNet', 'ccEnd', 'wxoCut', 'dashFirst', 'carN', 'carSec', 'wxIcons', 'nRep', 'nTrips', 'nBakYm', 'nBakAt', 'nBakSnz', 'gtMirror', 'gtList', 'iceDep', 'iceWe', 'icePark', 'iceMin', 'iceK', 'cmpCar', 'cmpL', 'cmpEur', 'cmpCo2'];
+const SYNC_SET_KEYS = ['title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAcKwh', 'certDcKwh', 'certKm', 'wltpNet', 'ccEnd', 'wxoCut', 'dashFirst', 'car', 'carT', 'carN', 'carSec', 'wxIcons', 'nRep', 'nTrips', 'nBakYm', 'nBakAt', 'nBakSnz', 'gtMirror', 'gtList', 'iceDep', 'iceWe', 'icePark', 'iceMin', 'iceK', 'cmpCar', 'cmpL', 'cmpEur', 'cmpCo2'];
 /** Einstellungen für die Cloud: feste Reihenfolge, ohne leere Werte (Firestore verbietet undefined). null = nichts vorhanden. */
 function syncSet(src) {
   const o = {}; if (src && typeof src === 'object') SYNC_SET_KEYS.forEach(k => { const v = src[k]; if (v != null && v !== '' && !(typeof v === 'number' && !isFinite(v))) o[k] = v; });
@@ -6722,7 +6767,7 @@ async function hpField(which) {
 let ltEdit = null;
 function ltApp() { try { const rs = getReadings(); if (!rs.length) return null; const t = consumptionTotals(rs, rs.map((_, i) => i)); return t && t.km >= 100 ? t.kwh100 : null; } catch (e) { return null; } }
 /** WLTP ohne Ladeverluste: eigener Wert aus den Einstellungen, sonst WLTP − 8 % (geschätzt) */
-function wltpNet() { const s = getSettings(), n = Number(s.wltpNet); if (n > 0) return { v: n, est: false }; const w = Number(s.wltp) > 0 ? Number(s.wltp) : 16; return { v: Math.round(w * 0.92 * 10) / 10, est: true }; }
+function wltpNet() { const s = getSettings(), n = Number(s.wltpNet); if (n > 0) return { v: n, est: false }; const w = Number(s.wltp) > 0 ? Number(s.wltp) : carProf(s).wltp; return { v: Math.round(w * 0.92 * 10) / 10, est: true }; }
 function ltSvg(es, app, wl) {
   const W = 296, H = 124, L = 32, R = 12, T = 16, B = 20, t0 = Date.parse(es[0].date), t1 = Date.parse(es[es.length - 1].date), span = Math.max(1, t1 - t0);
   const vs = es.map(e => e.k100).concat(app != null ? [app] : [], wl != null ? [wl] : []); let y0 = Math.floor(Math.min(...vs) - 0.6), y1 = Math.ceil(Math.max(...vs) + 0.6); if (y1 - y0 < 2) y1 = y0 + 2;
@@ -7553,7 +7598,7 @@ $('rec-sheet').addEventListener('click', (e) => {
    Rekuperation), Anfahren/Bremsen nach Tempo, Nebenverbraucher, Heizung/Klima + kalter Akku, Nässe (mehr Rollwiderstand).
    Persönlicher Faktor: lernt aus den selbst eingetragenen Realwerten gemerkter Fahrten (lab.fc), neue Fahrten zählen mehr (Halbwertszeit 180 Tage).
    ===================================================================== */
-const RT_P = { m: 2050, crr: 0.0095, cw: 0.257, A: 2.56, eta: 0.87, rec: 0.65, aux: 0.35, mp: 75 };
+const rtPhys = () => { const c = carProf(); return { m: c.m, crr: c.crr, cw: c.cw, A: c.A, eta: c.eta, rec: c.rec, aux: c.aux, mp: 75 }; };   // aus dem Fahrzeugprofil
 const RT = { a: null, b: null, res: null, busy: false, err: '', tab: 'plan', n: 0, route: {}, wx: {}, sugN: 0, sugT: 0, sug: {} };
 const KEY_RT = 'enyaq.rtLast';
 const rtFmtP = (v) => (v >= 0.05 ? '+' : v <= -0.05 ? '−' : '±') + fmt(Math.abs(v), 1) + ' %';
@@ -7610,7 +7655,7 @@ function rtFog(w, pers) {
 }
 const RT_STANDBY = 0.05;                                                          // kW Ruhestrom beim Parken am Ziel (Hin & zurück; zählt im Akkustand mit)
 function rtCalc(legs, o) {
-  const m = RT_P.m + RT_P.mp * (o.pers - 1), g = 9.81, cap = batteryKwh(), f = 1 + o.tempo / 100, J = 3.6e6;
+  const RT_P = rtPhys(), m = RT_P.m + RT_P.mp * (o.pers - 1), g = 9.81, cap = batteryKwh(), f = 1 + o.tempo / 100, J = 3.6e6;
   const bat = (x) => x > 0 ? x / RT_P.eta : x * RT_P.rec;
   let t = 0, E = { base: 0, slope: 0, wind: 0, rain: 0, heat: 0 }, cum = [0], Ts = [], rainKm = 0, hwSum = 0, noWx = false, h = [], turn = null, durDrive = 0, d0 = 0, pts = [], dkm = [], tt = [], dk = 0, fogE = [];
   legs.forEach((lg, li) => {
