@@ -2223,6 +2223,7 @@ async function authHeaders() {                                                  
   return { Authorization: 'Bearer ' + t };
 }
 function renderVehicleStatus() {
+  paintUserBoxes();                                                              // „· Škoda-API verbunden“ in den Konto-Zeilen
   const el = $('vehicle-status'); if (!el) return;
   el.textContent = !window.cloud?.isSignedIn?.() ? '' : vehicle.ok
     ? 'Škoda-API verbunden' + (keyExpiry() ? ' · Schlüssel gültig bis ' + new Date(keyExpiry() + 'T12:00:00').toLocaleDateString('de-DE') : '')
@@ -5469,7 +5470,10 @@ window.onCloudStatus = (s) => {
   else if (cloudEmail) { el.textContent = 'Angemeldet als ' + cloudEmail + ' – Synchronisation aktiv.' + (s?.note ? ' ' + s.note + '.' : ''); el.className = 'text-sm text-emerald-700 dark:text-emerald-400'; }
   else { el.textContent = 'Nicht angemeldet – Daten nur auf diesem Gerät.'; el.className = 'text-sm text-slate-500 dark:text-slate-400'; }
   btn.textContent = cloudEmail ? 'Abmelden' : 'Mit Google anmelden';
+  paintUserBoxes();
 };
+/* Anmeldung kommt erst nach dem Start (Firebase): Konto-Zeilen in Schnellmenü und Einstellungs-Menü dann nachziehen – sonst bleibt am PC „Nicht angemeldet“ stehen */
+function paintUserBoxes() { try { renderNavUser(); } catch (e) { } try { renderDrawerUser(); } catch (e) { } }
 $('btn-help').addEventListener('click', () => $('help-dialog').classList.remove('hidden'));
 $('help-close').addEventListener('click', () => $('help-dialog').classList.add('hidden'));
 $('help-dialog').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden'); });   // Tippen neben das Fenster schließt
@@ -7767,11 +7771,15 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('set-d
 
 /* ---- Schnellmenü auf Start („☰“ links neben dem Titel oder vom linken Rand nach rechts wischen): alle wichtigen Seiten und Reiter mit einem Tipp ---- */
 function navOpen() { return $('nav-drawer').getAttribute('aria-hidden') === 'false'; }
-function openNavDrawer() {
+/** Konto-Zeile unten im Schnellmenü (am PC dauerhaft sichtbar) – wird auch bei jeder Änderung der Anmeldung neu gezeichnet */
+function renderNavUser() {
   try { const u = window.cloud?.userInfo?.(), av = $('nav-avatar'); $('nav-name').textContent = u ? (u.name || u.email || 'Angemeldet') : 'Nicht angemeldet';
     $('nav-sub').textContent = u ? 'Cloud ✓' + (typeof apiEnabled === 'function' && apiEnabled() ? ' · Škoda-API verbunden' : '') : 'Konto & Cloud – antippen zum Anmelden';
     const ini = u ? (u.name || u.email || '?').split(/[\s@.]+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('') : '?';
     av.innerHTML = u && u.photo ? '<img src="' + esc(u.photo) + '" alt="" referrerpolicy="no-referrer" class="h-full w-full object-cover">' : esc(ini); } catch (e) { }
+}
+function openNavDrawer() {
+  renderNavUser();
   const n = Number(($('bell-badge')?.textContent || '').replace(/\D/g, '')) || 0, rb = $('nav-rem-n'); rb.textContent = n; rb.classList.toggle('hidden', !(n > 0 && !$('bell-badge').classList.contains('hidden')));
   let due = false; try { const lim = new Date(); lim.setMonth(lim.getMonth() + 2); due = chDue().some(x => x.d <= lim); } catch (e) { } $('nav-ch-dot').classList.toggle('hidden', !due);   // HU/Service in den nächsten 2 Monaten oder überfällig
   const d = $('nav-drawer'); d.classList.remove('pointer-events-none'); d.setAttribute('aria-hidden', 'false'); $('btn-nav').setAttribute('aria-expanded', 'true');
