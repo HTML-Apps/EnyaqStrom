@@ -8,3 +8,4 @@
 - `CACHE_VERSION` in `sw.js` bei jeder Auslieferung erhöhen.
 - Karussell-Bilder auf Start: vorab aufbereitet in `Bilder/hero/` (weißer Rand entfernt, zugeschnitten, WebP 1100 px).
   Werte `aspect`/`extra` stehen in `HERO_IMGS` in `index.html`. Bei neuen Bildern beides neu erzeugen; Bild 1 steht zusätzlich direkt im HTML und wird vorgeladen.
+- Maßbilder (Enyaq7–9, Originale in `Bilder/`): mit `python3 tools/hero_masse.py` freistellen und Bemaßung hell umfärben → `Bilder/hero/7–9.webp`.

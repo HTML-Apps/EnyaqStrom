@@ -214,7 +214,7 @@
       </button>
       <div id="hero-car" class="relative -mx-3 mt-3 h-[clamp(230px,64vw,340px)]">
         <div id="veh-card" class="hidden" aria-label="Fahrzeugstatus"></div>
-        <div id="car-scroll" class="absolute inset-0 overflow-hidden select-none touch-pan-y focus:outline-none transition-opacity duration-500" tabindex="0" role="group" aria-roledescription="Karussell" aria-label="Bilder vom Enyaq, nach links oder rechts wischen zum Wechseln"><div class="car-slide absolute inset-0 pointer-events-none" style="opacity:1;transition:opacity .45s ease-in-out;will-change:opacity"><img src="/Bilder/hero/1.webp" width="880" height="512" fetchpriority="high" alt="Skoda Enyaq, Bild 1 von 7" draggable="false" class="absolute inset-x-4 top-0 bottom-2.5 w-[calc(100%-2rem)] h-[calc(100%-0.625rem)] object-contain object-bottom"></div></div>
+        <div id="car-scroll" class="absolute inset-0 overflow-hidden select-none touch-pan-y focus:outline-none transition-opacity duration-500" tabindex="0" role="group" aria-roledescription="Karussell" aria-label="Bilder vom Enyaq, nach links oder rechts wischen zum Wechseln"><div class="car-slide absolute inset-0 pointer-events-none" style="opacity:1;transition:opacity .45s ease-in-out;will-change:opacity"><img src="/Bilder/hero/1.webp" width="880" height="512" fetchpriority="high" alt="Skoda Enyaq, Bild 1 von 9" draggable="false" class="absolute inset-x-4 top-0 bottom-2.5 w-[calc(100%-2rem)] h-[calc(100%-0.625rem)] object-contain object-bottom"></div></div>
         <div id="car-live" class="absolute inset-0 flex items-end justify-center opacity-0 pointer-events-none transition-opacity duration-500" aria-hidden="true"><img src="/Bilder/Enyaq_live.webp" alt="Enyaq lädt" width="1074" height="584" decoding="async" draggable="false" class="max-h-full w-full object-contain object-bottom select-none"></div>
       </div>
       <script>/* Am PC: Platz für „Fahrzeugstatus“ sofort freihalten, wenn es Fahrzeugdaten gibt – sonst steht das Auto erst mittig und rückt dann nach links (gleiche Bedingung wie renderVehCard) */
@@ -4467,7 +4467,8 @@ const CAR_NAMES = [1, 2, '_4', 3, 4, 5], CAR_DOTS = 3;
 const HERO_IMGS = [{ name: 1, src: '/Bilder/hero/1.webp', aspect: 1.7188, extra: 0.043 }, { name: 2, src: '/Bilder/hero/2.webp', aspect: 1.5625, extra: 0.0665 },
   { name: '_4', src: '/Bilder/hero/akku.webp', aspect: 1.2966, extra: 0.098, cut: true }, { name: 3, src: '/Bilder/hero/3.webp', aspect: 1.8134, extra: 0.0631 },
   { name: 4, src: '/Bilder/hero/4.webp', aspect: 1.1614, extra: 0.0053, tech: true }, { name: 5, src: '/Bilder/hero/5.webp', aspect: 2.3392, extra: 0.0058, tech: true },
-  { name: 'schnitt', src: '/Bilder/hero/schnitt.webp', aspect: 1.9696, extra: 0, cut: true }];   // Schnittbild mit Maßen: Bemaßung hell umgefärbt, Auto freigestellt (volle Breite, zum Lesen antippen → Vollbild)
+  { name: 7, src: '/Bilder/hero/7.webp', aspect: 1.9696, extra: 0, cut: true }, { name: 8, src: '/Bilder/hero/8.webp', aspect: 2.3983, extra: 0, cut: true },
+  { name: 9, src: '/Bilder/hero/9.webp', aspect: 2.067, extra: 0, cut: true }];   // Schnittbild mit Maßen: Bemaßung hell umgefärbt, Auto freigestellt (volle Breite, zum Lesen antippen → Vollbild)
 const carAutoN = () => { const v = Number(getSettings().carN); return Number.isInteger(v) && v >= 1 && v <= 6 ? v : 6; };            // Einstellung: so viele Bilder wechseln automatisch
 const carAutoMs = () => { const v = Number(getSettings().carSec); return (Number.isFinite(v) && v >= 5 && v <= 600 ? v : 30) * 1000; };   // Bilder/Enyaq1, 2, _4 (Akku-Schnitt), 3, 4, 5 (unten bleiben 3 Punkte als Deko); automatischer Wechsel alle 30 Sekunden
 async function initCarousel() {
