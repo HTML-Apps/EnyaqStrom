@@ -395,6 +395,8 @@
     <div id="trends" class="flex snap-x snap-mandatory gap-4 overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-roledescription="Karussell" aria-label="Trends der letzten 8 Monate"></div>
     <div id="trends-dots" class="!mt-2 flex justify-center gap-2 cursor-pointer" aria-hidden="true"></div>
     <div id="hero-bg" aria-hidden="true" class="absolute -top-3 -inset-x-3 -z-10 h-[620px] pointer-events-none !mt-0" style="background:radial-gradient(ellipse 72% 190px at 50% 190px,rgba(80,150,255,.40),rgba(80,150,255,0) 70%),linear-gradient(180deg,#000 0,#000 28px,#030b24 70px,#061a52 160px,#0b2f8a 280px,#0a2466 370px,#050f2e 470px,#000 600px)"></div>
+    <script>/* Eigenes Farbthema sofort beim Aufbau der Seite setzen (sonst blitzt kurz das blaue Standard-Thema auf); den Wert legt applyHeroColor() ab */
+      try { var hb = localStorage.getItem('enyaq.heroBgCss'); if (hb) document.getElementById('hero-bg').style.background = hb; } catch (e) { }</script>
   </section>
 
   <!-- ============ VIEW 2: ERFASSEN ============ -->
@@ -4627,7 +4629,8 @@ function heroCustomTheme(hex) {
 function applyHeroColor() {
   const k = heroThemeKey(), t = k === 'custom' ? heroCustomTheme(heroCustomHex()) : HERO_THEMES[k], bg = $('hero-bg');
   const cs = $('hero-custom-sw'); if (cs) { const c = heroCustomHex(); cs.style.background = c ? 'linear-gradient(180deg,#000 0%,' + heroCustomTheme(c).mid + ' 55%,#000 100%)' : 'conic-gradient(from 90deg,#ef4444,#f59e0b,#10b981,#0ea5e9,#8b5cf6,#ef4444)'; }
-  if (bg) bg.style.background = 'radial-gradient(ellipse 72% 190px at 50% 190px,' + t.glow + ',' + t.glow0 + ' 70%),linear-gradient(180deg,' + t.stops + ')';
+  const css = 'radial-gradient(ellipse 72% 190px at 50% 190px,' + t.glow + ',' + t.glow0 + ' 70%),linear-gradient(180deg,' + t.stops + ')';
+  if (bg) bg.style.background = css; try { localStorage.setItem('enyaq.heroBgCss', css); } catch (e) { }   // für den nächsten Start (Skript direkt nach #hero-bg)
   document.querySelectorAll('[data-hero]').forEach(b => { const on = b.dataset.hero === k; b.setAttribute('aria-pressed', String(on)); b.classList.toggle('ring-2', on); b.classList.toggle('ring-emerald-500', on); b.classList.toggle('ring-offset-2', on); });
 }
 $('hero-swatches').innerHTML = Object.entries(HERO_THEMES).map(([k, t]) => `<button type="button" data-hero="${k}" aria-pressed="false" class="flex flex-col items-center gap-1.5 rounded-xl ring-offset-white dark:ring-offset-black active:scale-95 transition"><span class="block h-12 w-full rounded-xl border border-slate-300 dark:border-slate-700" style="background:linear-gradient(180deg,#000 0%,${t.mid} 55%,#000 100%)"></span><span class="text-xs text-slate-600 dark:text-slate-300">${t.label}</span></button>`).join('')
