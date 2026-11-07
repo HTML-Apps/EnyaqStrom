@@ -686,6 +686,7 @@
     <div id="kb-mg-bar" class="hidden flex items-center justify-between gap-2 px-1 text-xs"><span id="kb-mg-sum" class="text-slate-500 dark:text-slate-400"></span><button id="kb-mg-share" type="button" class="shrink-0 font-semibold text-sky-600 dark:text-sky-300">📋 Werkstatt-Liste</button></div>
     <div id="kb-pin-wrap" class="hidden"><p class="mb-1.5 px-1 text-[11px] uppercase tracking-wider text-slate-500">Angeheftet</p><div id="kb-pins" class="grid grid-cols-2 gap-2"></div></div>
     <div id="kb-list-wrap"><p class="mb-1.5 px-1 text-[11px] uppercase tracking-wider text-slate-500">Alle Einträge</p><ul id="kb-list" class="rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm divide-y divide-slate-200 dark:divide-slate-800 overflow-hidden"></ul></div>
+    <button id="kb-up-start" type="button" class="hidden w-full rounded-2xl bg-sky-600 py-3 text-sm font-semibold text-white active:scale-95 transition">🏁 Aktuelle Version eintragen</button>
     <p id="kb-empty" class="hidden px-1 py-6 text-center text-sm text-slate-500 dark:text-slate-400">Noch nichts gespeichert. Lege mit „+ Neu“ zum Beispiel den Link zum Handbuch, Reifendruck-Werte oder die Nummer deiner Werkstatt an.</p>
   </section>
 
@@ -1645,6 +1646,13 @@
       <p id="kb-edit-h" class="font-semibold">Neuer Eintrag</p>
       <div><label for="kb-title" class="text-xs text-slate-500 dark:text-slate-400">Titel</label><input id="kb-title" type="text" maxlength="80" autocomplete="off" placeholder="z. B. Bedienungsanleitung" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
       <div><label for="kb-cat" class="text-xs text-slate-500 dark:text-slate-400">Kategorie</label><select id="kb-cat" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></select></div>
+      <div id="kb-up" class="hidden space-y-2.5 rounded-2xl bg-sky-50 dark:bg-sky-950/30 p-3">
+        <div class="grid grid-cols-2 gap-2"><div class="min-w-0"><label for="kb-up-ver" class="flex h-5 items-center text-xs text-slate-500 dark:text-slate-400">Version</label><input id="kb-up-ver" type="text" maxlength="24" autocomplete="off" placeholder="z. B. 3.7" class="h-[46px] mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
+          <div class="min-w-0"><p class="flex h-5 items-center text-xs text-slate-500 dark:text-slate-400">Wie</p><div id="kb-up-how" class="mt-1 grid h-[46px] grid-cols-2 gap-1.5 text-sm font-medium"></div></div></div>
+        <div class="grid grid-cols-2 gap-2"><div class="min-w-0"><label for="kb-up-date" class="flex h-5 items-center text-xs text-slate-500 dark:text-slate-400">Installiert am</label><input id="kb-up-date" type="date" class="h-[46px] mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
+          <div class="min-w-0"><label for="kb-up-km" class="flex h-5 items-center gap-1 text-xs text-slate-500 dark:text-slate-400">km-Stand <button id="kb-up-kmf" type="button" title="km-Stand vom Auto holen" aria-label="km-Stand vom Auto holen" class="leading-none text-emerald-600 dark:text-emerald-400">↻</button></label><input id="kb-up-km" type="text" inputmode="numeric" autocomplete="off" placeholder="–" class="h-[46px] mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div></div>
+        <label class="flex items-start gap-2 text-sm"><input id="kb-up-base" type="checkbox" class="mt-0.5 h-4 w-4 accent-sky-600"><span>Ausgangsstand <span class="block text-xs text-slate-500 dark:text-slate-400">Version, die schon drauf war, als du mit der Aufzeichnung begonnen hast – kein Vergleich</span></span></label>
+      </div>
       <div id="kb-mg" class="hidden space-y-2.5 rounded-2xl bg-rose-50 dark:bg-rose-950/30 p-3">
         <div><p class="text-xs text-slate-500 dark:text-slate-400">Status</p><div id="kb-mg-st" class="mt-1 grid grid-cols-3 gap-1.5 text-sm font-medium"></div></div>
         <div><p class="text-xs text-slate-500 dark:text-slate-400">Art</p><div id="kb-mg-art" class="mt-1 flex flex-wrap gap-1.5 text-xs font-medium"></div></div>
@@ -3049,6 +3057,9 @@ function renderTrends() {
         <div class="min-w-0 flex-1 flex flex-col">
           <div class="relative flex-1 min-h-[150px] flex items-end gap-1">
             ${avg > 0 ? `<div class="absolute inset-x-0 border-t-2 border-dashed border-emerald-500/70 pointer-events-none" style="bottom:${hp(avg).toFixed(1)}%" title="Durchschnitt ${num(avg)} ${d.unit}"></div>` : ''}
+            ${d.key === 'eff' ? (() => { try { return upList().filter(u => !u.base).map(u => { const t = new Date(u.inst + 'T12:00:00'), i = vals.findIndex(v => v.y === t.getFullYear() && v.m === t.getMonth()); if (i < 0) return '';
+              const left = (i + (t.getDate() - 1) / new Date(t.getFullYear(), t.getMonth() + 1, 0).getDate()) / vals.length * 100;
+              return `<button type="button" data-upmark="${esc(String(u.id))}" class="absolute top-0 bottom-0 z-10 w-4 -translate-x-1/2" style="left:${left.toFixed(1)}%" title="Software ${esc(u.ver || '')} – Vorher/Nachher"><span class="absolute inset-y-0 left-1/2 border-l-2 border-dashed border-sky-400"></span><span class="absolute bottom-1 ${left > 60 ? 'right-1/2 mr-0.5' : 'left-1/2 ml-0.5'} whitespace-nowrap rounded-md bg-white/90 dark:bg-slate-900/90 px-1 text-[10px] font-semibold text-sky-600 dark:text-sky-300">📡 ${esc(u.ver || '')}</span></button>`; }).join(''); } catch (e) { return ''; } })() : ''}
             ${vals.map(x => `<div class="relative flex-1 h-full flex items-end" title="${MONTHS_LONG[x.m]} ${x.y}: ${num(x.v)} ${d.unit}${x.cur ? ' (Zwischenstand)' : ''}"><div class="relative w-full rounded-t ${x.cur ? 'bg-emerald-300/80 dark:bg-emerald-300/70' : 'bg-emerald-600 dark:bg-emerald-500/80'}" style="height:${x.v > 0 ? Math.max(3, hp(x.v)).toFixed(1) : 1.5}%">${x.v > 0 ? `<span class="absolute inset-x-[-4px] bottom-full mb-0.5 text-center text-[10px] font-semibold leading-none tabular-nums text-slate-600 dark:text-slate-300">${x.v >= 1000 ? fmt(x.v / 1000, 1) + 'k' : fmt(x.v, d.key === 'eff' ? 1 : 0)}</span>` : ''}</div></div>`).join('')}
           </div>
           <div class="mt-1.5 flex gap-1 text-[10px] text-slate-500 dark:text-slate-400">${vals.map(x => `<span class="flex-1 text-center">${MONTHS[x.m]}</span>`).join('')}</div>
@@ -3075,6 +3086,7 @@ function mouseSwipe(tr, gap) {
   tr.addEventListener('dragstart', (e) => e.preventDefault());
 }
 mouseSwipe($('trends'), 16);
+$('trends').addEventListener('click', (e) => { const b = e.target.closest('[data-upmark]'); if (b) { e.stopPropagation(); openKb(b.dataset.upmark); } });
 $('trends-dots').addEventListener('click', (e) => { const d = e.target.closest('[data-tdot]'); if (!d) return; const box = $('trends'); box.scrollTo({ left: Number(d.dataset.tdot) * (box.firstElementChild.offsetWidth + 16), behavior: 'smooth' }); });
 $('trends').addEventListener('scroll', () => {
   const box = $('trends'), w = box.firstElementChild ? box.firstElementChild.offsetWidth + 16 : 1, i = Math.round(box.scrollLeft / w);
@@ -5294,7 +5306,16 @@ $('go-prov').addEventListener('click', () => showView('providers'));
    Speicher: enyaq.kb = { cats: [Name], items: [{ id, title, cat, text?, links?: [{ url, label? }], files?: [{ id, name, mime }], pin?, at }] }
    Cloud: im Dokument settings/prefs (Feld kb), Datensicherung: Feld kb.
    ===================================================================== */
-const KEY_KB = 'enyaq.kb', KB_MG = 'Mängel', KB_DEF_CATS = ['Mängel', 'Handbuch', 'Tipps', 'Werkstatt', 'Verträge', 'Sonstiges'];
+const KEY_KB = 'enyaq.kb', KB_MG = 'Mängel', KB_UP = 'Updates', KB_DEF_CATS = ['Mängel', 'Updates', 'Handbuch', 'Tipps', 'Werkstatt', 'Verträge', 'Sonstiges'];
+/* Software-Updates = feste Wissen-Kategorie „Updates“: ver, how 'ota'|'werkstatt', inst 'JJJJ-MM-TT', km, base (Ausgangsstand, kein Vergleich), done (Auswertung gemeldet).
+   Vergleich je 30 Tage vor/nach der Installation (vorher höchstens bis zum vorigen Update). */
+const UP_DAYS = 30, isUp = (x) => x && x.cat === KB_UP;
+const upList = (kb) => (kb || getKb()).items.filter(x => isUp(x) && x.inst).sort((a, b) => a.inst.localeCompare(b.inst));
+const upCur = (kb) => { const l = upList(kb); return l.length ? l[l.length - 1] : null; };
+const upAge = (x) => Math.floor((Date.now() - Date.parse(x.inst + 'T00:00:00')) / 864e5);
+const upTag = (x) => { const [t, c] = x.base ? ['Ausgangsstand', 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200'] : upAge(x) < UP_DAYS ? ['Vergleich läuft', 'bg-sky-100 text-sky-800 dark:bg-sky-900/60 dark:text-sky-200'] : ['✓ ausgewertet', 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-200']; return `<span class="shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${c}">${t}</span>`; };
+const upIcon = (x) => x.base ? '🏁' : x.how === 'werkstatt' ? '🔧' : '📡';
+const upMeta = (x) => [x.inst ? mgDate(x.inst) : '', x.km ? fmt(x.km, 0) + ' km' : '', x.base ? '' : x.how === 'werkstatt' ? 'Werkstatt' : 'OTA'].filter(Boolean).join(' · ');
 /* Mängel-Tagebuch = feste Wissen-Kategorie „Mängel“. Zusatzfelder je Eintrag: st 'offen'|'gemeldet'|'erledigt', art (Art des Mangels), seen 'JJJJ-MM-TT', km, occ [ISO] (wieder aufgetreten). */
 const MG_ST = { offen: ['offen', 'bg-rose-100 text-rose-700 dark:bg-rose-900/60 dark:text-rose-200'], gemeldet: ['gemeldet', 'bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200'], erledigt: ['erledigt', 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-200'] };
 const MG_ART = [['geraeusch', '🔊', 'Geräusch'], ['software', '💻', 'Software'], ['elektrik', '⚡', 'Elektrik'], ['karosserie', '🚪', 'Karosserie'], ['laden', '🔌', 'Laden'], ['sonst', '🛠️', 'Sonstiges']];
@@ -5303,9 +5324,9 @@ const mgTag = (x) => `<span class="shrink-0 rounded-md px-1.5 py-0.5 text-[11px]
 const mgDate = (d) => d ? new Date(d.length === 10 ? d + 'T12:00:00' : d).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
 const mgMeta = (x) => [x.seen ? 'seit ' + mgDate(x.seen).slice(0, 6) : '', x.km ? fmt(x.km, 0) + ' km' : '', x.files && x.files.length ? '📷 ' + x.files.length : '', (x.occ || []).length ? (x.occ.length + 1) + '× aufgetreten' : ''].filter(Boolean).join(' · ') || MG_ART.find(a => a[0] === x.art)?.[2] || KB_MG;
 const mgOpen = (kb) => kb.items.filter(x => isMg(x) && mgSt(x) === 'offen').length;
-const KB_ICON = (c) => c === KB_MG ? '🛠️' : /hand|anleit|manual/i.test(c) ? '📘' : /tipp|trick|info/i.test(c) ? '💡' : /werk|service|wart/i.test(c) ? '🔧' : /vertr|versich|doku|unterl/i.test(c) ? '📄' : /lade|strom|wallbox/i.test(c) ? '⚡' : /kontakt|tel/i.test(c) ? '📞' : '🗂️';
-const KB_TINT = (c) => c === KB_MG ? 'bg-rose-100 dark:bg-rose-600/25' : ({ '📘': 'bg-sky-100 dark:bg-sky-600/25', '💡': 'bg-amber-100 dark:bg-amber-600/25', '🔧': 'bg-violet-100 dark:bg-violet-600/25', '📄': 'bg-emerald-100 dark:bg-emerald-600/25', '⚡': 'bg-lime-100 dark:bg-lime-600/25', '📞': 'bg-rose-100 dark:bg-rose-600/25' }[KB_ICON(c)] || 'bg-slate-100 dark:bg-slate-700/60');
-function getKb() { const o = load(KEY_KB, null), cats = o && Array.isArray(o.cats) && o.cats.length ? o.cats.slice() : KB_DEF_CATS.slice(); if (!cats.includes(KB_MG)) cats.unshift(KB_MG);   // „Mängel“ ist fest dabei
+const KB_ICON = (c) => c === KB_MG ? '🛠️' : c === KB_UP ? '🔄' : /hand|anleit|manual/i.test(c) ? '📘' : /tipp|trick|info/i.test(c) ? '💡' : /werk|service|wart/i.test(c) ? '🔧' : /vertr|versich|doku|unterl/i.test(c) ? '📄' : /lade|strom|wallbox/i.test(c) ? '⚡' : /kontakt|tel/i.test(c) ? '📞' : '🗂️';
+const KB_TINT = (c) => c === KB_MG ? 'bg-rose-100 dark:bg-rose-600/25' : c === KB_UP ? 'bg-sky-100 dark:bg-sky-600/25' : ({ '📘': 'bg-sky-100 dark:bg-sky-600/25', '💡': 'bg-amber-100 dark:bg-amber-600/25', '🔧': 'bg-violet-100 dark:bg-violet-600/25', '📄': 'bg-emerald-100 dark:bg-emerald-600/25', '⚡': 'bg-lime-100 dark:bg-lime-600/25', '📞': 'bg-rose-100 dark:bg-rose-600/25' }[KB_ICON(c)] || 'bg-slate-100 dark:bg-slate-700/60');
+function getKb() { const o = load(KEY_KB, null), cats = o && Array.isArray(o.cats) && o.cats.length ? o.cats.slice() : KB_DEF_CATS.slice(); if (!cats.includes(KB_UP)) cats.unshift(KB_UP); if (!cats.includes(KB_MG)) cats.unshift(KB_MG);   // „Mängel“ und „Updates“ sind fest dabei
   return { cats, items: o && Array.isArray(o.items) ? o.items : [] }; }
 function setKb(o) { save(KEY_KB, JSON.parse(JSON.stringify(o))); pushPrefs(); renderKbStart(); if (currentView === 'kb') renderKb(); }
 let kbCat = '', kbCur = null, kbPend = [];
@@ -5314,14 +5335,16 @@ function renderKb() {
   const kb = getKb(), q = $('kb-q').value.trim().toLowerCase();
   const n = (c) => kb.items.filter(x => x.cat === c).length;
   const nOpen = mgOpen(kb);
-  $('kb-cats').innerHTML = [['', 'Alle ' + kb.items.length]].concat(kb.cats.filter(c => n(c) || c === KB_MG).map(c => [c, KB_ICON(c) + ' ' + c + (c === KB_MG ? '' : ' ' + n(c))]))
+  $('kb-cats').innerHTML = [['', 'Alle ' + kb.items.length]].concat(kb.cats.filter(c => n(c) || c === KB_MG || c === KB_UP).map(c => [c, KB_ICON(c) + ' ' + c + (c === KB_MG || !n(c) ? '' : ' ' + n(c))]))
     .map(([k, l]) => `<button type="button" data-kbc="${esc(k)}" class="shrink-0 rounded-lg px-2.5 py-1.5 ${k === kbCat ? 'bg-emerald-600/20 text-emerald-700 dark:text-emerald-300 font-semibold' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300'}">${esc(l)}${k === KB_MG && nOpen ? ` <span class="ml-0.5 rounded-md bg-rose-600 px-1.5 text-[10px] font-bold text-white">${nOpen}</span>` : ''}</button>`).join('');
   const mgs = kb.items.filter(isMg), cnt = (st) => mgs.filter(x => mgSt(x) === st).length;
-  $('kb-mg-bar').classList.toggle('hidden', kbCat !== KB_MG);
-  $('kb-mg-sum').textContent = mgs.length ? cnt('offen') + ' offen · ' + cnt('gemeldet') + ' gemeldet · ' + cnt('erledigt') + ' erledigt' : 'Noch keine Mängel notiert';
-  $('kb-mg-share').classList.toggle('hidden', !(cnt('offen') + cnt('gemeldet')));
+  const uc = upCur(kb);
+  $('kb-mg-bar').classList.toggle('hidden', kbCat !== KB_MG && !(kbCat === KB_UP && uc));
+  $('kb-mg-sum').innerHTML = kbCat === KB_UP ? (uc ? 'Aktuell: <b class="text-slate-800 dark:text-slate-100">' + esc(uc.ver || '?') + '</b> seit ' + mgDate(uc.inst) : '') : esc(mgs.length ? cnt('offen') + ' offen · ' + cnt('gemeldet') + ' gemeldet · ' + cnt('erledigt') + ' erledigt' : 'Noch keine Mängel notiert');
+  $('kb-mg-share').classList.toggle('hidden', kbCat !== KB_MG || !(cnt('offen') + cnt('gemeldet')));
+  $('kb-up-start').classList.toggle('hidden', !(kbCat === KB_UP && !uc));
   const hit = (x) => (!kbCat || x.cat === kbCat) && (!q || [x.title, x.text, x.cat].concat((x.links || []).map(l => l.url + ' ' + (l.label || ''))).join(' ').toLowerCase().includes(q));
-  const ord = { offen: 0, gemeldet: 1, erledigt: 2 }, list = kb.items.filter(hit).sort((a, b) => kbCat === KB_MG ? (ord[mgSt(a)] - ord[mgSt(b)]) || String(b.seen || b.at || '').localeCompare(String(a.seen || a.at || '')) : a.title.localeCompare(b.title, 'de')), pins = list.filter(x => x.pin), rest = list.filter(x => !x.pin);
+  const ord = { offen: 0, gemeldet: 1, erledigt: 2 }, list = kb.items.filter(hit).sort((a, b) => kbCat === KB_MG ? (ord[mgSt(a)] - ord[mgSt(b)]) || String(b.seen || b.at || '').localeCompare(String(a.seen || a.at || '')) : kbCat === KB_UP ? String(b.inst || '').localeCompare(String(a.inst || '')) : a.title.localeCompare(b.title, 'de')), pins = list.filter(x => x.pin), rest = list.filter(x => !x.pin);
   $('kb-pin-wrap').classList.toggle('hidden', !pins.length);
   $('kb-pins').innerHTML = pins.map(x => `<button type="button" data-kb="${esc(x.id)}" class="flex h-14 min-w-0 items-center gap-2.5 rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm px-2.5 text-left active:scale-[0.98] transition">
       <span class="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] ${KB_TINT(x.cat)}">${KB_ICON(x.cat)}</span>
@@ -5329,14 +5352,15 @@ function renderKb() {
       <svg class="h-3.5 w-3.5 shrink-0 text-slate-400" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3l7 7-3 1-4 4 1 5-2 1-4-5-5 5-1-1 5-5-5-4 1-2 5 1 4-4z"/></svg></button>`).join('');
   $('kb-list-wrap').classList.toggle('hidden', !rest.length);
   $('kb-list').innerHTML = rest.map(x => `<li><button type="button" data-kb="${esc(x.id)}" class="flex w-full items-center gap-3 px-3.5 py-3 text-left active:bg-slate-100 dark:active:bg-slate-800">
-      <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${KB_TINT(x.cat)}">${isMg(x) ? mgArt(x)[1] : KB_ICON(x.cat)}</span>
-      <span class="min-w-0 flex-1"><span class="block truncate font-medium">${esc(x.title)}</span><span class="block truncate text-xs text-slate-500 dark:text-slate-400">${esc(isMg(x) ? mgMeta(x) : kbSub(x))}</span></span>${isMg(x) ? mgTag(x) : '<span class="text-slate-400">›</span>'}</button></li>`).join('');
+      <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${KB_TINT(x.cat)}">${isMg(x) ? mgArt(x)[1] : isUp(x) ? upIcon(x) : KB_ICON(x.cat)}</span>
+      <span class="min-w-0 flex-1"><span class="block truncate font-medium">${esc(x.title)}</span><span class="block truncate text-xs text-slate-500 dark:text-slate-400">${esc(isMg(x) ? mgMeta(x) : isUp(x) ? upMeta(x) : kbSub(x))}</span></span>${isMg(x) ? mgTag(x) : isUp(x) ? upTag(x) : '<span class="text-slate-400">›</span>'}</button></li>`).join('');
   $('kb-empty').classList.toggle('hidden', list.length > 0);
-  $('kb-empty').textContent = kbCat === KB_MG && !q ? 'Noch keine Mängel. Mit „+ Neu“ notierst du z. B. ein Klappern oder einen Software-Fehler – mit Datum, km vom Auto und Fotos.' : kb.items.length ? 'Keine Treffer.' : 'Noch nichts gespeichert. Lege mit „+ Neu“ zum Beispiel den Link zum Handbuch, Reifendruck-Werte oder die Nummer deiner Werkstatt an.';
+  $('kb-empty').textContent = kbCat === KB_UP && !q ? 'Noch keine Software-Version eingetragen. Trag zuerst die Version ein, die jetzt auf dem Auto ist (Ausgangsstand) – jedes spätere Update wird dann mit der Zeit davor verglichen.' : kbCat === KB_MG && !q ? 'Noch keine Mängel. Mit „+ Neu“ notierst du z. B. ein Klappern oder einen Software-Fehler – mit Datum, km vom Auto und Fotos.' : kb.items.length ? 'Keine Treffer.' : 'Noch nichts gespeichert. Lege mit „+ Neu“ zum Beispiel den Link zum Handbuch, Reifendruck-Werte oder die Nummer deiner Werkstatt an.';
 }
 /* Start: Button-Zusatz und angeheftete Einträge als Chips (Link-Einträge öffnen direkt) */
 function renderKbStart() {
   const kb = getKb(), n = kb.items.length, pins = kb.items.filter(x => x.pin).sort((a, b) => a.title.localeCompare(b.title, 'de'));
+  try { upCheckDone(); } catch (e) { }
   const mo = mgOpen(kb); $('go-kb-n').textContent = ' · ' + (mo ? mo + (mo === 1 ? ' offener Mangel' : ' offene Mängel') : n ? n + (n === 1 ? ' Eintrag' : ' Einträge') : 'Handbuch, Tipps & mehr');
   $('kb-start-pins').classList.toggle('hidden', !pins.length);
   /* Angepinnte Einträge als Unterzeilen von „Wissen“ (Baumlinie); mit Link öffnet ein Tipp direkt den Link, sonst den Eintrag */
@@ -5361,11 +5385,55 @@ function openKb(id) {
       ${(x.occ || []).length ? `<p class="mt-1 text-left text-xs text-slate-500 dark:text-slate-400">Wieder aufgetreten: ${x.occ.map(o => mgDate(o).slice(0, 6)).join(', ')} · insgesamt ${x.occ.length + 1}×</p>` : ''}
       <div class="mt-2.5 grid grid-cols-2 gap-1.5"><button type="button" data-kbact="again" class="rounded-xl bg-white dark:bg-slate-800 py-2 text-xs font-semibold active:scale-95 transition">＋ wieder aufgetreten</button>
         ${mgSt(x) === 'offen' ? '<button type="button" data-kbact="st-gemeldet" class="rounded-xl bg-white dark:bg-slate-800 py-2 text-xs font-semibold active:scale-95 transition">→ gemeldet</button>' : mgSt(x) === 'gemeldet' ? '<button type="button" data-kbact="st-erledigt" class="rounded-xl bg-white dark:bg-slate-800 py-2 text-xs font-semibold active:scale-95 transition">✓ erledigt</button>' : '<button type="button" data-kbact="st-offen" class="rounded-xl bg-white dark:bg-slate-800 py-2 text-xs font-semibold active:scale-95 transition">↺ wieder offen</button>'}</div></div>` : ''}
+    ${isUp(x) ? `<div class="rounded-2xl bg-sky-50 dark:bg-sky-950/30 p-3 text-sm"><div class="flex items-center justify-between gap-2"><span class="font-semibold">${upIcon(x)} Version ${esc(x.ver || '?')}</span>${upTag(x)}</div><p class="mt-1 text-left text-slate-600 dark:text-slate-300">${esc(upMeta(x))}</p>
+      ${x.base ? '<p class="mt-2 text-left text-xs text-slate-500 dark:text-slate-400">Ausgangsstand: ab hier wird jedes neue Update mit der Zeit davor verglichen.</p>' : '<div id="kb-up-cmp" class="mt-2"><p class="text-xs text-slate-500 dark:text-slate-400">Vergleich wird berechnet …</p></div>'}</div>` : ''}
     ${x.text ? `<div class="rounded-2xl bg-slate-100 dark:bg-slate-800/60 p-3 text-sm leading-6 whitespace-pre-wrap break-words">${kbLinkify(x.text)}</div>` : ''}
     ${x.files && x.files.length ? `<div><p class="mb-1.5 text-xs text-slate-500 dark:text-slate-400">Belege</p><div class="flex flex-wrap gap-1.5">${x.files.map(f => `<a href="${dvLink(f.id)}" target="_blank" rel="noopener" class="inline-flex max-w-full items-center gap-1 rounded-lg bg-slate-100 dark:bg-slate-800 px-2.5 py-1.5 text-xs"><span aria-hidden="true">📎</span><span class="truncate">${esc(f.name)}</span></a>`).join('')}</div></div>` : ''}
     <div class="grid grid-cols-3 gap-2 pt-1"><button type="button" data-kbact="edit" class="py-2.5 rounded-xl bg-slate-200 dark:bg-slate-800 text-sm font-medium active:scale-95 transition">Bearbeiten</button><button type="button" data-kbact="share" class="py-2.5 rounded-xl bg-slate-200 dark:bg-slate-800 text-sm font-medium active:scale-95 transition">Teilen</button><button type="button" data-kbact="del" class="py-2.5 rounded-xl bg-slate-200 dark:bg-slate-800 text-sm font-medium text-red-600 dark:text-red-300 active:scale-95 transition">Löschen</button></div>
     <button type="button" data-kbact="close" class="w-full py-3 rounded-2xl bg-emerald-600 text-white font-semibold active:scale-95 transition">Schließen</button>`;
   $('kb-dialog').classList.remove('hidden');
+  if (isUp(x) && !x.base) upCompare(x).then(h => { if (kbCur === x.id && $('kb-up-cmp')) $('kb-up-cmp').innerHTML = h; }).catch(e => { console.error(e); if ($('kb-up-cmp')) $('kb-up-cmp').innerHTML = '<p class="text-xs text-red-600">Vergleich nicht möglich.</p>'; });
+}
+/* Vorher/Nachher-Vergleich eines Updates → HTML. Verbrauch ab Akku je Strecke zwischen zwei Ladungen; temperaturbereinigt über die Abweichung vom eigenen Wettermodell. */
+async function upCompare(x) {
+  const t0 = Date.parse(x.inst + 'T00:00:00'), prev = upList().filter(y => y.inst < x.inst).pop(), D = 864e5;
+  const bA = Math.max(t0 - UP_DAYS * D, prev ? Date.parse(prev.inst + 'T00:00:00') : 0), aB = Math.min(t0 + UP_DAYS * D, Date.now() + D), age = Math.min(UP_DAYS, Math.max(0, upAge(x)));
+  const rs = getReadings(), inB = (t) => t >= bA && t < t0, inA = (t) => t >= t0 && t < aB;
+  const seg = []; rs.forEach((r, i) => { if (i < 1) return; const s2 = entryStats(rs, i), a = Date.parse(rs[i - 1].date), b = Date.parse(r.date); if (s2.method !== 'soc' || s2.rough || !(s2.km >= 10) || !(s2.usedBat > 0)) return; seg.push({ a, b, km: s2.km, bat: s2.usedBat }); });
+  const sB = seg.filter(z => inB(z.b) && z.a >= bA), sA = seg.filter(z => inA(z.b) && z.a >= t0 - D);
+  const k100 = (l) => { const km = l.reduce((q, z) => q + z.km, 0); return km ? l.reduce((q, z) => q + z.bat, 0) / km * 100 : null; };
+  let adj = null; const l = wxLoc();
+  if (l && sB.length && sA.length) { try { const all = sB.concat(sA), m = await wxoModel(l), days = await wxTemps(l, wxIso(new Date(Math.min(...all.map(z => z.a)))), wxIso(new Date(Math.max(...all.map(z => z.b))))), tc = load(KEY_TEMPS, {}) || {}, rain = tc.rain || {}, hum = tc.hum || {};
+      const res = (z) => { let st = 0, n = 0, wet = 0, nr = 0, hu = 0, nh = 0; for (let t = z.a; t <= z.b + 1; t += D) { const d = wxIso(new Date(t)); if (days[d] != null) { st += days[d]; n++; } if (rain[d] != null) { nr++; if (rain[d] >= 1) wet++; } if (hum[d] != null) { nh++; hu += hum[d]; } }
+        return n ? z.bat / z.km * 100 - wxoPredX(m, wxoX(st / n, nr ? wet / nr : 0, nh ? hu / nh : 0)) : null; };
+      const avgR = (L2) => { const v = L2.map(z => ({ r: res(z), km: z.km })).filter(o => o.r != null), km = v.reduce((q, o) => q + o.km, 0); return km ? v.reduce((q, o) => q + o.r * o.km, 0) / km : null; };
+      const rB = avgR(sB), rA = avgR(sA); if (rB != null && rA != null) adj = (rA - rB) / (k100(sB) || 16) * 100; } catch (e) { } }
+  const cv = getLab().curves.filter(c => c.date && c.pts), cvT = (c) => Date.parse(c.date + 'T12:00:00'), p2060 = (c) => { let q = 0, n = 0; for (let p = Math.max(20, c.s0); p <= Math.min(60, c.s1); p += 5) { q += cvPow(c, p); n++; } return n >= 3 ? q / n : null; };
+  const cB = cv.filter(c => cvT(c) < t0 && cvT(c) >= t0 - 120 * D && (!prev || cvT(c) >= Date.parse(prev.inst + 'T00:00:00'))).sort((a, b) => cvT(b) - cvT(a))[0], cA = cv.filter(c => cvT(c) >= t0).sort((a, b) => cvT(a) - cvT(b))[0];
+  const lossOf = (f) => { const v = rs.map((r, i) => ({ r, s2: entryStats(rs, i) })).filter(o => isHome(o.r) && f(Date.parse(o.r.date)) && o.s2.loss != null && o.s2.loss >= 0 && o.s2.loss < 40).map(o => o.s2.loss); return v.length ? v.reduce((q, y) => q + y, 0) / v.length : null; };
+  const cfOf = (f) => { const v = rs.filter(r => comfortOf(r) > 0 && f(Date.parse(r.date))).map(comfortOf); return v.length ? v.reduce((q, y) => q + y, 0) / v.length : null; };
+  const rows = [], good = [], bad = [];
+  const row = (lab, a, b, u, dec, lowGood, note, dOverride, pkt) => { if (a == null && b == null) return; const d = dOverride != null ? dOverride : a != null && b != null ? (pkt ? b - a : (b - a) / a * 100) : null, ok = d == null || Math.abs(d) < (pkt ? 0.5 : 1.5) ? null : (d < 0) === lowGood;
+    if (ok === true) good.push(lab); if (ok === false) bad.push(lab);
+    rows.push(`<div class="grid grid-cols-[1.3fr_.8fr_.8fr_.7fr] items-baseline gap-1 border-t border-slate-200 dark:border-slate-800 py-1.5 text-[13px]"><span class="text-left text-slate-600 dark:text-slate-300">${lab}</span><span class="text-right tabular-nums">${a != null ? fmt(a, dec) + u : '–'}</span><span class="text-right font-semibold tabular-nums">${b != null ? fmt(b, dec) + u : '–'}</span><span class="text-right font-semibold tabular-nums ${ok === true ? 'text-emerald-600 dark:text-emerald-400' : ok === false ? 'text-rose-600 dark:text-rose-400' : 'text-slate-500'}">${d != null ? (d > 0 ? '+' : '−') + (pkt ? fmt(Math.abs(d), 1) + ' Pkt' : fmt(Math.abs(d), 0) + ' %') : ''}</span></div>`
+      + (note ? `<p class="-mt-1 pb-1 text-left text-[10.5px] text-slate-500 dark:text-slate-400">${note}</p>` : '')); };
+  row('Verbrauch ab Akku', k100(sB), k100(sA), '', 1, true, adj != null ? 'Δ temperaturbereinigt mit deinem Wettermodell' : sB.length && sA.length ? 'ohne Temperatur-Bereinigung' : '', adj);
+  row('DC 20–60 %', cB ? p2060(cB) : null, cA ? p2060(cA) : null, ' kW', 0, false);
+  row('Ladeverlust zuhause', lossOf(inB), lossOf(inA), ' %', 1, true, '', null, true);
+  row('Komfort je Vorheizen', cfOf(inB), cfOf(inA), ' kWh', 1, true);
+  const kmA = sA.reduce((q, z) => q + z.km, 0), nA = rs.filter(r => inA(Date.parse(r.date))).length;
+  const head = `<p class="text-left text-xs text-slate-500 dark:text-slate-400">Vorher / nachher · je ${UP_DAYS} Tage</p><div class="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800"><div class="h-full bg-sky-500" style="width:${(age / UP_DAYS * 100).toFixed(0)}%"></div></div>
+    <p class="mt-1 text-left text-[11px] text-slate-500 dark:text-slate-400">nachher: ${age} von ${UP_DAYS} Tagen · ${nA} ${nA === 1 ? 'Ladung' : 'Ladungen'} · ${fmt(kmA, 0)} km</p>`;
+  if (!rows.length) return head + '<p class="mt-2 text-left text-xs text-slate-500 dark:text-slate-400">Noch keine vergleichbaren Daten. Ladungen mit Akku-% und km-Stand vor und nach dem Update füllen den Vergleich.</p>';
+  const fz = good.length || bad.length ? (good.length ? 'besser: ' + good.join(', ') : '') + (good.length && bad.length ? ' · ' : '') + (bad.length ? 'schlechter: ' + bad.join(', ') : '') : 'bisher kein deutlicher Unterschied';
+  return head + `<div class="mt-2 grid grid-cols-[1.3fr_.8fr_.8fr_.7fr] gap-1 text-[10px] uppercase tracking-wide text-slate-500"><span></span><span class="text-right">vorher</span><span class="text-right">nachher</span><span class="text-right">Δ</span></div>` + rows.join('')
+    + `<p class="mt-2 rounded-xl bg-sky-100/70 dark:bg-sky-900/40 px-3 py-2 text-left text-xs text-sky-900 dark:text-sky-100">${age < UP_DAYS ? 'Zwischenstand' : 'Ergebnis'}: ${esc(fz)}.${age < UP_DAYS ? ' Endgültig nach ' + UP_DAYS + ' Tagen.' : ''}</p>`;
+}
+/* Nach 30 Tagen: Auswertung einmal melden (Benachrichtigung, falls erlaubt) */
+function upCheckDone() {
+  const kb = getKb(), due = kb.items.filter(x => isUp(x) && !x.base && !x.done && x.inst && upAge(x) >= UP_DAYS); if (!due.length) return;
+  save(KEY_KB, { ...kb, items: kb.items.map(x => due.includes(x) ? { ...x, done: true } : x) }); try { pushPrefs(); } catch (e) { }
+  try { if ('Notification' in window && Notification.permission === 'granted' && navigator.serviceWorker) navigator.serviceWorker.ready.then(r => due.forEach(x => r.showNotification('Update ' + (x.ver || '') + ' ausgewertet', { body: 'Der Vorher/Nachher-Vergleich ist fertig – Wissen → Updates.', tag: 'upd-' + x.id, icon: '/Bilder/car-v4-192.png' }))); } catch (e) { }
 }
 function kbLinkRow(u = '', l = '') { return `<div class="kb-lrow flex gap-1.5"><input type="url" inputmode="url" autocomplete="off" placeholder="https://…" value="${esc(u)}" aria-label="Adresse" class="kb-lu min-w-0 flex-[3] rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"><input type="text" autocomplete="off" placeholder="Name" value="${esc(l)}" aria-label="Name des Links" class="kb-ll min-w-0 flex-[2] rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"><button type="button" data-kbrm="1" aria-label="Link entfernen" class="w-9 shrink-0 rounded-xl text-slate-500">✕</button></div>`; }
 function kbFilesHtml(files) { return files.map((f, i) => `<span class="inline-flex max-w-full items-center gap-1 rounded-lg bg-slate-100 dark:bg-slate-800 pl-2.5 pr-1 py-1 text-xs"><span class="truncate">📎 ${esc(f.name)}${f.pending ? ' · wird hochgeladen' : ''}</span><button type="button" data-kbf="${i}" aria-label="Beleg entfernen" class="px-1.5 text-slate-500">✕</button></span>`).join('') + '<button type="button" id="kb-file-add" class="rounded-lg border border-dashed border-slate-400 dark:border-slate-600 px-2.5 py-1 text-xs text-slate-500 dark:text-slate-400">+ Beleg</button>'; }
@@ -5379,6 +5447,8 @@ function editKb(id) {
   $('kb-cat').value = x ? x.cat : (kbCat || kb.cats.find(c => c !== KB_MG) || kb.cats[0]);
   kbMg = { st: x ? mgSt(x) : 'offen', art: x && x.art ? x.art : '' }; $('kb-mg-date').value = x && x.seen ? x.seen : wxIso(new Date()); $('kb-mg-date').max = wxIso(new Date());
   $('kb-mg-km').value = x && x.km ? String(x.km) : (() => { try { const c = ltmCarKm(); if (c && c.km) return String(c.km); const k = lastKnownKm(); return k ? String(Math.round(k)) : ''; } catch (e) { return ''; } })();
+  kbUp = { how: x && x.how === 'werkstatt' ? 'werkstatt' : 'ota' }; $('kb-up-ver').value = x && x.ver ? x.ver : ''; $('kb-up-date').value = x && x.inst ? x.inst : wxIso(new Date()); $('kb-up-date').max = wxIso(new Date());
+  $('kb-up-km').value = x && x.km ? String(x.km) : $('kb-mg-km').value; $('kb-up-base').checked = !!(x ? x.base : kbUpBaseNext); kbUpBaseNext = false;
   kbMgPaint();
   $('kb-links').innerHTML = (x && x.links && x.links.length ? x.links : [{ url: '' }]).map(l => kbLinkRow(l.url, l.label)).join('');
   $('kb-files').innerHTML = kbFilesHtml(kbFiles); $('kb-msg').classList.add('hidden');
@@ -5415,15 +5485,20 @@ async function kbUpload(item, files, tokP) {
 }
 $('kb-save').addEventListener('click', async () => {
   const title = $('kb-title').value.trim().replace(/\s+/g, ' ').slice(0, 80), cat = $('kb-cat').value === '__new' ? getKb().cats[0] : $('kb-cat').value;
-  if (!title) { kbErr('Bitte einen Titel eingeben.'); return; }
+  const upVer = $('kb-up-ver').value.trim().slice(0, 24);
+  if (cat === KB_UP && !upVer) { kbErr('Bitte die Software-Version eintragen (z. B. 3.7).'); return; }
+  if (cat === KB_UP && !$('kb-up-date').value) { kbErr('Bitte das Datum der Installation eintragen.'); return; }
+  if (!title && cat !== KB_UP) { kbErr('Bitte einen Titel eingeben.'); return; }
   const links = []; for (const r of document.querySelectorAll('#kb-links .kb-lrow')) {
     let u = r.querySelector('.kb-lu').value.trim(); const l = r.querySelector('.kb-ll').value.trim().slice(0, 60); if (!u) continue;
     if (!/^[a-z][a-z0-9+.-]*:/i.test(u)) u = 'https://' + u;
     try { const p = new URL(u); if (!/^(https?|tel|mailto):$/.test(p.protocol)) throw 0; } catch (e) { kbErr('Ungültiger Link: ' + u); return; }
     const o = { url: u }; if (l) o.label = l; links.push(o);
   }
-  const kb = getKb(), old = kb.items.find(y => String(y.id) === String(kbCur)), item = { id: old ? old.id : Date.now(), title, cat, at: new Date().toISOString() };
+  const kb = getKb(), old = kb.items.find(y => String(y.id) === String(kbCur)), item = { id: old ? old.id : Date.now(), title: title || ('Software ' + upVer), cat, at: new Date().toISOString() };
   const text = $('kb-text').value.trim().slice(0, 4000); if (text) item.text = text; if (links.length) item.links = links; if ($('kb-pin').checked) item.pin = true;
+  if (cat === KB_UP) { const km = $('kb-up-km').value.trim() ? Number($('kb-up-km').value.replace(/\D/g, '')) : null; if (km != null && !(km >= 0 && km < 2e6)) { kbErr('Bitte einen gültigen km-Stand eingeben oder das Feld leer lassen.'); return; }
+    item.ver = upVer; item.how = kbUp.how; item.inst = $('kb-up-date').value; if (km) item.km = km; if ($('kb-up-base').checked) item.base = true; if (old && old.done && old.inst === item.inst) item.done = true; }
   if (cat === KB_MG) { const km = $('kb-mg-km').value.trim() ? Number($('kb-mg-km').value.replace(/\D/g, '')) : null; if (km != null && !(km >= 0 && km < 2e6)) { kbErr('Bitte einen gültigen km-Stand eingeben oder das Feld leer lassen.'); return; }
     item.st = kbMg.st; if (kbMg.art) item.art = kbMg.art; if ($('kb-mg-date').value) item.seen = $('kb-mg-date').value; if (km) item.km = km; if (old && old.occ && old.occ.length) item.occ = old.occ; if (old && old.stAt && old.st === kbMg.st) item.stAt = old.stAt; else if (kbMg.st !== 'offen') item.stAt = new Date().toISOString(); }
   const kept = kbFiles.filter(f => !f.pending).map(f => ({ id: f.id, name: f.name, mime: f.mime })); if (kept.length) item.files = kept;
@@ -5437,13 +5512,22 @@ $('kb-save').addEventListener('click', async () => {
 });
 /* Mängel: Felder im Bearbeiten-Dialog */
 let kbMg = { st: 'offen', art: '' };
+let kbUp = { how: 'ota' }, kbUpBaseNext = false;
 function kbMgPaint() {
   $('kb-mg').classList.toggle('hidden', $('kb-cat').value !== KB_MG);
+  $('kb-up').classList.toggle('hidden', $('kb-cat').value !== KB_UP);
+  $('kb-up-how').innerHTML = [['ota', 'OTA'], ['werkstatt', 'Werkstatt']].map(([k, l]) => `<button type="button" data-uphow="${k}" class="whitespace-nowrap rounded-xl text-[13px] ${kbUp.how === k ? 'bg-sky-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300'}">${l}</button>`).join('');
+  $('kb-title').placeholder = $('kb-cat').value === KB_UP ? 'leer = „Software ‹Version›“' : 'z. B. Bedienungsanleitung';
   $('kb-mg-st').innerHTML = Object.keys(MG_ST).map(k => `<button type="button" data-mgst="${k}" class="rounded-xl py-2 ${kbMg.st === k ? MG_ST[k][1] + ' ring-2 ring-current/30' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300'}">${MG_ST[k][0]}</button>`).join('');
   $('kb-mg-art').innerHTML = MG_ART.map(([k, i, l]) => `<button type="button" data-mgart="${k}" class="rounded-lg px-2 py-1.5 ${kbMg.art === k ? 'bg-emerald-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300'}">${i} ${l}</button>`).join('');
   $('kb-text').placeholder = $('kb-cat').value === KB_MG ? 'Wann tritt es auf? Temperatur, Straße, Geschwindigkeit … – hilft der Werkstatt beim Nachstellen' : 'Text, Werte, Schritte …';
 }
 $('kb-cat').addEventListener('change', kbMgPaint);
+$('kb-up').addEventListener('click', async (e) => {
+  const h = e.target.closest('[data-uphow]'); if (h) { kbUp.how = h.dataset.uphow; kbMgPaint(); return; }
+  if (e.target.id === 'kb-up-kmf') { e.preventDefault(); const b = e.target; b.textContent = '…'; try { $('kb-up-km').value = String((await fetchCarKm()).km); } catch (er) { kbErr('km-Stand vom Auto nicht verfügbar.'); } b.textContent = '↻'; }
+});
+$('kb-up-start').addEventListener('click', () => { kbUpBaseNext = true; editKb(null); setTimeout(() => $('kb-up-ver').focus(), 60); });
 $('kb-mg').addEventListener('click', async (e) => {
   const s2 = e.target.closest('[data-mgst]'), a = e.target.closest('[data-mgart]');
   if (s2) { kbMg.st = s2.dataset.mgst; kbMgPaint(); return; }
@@ -8179,6 +8263,8 @@ function cvMinutes(c, a, b) {                                                   
   }
   return m;
 }
+/** Software-Stand einer Ladekurve (letztes Update vor ihrem Datum) als kleiner Zusatz am Chip, z. B. „· 3.7.1“ – vor/nach einem Update vergleichbar */
+function cvUpTag(c) { try { const l = upList(); if (l.length < 2 || !c.date) return ''; const u = l.filter(x => x.inst <= c.date).pop(); return u ? ` <span class="opacity-70">· 📡 ${esc(u.ver || '')}</span>` : ''; } catch (e) { return ''; } }
 function renderCurve() {
   const el = $('cv-body'); if (!el) return;
   const lab = getLab(), cs = lab.curves.slice().sort((a, b) => String(a.date).localeCompare(String(b.date)));
@@ -8186,7 +8272,7 @@ function renderCurve() {
   if (!cs.some(c => c.id === cvSel)) cvSel = cs[cs.length - 1].id;
   const c = cs.find(x => x.id === cvSel), others = cs.filter(x => x !== c);
   const COL = ['#f59e0b', '#38bdf8', '#a78bfa', '#34d399'], col = (x) => COL[cs.indexOf(x) % COL.length];
-  const chips = `<div class="mt-2 flex flex-wrap gap-1.5">${cs.map(x => `<button type="button" data-cv="${esc(x.id)}" class="inline-flex h-[30px] items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold ${x === c ? '' : 'border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300'}"${x === c ? ` style="background:${col(x)}26;color:${col(x)}"` : ''}><span class="h-[3px] w-2.5 rounded" style="background:${col(x)}"></span>${esc(x.name || 'Kurve')} · ${String(x.date || '').slice(5, 7)}/${String(x.date || '').slice(0, 4)}</button>`).join('')}<button type="button" data-cvact="new" class="inline-flex h-[30px] items-center rounded-full border border-dashed border-slate-400 dark:border-slate-600 px-2.5 text-xs font-semibold text-slate-500 dark:text-slate-400">+ Kurve hinzufügen</button></div>`;
+  const chips = `<div class="mt-2 flex flex-wrap gap-1.5">${cs.map(x => `<button type="button" data-cv="${esc(x.id)}" class="inline-flex h-[30px] items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold ${x === c ? '' : 'border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300'}"${x === c ? ` style="background:${col(x)}26;color:${col(x)}"` : ''}><span class="h-[3px] w-2.5 rounded" style="background:${col(x)}"></span>${esc(x.name || 'Kurve')} · ${String(x.date || '').slice(5, 7)}/${String(x.date || '').slice(0, 4)}${cvUpTag(x)}</button>`).join('')}<button type="button" data-cvact="new" class="inline-flex h-[30px] items-center rounded-full border border-dashed border-slate-400 dark:border-slate-600 px-2.5 text-xs font-semibold text-slate-500 dark:text-slate-400">+ Kurve hinzufügen</button></div>`;
   const W = 320, H = 170, L = 34, R = 8, T = 14, B = 26, X = (p) => L + p / 100 * (W - L - R), Y = (kw) => T + (1 - Math.min(150, kw) / 150) * (H - T - B);
   const cvEnd = (x) => Math.max(x.s1, ...(x.tail || []).filter(t => t.min > 0).map(t => t.b));
   const path = (x, from = x.s0, to = cvEnd(x)) => { let d = ''; for (let p = from; p <= to + 0.01; p += 0.5) d += (d ? ' L' : 'M') + X(p).toFixed(1) + ' ' + Y(cvPow(x, p)).toFixed(1); return d; };
