@@ -4,17 +4,38 @@
 //   GET /api/vehicle?check=1  -> { enabled, keyExpires }   (keine Škoda-Abfrage, zählt nicht gegen das Limit)
 //   GET /api/vehicle?raw=1    -> rohe Škoda-Antwort ohne VIN (Diagnose: welche Felder gibt es?)
 //   GET /api/vehicle          -> Fahrzeugdaten (Limit der Škoda-API: 20 Anfragen/Stunde/Fahrzeug -> 60 s Cache je Konto)
-import { verifyUser, accountFor } from '../lib/auth.js';
+//   POST /api/vehicle {newKey} -> neuen API-Schlüssel aus der App übernehmen: erst beim Škoda-Server prüfen, dann verschlüsselt speichern
+//                                (hat danach Vorrang vor dem Schlüssel in SKODA_ACCOUNTS; VIN/Freischaltung bleiben dort)
+import { verifyUser, accountForUser, forgetAccountCache } from '../lib/auth.js';
+import { fsSetStrings, seal } from '../lib/fs.js';
 
 const cache = new Map();
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Nur GET erlaubt' });
+  if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).json({ error: 'Nur GET oder POST erlaubt' });
 
   const user = await verifyUser(req);
   if (!user) return res.status(401).json({ error: 'Nicht angemeldet' });
-  const acc = accountFor(user.email);
+  const acc = await accountForUser(user);
+
+  if (req.method === 'POST') {                                   // Schlüssel in der App ersetzen
+    if (!acc) return res.status(403).json({ error: 'Für dieses Konto sind keine Fahrzeugdaten hinterlegt' });
+    if (!process.env.FIREBASE_SERVICE_ACCOUNT) return res.status(503).json({ error: 'Speichern nicht eingerichtet (FIREBASE_SERVICE_ACCOUNT fehlt)' });
+    const nk = String(req.body?.newKey || '').trim();
+    if (nk.length < 16 || nk.length > 400 || /\s/.test(nk)) return res.status(400).json({ error: 'Das sieht nicht wie ein Škoda-API-Schlüssel aus' });
+    try {
+      const r = await fetch('https://public.api.connect.skoda-auto.cz/api/v1/vehicles/' + encodeURIComponent(acc.vin) + '?include=odometer', { headers: { 'X-API-Key': nk, Accept: 'application/json' } });
+      if (r.status === 401) return res.status(400).json({ error: 'Der Škoda-Server kennt diesen Schlüssel nicht (ungültig oder abgelaufen)' });
+      if (r.status === 403) return res.status(400).json({ error: 'Der Schlüssel gilt nicht für dein Fahrzeug' });
+      if (r.status === 429) return res.status(429).json({ error: 'Abfrage-Limit erreicht – bitte in ein paar Minuten erneut versuchen' });
+      if (!r.ok) return res.status(502).json({ error: 'Škoda-Server antwortet mit Fehler ' + r.status });
+      const ex = r.headers.get('x-api-key-expires-at'), exp = ex && !isNaN(Date.parse(ex)) ? new Date(ex).toISOString().slice(0, 10) : '';
+      await fsSetStrings(`enyaqStrom/${user.uid}/settings/skoda`, { key: seal(nk), expires: exp, at: new Date().toISOString() });
+      forgetAccountCache(user.uid); cache.delete(user.email);
+      return res.status(200).json({ ok: true, expires: exp || null });
+    } catch (err) { return res.status(500).json({ error: String(err.message || err).slice(0, 160) }); }
+  }
 
   if (req.query && req.query.check) return res.status(200).json({ enabled: !!acc, keyExpires: acc?.expires ?? null });
   if (!acc) return res.status(403).json({ error: 'Für dieses Konto sind keine Fahrzeugdaten hinterlegt' });
