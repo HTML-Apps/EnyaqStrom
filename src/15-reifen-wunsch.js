@@ -44,7 +44,7 @@ function renderTires() {
       <span class="font-barlow text-[26px] font-bold leading-none" style="color:${tCol(a)}">${tFmt(a)}<span class="text-[13px]"> mm</span></span>
       <span class="mt-1 flex gap-[3px] text-[10px] tabular-nums">${[0, 1, 2].map(i => `<span class="rounded bg-white dark:bg-slate-900 px-1" title="${TIRE_PT[i]}">${tFmt(v[i])}</span>`).join('')}</span>
       ${prev != null && a != null ? `<span class="mt-0.5 text-[9.5px] text-slate-500 dark:text-slate-400">${a - prev > 0.04 ? '+' : a - prev < -0.04 ? '−' : '±'}${fmt(Math.abs(a - prev), 1)} seit letzter</span>` : ''}</button>`; };
-  const car = `<div class="relative h-[204px] w-[102px]"><img src="/Bilder/enyaq-top.webp" alt="Enyaq von oben" width="474" height="944" draggable="false" class="h-full w-full select-none object-contain">`
+  const car = `<div class="relative h-[204px] w-[102px]"><img src="/Bilder/Enyaq/enyaq-top.webp" alt="Enyaq von oben" width="474" height="944" draggable="false" class="h-full w-full select-none object-contain">`
     + [['left', 23.5, 'VL'], ['right', 23.5, 'VR'], ['left', 76.5, 'HL'], ['right', 76.5, 'HR']].map(([sd, y, p]) => `<span class="absolute h-[34px] w-[7px] -translate-y-1/2 rounded-[3px] shadow" style="${sd}:3px;top:${y}%;background:${tCol(tAvg(last.v[p]))}"></span>`).join('') + '</div>';
   const pg = tirePrognosis(ms);
   let h = `<div class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 space-y-2">

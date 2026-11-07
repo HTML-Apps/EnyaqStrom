@@ -2678,7 +2678,7 @@ function renderHeroReminder() {
 }
 const probeImg = (src) => new Promise(res => { const i = new Image(); i.onload = () => res(src); i.onerror = () => res(null); i.src = src; });
 const HERO_VER = '7';                                    // bei neuen Bildern hochzählen (umgeht den Browser- und Service-Worker-Cache)
-async function findHeroImg(n) { for (const e of ['png', 'webp', 'jpg', 'jpeg']) { const ok = await probeImg('Bilder/Enyaq' + n + '.' + e + '?v=' + HERO_VER); if (ok) return ok; } return null; }
+async function findHeroImg(n) { for (const e of ['png', 'webp', 'jpg', 'jpeg']) { const ok = await probeImg('Bilder/Enyaq/Enyaq' + n + '.' + e + '?v=' + HERO_VER); if (ok) return ok; } return null; }
 /** Bereitet ein Karussell-Bild auf: (1) opaker weißer Rand wird transparent gemacht (nicht wirklich freigestellte Bilder), (2) transparenter Rand wird weggeschnitten,
     damit das Auto den Bildbereich ausfüllt. Liefert { src, aspect, extra }: Seitenverhältnis des zugeschnittenen Bilds und den Anteil der Bildhöhe unterhalb der Aufstandslinie
     der Reifen (Zeile mit deckenden Pixeln, Schatten darunter ist durchscheinend). Daraus richtet die Seite alle Bilder auf dieselbe Standlinie aus. */
@@ -2726,14 +2726,14 @@ let lbOpen = false;
 const CAR_NAMES = [1, 2, '_4', 3, 4, 5], CAR_DOTS = 3;
 /* Karussell-Bilder vorab aufbereitet (weißer Rand entfernt, zugeschnitten, 1100 px WebP) – vorher geschah das bei jedem Start per Canvas im Handy,
    und Bild 1 erschien erst, wenn alle sechs fertig waren. aspect/extra wie cutWhite (Seitenverhältnis, Schattenanteil unter der Aufstandslinie).
-   Neue Bilder: Bilder/EnyaqN.* tauschen, dann Bilder/hero/ neu erzeugen (siehe CLAUDE.md). Bild 1 steht schon im HTML (lädt sofort). */
-const HERO_IMGS = [{ name: 1, src: '/Bilder/hero/1.webp', aspect: 1.7188, extra: 0.043 }, { name: 2, src: '/Bilder/hero/2.webp', aspect: 1.5625, extra: 0.0665 },
-  { name: '_4', src: '/Bilder/hero/akku.webp', aspect: 1.2966, extra: 0.098, cut: true }, { name: 3, src: '/Bilder/hero/3.webp', aspect: 1.8134, extra: 0.0631 },
-  { name: 4, src: '/Bilder/hero/4.webp', aspect: 1.1614, extra: 0.0053, tech: true }, { name: 5, src: '/Bilder/hero/5.webp', aspect: 2.3392, extra: 0.0058, tech: true },
-  { name: 7, src: '/Bilder/hero/7.webp', aspect: 1.9696, extra: 0, cut: true }, { name: 8, src: '/Bilder/hero/8.webp', aspect: 2.3983, extra: 0, cut: true },
-  { name: 9, src: '/Bilder/hero/9.webp', aspect: 2.067, extra: 0, cut: true, pad: true }];   // pad: etwas Abstand links/rechts   // Schnittbild mit Maßen: Bemaßung hell umgefärbt, Auto freigestellt (volle Breite, zum Lesen antippen → Vollbild)
+   Neue Bilder: Bilder/Enyaq/EnyaqN.* tauschen, dann Bilder/Enyaq/hero/ neu erzeugen (siehe CLAUDE.md). Bild 1 steht schon im HTML (lädt sofort). */
+const HERO_IMGS = [{ name: 1, src: '/Bilder/Enyaq/hero/1.webp', aspect: 1.7188, extra: 0.043 }, { name: 2, src: '/Bilder/Enyaq/hero/2.webp', aspect: 1.5625, extra: 0.0665 },
+  { name: '_4', src: '/Bilder/Enyaq/hero/akku.webp', aspect: 1.2966, extra: 0.098, cut: true }, { name: 3, src: '/Bilder/Enyaq/hero/3.webp', aspect: 1.8134, extra: 0.0631 },
+  { name: 4, src: '/Bilder/Enyaq/hero/4.webp', aspect: 1.1614, extra: 0.0053, tech: true }, { name: 5, src: '/Bilder/Enyaq/hero/5.webp', aspect: 2.3392, extra: 0.0058, tech: true },
+  { name: 7, src: '/Bilder/Enyaq/hero/7.webp', aspect: 1.9696, extra: 0, cut: true }, { name: 8, src: '/Bilder/Enyaq/hero/8.webp', aspect: 2.3983, extra: 0, cut: true },
+  { name: 9, src: '/Bilder/Enyaq/hero/9.webp', aspect: 2.067, extra: 0, cut: true, pad: true }];   // pad: etwas Abstand links/rechts   // Schnittbild mit Maßen: Bemaßung hell umgefärbt, Auto freigestellt (volle Breite, zum Lesen antippen → Vollbild)
 const carAutoN = () => { const v = Number(getSettings().carN); return Number.isInteger(v) && v >= 1 && v <= HERO_IMGS.length ? v : 6; };            // Einstellung: so viele Bilder wechseln automatisch
-const carAutoMs = () => { const v = Number(getSettings().carSec); return (Number.isFinite(v) && v >= 5 && v <= 600 ? v : 30) * 1000; };   // Bilder/Enyaq1, 2, _4 (Akku-Schnitt), 3, 4, 5 (unten bleiben 3 Punkte als Deko); automatischer Wechsel alle 30 Sekunden
+const carAutoMs = () => { const v = Number(getSettings().carSec); return (Number.isFinite(v) && v >= 5 && v <= 600 ? v : 30) * 1000; };   // Bilder/Enyaq/Enyaq1, 2, _4 (Akku-Schnitt), 3, 4, 5 (unten bleiben 3 Punkte als Deko); automatischer Wechsel alle 30 Sekunden
 async function initCarousel() {
   const box = $('car-scroll'), dash = $('car-dashes'); if (!box) return;
   const imgs = HERO_IMGS.map(m => ({ ...m }));                                           // Bild 4/5 = Technik (Akku, Motor): mittig und etwas kleiner, ohne Standlinie
@@ -2769,7 +2769,7 @@ async function initCarousel() {
   box.addEventListener('keydown', (e) => { if (e.key === 'ArrowLeft') show(cur - 1); else if (e.key === 'ArrowRight') show(cur + 1); else if (e.key === 'Enter') lbShow(cur); });
 
   /* ---- Vollbild mit Zoom (Tipp aufs Bild): zwei Finger zoomen, ein Finger verschiebt, Doppeltipp 2,5×; ungezoomt wischen = nächstes Bild,
-     nach unten wischen, ✕ oder Zurück-Taste = schließen. Während es offen ist, wechselt das Karussell nicht. Gibt es Bilder/EnyaqN-hd.webp, wird es nachgeladen. */
+     nach unten wischen, ✕ oder Zurück-Taste = schließen. Während es offen ist, wechselt das Karussell nicht. Gibt es Bilder/Enyaq/EnyaqN-hd.webp, wird es nachgeladen. */
   const ov = document.createElement('div'); ov.id = 'car-lb'; ov.className = 'hidden fixed inset-0 z-[95] bg-black select-none'; ov.style.touchAction = 'none';
   ov.innerHTML = '<img id="car-lb-img" alt="" draggable="false" class="absolute inset-0 h-full w-full object-contain will-change-transform" style="padding:max(56px,env(safe-area-inset-top)) 8px max(40px,env(safe-area-inset-bottom))">'
     + '<span id="car-lb-n" class="absolute left-4 text-sm font-medium text-white/80 tabular-nums" style="top:max(18px,env(safe-area-inset-top))"></span>'
@@ -2783,7 +2783,7 @@ async function initCarousel() {
   const setImg = (i) => {
     lbi = ((i % imgs.length) + imgs.length) % imgs.length; sc = 1; tx = 0; ty = 0; apply(false); li.style.opacity = '1';
     li.src = hd[lbi] || imgs[lbi].src; ov.querySelector('#car-lb-n').textContent = imgs.length > 1 ? (lbi + 1) + ' / ' + imgs.length : '';
-    if (hd[lbi] === undefined) { const n = lbi, t = new Image(); hd[n] = null; t.onload = () => { hd[n] = t.src; if (lbi === n && lbOpen) li.src = t.src; }; t.src = 'Bilder/Enyaq' + (imgs[n].name != null ? imgs[n].name : n + 1) + '-hd.webp?v=' + HERO_VER; }
+    if (hd[lbi] === undefined) { const n = lbi, t = new Image(); hd[n] = null; t.onload = () => { hd[n] = t.src; if (lbi === n && lbOpen) li.src = t.src; }; t.src = 'Bilder/Enyaq/Enyaq' + (imgs[n].name != null ? imgs[n].name : n + 1) + '-hd.webp?v=' + HERO_VER; }
   };
   function lbShow(i) { if (lbOpen) return; lbOpen = true; setImg(i); ov.classList.remove('hidden'); document.body.style.overflow = 'hidden'; clearTimeout(autoT); try { history.pushState({ carLb: 1 }, ''); pushed = true; } catch (e) { pushed = false; } }
   const lbClose = (fromPop) => {
@@ -7255,7 +7255,7 @@ function renderTires() {
       <span class="font-barlow text-[26px] font-bold leading-none" style="color:${tCol(a)}">${tFmt(a)}<span class="text-[13px]"> mm</span></span>
       <span class="mt-1 flex gap-[3px] text-[10px] tabular-nums">${[0, 1, 2].map(i => `<span class="rounded bg-white dark:bg-slate-900 px-1" title="${TIRE_PT[i]}">${tFmt(v[i])}</span>`).join('')}</span>
       ${prev != null && a != null ? `<span class="mt-0.5 text-[9.5px] text-slate-500 dark:text-slate-400">${a - prev > 0.04 ? '+' : a - prev < -0.04 ? '−' : '±'}${fmt(Math.abs(a - prev), 1)} seit letzter</span>` : ''}</button>`; };
-  const car = `<div class="relative h-[204px] w-[102px]"><img src="/Bilder/enyaq-top.webp" alt="Enyaq von oben" width="474" height="944" draggable="false" class="h-full w-full select-none object-contain">`
+  const car = `<div class="relative h-[204px] w-[102px]"><img src="/Bilder/Enyaq/enyaq-top.webp" alt="Enyaq von oben" width="474" height="944" draggable="false" class="h-full w-full select-none object-contain">`
     + [['left', 23.5, 'VL'], ['right', 23.5, 'VR'], ['left', 76.5, 'HL'], ['right', 76.5, 'HR']].map(([sd, y, p]) => `<span class="absolute h-[34px] w-[7px] -translate-y-1/2 rounded-[3px] shadow" style="${sd}:3px;top:${y}%;background:${tCol(tAvg(last.v[p]))}"></span>`).join('') + '</div>';
   const pg = tirePrognosis(ms);
   let h = `<div class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 space-y-2">

@@ -24,6 +24,6 @@ def process(src, out, blank=None, close_rows=None):
     im=Image.fromarray(o.clip(0,255).astype(np.uint8),'RGBA'); ys,xs=np.where(o[:,:,3]>20)
     im=im.crop((xs.min()-2,ys.min()-2,xs.max()+3,ys.max()+3)); im.save(out+'.webp','WEBP',quality=90,method=6)
     print(out, im.size, 'aspect', round(im.size[0]/im.size[1],4))
-process('Bilder/Enyaq7.jpg', 'Bilder/hero/7', close_rows=440)
-process('Bilder/Enyaq8.jpg', 'Bilder/hero/8', blank=[(200, 0, 560, 68), (990, 0, 1300, 68)])   # Titel „Enyaq iV 50“ entfernen
-process('Bilder/Enyaq9.jpg', 'Bilder/hero/9')
+process('Bilder/Enyaq/Enyaq7.jpg', 'Bilder/Enyaq/hero/7', close_rows=440)
+process('Bilder/Enyaq/Enyaq8.jpg', 'Bilder/Enyaq/hero/8', blank=[(200, 0, 560, 68), (990, 0, 1300, 68)])   # Titel „Enyaq iV 50“ entfernen
+process('Bilder/Enyaq/Enyaq9.jpg', 'Bilder/Enyaq/hero/9')
