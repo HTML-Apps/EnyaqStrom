@@ -27,6 +27,7 @@
 })();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<link rel="preload" as="image" href="/Bilder/hero/1.webp" fetchpriority="high">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&display=block" rel="stylesheet">
@@ -213,7 +214,7 @@
       </button>
       <div id="hero-car" class="relative -mx-3 mt-3 h-[clamp(230px,64vw,340px)]">
         <div id="veh-card" class="hidden" aria-label="Fahrzeugstatus"></div>
-        <div id="car-scroll" class="absolute inset-0 overflow-hidden select-none touch-pan-y focus:outline-none transition-opacity duration-500" tabindex="0" role="group" aria-roledescription="Karussell" aria-label="Bilder vom Enyaq, nach links oder rechts wischen zum Wechseln"></div>
+        <div id="car-scroll" class="absolute inset-0 overflow-hidden select-none touch-pan-y focus:outline-none transition-opacity duration-500" tabindex="0" role="group" aria-roledescription="Karussell" aria-label="Bilder vom Enyaq, nach links oder rechts wischen zum Wechseln"><div class="car-slide absolute inset-0 pointer-events-none" style="opacity:1;transition:opacity .45s ease-in-out;will-change:opacity"><img src="/Bilder/hero/1.webp" width="880" height="512" fetchpriority="high" alt="Skoda Enyaq, Bild 1 von 6" draggable="false" class="absolute inset-x-4 top-0 bottom-2.5 w-[calc(100%-2rem)] h-[calc(100%-0.625rem)] object-contain object-bottom"></div></div>
         <div id="car-live" class="absolute inset-0 flex items-end justify-center opacity-0 pointer-events-none transition-opacity duration-500" aria-hidden="true"><img src="/Bilder/Enyaq_live.webp" alt="Enyaq lädt" width="1074" height="584" decoding="async" draggable="false" class="max-h-full w-full object-contain object-bottom select-none"></div>
       </div>
       <div id="car-dashes" class="hidden" aria-hidden="true"></div>
@@ -4455,17 +4456,23 @@ new MutationObserver(() => $('view-dashboard').classList.toggle('live-setup-open
   .observe($('live-setup'), { attributes: true, attributeFilter: ['class'] });
 let lbOpen = false;
 const CAR_NAMES = [1, 2, '_4', 3, 4, 5], CAR_DOTS = 3;
+/* Karussell-Bilder vorab aufbereitet (weißer Rand entfernt, zugeschnitten, 1100 px WebP) – vorher geschah das bei jedem Start per Canvas im Handy,
+   und Bild 1 erschien erst, wenn alle sechs fertig waren. aspect/extra wie cutWhite (Seitenverhältnis, Schattenanteil unter der Aufstandslinie).
+   Neue Bilder: Bilder/EnyaqN.* tauschen, dann Bilder/hero/ neu erzeugen (siehe CLAUDE.md). Bild 1 steht schon im HTML (lädt sofort). */
+const HERO_IMGS = [{ name: 1, src: '/Bilder/hero/1.webp', aspect: 1.7188, extra: 0.043 }, { name: 2, src: '/Bilder/hero/2.webp', aspect: 1.5625, extra: 0.0665 },
+  { name: '_4', src: '/Bilder/hero/akku.webp', aspect: 1.2966, extra: 0.098, cut: true }, { name: 3, src: '/Bilder/hero/3.webp', aspect: 1.8134, extra: 0.0631 },
+  { name: 4, src: '/Bilder/hero/4.webp', aspect: 1.1614, extra: 0.0053, tech: true }, { name: 5, src: '/Bilder/hero/5.webp', aspect: 2.3392, extra: 0.0058, tech: true }];
 const carAutoN = () => { const v = Number(getSettings().carN); return Number.isInteger(v) && v >= 1 && v <= 6 ? v : 6; };            // Einstellung: so viele Bilder wechseln automatisch
 const carAutoMs = () => { const v = Number(getSettings().carSec); return (Number.isFinite(v) && v >= 5 && v <= 600 ? v : 30) * 1000; };   // Bilder/Enyaq1, 2, _4 (Akku-Schnitt), 3, 4, 5 (unten bleiben 3 Punkte als Deko); automatischer Wechsel alle 30 Sekunden
 async function initCarousel() {
   const box = $('car-scroll'), dash = $('car-dashes'); if (!box) return;
-  const found = await Promise.all(CAR_NAMES.map(n => findHeroImg(n))), names = CAR_NAMES.filter((_, i) => found[i]), srcs = found.filter(Boolean);
-  let imgs = await Promise.all(srcs.map(async (u, i) => ({ ...(await cutWhite(u)), tech: /Enyaq[45]\./.test(u), cut: /Enyaq_4\./.test(u), name: names[i] })));   // Bild 4/5 = Technik (Akku, Motor): mittig und etwas kleiner, ohne Standlinie
-  if (!imgs.length) imgs = [{ src: HERO_FALLBACK, aspect: 700 / 391, extra: 0 }];
+  const imgs = HERO_IMGS.map(m => ({ ...m }));                                           // Bild 4/5 = Technik (Akku, Motor): mittig und etwas kleiner, ohne Standlinie
   /* Die Bilder liegen übereinander; ein Wisch (oder Pfeiltaste) blendet per CSS-Übergang auf das nächste bzw. vorherige Bild über. Pro Wisch genau ein Bild.
      Bewusst ohne mitlaufende Bewegung beim Wischen: Nur Deckkraft wird animiert (läuft ohne JavaScript pro Frame), dadurch ruckelt nichts.
      Der Schatten unter dem Auto kommt aus den Bildern selbst. */
-  box.innerHTML = imgs.map((m, i) => `<div class="car-slide absolute inset-0 pointer-events-none" style="opacity:${i === 0 ? 1 : 0};transition:opacity .45s ease-in-out;will-change:opacity"><img src="${m.src}" alt="Skoda Enyaq, Bild ${i + 1} von ${imgs.length}" draggable="false" class="${m.cut ? 'absolute inset-x-1 top-[1%] bottom-[3%] w-[calc(100%-0.5rem)] h-[96%] object-contain object-center' : m.tech ? 'absolute inset-x-8 top-[8%] bottom-[14%] w-[calc(100%-4rem)] h-[78%] object-contain object-center' : 'absolute inset-x-4 top-0 bottom-2.5 w-[calc(100%-2rem)] h-[calc(100%-0.625rem)] object-contain object-bottom'}"></div>`).join('');
+  const tpl = (m, i) => `<div class="car-slide absolute inset-0 pointer-events-none" style="opacity:${i === 0 ? 1 : 0};transition:opacity .45s ease-in-out;will-change:opacity"><img src="${m.src}" decoding="async" alt="Skoda Enyaq, Bild ${i + 1} von ${imgs.length}" draggable="false" class="${m.cut ? 'absolute inset-x-1 top-[1%] bottom-[3%] w-[calc(100%-0.5rem)] h-[96%] object-contain object-center' : m.tech ? 'absolute inset-x-8 top-[8%] bottom-[14%] w-[calc(100%-4rem)] h-[78%] object-contain object-center' : 'absolute inset-x-4 top-0 bottom-2.5 w-[calc(100%-2rem)] h-[calc(100%-0.625rem)] object-contain object-bottom'}"></div>`;
+  if (box.querySelector('.car-slide')) box.insertAdjacentHTML('beforeend', imgs.slice(1).map((m, i) => tpl(m, i + 1)).join(''));   // Bild 1 steht schon im HTML
+  else box.innerHTML = imgs.map(tpl).join('');
   dash.innerHTML = imgs.length > 1 ? imgs.slice(0, CAR_DOTS).map(() => '<span class="select-none text-[22px] leading-none text-white">•</span>').join('') : '';    // Zeichen statt Formen (Dark-Mode des Browsers), alle gleich, ohne Hervorhebung
   const slides = [...box.querySelectorAll('.car-slide')], els = [...box.querySelectorAll('img')]; let cur = 0, lock = false, sx = 0, sy = 0, tracking = false, autoT = 0;
   /* Auf dieselbe Standlinie ausrichten: Bild 1 ist die Referenz. Bilder mit mehr Schatten unter den Reifen werden so weit nach unten gesetzt, dass die Reifen auf gleicher Höhe stehen. */

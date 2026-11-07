@@ -6,3 +6,5 @@
   Danach in `index.html` (`/app.css?v=…`) und `sw.js` (`SAME_ORIGIN_ASSETS`, `CACHE_VERSION`) die Version erhöhen.
 - Klassen nur als vollständige Wörter schreiben (nicht per String zusammensetzen), sonst findet Tailwind sie nicht.
 - `CACHE_VERSION` in `sw.js` bei jeder Auslieferung erhöhen.
+- Karussell-Bilder auf Start: vorab aufbereitet in `Bilder/hero/` (weißer Rand entfernt, zugeschnitten, WebP 1100 px).
+  Werte `aspect`/`extra` stehen in `HERO_IMGS` in `index.html`. Bei neuen Bildern beides neu erzeugen; Bild 1 steht zusätzlich direkt im HTML und wird vorgeladen.
