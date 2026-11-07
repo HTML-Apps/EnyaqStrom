@@ -5,13 +5,12 @@
  * - Die KI-Abfrage (/api/…) wird NIE gecacht und läuft immer übers Netz.
  * Bei größeren Änderungen am Cache-Konzept CACHE_VERSION erhöhen. */
 
-const CACHE_VERSION = 'v224';
+const CACHE_VERSION = 'v225';
 const CACHE_NAME = 'enyaq-' + CACHE_VERSION;
 
 // Dateien, die beim Installieren vorab geladen werden
-const SAME_ORIGIN_ASSETS = ['./', './index.html'];
+const SAME_ORIGIN_ASSETS = ['./', './index.html', './app.css?v=225'];
 const CDN_ASSETS = [
-  'https://cdn.tailwindcss.com',
   'https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js'
 ];
 
@@ -45,7 +44,7 @@ self.addEventListener('fetch', (event) => {
   if (url.origin === self.location.origin && url.pathname.startsWith('/api/')) return;
   if (!/^https?:$/.test(url.protocol)) return;
   // Fremde Hosts nur für die bekannten Skript-CDNs cachen – Firestore/Auth (Streaming, Login-Iframe/Popup) niemals anfassen
-  const CDN_HOSTS = ['cdn.tailwindcss.com', 'cdn.jsdelivr.net', 'www.gstatic.com'];
+  const CDN_HOSTS = ['cdn.jsdelivr.net', 'www.gstatic.com'];
   if (url.origin !== self.location.origin && !CDN_HOSTS.includes(url.hostname)) return;
 
   // Seitenaufrufe: Network first, offline -> gecachte index.html

@@ -5,5 +5,11 @@
   "dependencies": {
     "jose": "^5.9.6",
     "web-push": "^3.6.7"
+  },
+  "scripts": {
+    "css": "tailwindcss -c tailwind.config.cjs -i styles/tw-in.css -o app.css --minify"
+  },
+  "devDependencies": {
+    "tailwindcss": "3.4.19"
   }
 }
