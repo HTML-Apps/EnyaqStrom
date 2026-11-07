@@ -1450,7 +1450,6 @@
           <div class="space-y-3">
           <p id="cloud-status" class="text-sm">Wird geladen …</p>
       <p id="vehicle-status" class="text-sm text-slate-500 dark:text-slate-400"></p>
-      <button id="veh-raw" type="button" class="mt-2 w-full rounded-xl border border-slate-300 dark:border-slate-700 py-2.5 text-sm font-semibold active:scale-95 transition">Rohdaten vom Auto prüfen</button>
       <button id="veh-key" type="button" class="hidden mt-2 w-full rounded-xl border border-slate-300 dark:border-slate-700 py-2.5 text-sm font-semibold active:scale-95 transition">🔑 Škoda-Schlüssel ersetzen</button>
       <div class="grid grid-cols-2 gap-2">
         <button id="btn-cloud" class="w-full px-2 py-3 rounded-2xl bg-slate-900 dark:bg-slate-700 text-white text-sm font-medium active:scale-95 transition">Mit Google anmelden</button>
@@ -2283,23 +2282,6 @@ $('au-sheet').addEventListener('click', async (e) => {
     if (d.expires) vehicle.expires = d.expires; save(KEY_VEHICLE, vehicle); renderVehicleStatus(); try { renderKeyWarning(); } catch (er) { }
     $('au-sheet-box').innerHTML = `<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div><p class="text-lg font-bold">✓ Neuer Schlüssel aktiv</p><p class="text-left text-sm text-slate-600 dark:text-slate-300">Der Škoda-Server hat ihn akzeptiert.${d.expires ? ' Gültig bis <b>' + new Date(d.expires + 'T12:00:00').toLocaleDateString('de-DE') + '</b>.' : ''}</p><button type="button" data-cc="close" class="h-12 w-full rounded-2xl bg-emerald-600 text-sm font-semibold text-white">Fertig</button>`;
   } catch (er) { msg.className = 'min-h-[1.25rem] text-left text-sm text-red-600 dark:text-red-400'; msg.textContent = er.message; b.disabled = false; b.textContent = 'Prüfen & speichern'; }
-});
-/* Diagnose: welche Felder meldet das Auto? Zeigt Temperatur-Felder hervorgehoben und die komplette Antwort zum Kopieren */
-$('veh-raw').addEventListener('click', async () => {
-  const box = $('au-sheet-box'), show = (h) => { box.innerHTML = '<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div><p class="text-lg font-bold">Rohdaten vom Auto</p>' + h + '<button type="button" data-cc="close" class="h-12 w-full rounded-2xl border border-slate-300 dark:border-slate-700 text-sm font-semibold">Schließen</button>'; $('au-sheet').classList.remove('hidden'); };
-  if (!apiEnabled()) { show('<p class="text-sm text-left">Für dieses Konto sind keine Fahrzeugdaten eingerichtet.</p>'); return; }
-  show('<p class="text-sm text-left text-slate-500">Frage den Škoda-Server ab …</p>');
-  try {
-    const res = await fetch('/api/vehicle?raw=1', { headers: await authHeaders() }), d = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(d.error || 'HTTP ' + res.status);
-    const hits = []; (function walk(o, path) { if (o && typeof o === 'object') Object.keys(o).forEach(k => { const p = path ? path + '.' + k : k; if (/temp|celsius|kelvin/i.test(k)) hits.push([p, JSON.stringify(o[k])]); walk(o[k], p); }); })(d.data, '');
-    const json = JSON.stringify(d.data, null, 2);
-    show(`<p class="text-sm text-left">${hits.length ? '<b class="text-emerald-600 dark:text-emerald-400">Temperatur-Felder gefunden:</b>' : '<b class="text-amber-600 dark:text-amber-400">Keine Temperatur-Felder in der Antwort.</b>'} <span class="text-slate-500">(Abfrage: ${esc(d.include || '')}, Status ${d.status})</span></p>
-      ${hits.length ? '<div class="rounded-xl bg-slate-100 dark:bg-slate-800 p-2.5 font-mono text-[11.5px] break-all">' + hits.map(([p, v]) => esc(p) + ' = ' + esc(v.slice(0, 120))).join('<br>') + '</div>' : ''}
-      <pre id="veh-raw-json" class="max-h-[45vh] overflow-auto rounded-xl bg-slate-100 dark:bg-slate-800 p-2.5 text-[10.5px] leading-snug">${esc(json)}</pre>
-      <button type="button" id="veh-raw-copy" class="h-11 w-full rounded-2xl bg-emerald-600 text-sm font-semibold text-white">Antwort kopieren</button>`);
-    $('veh-raw-copy').addEventListener('click', async () => { try { await navigator.clipboard.writeText(json); $('veh-raw-copy').textContent = '✓ Kopiert'; } catch (e) { $('veh-raw-copy').textContent = 'Kopieren nicht möglich'; } });
-  } catch (e) { show('<p class="text-sm text-left text-red-600 dark:text-red-400">Nicht verfügbar: ' + esc(e.message) + '</p>'); }
 });
 async function checkVehicle(uid) {                                                  // einmal nach der Anmeldung, ohne Škoda-Abfrage
   if (vehicle.uid !== uid) vehicle = { uid, ok: false, expires: null };             // anderes Konto: nichts vom vorherigen übernehmen
@@ -8014,7 +7996,6 @@ function closeNavDrawer() {
 const navStart = (id) => { if (currentView !== 'dashboard') showView('dashboard'); setTimeout(() => { const el = $(id); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 320); };
 const NAV_GO = {
   sprache: () => openSettings('sprache'),
-  'veh-raw': () => { openSettings('konto'); setTimeout(() => { const b = $('veh-raw'); b.scrollIntoView({ block: 'center' }); b.click(); }, 350); },
   home: () => showView('dashboard'),
   'cap-home': () => { setCapPlace('home'); showView('capture'); setCapPlace('home'); }, 'cap-bosch': () => { setCapPlace('bosch'); showView('capture'); setCapPlace('bosch'); },
   'cap-away': () => { setCapPlace('away'); showView('capture'); setCapPlace('away'); }, costs: () => showView('costs'),
@@ -8040,7 +8021,7 @@ const NAV_IDX = [
   ['eff', 'Verbräuche & Effizienz', 'Start', 'verbrauch kwh/100 km ladekosten pro km strompreis'], ['trends', 'Trends', 'Start', 'laufleistung stromkosten gesamtkosten monate'], ['recs', 'Rekorde', 'Rekorde', 'verbrauch bestwert strecke tempomat messreihe reichweite langzeitverbrauch seit kauf bordcomputer akku temperatur °c notieren'],
   ['akkutemp', 'Akku-Temperatur notieren', 'Rekorde › Akku °C', 'akku temperatur °c grad notieren batterie'], ['curve', 'DC-Ladekurve', 'Berichte › Akku', 'schnellladen ladeleistung kw ladezeit rechner sommer winter'],
   ['akku', 'Akku', 'Berichte › Akku', 'kapazität pflege temperatur soh netto rebalancing'], ['stat', 'Statistik', 'Berichte › Daten', 'fahrzeugdaten verbrauch laufleistung'], ['badges', 'Abzeichen', 'Abzeichen', 'badges erfolge'],
-  ['akte', 'Fahrzeugakte', 'Berichte › Daten', 'verkauf historie'], ['sprache', 'Sprachsteuerung', 'Einstellungen', 'gemini sprachbefehle google tasks akku langzeit android auto'], ['veh-raw', 'Rohdaten vom Auto prüfen', 'Einstellungen › Konto', 'škoda api diagnose akkutemperatur felder'], ['ausst', 'Ausstattung', 'Berichte › Daten', 'sonderausstattung datenblatt care connect pr-code farbe felgen'], ['akte-pdf', 'Fahrzeugakte als PDF', 'Aktion', 'drucken export'], ['checkheft', 'Checkheft', 'Berichte › Daten', 'service reparatur tüv hu werkstatt'],
+  ['akte', 'Fahrzeugakte', 'Berichte › Daten', 'verkauf historie'], ['sprache', 'Sprachsteuerung', 'Einstellungen', 'gemini sprachbefehle google tasks akku langzeit android auto'], ['ausst', 'Ausstattung', 'Berichte › Daten', 'sonderausstattung datenblatt care connect pr-code farbe felgen'], ['akte-pdf', 'Fahrzeugakte als PDF', 'Aktion', 'drucken export'], ['checkheft', 'Checkheft', 'Berichte › Daten', 'service reparatur tüv hu werkstatt'],
   ['ch-pdf', 'Checkheft als PDF', 'Aktion', 'belege mappe drucken'], ['rep-fahrten', 'Fahrten-Bericht', 'Berichte › Fahrten', 'fahrtenbuch arbeitsweg'], ['tax', 'Steuer · Arbeitsweg', 'Berichte › Fahrten', 'pendlerpauschale entfernungspauschale werbungskosten'],
   ['hist', 'Historie', 'Historie', 'verlauf bearbeiten datenprüfung'], ['hist-laden', 'Ladungen', 'Historie › Laden', 'verlauf'], ['hist-kosten', 'Kosten-Verlauf', 'Historie › Kosten', 'etiketten kategorien filter'], ['trips', 'Fahrten', 'Historie › Fahrten', 'fahrtenbuch'],
   ['wrap', 'Rückblick', 'Start', 'jahr wrapped'], ['reminders', 'Erinnerungen', 'Erinnerungen', 'wartung termine fällig'], ['kb', 'Wissen', 'Wissen', 'notizen links tipps'], ['wish', 'Wunschliste', 'Wunschliste', 'zubehör kaufen wunsch matten kofferraum links shop'], ['tires', 'Reifen', 'Reifen', 'profiltiefe profil reifenprofil mm sommer winter allwetter messen'], ['providers', 'Ladekarten', 'Ladeanbieter', 'anbieter tarife preise'],
