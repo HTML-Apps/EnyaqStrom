@@ -9,7 +9,7 @@
   Danach in `index.html` (`/app.js?v=…`, `/app.css?v=…`) und `sw.js` (`SAME_ORIGIN_ASSETS`, `CACHE_VERSION`) die Version erhöhen.
 - Klassen nur als vollständige Wörter schreiben (nicht per String zusammensetzen), sonst findet Tailwind sie nicht.
 - `CACHE_VERSION` in `sw.js` bei jeder Auslieferung erhöhen.
-- Bilder je Auto in Unterordnern: `Bilder/Enyaq/` (alles Enyaq-spezifische inkl. `hero/`), `Bilder/Epiq/` (noch leer, siehe LIESMICH.md).
+- Bilder je Auto in Unterordnern: `Bilder/Enyaq/` (alles Enyaq-spezifische inkl. `hero/`), `Bilder/Epiq/` (Epiq1–2 + `hero/`, noch nicht in der App verwendet; aufbereiten mit `python3 tools/epiq_bilder.py`, siehe LIESMICH.md).
   Gemeinsame Bilder (Icons, Wetter `wx/`, Statistik, Fahrzeugakte, Shortcuts) bleiben direkt in `Bilder/`.
 - Karussell-Bilder auf Start: vorab aufbereitet in `Bilder/Enyaq/hero/` (weißer Rand entfernt, zugeschnitten, WebP 1100 px).
   Werte `aspect`/`extra` stehen in `HERO_IMGS` (src/05-startseite-banner.js). Bild 1 steht zusätzlich direkt im HTML und wird vorgeladen.
