@@ -79,6 +79,9 @@
   .spinner { width:22px;height:22px;border:3px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
   :root { color-scheme: light dark; }
+  /* Auswahllisten: Chrome am PC (Windows) zeichnet die aufgeklappte Liste sonst weiß, die Einträge erben aber die helle Schrift → kaum lesbar */
+  select option, select optgroup { background-color: #fff; color: #0f172a; }
+  @media (prefers-color-scheme: dark) { select { color-scheme: dark; } select option, select optgroup { background-color: #0f172a; color: #e2e8f0; } }
   /* Live-Modus auf Start: Erinnerungen, Bildpunkte und Hinweis-Banner ausblenden, damit die Zählerkarte ohne Scrollen sichtbar ist */
   #view-dashboard.live-setup-open #hero-rem-wrap,                       /* schon beim Öffnen der Live-Eingabe */
   #view-dashboard.live-mode #hero-rem-wrap, #view-dashboard.live-mode #car-dashes, #view-dashboard.live-mode #report-banner, #view-dashboard.live-mode #trips-banner, #view-dashboard.live-mode #frost-banner, #view-dashboard.live-mode #bak-banner { display: none !important; }
@@ -5335,7 +5338,7 @@ function renderKb() {
   const kb = getKb(), q = $('kb-q').value.trim().toLowerCase();
   const n = (c) => kb.items.filter(x => x.cat === c).length;
   const nOpen = mgOpen(kb);
-  $('kb-cats').innerHTML = [['', 'Alle ' + kb.items.length]].concat(kb.cats.filter(c => n(c) || c === KB_MG || c === KB_UP).map(c => [c, KB_ICON(c) + ' ' + c + (c === KB_MG || !n(c) ? '' : ' ' + n(c))]))
+  $('kb-cats').innerHTML = [['', 'Alle (' + kb.items.length + ')']].concat(kb.cats.filter(c => n(c) || c === KB_MG || c === KB_UP).map(c => [c, KB_ICON(c) + ' ' + c + (c === KB_MG ? '' : ' (' + n(c) + ')')]))
     .map(([k, l]) => `<button type="button" data-kbc="${esc(k)}" class="shrink-0 rounded-lg px-2.5 py-1.5 ${k === kbCat ? 'bg-emerald-600/20 text-emerald-700 dark:text-emerald-300 font-semibold' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300'}">${esc(l)}${k === KB_MG && nOpen ? ` <span class="ml-0.5 rounded-md bg-rose-600 px-1.5 text-[10px] font-bold text-white">${nOpen}</span>` : ''}</button>`).join('');
   const mgs = kb.items.filter(isMg), cnt = (st) => mgs.filter(x => mgSt(x) === st).length;
   const uc = upCur(kb);
