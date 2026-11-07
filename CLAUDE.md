@@ -4,7 +4,8 @@
 - **`app.js` ist generiert**: `src/*.js` werden in Namensreihenfolge unverändert zu einem Skript zusammengehängt (`npm run js`).
   Nie `app.js` direkt bearbeiten. Ein einziges Skript wie früher inline → Funktionen gelten dateiübergreifend, Reihenfolge = Dateiname.
 - **Tailwind ist vorab gebaut** (`npm run css`, scannt `index.html` und `src/**/*.js`) → `app.css`.
-- Nach Änderungen: `npm install` (einmalig), dann **`npm run build`** (js + css), `app.js`/`app.css` mit einchecken.
+- Nach Änderungen: `npm install` (einmalig), dann **`npm run make`** (js + css), `app.js`/`app.css` mit einchecken.
+  Das Skript heißt bewusst nicht `build`: Vercel würde es sonst selbst ausführen und danach einen Ordner `public` erwarten → Deploy schlägt fehl.
   Danach in `index.html` (`/app.js?v=…`, `/app.css?v=…`) und `sw.js` (`SAME_ORIGIN_ASSETS`, `CACHE_VERSION`) die Version erhöhen.
 - Klassen nur als vollständige Wörter schreiben (nicht per String zusammensetzen), sonst findet Tailwind sie nicht.
 - `CACHE_VERSION` in `sw.js` bei jeder Auslieferung erhöhen.
