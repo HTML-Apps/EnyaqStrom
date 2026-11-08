@@ -235,6 +235,7 @@ function renderVehSlide() {
   const soc = Math.round(d.soc), tgt = Number(d.targetSoc) || null, charging = d.chargeState === 'CHARGING' || d.chargePowerKw > 0, plugged = d.plug === 'CONNECTED';
   const lk = d.doorsLocked || d.locked, locked = lk === 'YES' ? true : lk === 'NO' ? false : null, ok = locked !== false && !/OPEN/.test(d.doors || '') && !/OPEN/.test(d.windows || '');
   const at = d.capturedAt ? new Date(d.capturedAt) : new Date(c.t);
+  if (isSimple()) { el.innerHTML = vehSlideEasy(d, soc, tgt, charging, plugged, locked, at); return; }
   const tile = (a, b, col) => `<div class="min-w-0 rounded-xl bg-slate-100 dark:bg-slate-800/70 px-2.5 py-1.5"><p class="text-[10.5px] text-left text-slate-500 dark:text-slate-400">${a}</p><p class="truncate text-[13px] font-semibold ${col || ''}">${b}</p></div>`;
   el.innerHTML = `<div class="flex items-center justify-between gap-2"><p class="font-barlow text-xl font-bold uppercase tracking-[0.08em] leading-6">Fahrzeugstatus</p><span class="text-[11px] ${ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}">● ${ok ? 'Alles OK' : 'Bitte prüfen'}</span></div>
     <div class="mt-1.5 flex items-baseline gap-2"><span class="font-barlow text-[36px] font-bold leading-none">${soc} %</span>${d.rangeKm != null ? `<span class="text-[15px] font-semibold">${fmt(d.rangeKm, 0)} km</span>` : ''}<span class="ml-auto text-[10.5px] text-slate-500 dark:text-slate-400">${at.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })} · ${hhmm(at.getTime())}</span></div>
@@ -245,6 +246,28 @@ function renderVehSlide() {
       charging ? tile('Lädt', (d.chargePowerKw > 0 ? fmt(d.chargePowerKw, 1) + ' kW' : '') + (d.minutesToFull > 0 ? ' · voll ' + hhmm(at.getTime() + d.minutesToFull * 60000) : ''), 'text-sky-600 dark:text-sky-300') : tile('Ladekabel', plugged ? 'verbunden' : 'nicht verbunden'),
       tile('Ladeziel', tgt ? tgt + ' %' + (d.careMode === 'ACTIVATED' ? ' · Schonung' : '') : '–'),
       tile('km-Stand', d.odometerKm != null ? fmt(Math.round(d.odometerKm), 0) + ' km' : '–')].join('')}</div>`;
+}
+/* Einfache Ansicht: kompakter Status (Mockup „Status A“). Zustand über Symbole oben (Schloss zu/offen, Stecker ab/steckt, Blitz = lädt),
+   die Zeile unten sagt es in Worten. Laden: Balken blau mit laufenden Streifen. */
+const VEH_ICO = {
+  lockc: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>', locko: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.6-1.7"/>',
+  plug: '<path d="M9 3v4M15 3v4M7 7h10v4a5 5 0 0 1-10 0z"/><path d="M12 16v5"/>', plugin: '<path d="M9 3v4M15 3v4M7 7h10v4a5 5 0 0 1-10 0z"/><path d="M12 16v3"/><path d="M8 21h8"/>', bolt: '<path d="M13 3L5 14h6l-1 7 8-11h-6z"/>'
+};
+const vehIco = (k, cls, label) => `<span role="img" aria-label="${label}" class="flex h-[26px] w-[26px] items-center justify-center rounded-[9px] ${cls}"><svg class="h-[18px] w-[18px]" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true">${VEH_ICO[k]}</svg></span>`;
+function vehSlideEasy(d, soc, tgt, charging, plugged, locked, at) {
+  const open = locked === false, openDW = /OPEN/.test(d.doors || '') || /OPEN/.test(d.windows || '');
+  const lockI = open || openDW ? vehIco('locko', 'bg-amber-500/20 text-amber-500 dark:text-amber-400', open ? 'offen' : 'Tür oder Fenster offen') : locked ? vehIco('lockc', 'text-slate-400', 'verriegelt') : '';
+  const plugI = charging ? vehIco('bolt', 'bg-sky-500/20 text-sky-600 dark:text-sky-400', 'lädt') : plugged ? vehIco('plugin', 'text-sky-600 dark:text-sky-400', 'Kabel verbunden') : vehIco('plug', 'text-slate-300 dark:text-slate-600', 'Kabel nicht verbunden');
+  const today = wxIso(at) === wxIso(new Date()), atTxt = (today ? '' : at.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }) + ' · ') + hhmm(at.getTime());   // heute: nur Uhrzeit (Platz)
+  const tgtTxt = tgt ? 'Ladeziel ' + tgt + ' %' : '';
+  const foot = charging ? `<b class="font-semibold text-sky-600 dark:text-sky-400">Lädt${d.chargePowerKw > 0 ? ' · ' + fmt(d.chargePowerKw, 1) + ' kW' : ''}${d.minutesToFull > 0 ? ' · voll ca. ' + hhmm(at.getTime() + d.minutesToFull * 60000) : ''}</b>`
+    : open ? '<b class="font-semibold text-amber-600 dark:text-amber-400">Auto ist nicht verriegelt</b>' : openDW ? '<b class="font-semibold text-amber-600 dark:text-amber-400">Tür oder Fenster offen</b>'
+    : plugged ? `<b class="font-semibold text-sky-600 dark:text-sky-400">Kabel steckt${tgtTxt ? ' · ' + tgtTxt : ''}</b>` : tgtTxt;
+  const fill = charging ? 'from-sky-600 to-sky-400' : socBarCls(soc), stripes = charging ? '<div class="absolute inset-0 veh-stripes"></div>' : '';
+  return `<div class="flex items-center gap-1.5"><p class="min-w-0 flex-1 truncate font-barlow text-[19px] font-bold uppercase tracking-[0.06em] leading-6">Fahrzeugstatus</p>${lockI}${plugI}<span class="ml-0.5 shrink-0 whitespace-nowrap text-[11px] text-slate-500 dark:text-slate-400">${atTxt}</span></div>
+    <div class="mt-1.5 flex items-baseline gap-2.5"><span class="font-barlow text-[44px] font-bold leading-none">${soc} %</span>${d.rangeKm != null ? `<span class="font-barlow text-[22px] font-bold ${wxoLowR(d.rangeKm) ? 'text-red-500' : ''}">${fmt(d.rangeKm, 0)} km</span>` : ''}${d.odometerKm != null ? `<span class="ml-auto text-xs text-slate-500 dark:text-slate-400">km ${fmt(Math.round(d.odometerKm), 0)}</span>` : ''}</div>
+    <div class="relative mt-2 h-3 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800"><div class="relative h-full overflow-hidden rounded-full bg-gradient-to-r ${fill}" style="width:${Math.max(2, Math.min(100, soc))}%">${stripes}</div>${tgt ? `<div class="absolute inset-y-0 w-0.5 bg-slate-900/60 dark:bg-white/75" style="left:${tgt}%"></div>` : ''}</div>
+    <div class="mt-1.5 flex justify-between gap-2 text-[11.5px] text-slate-500 dark:text-slate-400"><span class="min-w-0 truncate">${foot}</span><span class="shrink-0">vom Auto · Škoda-App</span></div>`;
 }
 function renderVehCard() {
   try { renderVehSlide(); } catch (e) { }
