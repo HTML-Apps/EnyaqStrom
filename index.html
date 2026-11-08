@@ -182,7 +182,7 @@
   html.simple .simple-only { display: block !important; }
   html.simple #hero-stats, html.simple #hero-rem-wrap, html.simple #frost-banner, html.simple #trips-banner, html.simple #wxo-card, html.simple #btm-card, html.simple #meter-card,
   html.simple #go-stat, html.simple #btn-wrap-preview, html.simple #go-akku, html.simple #go-trips, html.simple #go-prov, html.simple #go-badges, html.simple #kb-card,
-  html.simple #bottom-nav, html.simple [data-place="bosch"], html.simple #rec-chips, html.simple #rep-mode [data-mode="fahrten"], html.simple [data-bt="kurve"],
+  html.simple #bottom-nav, html.simple [data-place="bosch"], html.simple #rec-chips, html.simple #rep-mode [data-mode="fahrten"], html.simple [data-bt="kurve"], html.simple [data-bt="mehr"], html.simple #sec-eff, html.simple #sec-trends,
   html.simple [data-dp="akte"], html.simple [data-dp="ausst"], html.simple [data-dp="checkheft"], html.simple [data-filter="fahrten"], html.simple div:has(> #bt-minus),
   html.simple #sd-list [data-sec="fahrten"], html.simple #sd-list [data-sec="wetter"], html.simple #sd-list [data-sec="sprache"],
   html.simple #set-drawer [data-go="providers"], html.simple #set-drawer [data-go="kb"], html.simple #set-drawer [data-go="badges"],
@@ -202,7 +202,7 @@
   @media (prefers-reduced-motion: reduce) { #bd-conf i, #bdg-conf i { animation: none; top: var(--y, 10%); } #bd-card, #bdg-card { animation: none; } }
 </style>
 <!-- Tailwind fertig gebaut (npm run css) – am Ende des Kopfs wie früher das CDN, damit die Reihenfolge der Regeln gleich bleibt -->
-<link rel="stylesheet" href="/app.css?v=245">
+<link rel="stylesheet" href="/app.css?v=246">
 </head>
 <body class="bg-black text-slate-100 min-h-screen">
 
@@ -266,6 +266,7 @@
     <div id="dash-swipe" class="relative">
     <div id="dash-swipe-track" class="no-scrollbar flex gap-3 overflow-x-auto snap-x snap-mandatory overscroll-x-contain">
     <div id="ltm-card" class="flex flex-col w-full shrink-0 snap-center snap-always rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4"></div>
+    <div id="care-slide" role="button" tabindex="0" aria-label="Akkupflege – Details öffnen" class="hidden flex flex-col w-full shrink-0 snap-center snap-always rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4 cursor-pointer"></div>
     <div id="btm-card" class="flex flex-col w-full shrink-0 snap-center snap-always rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4"></div>
     <div id="wxo-card" class="relative hidden flex flex-col w-full shrink-0 snap-center snap-always rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
       <div class="flex items-center justify-between gap-2"><div class="min-w-0"><p class="font-barlow text-xl font-bold uppercase tracking-[0.08em] leading-6">Verbrauchs-Prognose</p></div><button id="wxo-more" type="button" class="shrink-0 text-xs font-semibold text-sky-700 dark:text-sky-300 active:opacity-70">7 Tage ›</button></div>
@@ -368,6 +369,7 @@
       <span class="h-0.5 flex-1 rounded-full bg-gradient-to-r from-emerald-500/80 to-white/10" aria-hidden="true"></span>
     </div>
 
+    <div id="eff-block" class="space-y-3">
     <div id="dash-place" class="flex bg-slate-200 dark:bg-slate-800 rounded-xl p-1"><button type="button" data-place="home" class="dash-place-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Zuhause</button><button type="button" data-place="bosch" class="dash-place-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Bosch</button><button type="button" data-place="away" class="dash-place-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Unterwegs</button><button type="button" data-place="all" class="dash-place-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Gesamt</button></div>
 
     <div class="rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
@@ -376,7 +378,7 @@
         <button data-range="month" class="range-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Monat</button>
         <button data-range="year"  class="range-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Jahr</button>
       </div>
-      <p id="chart-title" class="text-sm text-slate-500 dark:text-slate-400 mb-2"></p>
+      <p id="chart-title" class="text-left text-sm text-slate-500 dark:text-slate-400 mb-2"></p>
       <div class="relative h-64"><canvas id="chart"></canvas></div>
       <p id="chart-empty" class="hidden text-center text-sm text-slate-500 py-6">Noch keine Daten. Erfasse mindestens zwei Zählerstände.</p>
     </div>
@@ -413,12 +415,15 @@
       <p id="loss-empty" class="hidden text-center text-sm text-slate-500 py-6">Noch keine Ladungen mit Akku-Start und -Ende erfasst.</p>
       <p id="loss-note" class="text-xs text-slate-500 dark:text-slate-400 mt-3 text-center"></p>
     </div>
+    </div>
     <div id="sec-trends" class="!mt-7 flex items-center gap-3 scroll-mt-4" role="presentation">
       <h2 class="shrink-0 font-barlow text-xl font-bold uppercase tracking-[0.1em] text-white">Trends</h2>
       <span class="h-0.5 flex-1 rounded-full bg-gradient-to-r from-emerald-500/80 to-white/10" aria-hidden="true"></span>
     </div>
+    <div id="trends-block">
     <div id="trends" class="flex snap-x snap-mandatory gap-4 overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-roledescription="Karussell" aria-label="Trends der letzten 8 Monate"></div>
     <div id="trends-dots" class="!mt-2 flex justify-center gap-2 cursor-pointer" aria-hidden="true"></div>
+    </div>
     <div id="hero-bg" aria-hidden="true" class="absolute -top-3 -inset-x-3 -z-10 h-[620px] pointer-events-none !mt-0" style="background:radial-gradient(ellipse 72% 190px at 50% 190px,rgba(80,150,255,.40),rgba(80,150,255,0) 70%),linear-gradient(180deg,#000 0,#000 28px,#030b24 70px,#061a52 160px,#0b2f8a 280px,#0a2466 370px,#050f2e 470px,#000 600px)"></div>
     <script>/* Eigenes Farbthema sofort beim Aufbau der Seite setzen (sonst blitzt kurz das blaue Standard-Thema auf); den Wert legt applyHeroColor() ab */
       try { var hb = localStorage.getItem('enyaq.heroBgCss'); if (hb) document.getElementById('hero-bg').style.background = hb; } catch (e) { }</script>
@@ -646,6 +651,15 @@
   <section id="view-eval" class="view hidden space-y-3">
     <div class="-mt-2 flex h-[60px] items-center gap-1"><button type="button" data-easy-menu aria-label="Menü" class="-ml-2 w-11 h-11 shrink-0 rounded-xl text-white flex items-center justify-center active:scale-95 transition"><svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button><h1 class="min-w-0 truncate font-barlow font-semibold text-2xl uppercase tracking-[0.14em]">Auswerten</h1></div>
     <div id="simple-eval"></div>
+  </section>
+
+  <section id="view-eff" class="view hidden space-y-3">
+    <div class="-mt-2 flex h-[60px] items-center gap-1"><button type="button" data-easy-back aria-label="Zurück" class="-ml-2 w-11 h-11 shrink-0 rounded-xl text-white flex items-center justify-center active:scale-95 transition"><svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button><h1 class="min-w-0 truncate font-barlow font-semibold text-2xl uppercase tracking-[0.14em] text-white">Effizienz</h1></div>
+    <div id="eff-host"></div>
+  </section>
+  <section id="view-trends" class="view hidden space-y-3">
+    <div class="-mt-2 flex h-[60px] items-center gap-1"><button type="button" data-easy-back aria-label="Zurück" class="-ml-2 w-11 h-11 shrink-0 rounded-xl text-white flex items-center justify-center active:scale-95 transition"><svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button><h1 class="min-w-0 truncate font-barlow font-semibold text-2xl uppercase tracking-[0.14em] text-white">Trends</h1></div>
+    <div id="trends-host"></div>
   </section>
 
   <section id="view-tires" class="view hidden space-y-3">
@@ -1845,7 +1859,7 @@
   </div>
 </nav>
 
-<script src="/app.js?v=245"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
+<script src="/app.js?v=246"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
 <script type="module">
 /* Firebase (modular SDK). Die Konfiguration ist kein Geheimnis – geschützt wird über Auth + Firestore-Regeln. */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
