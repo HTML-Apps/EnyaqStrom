@@ -376,7 +376,7 @@ function carFormHints() {
     const o = CAR_PRESETS[carFormKey];
     if (parseNum($('set-battery').value) === o.net) $('set-battery').value = f(c.net);
     if (parseNum($('set-power').value) === o.ac) $('set-power').value = f(c.ac);
-    const tv = $('set-title').value.trim(); if (!tv || tv === DEFAULT_TITLE || tv === o.title) $('set-title').value = c.title || DEFAULT_TITLE;   // Standard-Titel mitwechseln
+    $('set-title').value = c.title;                                      // Titel folgt dem Modell (Škoda Enyaq / Škoda Epiq), danach frei änderbar
   }
   carFormKey = $('set-car').value;
   $('set-battery').placeholder = f(c.net); $('set-power').placeholder = f(c.ac);

@@ -99,7 +99,7 @@ function segPaint(sel, active) {
    überschreiben. Ohne Auswahl gilt der Enyaq iV 50 (= bisheriges Verhalten). Epiq: Werte laut EV Database (netto 51,7 kWh, 1.618 kg EU-Leergewicht,
    AC 11 kW, WLTP 13,7); cw und Stirnfläche sind Schätzwerte, bis Škoda sie nennt. */
 const CAR_PRESETS = {
-  enyaq50: { name: 'Škoda Enyaq iV 50', short: 'Enyaq', net: 52, ac: 7, wltp: 16, wltpHint: 'ca. 15,8 bis 16,1', m: 2050, crr: 0.0095, cw: 0.257, A: 2.56, eta: 0.87, rec: 0.65, aux: 0.35, wYrs: 8, wKm: 160000, wSoh: 70, av: true },
+  enyaq50: { name: 'Škoda Enyaq iV 50', title: 'Škoda Enyaq', short: 'Enyaq', net: 52, ac: 7, wltp: 16, wltpHint: 'ca. 15,8 bis 16,1', m: 2050, crr: 0.0095, cw: 0.257, A: 2.56, eta: 0.87, rec: 0.65, aux: 0.35, wYrs: 8, wKm: 160000, wSoh: 70, av: true },
   epiq55: { name: 'Škoda Epiq 55', title: 'Škoda Epiq', short: 'Epiq', net: 51.7, ac: 11, wltp: 13.7, wltpHint: 'ca. 13,7', m: 1620, crr: 0.0095, cw: 0.27, A: 2.4, eta: 0.87, rec: 0.65, aux: 0.35, wYrs: 8, wKm: 160000, wSoh: 70, av: false, est: true },
 };
 const CAR_TECH = { m: [800, 4000], cw: [0.15, 0.5], A: [1.5, 4], wYrs: [1, 15], wKm: [10000, 500000], wSoh: [50, 90] };   // überschreibbar, mit gültigem Bereich
