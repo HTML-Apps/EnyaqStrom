@@ -105,14 +105,23 @@ async function cutWhite(src) {
   } catch { return { src, aspect: null, extra: 0 }; }
 }
 /** Live-Modus: oben dauerhaft das Ladebild (Enyaq_live.webp) statt des Karussells; danach wieder Karussell mit Wechsel alle 30 Sekunden. */
-let liveHero = false;
-function setLiveHero(on) {
-  if (on === liveHero) return; liveHero = on;
+/* Ladebild je Fahrzeugprofil; es erscheint auch, solange der Fahrzeugstatus (Škoda-App) „lädt“ meldet (chargeHero) */
+const CAR_LIVE = { enyaq50: '/Bilder/Enyaq/Enyaq_live.webp', epiq55: '/Bilder/Epiq/Epiq_live.webp' };
+let liveHero = false, chargeHero = false;
+function paintHeroLayers() {
+  const on = liveHero || chargeHero, img = $('car-live').querySelector('img'), src = CAR_LIVE[carProf().key] || CAR_LIVE.enyaq50;
+  if (img && img.getAttribute('src') !== src) { img.src = src; img.removeAttribute('width'); img.removeAttribute('height'); }
+  if (img) img.alt = carShort() + ' lädt';
   $('car-live').classList.toggle('opacity-0', !on); $('car-live').setAttribute('aria-hidden', String(!on));
   $('car-scroll').classList.toggle('opacity-0', on); $('car-scroll').classList.toggle('pointer-events-none', on);
   $('car-dashes').classList.toggle('invisible', on);
+}
+function setLiveHero(on) {
+  if (on === liveHero) return; liveHero = on; paintHeroLayers();
   $('view-dashboard').classList.toggle('live-mode', on);                 // Zählerkarte rückt nach oben
 }
+/** Fahrzeugstatus „lädt“ (höchstens 3 Stunden alt): oben das Ladebild statt des Karussells */
+function setChargeHero(on) { if (on === chargeHero) return; chargeHero = on; paintHeroLayers(); }
 /* Live-Eingabe (Start-/Ziel-%) geöffnet: „Erinnerungen prüfen“ schon jetzt ausblenden, damit mehr Platz ist */
 new MutationObserver(() => $('view-dashboard').classList.toggle('live-setup-open', !$('live-setup').classList.contains('hidden')))
   .observe($('live-setup'), { attributes: true, attributeFilter: ['class'] });

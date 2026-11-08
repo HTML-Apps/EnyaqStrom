@@ -271,6 +271,8 @@ function vehSlideEasy(d, soc, tgt, charging, plugged, locked, at) {
 }
 function renderVehCard() {
   try { renderVehSlide(); } catch (e) { }
+  try { const c = load(KEY_WXO + 'S', null), d = c && c.d, at = d && (Date.parse(d.capturedAt) || c.t);
+    setChargeHero(!!(apiEnabled() && d && (d.chargeState === 'CHARGING' || d.chargePowerKw > 0) && at && Date.now() - at < 3 * 3600e3)); } catch (e) { }
   const el = $('veh-card'), wrap = $('hero-car'); if (!el) return;
   const c = load(KEY_WXO + 'S', null), d = c && c.d, on = isDesk() && apiEnabled() && d && d.soc != null && !liveHero;
   el.classList.toggle('on', !!on); wrap.classList.toggle('has-veh', !!on); if (!on) return;

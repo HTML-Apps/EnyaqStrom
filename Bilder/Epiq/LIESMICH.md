@@ -21,3 +21,8 @@ Bodenschatten (künstlich, wie bei Bild 2): 7–12. Nicht bei Maßbildern und Mo
 
 Reihenfolge und Darstellung im Karussell: `CAR_HERO` in `src/05-startseite-banner.js`.
 Gemeinsame Bilder (Icons, Wetter, Statistik, Fahrzeugakte) bleiben direkt in `Bilder/`.
+
+## Ladebild
+
+- `Epiq_live-original.jpg` → `Epiq_live.webp`: Auto + Ladekabel freigestellt, Wallbox (weiß auf weiß) über Helligkeit als abgerundetes Rechteck übernommen, Bodenschatten nur unter dem Auto. Aufbereiten mit `python3 tools/epiq_live.py`.
+- Erscheint oben statt des Karussells, solange der Fahrzeugstatus „lädt“ meldet (höchstens 3 h alt) oder der Live-Modus läuft (`CAR_LIVE` in `src/05-startseite-banner.js`).
