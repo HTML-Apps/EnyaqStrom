@@ -9,6 +9,23 @@ function syncSet(src) {
   const o = {}; if (src && typeof src === 'object') SYNC_SET_KEYS.forEach(k => { const v = src[k]; if (v != null && v !== '' && !(typeof v === 'number' && !isFinite(v))) o[k] = v; });
   return Object.keys(o).length ? o : null;
 }
+/* Voreinstellungen je Konto beim allerersten Anmelden (Cloud hat noch keine Einstellungen), z. B. Papa: Epiq + einfache Ansicht.
+   Schlüssel = SHA-256 der E-Mail-Adresse in Kleinbuchstaben (das Repo ist öffentlich, daher keine Adresse im Klartext).
+   Neuen Eintrag erzeugen: printf '%s' 'name@gmail.com' | sha256sum */
+const USER_PRESETS = {
+  febbc9e8f3e3ef17419da1192576c06011a38bf656c07d66c75bd317afb468c8: { car: 'epiq55', ui: 'simple' }
+};
+async function applyUserPreset() {
+  try {
+    const mail = ((window.cloud && window.cloud.userInfo && window.cloud.userInfo()) || {}).email; if (!mail || !crypto.subtle) return;
+    const h = [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(mail.trim().toLowerCase())))].map(b => b.toString(16).padStart(2, '0')).join('');
+    const p = USER_PRESETS[h]; if (!p) return;
+    const raw = load(KEY_SETTINGS, {}) || {}; if (syncSet(raw) && (raw.car || raw.ui)) return;                  // inzwischen schon etwas gewählt: nichts überschreiben
+    const carWas = carProf().key, c = CAR_PRESETS[p.car];
+    save(KEY_SETTINGS, { ...raw, ...p, title: (c && c.title) || raw.title }); pushPrefs(); applyTitle();
+    if (carProf().key !== carWas) setTimeout(() => location.reload(), 1500);                                   // Karussell-Bilder und Fahrzeugwerte des neuen Profils (Cloud-Schreiben liegt in der Offline-Warteschlange)
+  } catch (e) { console.warn('Voreinstellung:', e); }
+}
 function pushPrefs() {
   if (!window.cloud?.isSignedIn()) return;
   const w = Number(getSettings().wltp);
@@ -27,6 +44,7 @@ window.onCloudPrefs = (d, first, uid) => {
   if (JSON.stringify(np) !== JSON.stringify(lp)) { if (np) save(KEY_PROVINFO, np); else localStorage.removeItem(KEY_PROVINFO); if (currentView === 'providers') renderProvidersView(); }
   /* Einstellungen (Fahrzeugdaten, Strompreis, Akku, Kauf …): beim ersten Abgleich gilt die Cloud; hat sie noch nichts, werden die lokalen hochgeladen */
   const ls = syncSet(load(KEY_SETTINGS, {})); let ns = d ? syncSet(d.settings) : null;
+  if (first && ns == null) applyUserPreset();                         // ganz neues Konto: ggf. Voreinstellung (Fahrzeug, Ansicht) setzen
   if (first && ns == null && ls) { ns = ls; up = true; }
   if (ns && JSON.stringify(ns) !== JSON.stringify(ls)) {
     const raw = load(KEY_SETTINGS, {}) || {}; SYNC_SET_KEYS.forEach(k => delete raw[k]); save(KEY_SETTINGS, { ...raw, ...ns });   // PIN, WLTP usw. bleiben

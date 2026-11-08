@@ -19,3 +19,4 @@
 - Škoda-API-Schlüssel: in der App ersetzbar (verschlüsselt in `enyaqStrom/<uid>/settings/skoda`, siehe `lib/fs.js`, `lib/auth.js`); VIN/Freischaltung in `SKODA_ACCOUNTS`.
 - Fahrtenbuch per Teilen-Menü (Android, installierte App): `share_target` in `manifest.json` → POST `/share-target` wird im `sw.js` abgefangen, Datei im Cache `enyaq-share` abgelegt, Weiterleitung auf `/?go=fb-share` → Import in `src/18-teilen.js`.
 - Test-Screenshots nie im Repo-Ordner ablegen (Scratchpad nutzen).
+- Voreinstellungen je Konto beim ersten Anmelden (Cloud noch leer): `USER_PRESETS` in `src/11-cloud-drive-sicherung.js`, Schlüssel = SHA-256 der E-Mail (Repo ist öffentlich, keine Adressen im Klartext).
