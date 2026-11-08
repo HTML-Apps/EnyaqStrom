@@ -5594,13 +5594,13 @@ try { renderWrapCard(); } catch (e) { }
    im Dokument enyaqStrom/<uid>/settings/prefs, gleiche Regel wie Anbieter und Kategorien. Die PIN bleibt nur auf dem Gerät.
    Erster Abgleich: Was die Cloud hat, gilt; fehlt dort etwas und ist lokal vorhanden, wird es hochgeladen. Danach gilt die Cloud (Änderung auf einem Gerät wirkt auf allen).
    ===================================================================== */
-const SYNC_SET_KEYS = ['title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAcKwh', 'certDcKwh', 'certKm', 'wltpNet', 'ccEnd', 'wxoCut', 'dashFirst', 'car', 'carT', 'ui', 'carN', 'carSec', 'wxIcons', 'nRep', 'nTrips', 'nBakYm', 'nBakAt', 'nBakSnz', 'gtMirror', 'gtList', 'iceDep', 'iceWe', 'icePark', 'iceMin', 'iceK', 'cmpCar', 'cmpL', 'cmpEur', 'cmpCo2'];
+const SYNC_SET_KEYS = ['presetV', 'title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAcKwh', 'certDcKwh', 'certKm', 'wltpNet', 'ccEnd', 'wxoCut', 'dashFirst', 'car', 'carT', 'ui', 'carN', 'carSec', 'wxIcons', 'nRep', 'nTrips', 'nBakYm', 'nBakAt', 'nBakSnz', 'gtMirror', 'gtList', 'iceDep', 'iceWe', 'icePark', 'iceMin', 'iceK', 'cmpCar', 'cmpL', 'cmpEur', 'cmpCo2'];
 /** Einstellungen für die Cloud: feste Reihenfolge, ohne leere Werte (Firestore verbietet undefined). null = nichts vorhanden. */
 function syncSet(src) {
   const o = {}; if (src && typeof src === 'object') SYNC_SET_KEYS.forEach(k => { const v = src[k]; if (v != null && v !== '' && !(typeof v === 'number' && !isFinite(v))) o[k] = v; });
   return Object.keys(o).length ? o : null;
 }
-/* Voreinstellungen je Konto beim allerersten Anmelden (Cloud hat noch keine Einstellungen), z. B. Papa: Epiq + einfache Ansicht.
+/* Voreinstellungen je Konto, einmal beim ersten Anmelden (Markierung presetV in den synchronisierten Einstellungen), z. B. Papa: Epiq + einfache Ansicht.
    Schlüssel = SHA-256 der E-Mail-Adresse in Kleinbuchstaben (das Repo ist öffentlich, daher keine Adresse im Klartext).
    Neuen Eintrag erzeugen: printf '%s' 'name@gmail.com' | sha256sum */
 const USER_PRESETS = {
@@ -5612,11 +5612,11 @@ async function applyUserPreset() {
     const mail = ((window.cloud && window.cloud.userInfo && window.cloud.userInfo()) || {}).email; if (!mail || !crypto.subtle) return;
     const h = [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(mail.trim().toLowerCase())))].map(b => b.toString(16).padStart(2, '0')).join('');
     const p = USER_PRESETS[h]; if (!p) return;
-    const raw = load(KEY_SETTINGS, {}) || {}; save('enyaq.onbPreset', true);
+    const raw = load(KEY_SETTINGS, {}) || {}; if (raw.presetV) return;                                       // schon einmal angewendet (Markierung wird mitsynchronisiert) – spätere eigene Änderungen bleiben
+    save('enyaq.onbPreset', true);
     const add = {}; Object.keys(p).forEach(k => { if (raw[k] == null) add[k] = p[k]; });                       // nur Fehlendes ergänzen (Einladungslink /?auto=epiq hat das Auto evtl. schon gesetzt)
-    if (!Object.keys(add).length) return;
     const carWas = carProf().key, c = CAR_PRESETS[add.car];
-    save(KEY_SETTINGS, { ...raw, ...add, ...(c ? { title: c.title } : {}) }); pushPrefs(); applyTitle();
+    save(KEY_SETTINGS, { ...raw, ...add, ...(c ? { title: c.title } : {}), presetV: 1 }); pushPrefs(); applyTitle();
     const onb = (() => { try { return localStorage.getItem('enyaq.onb') || ''; } catch (e) { return ''; } })();
     if (carProf().key !== carWas && (!onb || onb === 'done')) setTimeout(() => location.reload(), 1500);   // im Onboarding lädt erst „Los geht’s“ neu                                   // Karussell-Bilder und Fahrzeugwerte des neuen Profils (Cloud-Schreiben liegt in der Offline-Warteschlange)
   } catch (e) { console.warn('Voreinstellung:', e); }
@@ -5639,7 +5639,7 @@ window.onCloudPrefs = (d, first, uid) => {
   if (JSON.stringify(np) !== JSON.stringify(lp)) { if (np) save(KEY_PROVINFO, np); else localStorage.removeItem(KEY_PROVINFO); if (currentView === 'providers') renderProvidersView(); }
   /* Einstellungen (Fahrzeugdaten, Strompreis, Akku, Kauf …): beim ersten Abgleich gilt die Cloud; hat sie noch nichts, werden die lokalen hochgeladen */
   const ls = syncSet(load(KEY_SETTINGS, {})); let ns = d ? syncSet(d.settings) : null;
-  if (first && ns == null) window.presetP = applyUserPreset();                         // ganz neues Konto: ggf. Voreinstellung (Fahrzeug, Ansicht) setzen
+  if (first) window.presetP = applyUserPreset();                                      // Voreinstellung (Fahrzeug, Ansicht …) einmal je Konto – läuft nach dem Abgleich (async)
   if (first && ns == null && ls) { ns = ls; up = true; }
   if (ns && JSON.stringify(ns) !== JSON.stringify(ls)) {
     const raw = load(KEY_SETTINGS, {}) || {}; SYNC_SET_KEYS.forEach(k => delete raw[k]); save(KEY_SETTINGS, { ...raw, ...ns });   // PIN, WLTP usw. bleiben
