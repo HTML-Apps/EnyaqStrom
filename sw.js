@@ -5,11 +5,11 @@
  * - Die KI-Abfrage (/api/…) wird NIE gecacht und läuft immer übers Netz.
  * Bei größeren Änderungen am Cache-Konzept CACHE_VERSION erhöhen. */
 
-const CACHE_VERSION = 'v256';
+const CACHE_VERSION = 'v257';
 const CACHE_NAME = 'enyaq-' + CACHE_VERSION;
 
 // Dateien, die beim Installieren vorab geladen werden
-const SAME_ORIGIN_ASSETS = ['./', './index.html', './app.css?v=256', './app.js?v=256', './Bilder/Enyaq/hero/1.webp'];
+const SAME_ORIGIN_ASSETS = ['./', './index.html', './app.css?v=257', './app.js?v=257', './Bilder/Enyaq/hero/1.webp'];
 const CDN_ASSETS = [
   'https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js'
 ];
@@ -17,7 +17,8 @@ const CDN_ASSETS = [
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE_NAME);
-    await cache.addAll(SAME_ORIGIN_ASSETS);
+    // einzeln laden: hakt eine Datei, bricht nicht die ganze Installation ab (sonst bleibt der alte Service Worker aktiv)
+    await Promise.all(SAME_ORIGIN_ASSETS.map(async (u) => { try { await cache.add(new Request(u, { cache: 'reload' })); } catch (err) { console.warn('[SW] Vorab-Caching fehlgeschlagen:', u, err); } }));
     // CDN-Dateien einzeln und "no-cors" laden (opake Antworten sind cachebar); ein Fehler bricht die Installation nicht ab
     await Promise.all(CDN_ASSETS.map(async (url) => {
       try { await cache.put(url, await fetch(new Request(url, { mode: 'no-cors' }))); }

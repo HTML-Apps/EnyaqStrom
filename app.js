@@ -8357,13 +8357,27 @@ async function fbSwState() {
     return 'App-Version: ' + ((document.querySelector('script[src^="/app.js"]') || {}).src || '').split('v=')[1] + ' · Hintergrund (Cache): ' + (ks || '–') + ' · aktiv: ' + st(r && r.active) + ', wartet: ' + st(r && r.waiting) + ', lädt: ' + st(r && r.installing);
   } catch (e) { return 'Status unbekannt'; }
 }
+/** Service Worker von Hand aktualisieren und Ergebnis bzw. Fehler anzeigen (Samsung Internet blieb auf einer alten Version stehen) */
+async function fbSwUpdate(pre, btn) {
+  btn.disabled = true; btn.textContent = 'Wird aktualisiert …'; const log = (t) => { pre.textContent += '\n' + t; pre.scrollTop = pre.scrollHeight; };
+  try {
+    const r = await navigator.serviceWorker.getRegistration(); if (!r) { log('Keine Registrierung gefunden'); return; }
+    log('Script: ' + ((r.active || r.installing || r.waiting || {}).scriptURL || '–'));
+    try { await r.update(); log('update() ausgeführt'); } catch (e) { log('update()-Fehler: ' + (e && e.message || e)); }
+    const w = r.installing || r.waiting; if (w) { log('neue Version: ' + w.state); await new Promise(ok => { const t = setTimeout(ok, 8000); w.addEventListener('statechange', () => { log('→ ' + w.state); if (w.state === 'activated' || w.state === 'redundant') { clearTimeout(t); ok(); } }); }); }
+    else log('keine neue Version gefunden');
+    log(await fbSwState());
+  } catch (e) { log('Fehler: ' + (e && e.message || e)); } finally { btn.disabled = false; btn.textContent = 'Hintergrund aktualisieren'; }
+}
 function fbShareDbg(dbg, sw) {
   const txt = (sw ? sw + '\n' : '') + (dbg ? ['Inhalt: ' + (dbg.ct || '–'), ...(dbg.keys && dbg.keys.length ? dbg.keys : ['keine Felder']), dbg.err ? 'Fehler: ' + dbg.err : '', dbg.body ? 'Daten: ' + dbg.body : ''].filter(Boolean).join('\n') : 'Keine Angaben vom Service Worker (alte Version aktiv? App einmal schließen und neu öffnen).');
   const el = document.createElement('div'); el.id = 'fb-dbg'; el.className = 'fixed inset-0 z-[90] flex items-end bg-black/60 p-3';
   el.innerHTML = `<div class="mx-auto w-full max-w-md rounded-3xl bg-slate-900 p-4 text-white shadow-2xl"><p class="text-base font-bold">Keine Datei angekommen</p><p class="mt-1 text-sm text-slate-300">Das hat das Teilen-Menü geschickt – bitte als Screenshot an Claude:</p>
     <pre class="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-all rounded-xl bg-black/50 p-2.5 text-left text-[11.5px] leading-snug text-amber-200">${esc(txt)}</pre>
-    <div class="mt-3 flex gap-2"><button type="button" data-dbg="copy" class="h-11 flex-1 rounded-2xl bg-slate-700 text-sm font-semibold">Kopieren</button><button type="button" data-dbg="x" class="h-11 flex-1 rounded-2xl bg-emerald-600 text-sm font-semibold">Schließen</button></div></div>`;
-  el.addEventListener('click', (e) => { const b = e.target.closest('[data-dbg]'); if (!b) return; if (b.dataset.dbg === 'copy') { try { navigator.clipboard.writeText(txt); b.textContent = 'Kopiert ✓'; } catch (er) { } return; } el.remove(); });
+    <button type="button" data-dbg="upd" class="mt-3 h-11 w-full rounded-2xl bg-sky-600 text-sm font-semibold">Hintergrund aktualisieren</button>
+    <div class="mt-2 flex gap-2"><button type="button" data-dbg="copy" class="h-11 flex-1 rounded-2xl bg-slate-700 text-sm font-semibold">Kopieren</button><button type="button" data-dbg="x" class="h-11 flex-1 rounded-2xl bg-emerald-600 text-sm font-semibold">Schließen</button></div></div>`;
+  el.addEventListener('click', (e) => { const b = e.target.closest('[data-dbg]'); if (!b) return; if (b.dataset.dbg === 'upd') { fbSwUpdate(el.querySelector('pre'), b); return; }
+    if (b.dataset.dbg === 'copy') { try { navigator.clipboard.writeText(el.querySelector('pre').textContent); b.textContent = 'Kopiert ✓'; } catch (er) { } return; } el.remove(); });
   document.body.appendChild(el);
 }
 async function fbShareImport() {
