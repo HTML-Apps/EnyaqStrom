@@ -20,10 +20,13 @@ async function applyUserPreset() {
     const mail = ((window.cloud && window.cloud.userInfo && window.cloud.userInfo()) || {}).email; if (!mail || !crypto.subtle) return;
     const h = [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(mail.trim().toLowerCase())))].map(b => b.toString(16).padStart(2, '0')).join('');
     const p = USER_PRESETS[h]; if (!p) return;
-    const raw = load(KEY_SETTINGS, {}) || {}; if (syncSet(raw) && (raw.car || raw.ui)) return;                  // inzwischen schon etwas gewählt: nichts überschreiben
-    const carWas = carProf().key, c = CAR_PRESETS[p.car];
-    save(KEY_SETTINGS, { ...raw, ...p, title: (c && c.title) || raw.title }); pushPrefs(); applyTitle();
-    if (carProf().key !== carWas) setTimeout(() => location.reload(), 1500);                                   // Karussell-Bilder und Fahrzeugwerte des neuen Profils (Cloud-Schreiben liegt in der Offline-Warteschlange)
+    const raw = load(KEY_SETTINGS, {}) || {}; save('enyaq.onbPreset', true);
+    const add = {}; Object.keys(p).forEach(k => { if (raw[k] == null) add[k] = p[k]; });                       // nur Fehlendes ergänzen (Einladungslink /?auto=epiq hat das Auto evtl. schon gesetzt)
+    if (!Object.keys(add).length) return;
+    const carWas = carProf().key, c = CAR_PRESETS[add.car];
+    save(KEY_SETTINGS, { ...raw, ...add, ...(c ? { title: c.title } : {}) }); pushPrefs(); applyTitle();
+    const onb = (() => { try { return localStorage.getItem('enyaq.onb') || ''; } catch (e) { return ''; } })();
+    if (carProf().key !== carWas && (!onb || onb === 'done')) setTimeout(() => location.reload(), 1500);   // im Onboarding lädt erst „Los geht’s“ neu                                   // Karussell-Bilder und Fahrzeugwerte des neuen Profils (Cloud-Schreiben liegt in der Offline-Warteschlange)
   } catch (e) { console.warn('Voreinstellung:', e); }
 }
 function pushPrefs() {
@@ -44,7 +47,7 @@ window.onCloudPrefs = (d, first, uid) => {
   if (JSON.stringify(np) !== JSON.stringify(lp)) { if (np) save(KEY_PROVINFO, np); else localStorage.removeItem(KEY_PROVINFO); if (currentView === 'providers') renderProvidersView(); }
   /* Einstellungen (Fahrzeugdaten, Strompreis, Akku, Kauf …): beim ersten Abgleich gilt die Cloud; hat sie noch nichts, werden die lokalen hochgeladen */
   const ls = syncSet(load(KEY_SETTINGS, {})); let ns = d ? syncSet(d.settings) : null;
-  if (first && ns == null) applyUserPreset();                         // ganz neues Konto: ggf. Voreinstellung (Fahrzeug, Ansicht) setzen
+  if (first && ns == null) window.presetP = applyUserPreset();                         // ganz neues Konto: ggf. Voreinstellung (Fahrzeug, Ansicht) setzen
   if (first && ns == null && ls) { ns = ls; up = true; }
   if (ns && JSON.stringify(ns) !== JSON.stringify(ls)) {
     const raw = load(KEY_SETTINGS, {}) || {}; SYNC_SET_KEYS.forEach(k => delete raw[k]); save(KEY_SETTINGS, { ...raw, ...ns });   // PIN, WLTP usw. bleiben
