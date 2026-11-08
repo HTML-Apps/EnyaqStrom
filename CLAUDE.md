@@ -17,3 +17,5 @@
 - Einfache Ansicht (Papa-Modus): Einstellung `ui: 'simple'` (Fahrzeug & Kauf → Ansicht), Logik in `src/17-einfach.js`, Ausblenden per CSS `html.simple …` in index.html; Drawer-Einträge mit `data-easy` bleiben sichtbar.
 - Testkonto ohne Auto: in `SKODA_ACCOUNTS` `{"mail@gmail.com": {"demo": true}}` → `/api/vehicle` liefert feste Beispielwerte.
 - Škoda-API-Schlüssel: in der App ersetzbar (verschlüsselt in `enyaqStrom/<uid>/settings/skoda`, siehe `lib/fs.js`, `lib/auth.js`); VIN/Freischaltung in `SKODA_ACCOUNTS`.
+- Fahrtenbuch per Teilen-Menü (Android, installierte App): `share_target` in `manifest.json` → POST `/share-target` wird im `sw.js` abgefangen, Datei im Cache `enyaq-share` abgelegt, Weiterleitung auf `/?go=fb-share` → Import in `src/18-teilen.js`.
+- Test-Screenshots nie im Repo-Ordner ablegen (Scratchpad nutzen).

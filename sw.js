@@ -5,11 +5,11 @@
  * - Die KI-Abfrage (/api/…) wird NIE gecacht und läuft immer übers Netz.
  * Bei größeren Änderungen am Cache-Konzept CACHE_VERSION erhöhen. */
 
-const CACHE_VERSION = 'v251';
+const CACHE_VERSION = 'v252';
 const CACHE_NAME = 'enyaq-' + CACHE_VERSION;
 
 // Dateien, die beim Installieren vorab geladen werden
-const SAME_ORIGIN_ASSETS = ['./', './index.html', './app.css?v=251', './app.js?v=251', './Bilder/Enyaq/hero/1.webp'];
+const SAME_ORIGIN_ASSETS = ['./', './index.html', './app.css?v=252', './app.js?v=252', './Bilder/Enyaq/hero/1.webp'];
 const CDN_ASSETS = [
   'https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js'
 ];
@@ -40,6 +40,20 @@ self.addEventListener('fetch', (event) => {
   const req = event.request;
   const url = new URL(req.url);
 
+  /* Teilen-Menü (Android, installierte App): MyŠkoda → Fahrtenbuch → Export → Teilen → diese App. Die Datei kommt als POST an /share-target;
+     sie wird kurz im Cache „enyaq-share“ abgelegt, die App öffnet Start und importiert sie dort (src/18-teilen.js). */
+  if (req.method === 'POST' && url.origin === self.location.origin && url.pathname === '/share-target') {
+    event.respondWith((async () => {
+      try {
+        const fd = await req.formData(), f = fd.getAll('file').find((x) => x && typeof x !== 'string');
+        const cache = await caches.open('enyaq-share');
+        if (f) await cache.put('/share-file', new Response(f, { headers: { 'content-type': f.type || 'text/csv', 'x-name': encodeURIComponent(f.name || 'fahrtenbuch.csv') } }));
+        else await cache.delete('/share-file');
+      } catch (err) { console.warn('[SW] Teilen fehlgeschlagen:', err); }
+      return Response.redirect(new URL('/?go=fb-share', self.location.origin).href, 303);
+    })());
+    return;
+  }
   if (req.method !== 'GET') return;                              // POST (KI-Abfrage) nie anfassen
   if (url.origin === self.location.origin && url.pathname.startsWith('/api/')) return;
   if (!/^https?:$/.test(url.protocol)) return;

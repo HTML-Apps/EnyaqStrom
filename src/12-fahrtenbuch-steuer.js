@@ -55,14 +55,15 @@ async function importTrips(file) {
     const parsed = parseTripCsv(await file.text()), cur = getTrips(), byId = new Map(cur.map(t => [t.id, t]));
     let fresh = 0, changed = 0;
     parsed.forEach(t => { const old = byId.get(t.id); if (!old) { byId.set(t.id, t); fresh++; return; } const n = { ...t }; if (old.ucls) n.ucls = old.ucls; if (tripSig(n) !== tripSig(old)) { byId.set(t.id, n); changed++; } });
-    if (!fresh && !changed) { flash(msg, 'Keine neuen Fahrten: alle ' + parsed.length + ' Fahrten der Datei sind schon vorhanden.', true); msg.classList.remove('hidden'); return; }
-    const status = commitTrips([...byId.values()]); if (!status) return;
+    if (!fresh && !changed) { flash(msg, 'Keine neuen Fahrten: alle ' + parsed.length + ' Fahrten der Datei sind schon vorhanden.', true); msg.classList.remove('hidden'); return { ok: true, fresh: 0, changed: 0, n: parsed.length, parsed }; }
+    const status = commitTrips([...byId.values()]); if (!status) return { ok: false, err: 'Speichern fehlgeschlagen' };
     save(KEY_TRIPS_IMP, { at: new Date().toISOString(), n: parsed.length }); renderTripsLast();
     const text = fresh + ' neue Fahrten' + (changed ? ', ' + changed + ' aktualisiert' : '') + ' importiert';
     flash(msg, text + (window.cloud?.isSignedIn() ? ' · Cloud: wird übertragen …' : ' · nur lokal (nicht angemeldet)'), true); msg.classList.remove('hidden');
     status.then(r => { if (r.startsWith('cloud')) { flash(msg, text + ' · Cloud ✓ (' + r.slice(6) + (r.slice(6) === '1' ? ' Monat' : ' Monate') + ' geschrieben)', true); msg.classList.remove('hidden'); } else if (r.startsWith('error:')) { flash(msg, text + ' · Cloud-Fehler: ' + r.slice(6), false); msg.classList.remove('hidden'); } });
     refreshViews();
-  } catch (err) { flash(msg, 'Fahrtenbuch-Import fehlgeschlagen: ' + err.message, false); msg.classList.remove('hidden'); }
+    return { ok: true, fresh, changed, n: parsed.length, parsed };
+  } catch (err) { flash(msg, 'Fahrtenbuch-Import fehlgeschlagen: ' + err.message, false); msg.classList.remove('hidden'); return { ok: false, err: err.message }; }
 }
 function renderTripsLast() {
   const x = load(KEY_TRIPS_IMP, null), n = getTrips().length, el = $('trips-last'); if (!el) return;
