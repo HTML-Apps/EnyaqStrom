@@ -205,7 +205,7 @@
   @media (prefers-reduced-motion: reduce) { #bd-conf i, #bdg-conf i { animation: none; top: var(--y, 10%); } #bd-card, #bdg-card { animation: none; } }
 </style>
 <!-- Tailwind fertig gebaut (npm run css) – am Ende des Kopfs wie früher das CDN, damit die Reihenfolge der Regeln gleich bleibt -->
-<link rel="stylesheet" href="/app.css?v=269">
+<link rel="stylesheet" href="/app.css?v=270">
 </head>
 <body class="bg-black text-slate-100 min-h-screen">
 
@@ -1816,8 +1816,10 @@
 
 <div id="help-dialog" class="hidden fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
   <div class="w-full max-w-sm rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 p-5 space-y-3">
-    <p class="font-semibold">SKODA-ACCOUNTS (Vercel):</p>
-    <pre class="select-all whitespace-pre-wrap break-all text-xs rounded-xl bg-slate-100 dark:bg-slate-800 p-3">{"junkerhendrik@googlemail.com":{"key":"DEIN_SCHLÜSSEL","vin":"DEINE_VIN","expires":"2027-04-03"}, "junkerthomas1@gmail.com":{"key":"…","vin":"…","expires":"JJJJ-MM-TT"}}</pre>
+    <p class="font-semibold">SKODA_ACCOUNTS (Vercel)</p>
+    <p class="text-left text-xs text-slate-500 dark:text-slate-400">Je Google-Konto eine Zeile. <b>allow</b> = darf das eigene Fahrzeug in der App verbinden (VIN + Schlüssel aus der MyŠkoda-App), <b>demo</b> = Testkonto mit Beispielwerten. Nach dem Ändern in Vercel neu deployen.</p>
+    <pre id="help-tpl" class="select-all whitespace-pre-wrap break-words text-left text-xs rounded-xl bg-slate-100 dark:bg-slate-800 p-3"></pre>
+    <button id="help-copy" type="button" class="w-full py-3 rounded-2xl bg-emerald-600 text-white font-medium active:scale-95 transition">Kopieren</button>
     <button id="help-close" class="w-full py-3 rounded-2xl bg-slate-200 dark:bg-slate-800 font-medium active:scale-95 transition">Schließen</button>
   </div>
 </div>
@@ -1862,7 +1864,7 @@
   </div>
 </nav>
 
-<script src="/app.js?v=269"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
+<script src="/app.js?v=270"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
 <script type="module">
 /* Firebase (modular SDK). Die Konfiguration ist kein Geheimnis – geschützt wird über Auth + Firestore-Regeln. */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
