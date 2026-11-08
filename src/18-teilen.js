@@ -21,9 +21,10 @@ async function fbShareImport() {
   if (!r) { fbToast('Keine Datei angekommen', 'Bitte in MyŠkoda erneut exportieren und teilen.', false); return; }
   const name = (() => { try { return decodeURIComponent(r.headers.get('x-name') || '') || 'fahrtenbuch.csv'; } catch (e) { return 'fahrtenbuch.csv'; } })();
   const blob = await r.blob(), file = new File([blob], name, { type: blob.type || 'text/csv' });
+  try { localStorage.setItem('enyaq.lastShare', JSON.stringify({ at: new Date().toISOString(), name, type: blob.type || '' })); } catch (e) { }   // Fehlersuche: Dateityp, den MyŠkoda liefert
   for (let i = 0; i < 10 && !(window.cloud && window.cloud.isSignedIn && window.cloud.isSignedIn()); i++) await new Promise(ok => setTimeout(ok, 200));   // kurz auf die Anmeldung warten, damit gleich in die Cloud geschrieben wird
   const res = await importTrips(file);
-  if (!res || !res.ok) { fbToast('Fahrtenbuch nicht importiert', (res && res.err) || name, false); return; }
+  if (!res || !res.ok) { fbToast('Fahrtenbuch nicht importiert', ((res && res.err) || name) + (blob.type ? ' (' + blob.type + ')' : ''), false); return; }
   const span = (() => { const ts = (res.parsed || []).map(t => Date.parse(t.s)).filter(Number.isFinite); if (!ts.length) return ''; const d = (x) => new Date(x).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }); return d(Math.min(...ts)) + ' – ' + d(Math.max(...ts)); })();
   if (!res.fresh && !res.changed) fbToast('Schon alles da', 'Alle ' + res.n + ' Fahrten aus ' + name + ' sind bereits importiert.', true, true);
   else fbToast(res.fresh + (res.fresh === 1 ? ' Fahrt' : ' Fahrten') + ' importiert', [span, res.changed ? res.changed + ' aktualisiert' : '', res.n - res.fresh - res.changed > 0 ? (res.n - res.fresh - res.changed) + ' doppelte übersprungen' : ''].filter(Boolean).join(' · '), true, true);
