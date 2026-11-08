@@ -200,6 +200,7 @@ function renderRecs() {
   const lab = getLab(), byRoute = new Map();
   lab.recs.forEach(r => { const k = recDirKey(r), o = byRoute.get(k); if (!o || r.k100 < o.k100) byRoute.set(k, r); });   // je Strecke ein Eintrag (ältere Doppelte: der beste zählt)
   const recs = [...byRoute.values()].sort((a, b) => a.route.localeCompare(b.route, 'de'));
+  if (isSimple()) recRoute = 'lt';                                                    // einfache Ansicht: nur Langzeitverbrauch
   if (!['all', 'speed', 'lt', 'bt'].includes(recRoute)) recRoute = 'all';
   const chip = (k, l) => `<button type="button" data-rr="${esc(k)}" class="h-8 shrink-0 whitespace-nowrap rounded-full px-3 text-xs font-semibold ${recRoute === k ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900' : 'border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300'}">${esc(l)}</button>`;
   const rc = $('rec-chips'); rc.className = 'flex bg-slate-200 dark:bg-slate-800 rounded-xl p-1';

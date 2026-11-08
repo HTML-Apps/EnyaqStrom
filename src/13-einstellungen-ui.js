@@ -133,7 +133,8 @@ const navNorm = (t) => String(t).toLowerCase().normalize('NFD').replace(/[\u0300
 function navSearch() {
   const q = navNorm($('nav-q').value.trim()), words = q.split(/\s+/).filter(Boolean), res = $('nav-results');
   $('nav-tiles').classList.toggle('hidden', !!words.length); res.classList.toggle('hidden', !words.length); if (!words.length) { res.innerHTML = ''; return; }
-  const hits = NAV_IDX.filter(x => { const h = navNorm(x[1] + ' ' + x[2] + ' ' + x[3]); return words.every(w => h.includes(w)); });
+  const easy = isSimple() ? new Set([...document.querySelectorAll('#nav-tiles [data-easy]')].map(b => b.dataset.nav)) : null;
+  const hits = NAV_IDX.filter(x => { if (easy && !easy.has(x[0])) return false; const h = navNorm(x[1] + ' ' + x[2] + ' ' + x[3]); return words.every(w => h.includes(w)); });
   res.innerHTML = hits.length ? hits.map(x => '<button type="button" data-nav="' + x[0] + '" class="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left active:bg-slate-100 dark:active:bg-slate-800"><span class="min-w-0 flex-1"><span class="block truncate text-[15px] font-semibold">' + esc(x[1]) + '</span><span class="block truncate text-xs text-slate-500 dark:text-slate-400">' + esc(x[2]) + '</span></span><svg class="h-4 w-4 shrink-0 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>').join('')
     : '<p class="px-3 py-4 text-sm text-slate-500 dark:text-slate-400 text-left">Nichts gefunden.</p>';
 }

@@ -103,7 +103,7 @@ function segPaint(sel, active) {
    AC 11 kW, WLTP 13,7); cw und Stirnfläche sind Schätzwerte, bis Škoda sie nennt. */
 const CAR_PRESETS = {
   enyaq50: { name: 'Škoda Enyaq iV 50', short: 'Enyaq', net: 52, ac: 7, wltp: 16, wltpHint: 'ca. 15,8 bis 16,1', m: 2050, crr: 0.0095, cw: 0.257, A: 2.56, eta: 0.87, rec: 0.65, aux: 0.35, wYrs: 8, wKm: 160000, wSoh: 70, av: true },
-  epiq55: { name: 'Škoda Epiq 55', short: 'Epiq', net: 51.7, ac: 11, wltp: 13.7, wltpHint: 'ca. 13,7', m: 1620, crr: 0.0095, cw: 0.27, A: 2.4, eta: 0.87, rec: 0.65, aux: 0.35, wYrs: 8, wKm: 160000, wSoh: 70, av: false, est: true },
+  epiq55: { name: 'Škoda Epiq 55', title: 'Škoda Epiq', short: 'Epiq', net: 51.7, ac: 11, wltp: 13.7, wltpHint: 'ca. 13,7', m: 1620, crr: 0.0095, cw: 0.27, A: 2.4, eta: 0.87, rec: 0.65, aux: 0.35, wYrs: 8, wKm: 160000, wSoh: 70, av: false, est: true },
 };
 const CAR_TECH = { m: [800, 4000], cw: [0.15, 0.5], A: [1.5, 4], wYrs: [1, 15], wKm: [10000, 500000], wSoh: [50, 90] };   // überschreibbar, mit gültigem Bereich
 function carProf(s = getSettings()) {
@@ -519,7 +519,8 @@ async function checkVehicle(uid) {                                              
   if (vehicle.ok && currentView === 'dashboard') try { renderWxo(); } catch (e) { }   // Restakku in der Prognose
 }
 const DEFAULT_TITLE = 'Skoda Enyaq | Ladekosten NK';
-function applyTitle() { const t = getSettings().title || DEFAULT_TITLE; $('app-title').textContent = t.split('|')[0].trim() || t; document.title = t; }          // Start-Ansicht zeigt nur den Teil vor „|“
+const isSimple = () => getSettings().ui === 'simple';                                // einfache Ansicht (src/17-einfach.js)
+function applyTitle() { try { applyUi(); } catch (e) { } const t = getSettings().title || (carProf().key !== 'enyaq50' ? carProf().title || carProf().name : DEFAULT_TITLE); $('app-title').textContent = t.split('|')[0].trim() || t; document.title = t; }          // Start-Ansicht zeigt nur den Teil vor „|“
 function renderSetupHint() { $('setup-hint').classList.toggle('hidden', !!localStorage.getItem(KEY_SETTINGS)); }   // Hinweis, bis die Einstellungen einmal gespeichert wurden
 function renderKeyWarning() {                                   // Erinnerung ab 7 Tagen vor Ablauf, danach dauerhaft bis zur Erneuerung
   const el = $('key-warn'), ex = keyExpiry();
@@ -790,7 +791,7 @@ function fillSettings() {
   $('set-cmp-car').value = s.cmpCar || ''; $('set-cmp-l').value = s.cmpL ? String(s.cmpL).replace('.', ',') : ''; $('set-cmp-eur').value = s.cmpEur ? String(s.cmpEur).replace('.', ',') : ''; $('set-cmp-co2').value = s.cmpCo2 ? String(s.cmpCo2) : '';
   $('set-price').value = String(s.price).replace('.', ',');
   $('set-battery').value = String(batteryKwh()).replace('.', ',');
-  $('set-car').value = carProf(s).key; const ct = s.carT || {}; Object.keys(CAR_TECH).forEach(k => { $('set-ct-' + k).value = ct[k] > 0 ? String(ct[k]).replace('.', ',') : ''; }); carFormHints();
+  $('set-ui').value = s.ui === 'simple' ? 'simple' : ''; $('set-car').value = carProf(s).key; const ct = s.carT || {}; Object.keys(CAR_TECH).forEach(k => { $('set-ct-' + k).value = ct[k] > 0 ? String(ct[k]).replace('.', ',') : ''; }); carFormHints();
   $('set-title').value = s.title || DEFAULT_TITLE;
   $('set-brand').value = s.brand || ''; $('set-model').value = s.model || ''; $('set-plate').value = s.plate || ''; $('set-year').value = s.year || ''; $('set-vin').value = s.vin || '';
   $('set-power').value = String(chargePowerKw()).replace('.', ',');
@@ -881,8 +882,8 @@ $('btn-save-settings').addEventListener('click', () => {
     if (+m[2] < 1990 || +m[2] * 12 + +m[1] > now.getFullYear() * 12 + now.getMonth() + 1) { alert('Das Baujahr ' + yr + ' kann nicht stimmen: Es muss zwischen 01/1990 und ' + String(now.getMonth() + 1).padStart(2, '0') + '/' + now.getFullYear() + ' liegen.'); $('set-year').focus(); return; }
   }
   const txt = (id, n) => $(id).value.trim().replace(/\s+/g, ' ').slice(0, n) || undefined;
-  if (save(KEY_SETTINGS, { title: $('set-title').value.trim() || DEFAULT_TITLE, car: $('set-car').value !== 'enyaq50' ? $('set-car').value : undefined, carT: Object.keys(carT).length ? carT : undefined, brand: txt('set-brand', 30), model: txt('set-model', 40), plate: (txt('set-plate', 15) || '').toUpperCase() || undefined, year: yr || undefined, vin: vin || undefined, price, battery, power, remDays, remKm, purchase, wltp: wl, wltpNet: wln !== undefined ? Math.round(wln * 100) / 100 : undefined, purchaseKm: pk !== undefined ? Math.round(pk) : undefined, purchasePrice: pp !== undefined ? Math.round(pp * 100) / 100 : undefined, commuteKm: getSettings().commuteKm || undefined, ccEnd: getSettings().ccEnd || undefined, gtMirror: getSettings().gtMirror || undefined, gtList: getSettings().gtList || undefined, rtLast: getSettings().rtLast || undefined, iceDep: getSettings().iceDep || undefined, iceWe: getSettings().iceWe || undefined, icePark: getSettings().icePark || undefined, iceMin: getSettings().iceMin || undefined, iceK: getSettings().iceK || undefined, nRep: getSettings().nRep || undefined, nTrips: getSettings().nTrips || undefined, nBakYm: getSettings().nBakYm || undefined, nBakAt: getSettings().nBakAt || undefined, nBakSnz: getSettings().nBakSnz || undefined, wxIcons: getSettings().wxIcons || undefined, carN: getSettings().carN ?? undefined, carSec: getSettings().carSec ?? undefined, wxoCut: getSettings().wxoCut ?? undefined, dashFirst: getSettings().dashFirst || undefined, refLo: rlo, refHi: rhi, nextHu, nextService, certAcKwh: certAcKwh !== undefined ? Math.round(certAcKwh * 10) / 10 : undefined, certDcKwh: certDcKwh !== undefined ? Math.round(certDcKwh * 10) / 10 : undefined, certKm: certKm !== undefined ? Math.round(certKm) : undefined })) {   // commuteKm: im Steuerhelfer (Berichte → Fahrten) gepflegt
-    renderReminderBadges(); renderHeroStats(); pushPrefs();
+  if (save(KEY_SETTINGS, { title: $('set-title').value.trim() || DEFAULT_TITLE, car: $('set-car').value !== 'enyaq50' ? $('set-car').value : undefined, carT: Object.keys(carT).length ? carT : undefined, ui: $('set-ui').value || undefined, brand: txt('set-brand', 30), model: txt('set-model', 40), plate: (txt('set-plate', 15) || '').toUpperCase() || undefined, year: yr || undefined, vin: vin || undefined, price, battery, power, remDays, remKm, purchase, wltp: wl, wltpNet: wln !== undefined ? Math.round(wln * 100) / 100 : undefined, purchaseKm: pk !== undefined ? Math.round(pk) : undefined, purchasePrice: pp !== undefined ? Math.round(pp * 100) / 100 : undefined, commuteKm: getSettings().commuteKm || undefined, ccEnd: getSettings().ccEnd || undefined, gtMirror: getSettings().gtMirror || undefined, gtList: getSettings().gtList || undefined, rtLast: getSettings().rtLast || undefined, iceDep: getSettings().iceDep || undefined, iceWe: getSettings().iceWe || undefined, icePark: getSettings().icePark || undefined, iceMin: getSettings().iceMin || undefined, iceK: getSettings().iceK || undefined, nRep: getSettings().nRep || undefined, nTrips: getSettings().nTrips || undefined, nBakYm: getSettings().nBakYm || undefined, nBakAt: getSettings().nBakAt || undefined, nBakSnz: getSettings().nBakSnz || undefined, wxIcons: getSettings().wxIcons || undefined, carN: getSettings().carN ?? undefined, carSec: getSettings().carSec ?? undefined, wxoCut: getSettings().wxoCut ?? undefined, dashFirst: getSettings().dashFirst || undefined, refLo: rlo, refHi: rhi, nextHu, nextService, certAcKwh: certAcKwh !== undefined ? Math.round(certAcKwh * 10) / 10 : undefined, certDcKwh: certDcKwh !== undefined ? Math.round(certDcKwh * 10) / 10 : undefined, certKm: certKm !== undefined ? Math.round(certKm) : undefined })) {   // commuteKm: im Steuerhelfer (Berichte → Fahrten) gepflegt
+    renderReminderBadges(); renderHeroStats(); pushPrefs(); applyTitle();
     $('settings-msg').classList.remove('hidden'); setTimeout(() => $('settings-msg').classList.add('hidden'), 2500);
   }
 });
@@ -913,6 +914,7 @@ function carFormHints() {
     const o = CAR_PRESETS[carFormKey];
     if (parseNum($('set-battery').value) === o.net) $('set-battery').value = f(c.net);
     if (parseNum($('set-power').value) === o.ac) $('set-power').value = f(c.ac);
+    const tv = $('set-title').value.trim(); if (!tv || tv === DEFAULT_TITLE || tv === o.title) $('set-title').value = c.title || DEFAULT_TITLE;   // Standard-Titel mitwechseln
   }
   carFormKey = $('set-car').value;
   $('set-battery').placeholder = f(c.net); $('set-power').placeholder = f(c.ac);
@@ -2732,15 +2734,18 @@ const HERO_IMGS = [{ name: 1, src: '/Bilder/Enyaq/hero/1.webp', aspect: 1.7188, 
   { name: 4, src: '/Bilder/Enyaq/hero/4.webp', aspect: 1.1614, extra: 0.0053, tech: true }, { name: 5, src: '/Bilder/Enyaq/hero/5.webp', aspect: 2.3392, extra: 0.0058, tech: true },
   { name: 7, src: '/Bilder/Enyaq/hero/7.webp', aspect: 1.9696, extra: 0, cut: true }, { name: 8, src: '/Bilder/Enyaq/hero/8.webp', aspect: 2.3983, extra: 0, cut: true },
   { name: 9, src: '/Bilder/Enyaq/hero/9.webp', aspect: 2.067, extra: 0, cut: true, pad: true }];   // pad: etwas Abstand links/rechts   // Schnittbild mit Maßen: Bemaßung hell umgefärbt, Auto freigestellt (volle Breite, zum Lesen antippen → Vollbild)
+/* Bilder je Fahrzeugprofil (ohne Eintrag: Enyaq-Bilder oben). Epiq: Bilder/Epiq/hero, aufbereitet mit tools/epiq_bilder.py */
+const CAR_HERO = { epiq55: [{ name: 2, src: '/Bilder/Epiq/hero/2.webp', aspect: 1.9538, extra: 0.03, noHd: true }, { name: 1, src: '/Bilder/Epiq/hero/1.webp', aspect: 2.1814, extra: 0, cut: true, noHd: true }] };
 const carAutoN = () => { const v = Number(getSettings().carN); return Number.isInteger(v) && v >= 1 && v <= HERO_IMGS.length ? v : 6; };            // Einstellung: so viele Bilder wechseln automatisch
 const carAutoMs = () => { const v = Number(getSettings().carSec); return (Number.isFinite(v) && v >= 5 && v <= 600 ? v : 30) * 1000; };   // Bilder/Enyaq/Enyaq1, 2, _4 (Akku-Schnitt), 3, 4, 5 (unten bleiben 3 Punkte als Deko); automatischer Wechsel alle 30 Sekunden
 async function initCarousel() {
   const box = $('car-scroll'), dash = $('car-dashes'); if (!box) return;
-  const imgs = HERO_IMGS.map(m => ({ ...m }));                                           // Bild 4/5 = Technik (Akku, Motor): mittig und etwas kleiner, ohne Standlinie
+  const prof = CAR_HERO[carProf().key], imgs = (prof || HERO_IMGS).map(m => ({ ...m }));
+  if (prof) { const f = box.querySelector('.car-slide img'); if (f && !f.src.endsWith(prof[0].src)) f.src = prof[0].src; }                                           // Bild 4/5 = Technik (Akku, Motor): mittig und etwas kleiner, ohne Standlinie
   /* Die Bilder liegen übereinander; ein Wisch (oder Pfeiltaste) blendet per CSS-Übergang auf das nächste bzw. vorherige Bild über. Pro Wisch genau ein Bild.
      Bewusst ohne mitlaufende Bewegung beim Wischen: Nur Deckkraft wird animiert (läuft ohne JavaScript pro Frame), dadurch ruckelt nichts.
      Der Schatten unter dem Auto kommt aus den Bildern selbst. */
-  const tpl = (m, i) => `<div class="car-slide absolute inset-0 pointer-events-none" style="opacity:${i === 0 ? 1 : 0};transition:opacity .45s ease-in-out;will-change:opacity"><img src="${m.src}" decoding="async" alt="Skoda Enyaq, Bild ${i + 1} von ${imgs.length}" draggable="false" class="${m.pad ? 'absolute inset-x-6 top-[2%] bottom-[4%] w-[calc(100%-3rem)] h-[94%] object-contain object-center' : m.cut ? 'absolute inset-x-1 top-[1%] bottom-[3%] w-[calc(100%-0.5rem)] h-[96%] object-contain object-center' : m.tech ? 'absolute inset-x-8 top-[8%] bottom-[14%] w-[calc(100%-4rem)] h-[78%] object-contain object-center' : 'absolute inset-x-4 top-0 bottom-2.5 w-[calc(100%-2rem)] h-[calc(100%-0.625rem)] object-contain object-bottom'}"></div>`;
+  const tpl = (m, i) => `<div class="car-slide absolute inset-0 pointer-events-none" style="opacity:${i === 0 ? 1 : 0};transition:opacity .45s ease-in-out;will-change:opacity"><img src="${m.src}" decoding="async" alt="${esc(carName())}, Bild ${i + 1} von ${imgs.length}" draggable="false" class="${m.pad ? 'absolute inset-x-6 top-[2%] bottom-[4%] w-[calc(100%-3rem)] h-[94%] object-contain object-center' : m.cut ? 'absolute inset-x-1 top-[1%] bottom-[3%] w-[calc(100%-0.5rem)] h-[96%] object-contain object-center' : m.tech ? 'absolute inset-x-8 top-[8%] bottom-[14%] w-[calc(100%-4rem)] h-[78%] object-contain object-center' : 'absolute inset-x-4 top-0 bottom-2.5 w-[calc(100%-2rem)] h-[calc(100%-0.625rem)] object-contain object-bottom'}"></div>`;
   if (box.querySelector('.car-slide')) box.insertAdjacentHTML('beforeend', imgs.slice(1).map((m, i) => tpl(m, i + 1)).join(''));   // Bild 1 steht schon im HTML
   else box.innerHTML = imgs.map(tpl).join('');
   dash.innerHTML = imgs.length > 1 ? imgs.slice(0, CAR_DOTS).map(() => '<span class="select-none text-[22px] leading-none text-white">•</span>').join('') : '';    // Zeichen statt Formen (Dark-Mode des Browsers), alle gleich, ohne Hervorhebung
@@ -2783,7 +2788,7 @@ async function initCarousel() {
   const setImg = (i) => {
     lbi = ((i % imgs.length) + imgs.length) % imgs.length; sc = 1; tx = 0; ty = 0; apply(false); li.style.opacity = '1';
     li.src = hd[lbi] || imgs[lbi].src; ov.querySelector('#car-lb-n').textContent = imgs.length > 1 ? (lbi + 1) + ' / ' + imgs.length : '';
-    if (hd[lbi] === undefined) { const n = lbi, t = new Image(); hd[n] = null; t.onload = () => { hd[n] = t.src; if (lbi === n && lbOpen) li.src = t.src; }; t.src = 'Bilder/Enyaq/Enyaq' + (imgs[n].name != null ? imgs[n].name : n + 1) + '-hd.webp?v=' + HERO_VER; }
+    if (hd[lbi] === undefined && !imgs[lbi].noHd) { const n = lbi, t = new Image(); hd[n] = null; t.onload = () => { hd[n] = t.src; if (lbi === n && lbOpen) li.src = t.src; }; t.src = 'Bilder/Enyaq/Enyaq' + (imgs[n].name != null ? imgs[n].name : n + 1) + '-hd.webp?v=' + HERO_VER; }
   };
   function lbShow(i) { if (lbOpen) return; lbOpen = true; setImg(i); ov.classList.remove('hidden'); document.body.style.overflow = 'hidden'; clearTimeout(autoT); try { history.pushState({ carLb: 1 }, ''); pushed = true; } catch (e) { pushed = false; } }
   const lbClose = (fromPop) => {
@@ -4625,8 +4630,12 @@ let wxoTok = 0, wxoLast = null;
 const wxoFmtR = (km) => fmt(Math.round(km / 5) * 5, 0);
 const wxoLowR = (km) => Math.round(km / 5) * 5 < 250;                                // Reichweite unter 250 km: ganz in Rot
 async function renderWxo() {
-  const el = $('wxo-card'), l = wxLoc(); if (!el) return;
-  if (!l || liveHero) { el.classList.add('hidden'); return; }
+  const el = $('wxo-card'), l = isSimple() ? null : wxLoc(); if (!el) return;
+  if (!l || liveHero) {                                                              // ohne Wetter (oder einfache Ansicht): Fahrzeugstatus trotzdem holen
+    el.classList.add('hidden');
+    if (!liveHero && apiEnabled()) wxoSoc().then(() => { try { renderVehCard(); } catch (e) { } }).catch(() => { });
+    return;
+  }
   const tok = ++wxoTok; let m, fc, socNow = null;
   try { [m, fc, socNow] = await Promise.all([wxoModel(l), wxoForecast(l), wxoSoc().catch(() => null)]); } catch (e) { if (tok === wxoTok) el.classList.add('hidden'); return; }
   if (tok !== wxoTok) return;
@@ -4703,10 +4712,10 @@ function openWxoSheet() {
 }
 /* Start: Verbrauchs-Prognose und Zählerstand seitlich wischen (Standard: Prognose). Höhe folgt der sichtbaren Karte. */
 const dSw = { tr: $('dash-swipe-track'), idx: 0 };
-function dashSlides() { return [$('ltm-card'), $('btm-card'), $('wxo-card'), $('veh-slide'), $('meter-card')].filter(x => x && !x.classList.contains('hidden') && !((x.id === 'btm-card' || x.id === 'ltm-card') && liveHero)); }
+function dashSlides() { if (isSimple()) return [$('veh-slide'), $('ltm-card')].filter(x => x && !x.classList.contains('hidden')); return [$('ltm-card'), $('btm-card'), $('wxo-card'), $('veh-slide'), $('meter-card')].filter(x => x && !x.classList.contains('hidden') && !((x.id === 'btm-card' || x.id === 'ltm-card') && liveHero)); }
 const dashIdx = (id) => Math.max(0, dashSlides().indexOf($(id)));
 /** Karte beim Öffnen: Prognose oder Zählerstand (Akku-Temperatur liegt links davon und wird nur per Wischen erreicht) */
-const dashDefaultIdx = () => dashFirstSlide() === 'wx' && !$('wxo-card').classList.contains('hidden') ? dashIdx('wxo-card') : dashIdx('meter-card');
+const dashDefaultIdx = () => isSimple() ? 0 : dashFirstSlide() === 'wx' && !$('wxo-card').classList.contains('hidden') ? dashIdx('wxo-card') : dashIdx('meter-card');
 function dashSwipeSync() {
   const sl = dashSlides(), w = dSw.tr.clientWidth + 12, i = Math.max(0, Math.min(sl.length - 1, Math.round(dSw.tr.scrollLeft / (w || 1)))); dSw.idx = i;
   const two = sl.length > 1, dd = $('dash-dots'); dd.classList.toggle('hidden', !two);
@@ -5503,7 +5512,7 @@ try { renderWrapCard(); } catch (e) { }
    im Dokument enyaqStrom/<uid>/settings/prefs, gleiche Regel wie Anbieter und Kategorien. Die PIN bleibt nur auf dem Gerät.
    Erster Abgleich: Was die Cloud hat, gilt; fehlt dort etwas und ist lokal vorhanden, wird es hochgeladen. Danach gilt die Cloud (Änderung auf einem Gerät wirkt auf allen).
    ===================================================================== */
-const SYNC_SET_KEYS = ['title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAcKwh', 'certDcKwh', 'certKm', 'wltpNet', 'ccEnd', 'wxoCut', 'dashFirst', 'car', 'carT', 'carN', 'carSec', 'wxIcons', 'nRep', 'nTrips', 'nBakYm', 'nBakAt', 'nBakSnz', 'gtMirror', 'gtList', 'iceDep', 'iceWe', 'icePark', 'iceMin', 'iceK', 'cmpCar', 'cmpL', 'cmpEur', 'cmpCo2'];
+const SYNC_SET_KEYS = ['title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAcKwh', 'certDcKwh', 'certKm', 'wltpNet', 'ccEnd', 'wxoCut', 'dashFirst', 'car', 'carT', 'ui', 'carN', 'carSec', 'wxIcons', 'nRep', 'nTrips', 'nBakYm', 'nBakAt', 'nBakSnz', 'gtMirror', 'gtList', 'iceDep', 'iceWe', 'icePark', 'iceMin', 'iceK', 'cmpCar', 'cmpL', 'cmpEur', 'cmpCo2'];
 /** Einstellungen für die Cloud: feste Reihenfolge, ohne leere Werte (Firestore verbietet undefined). null = nichts vorhanden. */
 function syncSet(src) {
   const o = {}; if (src && typeof src === 'object') SYNC_SET_KEYS.forEach(k => { const v = src[k]; if (v != null && v !== '' && !(typeof v === 'number' && !isFinite(v))) o[k] = v; });
@@ -6314,7 +6323,8 @@ const navNorm = (t) => String(t).toLowerCase().normalize('NFD').replace(/[\u0300
 function navSearch() {
   const q = navNorm($('nav-q').value.trim()), words = q.split(/\s+/).filter(Boolean), res = $('nav-results');
   $('nav-tiles').classList.toggle('hidden', !!words.length); res.classList.toggle('hidden', !words.length); if (!words.length) { res.innerHTML = ''; return; }
-  const hits = NAV_IDX.filter(x => { const h = navNorm(x[1] + ' ' + x[2] + ' ' + x[3]); return words.every(w => h.includes(w)); });
+  const easy = isSimple() ? new Set([...document.querySelectorAll('#nav-tiles [data-easy]')].map(b => b.dataset.nav)) : null;
+  const hits = NAV_IDX.filter(x => { if (easy && !easy.has(x[0])) return false; const h = navNorm(x[1] + ' ' + x[2] + ' ' + x[3]); return words.every(w => h.includes(w)); });
   res.innerHTML = hits.length ? hits.map(x => '<button type="button" data-nav="' + x[0] + '" class="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left active:bg-slate-100 dark:active:bg-slate-800"><span class="min-w-0 flex-1"><span class="block truncate text-[15px] font-semibold">' + esc(x[1]) + '</span><span class="block truncate text-xs text-slate-500 dark:text-slate-400">' + esc(x[2]) + '</span></span><svg class="h-4 w-4 shrink-0 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>').join('')
     : '<p class="px-3 py-4 text-sm text-slate-500 dark:text-slate-400 text-left">Nichts gefunden.</p>';
 }
@@ -7419,6 +7429,7 @@ function renderRecs() {
   const lab = getLab(), byRoute = new Map();
   lab.recs.forEach(r => { const k = recDirKey(r), o = byRoute.get(k); if (!o || r.k100 < o.k100) byRoute.set(k, r); });   // je Strecke ein Eintrag (ältere Doppelte: der beste zählt)
   const recs = [...byRoute.values()].sort((a, b) => a.route.localeCompare(b.route, 'de'));
+  if (isSimple()) recRoute = 'lt';                                                    // einfache Ansicht: nur Langzeitverbrauch
   if (!['all', 'speed', 'lt', 'bt'].includes(recRoute)) recRoute = 'all';
   const chip = (k, l) => `<button type="button" data-rr="${esc(k)}" class="h-8 shrink-0 whitespace-nowrap rounded-full px-3 text-xs font-semibold ${recRoute === k ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900' : 'border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300'}">${esc(l)}</button>`;
   const rc = $('rec-chips'); rc.className = 'flex bg-slate-200 dark:bg-slate-800 rounded-xl p-1';
@@ -8113,3 +8124,77 @@ if (window.__noStorage) {                                                       
   d.innerHTML = '<b>Browser-Speicher gesperrt.</b> Die App läuft, kann aber nichts dauerhaft auf diesem Gerät speichern. Öffne sie direkt in Chrome (nicht in einer anderen App) und erlaube unter Website-Einstellungen → Cookies und Websitedaten diese Seite. <button type="button" class="ml-1 underline font-semibold">Ausblenden</button>';
   d.querySelector('button').addEventListener('click', () => d.remove()); document.body.appendChild(d);
 }
+
+// ───── src/17-einfach.js ─────
+/* =====================================================================
+   Einfache Ansicht (Einstellungen → Fahrzeug & Kauf → Ansicht „Einfach“; Einstellung „ui“, wird mitsynchronisiert)
+   Gedacht für Mitfahrer ohne Technik-Ehrgeiz (Papa-Modus). Es wird nur ausgeblendet und anders angeordnet, Daten bleiben gleich:
+   - Start: Karussell, darunter wischbar Fahrzeugstatus (kompakt) ↔ Langzeitverbrauch, dann Kacheln + Liste zum Auswerten
+   - unten statt fünf Reitern: Start · Erfassen (Auswahl-Blatt) · Auswerten (eigene Seite mit denselben Kacheln)
+   - ausgeblendet per CSS (html.simple, siehe index.html): Wetter/Prognose, Akku °C, Zählerstand/Live, Bosch, Fahrtenbuch,
+     Rekorde/Tempomat, Ladekurve, Akte/Checkheft/Ausstattung, Wissen, Ladekarten, Abzeichen, Wunschliste, Routenplaner, Sprache
+   ===================================================================== */
+const EASY_ICO = {
+  clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>', chart: '<path d="M5 20V11M12 20V4M19 20v-6"/>',
+  batt: '<rect x="3" y="7" width="16" height="10" rx="2"/><path d="M21 10.5v3M6 10v4M9.5 10v4"/>', cal: '<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>',
+  leaf: '<path d="M5 19C5 11 11 5 19 5c0 8-6 14-14 14z"/><path d="M5 19l8-8"/>', trend: '<path d="M4 17l5-5 4 3 7-8"/><path d="M15 7h5v5"/>',
+  pie: '<path d="M12 3.5V12h8.5"/><circle cx="12" cy="12" r="8.5"/>', gauge: '<path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17l4-5"/>',
+  tire: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3"/><path d="M12 3.5V9M12 15v5.5M3.5 12H9M15 12h5.5"/>',
+  home: '<path d="M4 11l8-7 8 7v9h-5v-6h-6v6H4z"/>', map: '<path d="M12 21s-6-5.5-6-10.5a6 6 0 0 1 12 0C18 15.5 12 21 12 21z"/><circle cx="12" cy="10.5" r="2"/>',
+  euro: '<path d="M17 6.5a7 7 0 1 0 0 11"/><path d="M4.5 10h9M4.5 14h9"/>', chev: '<path d="M9 6l6 6-6 6"/>'
+};
+const easyIco = (k, cls) => `<svg class="${cls}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true">${EASY_ICO[k]}</svg>`;
+/* Auswerten: die ersten sechs als Kacheln, der Rest als Liste darunter (Start und Seite „Auswerten“ gleich) */
+const EASY_EVAL = [
+  ['hist', 'Historie', 'alle Ladungen', 'clock'], ['rep', 'Berichte', 'Monat und Jahr', 'chart'], ['akku', 'Akku', 'Zustand, Garantie', 'batt'],
+  ['wrap', 'Rückblick', 'Jahr in Zahlen', 'cal'], ['eff', 'Effizienz', 'Verbrauch, €/km', 'leaf'], ['trends', 'Trends', 'Verlauf je Monat', 'trend'],
+  ['stat', 'Statistik', 'Fahrzeugdaten auf einen Blick', 'pie'], ['lt', 'Langzeitverbrauch', 'Verlauf seit Kauf', 'gauge'], ['tires', 'Reifen', 'Profiltiefe und Wechsel', 'tire']
+];
+const EASY_ADD = [
+  ['cap-home', 'Zuhause geladen', 'Zählerstand der Wallbox – Foto oder Zahl', 'home', true], ['cap-away', 'Unterwegs geladen', 'kWh und Preis von der Ladesäule', 'map'],
+  ['costs', 'Kosten', 'Werkstatt, Versicherung, Wäsche …', 'euro'], ['lt-in', 'Langzeitverbrauch', 'Wert vom Bordcomputer „Seit Kauf“', 'gauge']
+];
+NAV_GO.lt = () => { recRoute = 'lt'; showView('recs'); };
+NAV_GO['lt-in'] = () => { showView('dashboard'); setTimeout(() => { try { dashSwipeTo(dashIdx('ltm-card')); $('dash-swipe').scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) { } }, 120); };
+function easyEvalHtml() {
+  const tile = ([k, t, s, i]) => `<button type="button" data-easy-go="${k}" class="flex min-h-[64px] items-center gap-2.5 rounded-[18px] bg-white dark:bg-slate-900 px-3 py-2.5 text-left shadow-sm active:scale-[0.98] transition">${easyIco(i, 'h-[26px] w-[26px] shrink-0 text-emerald-600 dark:text-emerald-400')}<span class="min-w-0"><span class="block truncate text-[15px] font-bold leading-tight">${t}</span><span class="mt-0.5 block truncate text-[11.5px] leading-tight text-slate-500 dark:text-slate-400">${s}</span></span></button>`;
+  const row = ([k, t, s, i]) => `<button type="button" data-easy-go="${k}" class="flex w-full min-h-[56px] items-center gap-3 px-3.5 py-2 text-left active:bg-slate-100 dark:active:bg-slate-800 transition">${easyIco(i, 'h-6 w-6 shrink-0 text-emerald-600 dark:text-emerald-400')}<span class="min-w-0 flex-1"><span class="block truncate text-[15px] font-semibold">${t}</span><span class="block truncate text-xs text-slate-500 dark:text-slate-400">${s}</span></span>${easyIco('chev', 'h-5 w-5 shrink-0 text-slate-400')}</button>`;
+  return `<div class="grid grid-cols-2 gap-2">${EASY_EVAL.slice(0, 6).map(tile).join('')}</div>`
+    + `<div class="mt-2 overflow-hidden rounded-[18px] bg-white dark:bg-slate-900 shadow-sm divide-y divide-slate-100 dark:divide-slate-800">${EASY_EVAL.slice(6).map(row).join('')}</div>`;
+}
+function renderEasy() {
+  $('simple-start').innerHTML = easyEvalHtml(); $('simple-eval').innerHTML = easyEvalHtml();
+  $('easy-sheet-list').innerHTML = EASY_ADD.map(([k, t, s, i, prim]) => `<button type="button" data-easy-go="${k}" class="flex w-full items-center gap-3.5 rounded-[20px] px-4 py-3.5 text-left active:scale-[0.98] transition ${prim ? 'bg-emerald-700 text-white' : 'bg-slate-100 dark:bg-slate-800'}">${easyIco(i, 'h-7 w-7 shrink-0 ' + (prim ? 'text-white' : 'text-emerald-600 dark:text-emerald-400'))}<span class="min-w-0 flex-1"><span class="block text-[16.5px] font-bold">${t}</span><span class="mt-0.5 block text-[12.5px] ${prim ? 'text-emerald-100' : 'text-slate-500 dark:text-slate-400'}">${s}</span></span>${easyIco('chev', 'h-5 w-5 shrink-0 ' + (prim ? 'text-white' : 'text-slate-400'))}</button>`).join('');
+}
+/** Klasse an <html> setzen und alles, was davon abhängt, neu ordnen (Wisch-Karten, Fußleiste) */
+function applyUi() {
+  const on = isSimple(), was = document.documentElement.classList.contains('simple');
+  document.documentElement.classList.toggle('simple', on);
+  if (on !== was) { try { dashSwipeSync(); dashSwipeTo(dashDefaultIdx(), false); } catch (e) { } try { renderWxo(); } catch (e) { } }
+  easyMark(currentView);
+}
+const EASY_EVAL_VIEWS = ['eval', 'report', 'history', 'recs', 'tires'];
+function easyMark(name) {
+  document.querySelectorAll('[data-easy-nav]').forEach(b => {
+    const k = b.dataset.easyNav, on = k === 'dashboard' ? name === 'dashboard' : k === 'eval' ? EASY_EVAL_VIEWS.includes(name) : name === 'capture' || name === 'costs';
+    b.classList.toggle('text-emerald-600', on); b.classList.toggle('dark:text-emerald-400', on); b.classList.toggle('text-slate-500', !on); b.classList.toggle('dark:text-slate-400', !on);
+    if (k !== 'add') { if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); }
+  });
+}
+function easySheet(open) {
+  const s = $('easy-sheet'); s.classList.toggle('hidden', !open);
+  if (open) { document.body.style.overflow = 'hidden'; setTimeout(() => { const b = s.querySelector('[data-easy-go]'); if (b) b.focus(); }, 30); } else document.body.style.overflow = '';
+}
+const easyGo = (k) => { easySheet(false); const f = NAV_GO[k]; if (f) f(); };
+document.addEventListener('click', (e) => {
+  const g = e.target.closest('[data-easy-go]'); if (g) { easyGo(g.dataset.easyGo); return; }
+  if (e.target.closest('[data-easy-close]')) { easySheet(false); return; }
+  if (e.target.closest('[data-easy-menu]')) { openNavDrawer(); return; }
+  const n = e.target.closest('[data-easy-nav]'); if (!n) return;
+  if (n.dataset.easyNav === 'add') easySheet(true); else showView(n.dataset.easyNav);
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('easy-sheet').classList.contains('hidden')) easySheet(false); });
+/* showView kennt die Fußleiste der einfachen Ansicht nicht: danach Markierung setzen */
+const showViewFull = showView;
+showView = function (name) { showViewFull(name); easyMark(name); };
+renderEasy(); applyUi();

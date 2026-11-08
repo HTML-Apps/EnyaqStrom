@@ -19,6 +19,8 @@ export default async function handler(req, res) {
   if (!user) return res.status(401).json({ error: 'Nicht angemeldet' });
   const acc = await accountForUser(user);
 
+  if (acc && acc.demo) return demo(req, res);                    // Testkonto: feste Werte, kein Škoda-Server
+
   if (req.method === 'POST') {                                   // Schlüssel in der App ersetzen
     if (!acc) return res.status(403).json({ error: 'Für dieses Konto sind keine Fahrzeugdaten hinterlegt' });
     if (!process.env.FIREBASE_SERVICE_ACCOUNT) return res.status(503).json({ error: 'Speichern nicht eingerichtet (FIREBASE_SERVICE_ACCOUNT fehlt)' });
@@ -93,4 +95,18 @@ export default async function handler(req, res) {
   } catch (err) {
     return res.status(502).json({ error: 'Škoda-Server nicht erreichbar' });
   }
+}
+
+/* Demo/Test (SKODA_ACCOUNTS-Eintrag {"demo": true}): fester Zustand eines Epiq in der Garage, damit sich die App ohne Auto und
+   ohne API-Schlüssel ausprobieren lässt. Zeitstempel = vor 10 Minuten, damit die Anzeige „aktuell“ wirkt. */
+function demo(req, res) {
+  if (req.method === 'POST') return res.status(400).json({ error: 'Testkonto: hier gibt es keinen echten Škoda-Schlüssel' });
+  if (req.query && req.query.check) return res.status(200).json({ enabled: true, keyExpires: null, demo: true });
+  const body = {
+    soc: 64, rangeKm: 262, chargeState: 'READY_FOR_CHARGING', plug: 'DISCONNECTED', plugLock: 'UNLOCKED', minutesToFull: null, fullAt: null,
+    careMode: 'ACTIVATED', atSavedLocation: true, doorsLocked: 'YES', locked: 'YES', doors: 'CLOSED', windows: 'CLOSED', lights: 'OFF',
+    targetSoc: 80, chargePowerKw: null, odometerKm: 1214, capturedAt: new Date(Date.now() - 10 * 60e3).toISOString(), keyExpiresAt: null, demo: true
+  };
+  if (req.query && req.query.raw) return res.status(200).json({ status: 200, include: 'demo', data: body });
+  return res.status(200).json(body);
 }

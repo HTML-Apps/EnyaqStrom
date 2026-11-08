@@ -126,15 +126,18 @@ const HERO_IMGS = [{ name: 1, src: '/Bilder/Enyaq/hero/1.webp', aspect: 1.7188, 
   { name: 4, src: '/Bilder/Enyaq/hero/4.webp', aspect: 1.1614, extra: 0.0053, tech: true }, { name: 5, src: '/Bilder/Enyaq/hero/5.webp', aspect: 2.3392, extra: 0.0058, tech: true },
   { name: 7, src: '/Bilder/Enyaq/hero/7.webp', aspect: 1.9696, extra: 0, cut: true }, { name: 8, src: '/Bilder/Enyaq/hero/8.webp', aspect: 2.3983, extra: 0, cut: true },
   { name: 9, src: '/Bilder/Enyaq/hero/9.webp', aspect: 2.067, extra: 0, cut: true, pad: true }];   // pad: etwas Abstand links/rechts   // Schnittbild mit Maßen: Bemaßung hell umgefärbt, Auto freigestellt (volle Breite, zum Lesen antippen → Vollbild)
+/* Bilder je Fahrzeugprofil (ohne Eintrag: Enyaq-Bilder oben). Epiq: Bilder/Epiq/hero, aufbereitet mit tools/epiq_bilder.py */
+const CAR_HERO = { epiq55: [{ name: 2, src: '/Bilder/Epiq/hero/2.webp', aspect: 1.9538, extra: 0.03, noHd: true }, { name: 1, src: '/Bilder/Epiq/hero/1.webp', aspect: 2.1814, extra: 0, cut: true, noHd: true }] };
 const carAutoN = () => { const v = Number(getSettings().carN); return Number.isInteger(v) && v >= 1 && v <= HERO_IMGS.length ? v : 6; };            // Einstellung: so viele Bilder wechseln automatisch
 const carAutoMs = () => { const v = Number(getSettings().carSec); return (Number.isFinite(v) && v >= 5 && v <= 600 ? v : 30) * 1000; };   // Bilder/Enyaq/Enyaq1, 2, _4 (Akku-Schnitt), 3, 4, 5 (unten bleiben 3 Punkte als Deko); automatischer Wechsel alle 30 Sekunden
 async function initCarousel() {
   const box = $('car-scroll'), dash = $('car-dashes'); if (!box) return;
-  const imgs = HERO_IMGS.map(m => ({ ...m }));                                           // Bild 4/5 = Technik (Akku, Motor): mittig und etwas kleiner, ohne Standlinie
+  const prof = CAR_HERO[carProf().key], imgs = (prof || HERO_IMGS).map(m => ({ ...m }));
+  if (prof) { const f = box.querySelector('.car-slide img'); if (f && !f.src.endsWith(prof[0].src)) f.src = prof[0].src; }                                           // Bild 4/5 = Technik (Akku, Motor): mittig und etwas kleiner, ohne Standlinie
   /* Die Bilder liegen übereinander; ein Wisch (oder Pfeiltaste) blendet per CSS-Übergang auf das nächste bzw. vorherige Bild über. Pro Wisch genau ein Bild.
      Bewusst ohne mitlaufende Bewegung beim Wischen: Nur Deckkraft wird animiert (läuft ohne JavaScript pro Frame), dadurch ruckelt nichts.
      Der Schatten unter dem Auto kommt aus den Bildern selbst. */
-  const tpl = (m, i) => `<div class="car-slide absolute inset-0 pointer-events-none" style="opacity:${i === 0 ? 1 : 0};transition:opacity .45s ease-in-out;will-change:opacity"><img src="${m.src}" decoding="async" alt="Skoda Enyaq, Bild ${i + 1} von ${imgs.length}" draggable="false" class="${m.pad ? 'absolute inset-x-6 top-[2%] bottom-[4%] w-[calc(100%-3rem)] h-[94%] object-contain object-center' : m.cut ? 'absolute inset-x-1 top-[1%] bottom-[3%] w-[calc(100%-0.5rem)] h-[96%] object-contain object-center' : m.tech ? 'absolute inset-x-8 top-[8%] bottom-[14%] w-[calc(100%-4rem)] h-[78%] object-contain object-center' : 'absolute inset-x-4 top-0 bottom-2.5 w-[calc(100%-2rem)] h-[calc(100%-0.625rem)] object-contain object-bottom'}"></div>`;
+  const tpl = (m, i) => `<div class="car-slide absolute inset-0 pointer-events-none" style="opacity:${i === 0 ? 1 : 0};transition:opacity .45s ease-in-out;will-change:opacity"><img src="${m.src}" decoding="async" alt="${esc(carName())}, Bild ${i + 1} von ${imgs.length}" draggable="false" class="${m.pad ? 'absolute inset-x-6 top-[2%] bottom-[4%] w-[calc(100%-3rem)] h-[94%] object-contain object-center' : m.cut ? 'absolute inset-x-1 top-[1%] bottom-[3%] w-[calc(100%-0.5rem)] h-[96%] object-contain object-center' : m.tech ? 'absolute inset-x-8 top-[8%] bottom-[14%] w-[calc(100%-4rem)] h-[78%] object-contain object-center' : 'absolute inset-x-4 top-0 bottom-2.5 w-[calc(100%-2rem)] h-[calc(100%-0.625rem)] object-contain object-bottom'}"></div>`;
   if (box.querySelector('.car-slide')) box.insertAdjacentHTML('beforeend', imgs.slice(1).map((m, i) => tpl(m, i + 1)).join(''));   // Bild 1 steht schon im HTML
   else box.innerHTML = imgs.map(tpl).join('');
   dash.innerHTML = imgs.length > 1 ? imgs.slice(0, CAR_DOTS).map(() => '<span class="select-none text-[22px] leading-none text-white">•</span>').join('') : '';    // Zeichen statt Formen (Dark-Mode des Browsers), alle gleich, ohne Hervorhebung
@@ -177,7 +180,7 @@ async function initCarousel() {
   const setImg = (i) => {
     lbi = ((i % imgs.length) + imgs.length) % imgs.length; sc = 1; tx = 0; ty = 0; apply(false); li.style.opacity = '1';
     li.src = hd[lbi] || imgs[lbi].src; ov.querySelector('#car-lb-n').textContent = imgs.length > 1 ? (lbi + 1) + ' / ' + imgs.length : '';
-    if (hd[lbi] === undefined) { const n = lbi, t = new Image(); hd[n] = null; t.onload = () => { hd[n] = t.src; if (lbi === n && lbOpen) li.src = t.src; }; t.src = 'Bilder/Enyaq/Enyaq' + (imgs[n].name != null ? imgs[n].name : n + 1) + '-hd.webp?v=' + HERO_VER; }
+    if (hd[lbi] === undefined && !imgs[lbi].noHd) { const n = lbi, t = new Image(); hd[n] = null; t.onload = () => { hd[n] = t.src; if (lbi === n && lbOpen) li.src = t.src; }; t.src = 'Bilder/Enyaq/Enyaq' + (imgs[n].name != null ? imgs[n].name : n + 1) + '-hd.webp?v=' + HERO_VER; }
   };
   function lbShow(i) { if (lbOpen) return; lbOpen = true; setImg(i); ov.classList.remove('hidden'); document.body.style.overflow = 'hidden'; clearTimeout(autoT); try { history.pushState({ carLb: 1 }, ''); pushed = true; } catch (e) { pushed = false; } }
   const lbClose = (fromPop) => {

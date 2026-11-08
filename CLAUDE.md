@@ -14,4 +14,6 @@
 - Karussell-Bilder auf Start: vorab aufbereitet in `Bilder/Enyaq/hero/` (weißer Rand entfernt, zugeschnitten, WebP 1100 px).
   Werte `aspect`/`extra` stehen in `HERO_IMGS` (src/05-startseite-banner.js). Bild 1 steht zusätzlich direkt im HTML und wird vorgeladen.
 - Maßbilder (Enyaq7–9, Originale in `Bilder/Enyaq/`): mit `python3 tools/hero_masse.py` freistellen und Bemaßung hell umfärben → `Bilder/Enyaq/hero/7–9.webp`.
+- Einfache Ansicht (Papa-Modus): Einstellung `ui: 'simple'` (Fahrzeug & Kauf → Ansicht), Logik in `src/17-einfach.js`, Ausblenden per CSS `html.simple …` in index.html; Drawer-Einträge mit `data-easy` bleiben sichtbar.
+- Testkonto ohne Auto: in `SKODA_ACCOUNTS` `{"mail@gmail.com": {"demo": true}}` → `/api/vehicle` liefert feste Beispielwerte.
 - Škoda-API-Schlüssel: in der App ersetzbar (verschlüsselt in `enyaqStrom/<uid>/settings/skoda`, siehe `lib/fs.js`, `lib/auth.js`); VIN/Freischaltung in `SKODA_ACCOUNTS`.

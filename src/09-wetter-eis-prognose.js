@@ -303,8 +303,12 @@ let wxoTok = 0, wxoLast = null;
 const wxoFmtR = (km) => fmt(Math.round(km / 5) * 5, 0);
 const wxoLowR = (km) => Math.round(km / 5) * 5 < 250;                                // Reichweite unter 250 km: ganz in Rot
 async function renderWxo() {
-  const el = $('wxo-card'), l = wxLoc(); if (!el) return;
-  if (!l || liveHero) { el.classList.add('hidden'); return; }
+  const el = $('wxo-card'), l = isSimple() ? null : wxLoc(); if (!el) return;
+  if (!l || liveHero) {                                                              // ohne Wetter (oder einfache Ansicht): Fahrzeugstatus trotzdem holen
+    el.classList.add('hidden');
+    if (!liveHero && apiEnabled()) wxoSoc().then(() => { try { renderVehCard(); } catch (e) { } }).catch(() => { });
+    return;
+  }
   const tok = ++wxoTok; let m, fc, socNow = null;
   try { [m, fc, socNow] = await Promise.all([wxoModel(l), wxoForecast(l), wxoSoc().catch(() => null)]); } catch (e) { if (tok === wxoTok) el.classList.add('hidden'); return; }
   if (tok !== wxoTok) return;
@@ -381,10 +385,10 @@ function openWxoSheet() {
 }
 /* Start: Verbrauchs-Prognose und Zählerstand seitlich wischen (Standard: Prognose). Höhe folgt der sichtbaren Karte. */
 const dSw = { tr: $('dash-swipe-track'), idx: 0 };
-function dashSlides() { return [$('ltm-card'), $('btm-card'), $('wxo-card'), $('veh-slide'), $('meter-card')].filter(x => x && !x.classList.contains('hidden') && !((x.id === 'btm-card' || x.id === 'ltm-card') && liveHero)); }
+function dashSlides() { if (isSimple()) return [$('veh-slide'), $('ltm-card')].filter(x => x && !x.classList.contains('hidden')); return [$('ltm-card'), $('btm-card'), $('wxo-card'), $('veh-slide'), $('meter-card')].filter(x => x && !x.classList.contains('hidden') && !((x.id === 'btm-card' || x.id === 'ltm-card') && liveHero)); }
 const dashIdx = (id) => Math.max(0, dashSlides().indexOf($(id)));
 /** Karte beim Öffnen: Prognose oder Zählerstand (Akku-Temperatur liegt links davon und wird nur per Wischen erreicht) */
-const dashDefaultIdx = () => dashFirstSlide() === 'wx' && !$('wxo-card').classList.contains('hidden') ? dashIdx('wxo-card') : dashIdx('meter-card');
+const dashDefaultIdx = () => isSimple() ? 0 : dashFirstSlide() === 'wx' && !$('wxo-card').classList.contains('hidden') ? dashIdx('wxo-card') : dashIdx('meter-card');
 function dashSwipeSync() {
   const sl = dashSlides(), w = dSw.tr.clientWidth + 12, i = Math.max(0, Math.min(sl.length - 1, Math.round(dSw.tr.scrollLeft / (w || 1)))); dSw.idx = i;
   const two = sl.length > 1, dd = $('dash-dots'); dd.classList.toggle('hidden', !two);
