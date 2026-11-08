@@ -4009,12 +4009,7 @@ window.onCloudStatus = (s) => {
 };
 /* Anmeldung kommt erst nach dem Start (Firebase): Konto-Zeilen in Schnellmenü und Einstellungs-Menü dann nachziehen – sonst bleibt am PC „Nicht angemeldet“ stehen */
 function paintUserBoxes() { try { renderNavUser(); } catch (e) { } try { renderDrawerUser(); } catch (e) { } }
-/* Vorlage für SKODA_ACCOUNTS: eigene Adresse eingesetzt, weitere als Platzhalter (keine fremden Adressen im öffentlichen Repo) */
-$('btn-help').addEventListener('click', () => {
-  const me = (window.cloud && window.cloud.userInfo && window.cloud.userInfo() || {}).email || 'deine@gmail.com';
-  $('help-tpl').textContent = '{\n  "' + me + '": {"allow": true},\n  "weitere@gmail.com": {"allow": true},\n  "test@gmail.com": {"demo": true}\n}';
-  $('help-copy').textContent = 'Kopieren'; $('help-dialog').classList.remove('hidden');
-});
+$('btn-help').addEventListener('click', () => { $('help-copy').textContent = 'Kopieren'; $('help-dialog').classList.remove('hidden'); });   // Einladungslink (Gedankenstütze)
 $('help-copy').addEventListener('click', async () => { try { await navigator.clipboard.writeText($('help-tpl').textContent); $('help-copy').textContent = 'Kopiert ✓'; } catch (e) { $('help-copy').textContent = 'Bitte von Hand markieren'; } });
 $('help-close').addEventListener('click', () => $('help-dialog').classList.add('hidden'));
 $('help-dialog').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden'); });   // Tippen neben das Fenster schließt
