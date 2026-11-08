@@ -5,11 +5,11 @@
  * - Die KI-Abfrage (/api/…) wird NIE gecacht und läuft immer übers Netz.
  * Bei größeren Änderungen am Cache-Konzept CACHE_VERSION erhöhen. */
 
-const CACHE_VERSION = 'v254';
+const CACHE_VERSION = 'v255';
 const CACHE_NAME = 'enyaq-' + CACHE_VERSION;
 
 // Dateien, die beim Installieren vorab geladen werden
-const SAME_ORIGIN_ASSETS = ['./', './index.html', './app.css?v=254', './app.js?v=254', './Bilder/Enyaq/hero/1.webp'];
+const SAME_ORIGIN_ASSETS = ['./', './index.html', './app.css?v=255', './app.js?v=255', './Bilder/Enyaq/hero/1.webp'];
 const CDN_ASSETS = [
   'https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js'
 ];
@@ -44,12 +44,18 @@ self.addEventListener('fetch', (event) => {
      sie wird kurz im Cache „enyaq-share“ abgelegt, die App öffnet Start und importiert sie dort (src/18-teilen.js). */
   if (req.method === 'POST' && url.origin === self.location.origin && url.pathname === '/share-target') {
     event.respondWith((async () => {
+      const cache = await caches.open('enyaq-share'), raw = req.clone();
+      const dbg = { at: new Date().toISOString(), ct: req.headers.get('content-type') || '', keys: [] };
       try {
-        const fd = await req.formData(), f = fd.getAll('file').find((x) => x && typeof x !== 'string');
-        const cache = await caches.open('enyaq-share');
+        await cache.delete('/share-file');
+        /* Datei unter jedem Feldnamen annehmen (Chrome: „file“, andere Browser evtl. anders); sonst Text mit CSV-Inhalt */
+        const fd = await req.formData(), ent = [...fd.entries()];
+        dbg.keys = ent.map(([k, v]) => k + '=' + (typeof v === 'string' ? 'text(' + v.length + '):' + v.slice(0, 60) : 'file:' + v.name + '|' + v.type + '|' + v.size));
+        const f = ent.map((e) => e[1]).find((v) => v && typeof v !== 'string' && v.size > 0), t = ent.map((e) => e[1]).find((v) => typeof v === 'string' && /Start of trip/.test(v));
         if (f) await cache.put('/share-file', new Response(f, { headers: { 'content-type': f.type || 'text/csv', 'x-name': encodeURIComponent(f.name || 'fahrtenbuch.csv') } }));
-        else await cache.delete('/share-file');
-      } catch (err) { console.warn('[SW] Teilen fehlgeschlagen:', err); }
+        else if (t) await cache.put('/share-file', new Response(t, { headers: { 'content-type': 'text/csv', 'x-name': 'fahrtenbuch.csv' } }));
+      } catch (err) { dbg.err = String(err && err.message || err); try { dbg.body = (await raw.text()).slice(0, 200); } catch (e) { } }
+      try { await cache.put('/share-debug', new Response(JSON.stringify(dbg), { headers: { 'content-type': 'application/json' } })); } catch (e) { }
       return Response.redirect(new URL('/?go=fb-share', self.location.origin).href, 303);
     })());
     return;
