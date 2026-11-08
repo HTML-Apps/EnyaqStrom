@@ -4,6 +4,7 @@
    - Start: Karussell, darunter wischbar Langzeitverbrauch ↔ Fahrzeugstatus (Standard) ↔ Akkupflege (nimmt deren Höhe an), dann Kacheln + Liste zum Auswerten
    - Verbräuche & Effizienz und Trends stehen nicht auf Start, sondern auf eigenen Seiten (view-eff / view-trends): die Blöcke
      #eff-block und #trends-block werden beim Umschalten dorthin verschoben und in der vollen Ansicht wieder zurück
+   - Handy: kein Seitenmenü und kein Menü-Knopf (alles über Kacheln, Glocke, Zahnrad und Fußleiste)
    - Akku: ohne „Mehrkonsum“ (Akku-Temperatur wird nicht notiert) und ohne Ladekurve
    - unten statt fünf Reitern: Start · Erfassen (Auswahl-Blatt) · Auswerten (eigene Seite mit denselben Kacheln)
    - ausgeblendet per CSS (html.simple, siehe index.html): Wetter/Prognose, Akku °C, Zählerstand/Live, Bosch, Fahrtenbuch,
@@ -112,6 +113,9 @@ showView = function (name) {
   showViewFull(name); easyMark(name);
   if (name === 'eff' || name === 'trends') { try { renderDashboard(); } catch (e) { } setTimeout(() => { ['chart', 'loss-chart'].forEach(id => { try { const ch = Chart.getChart($(id)); if (ch) ch.resize(); } catch (e) { } }); }, 30); window.scrollTo(0, 0); }
 };
+/* Handy: kein Seitenmenü (auch nicht per Wischen vom linken Rand oder Tastenkürzel); am PC bleibt es als Navigation stehen */
+const openNavDrawerFull = openNavDrawer;
+openNavDrawer = function () { if (isSimple() && !isDesk()) return; openNavDrawerFull(); };
 /* Akku: Mehrkonsum und Kurve gibt es in der einfachen Ansicht nicht */
 const setBtTabFull = setBtTab;
 setBtTab = function (t, anim) { if (isSimple() && (t === 'mehr' || t === 'kurve')) t = 'pflege'; setBtTabFull(t, anim); };
