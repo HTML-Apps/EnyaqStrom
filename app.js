@@ -470,7 +470,7 @@ function commitCosts(next) {
 }
 /* Škoda-Fahrzeugdaten: Ob für das angemeldete Konto ein Schlüssel hinterlegt ist, sagt der Server (SKODA_ACCOUNTS in Vercel). */
 const KEY_VEHICLE = 'enyaq.vehicle';
-let vehicle = load(KEY_VEHICLE, null) || { uid: null, ok: false, expires: null };   // zuletzt bekannter Stand (auch offline nutzbar)
+let vehicle = load(KEY_VEHICLE, null) || { uid: null, ok: false, allowed: false, expires: null };   // zuletzt bekannter Stand (auch offline nutzbar); allowed = darf verbinden, ok = verbunden
 let vehicleChecked = false;
 const apiEnabled = () => !!vehicle.ok;
 const keyExpiry = () => vehicle.expires ? String(vehicle.expires).slice(0, 10) : null;
@@ -484,11 +484,42 @@ function renderVehicleStatus() {
   const el = $('vehicle-status'); if (!el) return;
   el.textContent = !window.cloud?.isSignedIn?.() ? '' : vehicle.ok
     ? 'Škoda-API verbunden' + (keyExpiry() ? ' · Schlüssel gültig bis ' + new Date(keyExpiry() + 'T12:00:00').toLocaleDateString('de-DE') : '')
-    : 'Fahrzeugdaten: für dieses Konto nicht eingerichtet (manuelle Eingabe)';
-  $('veh-key').classList.toggle('hidden', !(window.cloud?.isSignedIn?.() && vehicle.ok));
+    : vehicle.allowed ? 'Fahrzeug noch nicht verbunden – VIN und Schlüssel aus der MyŠkoda-App eintragen' : 'Fahrzeugdaten: für dieses Konto nicht eingerichtet (manuelle Eingabe)';
+  $('veh-key').classList.toggle('hidden', !(window.cloud?.isSignedIn?.() && (vehicle.ok || vehicle.allowed)));
+  $('veh-key').textContent = vehicle.ok ? '🔑 Škoda-Schlüssel ersetzen' : '🚗 Fahrzeug verbinden';
+  try { renderEasy(); } catch (e) { }                                                // Karte „Fahrzeug verbinden“ auf Start (einfache Ansicht)
+}
+/** Formular für VIN (nur beim ersten Verbinden) und Schlüssel – im Blatt (Einstellungen, Start) und im Onboarding gleich */
+function vehFormHtml(withVin, dark) {
+  const inp = 'w-full min-w-0 rounded-xl border px-3 py-3 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ' + (dark ? 'border-slate-700 bg-slate-900 text-white' : 'border-slate-300 dark:border-slate-700 bg-transparent');
+  return (withVin ? `<label class="block text-left text-sm ${dark ? 'text-slate-400' : 'text-slate-600 dark:text-slate-300'}">Fahrzeug-Identnummer (VIN)<input id="sk-vin" type="text" maxlength="20" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="17 Zeichen, z. B. TMB…" class="mt-1 uppercase placeholder:normal-case ${inp}"></label>
+    <p class="-mt-1 text-left text-xs ${dark ? 'text-slate-500' : 'text-slate-500 dark:text-slate-400'}">Steht in der MyŠkoda-App beim Fahrzeug und im Fahrzeugschein (Feld E).</p>` : '')
+    + `<label class="block text-left text-sm ${dark ? 'text-slate-400' : 'text-slate-600 dark:text-slate-300'}">${withVin ? 'Schlüssel aus der MyŠkoda-App' : 'Neuer Schlüssel'}<input id="sk-new" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Schlüssel einfügen" class="mt-1 ${inp}"></label>
+    <p id="sk-msg" class="min-h-[1.25rem] text-left text-sm" role="status"></p>`;
+}
+/** VIN/Schlüssel an den eigenen Server: der prüft beim Škoda-Server und speichert verschlüsselt. Gibt { ok, expires } oder wirft mit verständlicher Meldung */
+async function vehConnect(withVin) {
+  const k = ($('sk-new').value || '').trim(), vin = withVin ? String($('sk-vin').value || '').toUpperCase().replace(/[\s-]/g, '') : undefined;
+  if (withVin && !/^[A-HJ-NPR-Z0-9]{17}$/.test(vin)) throw new Error(vin ? 'Die VIN hat 17 Zeichen (Buchstaben und Ziffern, ohne I, O, Q).' : 'Bitte die VIN eingeben.');
+  if (!k) throw new Error('Bitte den Schlüssel einfügen.');
+  const r = await fetch('/api/vehicle', { method: 'POST', headers: { ...(await authHeaders()), 'Content-Type': 'application/json' }, body: JSON.stringify(withVin ? { newKey: k, vin } : { newKey: k }) }), d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || 'HTTP ' + r.status);
+  vehicle = { ...vehicle, ok: true, allowed: true, expires: d.expires || vehicle.expires || null }; save(KEY_VEHICLE, vehicle);
+  renderVehicleStatus(); try { renderKeyWarning(); } catch (er) { } refreshViews(); try { renderWxo(); } catch (er) { }
+  return d;
 }
 /* Neuen Škoda-API-Schlüssel direkt in der App hinterlegen: der Server prüft ihn beim Škoda-Server und speichert ihn verschlüsselt (kein Vercel, kein Deploy) */
-$('veh-key').addEventListener('click', () => {
+function vehSheet() {
+  if (!vehicle.ok) {                                                               // erstes Verbinden: VIN + Schlüssel
+    $('au-sheet-box').innerHTML = `<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div><p class="text-lg font-bold">Fahrzeug verbinden</p>
+      <p class="text-left text-sm text-slate-600 dark:text-slate-300">Dann zeigt die App Akkustand, Reichweite und ob das Auto abgeschlossen ist – direkt vom Auto.</p>
+      <ol class="list-decimal space-y-1 pl-5 text-left text-sm text-slate-600 dark:text-slate-300"><li>In der <b>MyŠkoda-App</b> einen Schlüssel für die Schnittstelle erzeugen und kopieren.</li><li>VIN und Schlüssel hier eintragen.</li></ol>
+      ${vehFormHtml(true)}
+      <p class="text-left text-xs text-slate-500 dark:text-slate-400">Beides geht nur an deinen eigenen Server, wird dort beim Škoda-Server geprüft und verschlüsselt gespeichert.</p>
+      <button type="button" data-sk="connect" class="h-12 w-full rounded-2xl bg-emerald-600 text-sm font-semibold text-white active:scale-95 transition">Prüfen &amp; verbinden</button>
+      <button type="button" data-cc="close" class="h-12 w-full rounded-2xl border border-slate-300 dark:border-slate-700 text-sm font-semibold">Später</button>`;
+    $('au-sheet').classList.remove('hidden'); setTimeout(() => $('sk-vin')?.focus(), 80); return;
+  }
   $('au-sheet-box').innerHTML = `<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div><p class="text-lg font-bold">Škoda-Schlüssel ersetzen</p>
     <ol class="list-decimal space-y-1 pl-5 text-left text-sm text-slate-600 dark:text-slate-300"><li>In der <b>MyŠkoda-App</b> einen neuen Schlüssel für die Schnittstelle erzeugen und kopieren.</li><li>Hier einfügen und auf „Prüfen &amp; speichern“ tippen.</li></ol>
     <input id="sk-new" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Neuer Schlüssel" class="w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-3 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
@@ -497,8 +528,15 @@ $('veh-key').addEventListener('click', () => {
     <button type="button" data-sk="save" class="h-12 w-full rounded-2xl bg-emerald-600 text-sm font-semibold text-white active:scale-95 transition">Prüfen &amp; speichern</button>
     <button type="button" data-cc="close" class="h-12 w-full rounded-2xl border border-slate-300 dark:border-slate-700 text-sm font-semibold">Abbrechen</button>`;
   $('au-sheet').classList.remove('hidden'); setTimeout(() => $('sk-new')?.focus(), 80);
-});
+}
+$('veh-key').addEventListener('click', vehSheet);
 $('au-sheet').addEventListener('click', async (e) => {
+  const c = e.target.closest('[data-sk="connect"]');
+  if (c) { const msg = $('sk-msg'); c.disabled = true; c.textContent = 'Prüfe beim Škoda-Server …'; msg.textContent = '';
+    try { const d = await vehConnect(true);
+      $('au-sheet-box').innerHTML = `<div class="mx-auto h-1 w-10 rounded bg-slate-300 dark:bg-slate-700"></div><p class="text-lg font-bold">✓ Fahrzeug verbunden</p><p class="text-left text-sm text-slate-600 dark:text-slate-300">Der Škoda-Server hat VIN und Schlüssel akzeptiert. Auf Start erscheint gleich der Fahrzeugstatus.${d.expires ? ' Der Schlüssel gilt bis <b>' + new Date(d.expires + 'T12:00:00').toLocaleDateString('de-DE') + '</b>.' : ''}</p><button type="button" data-cc="close" class="h-12 w-full rounded-2xl bg-emerald-600 text-sm font-semibold text-white">Fertig</button>`;
+    } catch (er) { msg.className = 'min-h-[1.25rem] text-left text-sm text-red-600 dark:text-red-400'; msg.textContent = er.message; c.disabled = false; c.textContent = 'Prüfen & verbinden'; }
+    return; }
   const b = e.target.closest('[data-sk="save"]'); if (!b) return;
   const k = ($('sk-new').value || '').trim(), msg = $('sk-msg'); if (!k) { msg.className = 'min-h-[1.25rem] text-left text-sm text-red-600 dark:text-red-400'; msg.textContent = 'Bitte den neuen Schlüssel einfügen.'; return; }
   b.disabled = true; b.textContent = 'Prüfe beim Škoda-Server …'; msg.textContent = '';
@@ -509,11 +547,11 @@ $('au-sheet').addEventListener('click', async (e) => {
   } catch (er) { msg.className = 'min-h-[1.25rem] text-left text-sm text-red-600 dark:text-red-400'; msg.textContent = er.message; b.disabled = false; b.textContent = 'Prüfen & speichern'; }
 });
 async function checkVehicle(uid) {                                                  // einmal nach der Anmeldung, ohne Škoda-Abfrage
-  if (vehicle.uid !== uid) vehicle = { uid, ok: false, expires: null };             // anderes Konto: nichts vom vorherigen übernehmen
+  if (vehicle.uid !== uid) vehicle = { uid, ok: false, allowed: false, expires: null };             // anderes Konto: nichts vom vorherigen übernehmen
   try {
     const res = await fetch('/api/vehicle?check=1', { headers: await authHeaders() });
     const d = await res.json().catch(() => ({}));
-    if (res.ok) vehicle = { uid, ok: !!d.enabled, expires: d.keyExpires || null };
+    if (res.ok) vehicle = { uid, ok: !!d.enabled, allowed: !!(d.allowed || d.enabled), expires: d.keyExpires || null };
   } catch (e) { console.warn('Fahrzeug-Check fehlgeschlagen (offline?):', e.message); }   // dann bleibt der zuletzt bekannte Stand
   save(KEY_VEHICLE, vehicle); renderVehicleStatus(); refreshViews(); paintOdo(false);
   if (vehicle.ok && currentView === 'dashboard') try { renderWxo(); } catch (e) { }   // Restakku in der Prognose
@@ -3955,7 +3993,7 @@ window.onCloudReadings = (cloud, isFirst, uid) => {
 };
 
 window.onCloudStatus = (s) => {
-  if (s === null) { vehicle = { uid: null, ok: false, expires: null }; vehicleChecked = false; save(KEY_VEHICLE, vehicle); renderVehicleStatus(); refreshViews(); }
+  if (s === null) { vehicle = { uid: null, ok: false, allowed: false, expires: null }; vehicleChecked = false; save(KEY_VEHICLE, vehicle); renderVehicleStatus(); refreshViews(); }
   else if (s.uid && !vehicleChecked) { vehicleChecked = true; checkVehicle(s.uid); }              // beim Start im Hintergrund prüfen
   const el = $('cloud-status'), btn = $('btn-cloud');
   if (!s?.error) cloudEmail = s?.email || null;
@@ -8235,8 +8273,21 @@ function easyEvalHtml() {
   return `<div class="grid grid-cols-2 gap-2">${EASY_EVAL.slice(0, 6).map(tile).join('')}</div>`
     + `<div class="mt-2 overflow-hidden rounded-[18px] bg-white dark:bg-slate-900 shadow-sm divide-y divide-slate-100 dark:divide-slate-800">${EASY_EVAL.slice(6).map(row).join('')}</div>`;
 }
+/* Karte „Fahrzeug verbinden“ über den Kacheln: Konto ist freigegeben (SKODA_ACCOUNTS „allow“), aber VIN/Schlüssel fehlen noch; „Später“ blendet sie 14 Tage aus */
+const KEY_VEH_LATER = 'enyaq.vehLater';
+function easyVehCard() {
+  if (typeof vehicle === 'undefined' || !vehicle.allowed || vehicle.ok || !(window.cloud && window.cloud.isSignedIn && window.cloud.isSignedIn())) return '';
+  if (Date.now() < (Number(load(KEY_VEH_LATER, 0)) || 0)) return '';
+  return `<div class="mb-2 flex items-center gap-3 rounded-[18px] bg-white dark:bg-slate-900 p-3.5 shadow-sm"><svg class="h-7 w-7 shrink-0 text-sky-600 dark:text-sky-400" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 16V11l2-5h10l2 5v5"/><path d="M4 16h16v3H4z"/><circle cx="8" cy="16" r="1.5"/><circle cx="16" cy="16" r="1.5"/></svg>
+    <div class="min-w-0 flex-1"><p class="text-[15px] font-bold leading-tight">Fahrzeug verbinden</p><p class="mt-0.5 text-[12.5px] leading-snug text-slate-500 dark:text-slate-400">Akku, Reichweite und Schloss direkt vom Auto</p></div>
+    <div class="flex shrink-0 flex-col items-end gap-1"><button type="button" data-easy-veh="go" class="rounded-xl bg-sky-600 px-3 py-2 text-[13px] font-semibold text-white active:scale-95 transition">Verbinden</button><button type="button" data-easy-veh="later" class="px-1 text-xs text-slate-500 dark:text-slate-400">Später</button></div></div>`;
+}
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-easy-veh]'); if (!b) return;
+  if (b.dataset.easyVeh === 'go') vehSheet(); else { save(KEY_VEH_LATER, Date.now() + 14 * 864e5); renderEasy(); }
+});
 function renderEasy() {
-  $('simple-start').innerHTML = easyEvalHtml(); renderEvalMonth();
+  $('simple-start').innerHTML = easyVehCard() + easyEvalHtml(); renderEvalMonth();
   $('easy-sheet-list').innerHTML = EASY_ADD.map(([k, t, s, i, prim]) => `<button type="button" data-easy-go="${k}" class="flex w-full items-center gap-3.5 rounded-[20px] px-4 py-3.5 text-left active:scale-[0.98] transition ${prim ? 'bg-emerald-700 text-white' : 'bg-slate-100 dark:bg-slate-800'}">${easyIco(i, 'h-7 w-7 shrink-0 ' + (prim ? 'text-white' : 'text-emerald-600 dark:text-emerald-400'))}<span class="min-w-0 flex-1"><span class="block text-[16.5px] font-bold">${t}</span><span class="mt-0.5 block text-[12.5px] ${prim ? 'text-emerald-100' : 'text-slate-500 dark:text-slate-400'}">${s}</span></span>${easyIco('chev', 'h-5 w-5 shrink-0 ' + (prim ? 'text-white' : 'text-slate-400'))}</button>`).join('');
 }
 /* Start-Karte „Akkupflege“: Schonungs-Wert der letzten 90 Tage (batCare) kurz und mit einem Tipp; Tipp auf die Karte → Akku › Pflege */
@@ -8412,8 +8463,9 @@ fbShareImport();
    Fortschritt in localStorage „enyaq.onb“ (a1 … b3, t1 … t3, done) – übersteht das Neuladen nach der Voreinstellung.
    Wer schon Daten hat (lokal oder in der Cloud), sieht nichts davon.
    ===================================================================== */
-const KEY_ONB = 'enyaq.onb', ONB_ALL = ['b1', 'b2', 'b3'];
-const onbSteps = () => onbStandalone() ? ['b1', 'b2'] : ONB_ALL;          // schon installiert: Schritt „Startbildschirm“ entfällt
+const KEY_ONB = 'enyaq.onb';
+const onbNeedVeh = () => typeof vehicle !== 'undefined' && vehicle.allowed && !vehicle.ok;
+const onbSteps = () => ['b1', 'b2', ...(onbNeedVeh() || onbGet() === 'bv' ? ['bv'] : []), ...(onbStandalone() ? [] : ['b3'])];   // Fahrzeug nur, wenn freigegeben und noch nicht verbunden; Startbildschirm entfällt, wenn installiert
 const onbGet = () => { try { return localStorage.getItem(KEY_ONB) || ''; } catch (e) { return 'done'; } };
 const onbSet = (v) => { try { localStorage.setItem(KEY_ONB, v); } catch (e) { } };
 let onbInstall = null; window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); onbInstall = e; });   // „Auf den Startbildschirm“ in B3
@@ -8485,6 +8537,10 @@ function onbB2() {
      <label class="mt-4 block text-sm text-slate-400">Kilometerstand bei Abholung<input id="onb-km" type="text" inputmode="numeric" placeholder="z. B. 18" value="${s.purchaseKm != null ? s.purchaseKm : ''}" class="${inp}"></label>
      <p class="mt-1 text-[12.5px] text-slate-500">Steht im Kombi-Instrument · ungefähr reicht</p>`);
 }
+function onbBV() {
+  onbStep(onbSteps().indexOf('bv'), 'Fahrzeug verbinden?', 'Dann zeigt die App Akkustand, Reichweite und ob das Auto abgeschlossen ist – direkt vom Auto. Den Schlüssel erzeugst du in der MyŠkoda-App.',
+    `<div class="mt-5 space-y-3">${vehFormHtml(true, true)}</div><p class="rounded-2xl bg-slate-900 px-3.5 py-3 text-[13.5px] leading-relaxed text-slate-400">Noch kein Auto da? Einfach überspringen – das geht später jederzeit auf Start oder in den Einstellungen.</p>`, 'Verbinden');
+}
 let onbOpt = { inst: true };
 function onbB3() {
   const tog = (k, icon, t, s, dis) => `<button type="button" data-onb="${dis ? '' : 't-' + k}" ${dis ? 'disabled' : ''} role="switch" aria-checked="${!dis && onbOpt[k]}" class="mt-3.5 flex w-full items-center gap-3 rounded-[18px] bg-slate-900 p-3.5 text-left ${dis ? 'opacity-60' : 'active:scale-[0.99] transition'}">${icon}<span class="min-w-0 flex-1"><span class="block text-base font-semibold">${t}</span><span class="block text-[13px] leading-snug text-slate-400">${s}</span></span>${dis ? '' : `<span class="relative h-[30px] w-[50px] shrink-0 rounded-full ${onbOpt[k] ? 'bg-emerald-500' : 'bg-slate-700'}"><span class="absolute top-[3px] h-6 w-6 rounded-full bg-white ${onbOpt[k] ? 'right-[3px]' : 'left-[3px]'}"></span></span>`}</button>`;
@@ -8493,7 +8549,7 @@ function onbB3() {
   const instRow = onbStandalone() ? tog('inst', phone, 'Auf dem Startbildschirm ✓', 'Die App ist schon installiert.', true)
     : onbInstall ? tog('inst', phone, 'Auf den Startbildschirm', 'App-Symbol neben deinen anderen Apps', false)
     : tog('inst', phone, 'Auf den Startbildschirm', 'Im Browser-Menü ⋮ auf „App installieren“ bzw. „Zum Startbildschirm“ tippen.', true);
-  onbStep(2, 'Fast fertig!', 'Leg die App auf den Startbildschirm – dann öffnet sie sich wie jede andere App:', instRow + '<p id="onb-msg" class="mt-3 min-h-[1.25rem] text-sm text-amber-300" role="status"></p>', 'Fertig');
+  onbStep(onbSteps().indexOf('b3'), 'Fast fertig!', 'Leg die App auf den Startbildschirm – dann öffnet sie sich wie jede andere App:', instRow + '<p id="onb-msg" class="mt-3 min-h-[1.25rem] text-sm text-amber-300" role="status"></p>', 'Fertig');
 }
 /* Tour auf Start: Ring um das Ziel, Rest abgedunkelt, Sprechblase darunter bzw. darüber */
 const onbVeh = () => { const v = $('veh-slide'); return !!v && !v.classList.contains('hidden'); };
@@ -8522,7 +8578,7 @@ function onbTour(i) {
 }
 function onbShow() {
   const s = onbGet();
-  if (s === 'a1') onbA1(); else if (s === 'a2') onbA2(); else if (s === 'b1') onbB1(); else if (s === 'b2') onbB2(); else if (s === 'b3') onbB3();
+  if (s === 'a1') onbA1(); else if (s === 'a2') onbA2(); else if (s === 'b1') onbB1(); else if (s === 'b2') onbB2(); else if (s === 'bv') onbBV(); else if (s === 'b3') onbB3();
   else if (/^t[123]$/.test(s)) { if (isSimple()) onbTour(Number(s[1]) - 1); else { onbSet('done'); onbClose(); } }
   else onbClose();
 }
@@ -8547,6 +8603,8 @@ document.addEventListener('click', async (e) => {
     if (s === 'b1') setQuickSetting('price', onbPrice);
     if (s === 'b2') { const d = $('onb-buy').value, k = parseInt(String($('onb-km').value).replace(/\D/g, ''), 10);
       if (/^\d{4}-\d{2}-\d{2}$/.test(d)) setQuickSetting('purchase', d); if (Number.isFinite(k) && k >= 0 && k < 1e6) setQuickSetting('purchaseKm', k); }
+    if (s === 'bv') { b.disabled = true; b.textContent = 'Prüfe beim Škoda-Server …';
+      try { await vehConnect(true); } catch (er) { const m = $('sk-msg'); m.className = 'min-h-[1.25rem] text-left text-sm text-amber-300'; m.textContent = er.message; b.disabled = false; b.textContent = 'Verbinden'; return; } }
     if (s === 'b3') { b.disabled = true;
       if (onbOpt.inst && onbInstall && !onbStandalone()) { try { onbInstall.prompt(); await onbInstall.userChoice; } catch (er) { } onbInstall = null; }
       b.disabled = false; }

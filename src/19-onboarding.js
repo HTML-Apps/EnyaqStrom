@@ -7,8 +7,9 @@
    Fortschritt in localStorage „enyaq.onb“ (a1 … b3, t1 … t3, done) – übersteht das Neuladen nach der Voreinstellung.
    Wer schon Daten hat (lokal oder in der Cloud), sieht nichts davon.
    ===================================================================== */
-const KEY_ONB = 'enyaq.onb', ONB_ALL = ['b1', 'b2', 'b3'];
-const onbSteps = () => onbStandalone() ? ['b1', 'b2'] : ONB_ALL;          // schon installiert: Schritt „Startbildschirm“ entfällt
+const KEY_ONB = 'enyaq.onb';
+const onbNeedVeh = () => typeof vehicle !== 'undefined' && vehicle.allowed && !vehicle.ok;
+const onbSteps = () => ['b1', 'b2', ...(onbNeedVeh() || onbGet() === 'bv' ? ['bv'] : []), ...(onbStandalone() ? [] : ['b3'])];   // Fahrzeug nur, wenn freigegeben und noch nicht verbunden; Startbildschirm entfällt, wenn installiert
 const onbGet = () => { try { return localStorage.getItem(KEY_ONB) || ''; } catch (e) { return 'done'; } };
 const onbSet = (v) => { try { localStorage.setItem(KEY_ONB, v); } catch (e) { } };
 let onbInstall = null; window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); onbInstall = e; });   // „Auf den Startbildschirm“ in B3
@@ -80,6 +81,10 @@ function onbB2() {
      <label class="mt-4 block text-sm text-slate-400">Kilometerstand bei Abholung<input id="onb-km" type="text" inputmode="numeric" placeholder="z. B. 18" value="${s.purchaseKm != null ? s.purchaseKm : ''}" class="${inp}"></label>
      <p class="mt-1 text-[12.5px] text-slate-500">Steht im Kombi-Instrument · ungefähr reicht</p>`);
 }
+function onbBV() {
+  onbStep(onbSteps().indexOf('bv'), 'Fahrzeug verbinden?', 'Dann zeigt die App Akkustand, Reichweite und ob das Auto abgeschlossen ist – direkt vom Auto. Den Schlüssel erzeugst du in der MyŠkoda-App.',
+    `<div class="mt-5 space-y-3">${vehFormHtml(true, true)}</div><p class="rounded-2xl bg-slate-900 px-3.5 py-3 text-[13.5px] leading-relaxed text-slate-400">Noch kein Auto da? Einfach überspringen – das geht später jederzeit auf Start oder in den Einstellungen.</p>`, 'Verbinden');
+}
 let onbOpt = { inst: true };
 function onbB3() {
   const tog = (k, icon, t, s, dis) => `<button type="button" data-onb="${dis ? '' : 't-' + k}" ${dis ? 'disabled' : ''} role="switch" aria-checked="${!dis && onbOpt[k]}" class="mt-3.5 flex w-full items-center gap-3 rounded-[18px] bg-slate-900 p-3.5 text-left ${dis ? 'opacity-60' : 'active:scale-[0.99] transition'}">${icon}<span class="min-w-0 flex-1"><span class="block text-base font-semibold">${t}</span><span class="block text-[13px] leading-snug text-slate-400">${s}</span></span>${dis ? '' : `<span class="relative h-[30px] w-[50px] shrink-0 rounded-full ${onbOpt[k] ? 'bg-emerald-500' : 'bg-slate-700'}"><span class="absolute top-[3px] h-6 w-6 rounded-full bg-white ${onbOpt[k] ? 'right-[3px]' : 'left-[3px]'}"></span></span>`}</button>`;
@@ -88,7 +93,7 @@ function onbB3() {
   const instRow = onbStandalone() ? tog('inst', phone, 'Auf dem Startbildschirm ✓', 'Die App ist schon installiert.', true)
     : onbInstall ? tog('inst', phone, 'Auf den Startbildschirm', 'App-Symbol neben deinen anderen Apps', false)
     : tog('inst', phone, 'Auf den Startbildschirm', 'Im Browser-Menü ⋮ auf „App installieren“ bzw. „Zum Startbildschirm“ tippen.', true);
-  onbStep(2, 'Fast fertig!', 'Leg die App auf den Startbildschirm – dann öffnet sie sich wie jede andere App:', instRow + '<p id="onb-msg" class="mt-3 min-h-[1.25rem] text-sm text-amber-300" role="status"></p>', 'Fertig');
+  onbStep(onbSteps().indexOf('b3'), 'Fast fertig!', 'Leg die App auf den Startbildschirm – dann öffnet sie sich wie jede andere App:', instRow + '<p id="onb-msg" class="mt-3 min-h-[1.25rem] text-sm text-amber-300" role="status"></p>', 'Fertig');
 }
 /* Tour auf Start: Ring um das Ziel, Rest abgedunkelt, Sprechblase darunter bzw. darüber */
 const onbVeh = () => { const v = $('veh-slide'); return !!v && !v.classList.contains('hidden'); };
@@ -117,7 +122,7 @@ function onbTour(i) {
 }
 function onbShow() {
   const s = onbGet();
-  if (s === 'a1') onbA1(); else if (s === 'a2') onbA2(); else if (s === 'b1') onbB1(); else if (s === 'b2') onbB2(); else if (s === 'b3') onbB3();
+  if (s === 'a1') onbA1(); else if (s === 'a2') onbA2(); else if (s === 'b1') onbB1(); else if (s === 'b2') onbB2(); else if (s === 'bv') onbBV(); else if (s === 'b3') onbB3();
   else if (/^t[123]$/.test(s)) { if (isSimple()) onbTour(Number(s[1]) - 1); else { onbSet('done'); onbClose(); } }
   else onbClose();
 }
@@ -142,6 +147,8 @@ document.addEventListener('click', async (e) => {
     if (s === 'b1') setQuickSetting('price', onbPrice);
     if (s === 'b2') { const d = $('onb-buy').value, k = parseInt(String($('onb-km').value).replace(/\D/g, ''), 10);
       if (/^\d{4}-\d{2}-\d{2}$/.test(d)) setQuickSetting('purchase', d); if (Number.isFinite(k) && k >= 0 && k < 1e6) setQuickSetting('purchaseKm', k); }
+    if (s === 'bv') { b.disabled = true; b.textContent = 'Prüfe beim Škoda-Server …';
+      try { await vehConnect(true); } catch (er) { const m = $('sk-msg'); m.className = 'min-h-[1.25rem] text-left text-sm text-amber-300'; m.textContent = er.message; b.disabled = false; b.textContent = 'Verbinden'; return; } }
     if (s === 'b3') { b.disabled = true;
       if (onbOpt.inst && onbInstall && !onbStandalone()) { try { onbInstall.prompt(); await onbInstall.userChoice; } catch (er) { } onbInstall = null; }
       b.disabled = false; }

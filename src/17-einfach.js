@@ -43,8 +43,21 @@ function easyEvalHtml() {
   return `<div class="grid grid-cols-2 gap-2">${EASY_EVAL.slice(0, 6).map(tile).join('')}</div>`
     + `<div class="mt-2 overflow-hidden rounded-[18px] bg-white dark:bg-slate-900 shadow-sm divide-y divide-slate-100 dark:divide-slate-800">${EASY_EVAL.slice(6).map(row).join('')}</div>`;
 }
+/* Karte „Fahrzeug verbinden“ über den Kacheln: Konto ist freigegeben (SKODA_ACCOUNTS „allow“), aber VIN/Schlüssel fehlen noch; „Später“ blendet sie 14 Tage aus */
+const KEY_VEH_LATER = 'enyaq.vehLater';
+function easyVehCard() {
+  if (typeof vehicle === 'undefined' || !vehicle.allowed || vehicle.ok || !(window.cloud && window.cloud.isSignedIn && window.cloud.isSignedIn())) return '';
+  if (Date.now() < (Number(load(KEY_VEH_LATER, 0)) || 0)) return '';
+  return `<div class="mb-2 flex items-center gap-3 rounded-[18px] bg-white dark:bg-slate-900 p-3.5 shadow-sm"><svg class="h-7 w-7 shrink-0 text-sky-600 dark:text-sky-400" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 16V11l2-5h10l2 5v5"/><path d="M4 16h16v3H4z"/><circle cx="8" cy="16" r="1.5"/><circle cx="16" cy="16" r="1.5"/></svg>
+    <div class="min-w-0 flex-1"><p class="text-[15px] font-bold leading-tight">Fahrzeug verbinden</p><p class="mt-0.5 text-[12.5px] leading-snug text-slate-500 dark:text-slate-400">Akku, Reichweite und Schloss direkt vom Auto</p></div>
+    <div class="flex shrink-0 flex-col items-end gap-1"><button type="button" data-easy-veh="go" class="rounded-xl bg-sky-600 px-3 py-2 text-[13px] font-semibold text-white active:scale-95 transition">Verbinden</button><button type="button" data-easy-veh="later" class="px-1 text-xs text-slate-500 dark:text-slate-400">Später</button></div></div>`;
+}
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-easy-veh]'); if (!b) return;
+  if (b.dataset.easyVeh === 'go') vehSheet(); else { save(KEY_VEH_LATER, Date.now() + 14 * 864e5); renderEasy(); }
+});
 function renderEasy() {
-  $('simple-start').innerHTML = easyEvalHtml(); renderEvalMonth();
+  $('simple-start').innerHTML = easyVehCard() + easyEvalHtml(); renderEvalMonth();
   $('easy-sheet-list').innerHTML = EASY_ADD.map(([k, t, s, i, prim]) => `<button type="button" data-easy-go="${k}" class="flex w-full items-center gap-3.5 rounded-[20px] px-4 py-3.5 text-left active:scale-[0.98] transition ${prim ? 'bg-emerald-700 text-white' : 'bg-slate-100 dark:bg-slate-800'}">${easyIco(i, 'h-7 w-7 shrink-0 ' + (prim ? 'text-white' : 'text-emerald-600 dark:text-emerald-400'))}<span class="min-w-0 flex-1"><span class="block text-[16.5px] font-bold">${t}</span><span class="mt-0.5 block text-[12.5px] ${prim ? 'text-emerald-100' : 'text-slate-500 dark:text-slate-400'}">${s}</span></span>${easyIco('chev', 'h-5 w-5 shrink-0 ' + (prim ? 'text-white' : 'text-slate-400'))}</button>`).join('');
 }
 /* Start-Karte „Akkupflege“: Schonungs-Wert der letzten 90 Tage (batCare) kurz und mit einem Tipp; Tipp auf die Karte → Akku › Pflege */

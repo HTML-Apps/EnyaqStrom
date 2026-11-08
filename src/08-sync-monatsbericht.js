@@ -63,7 +63,7 @@ window.onCloudReadings = (cloud, isFirst, uid) => {
 };
 
 window.onCloudStatus = (s) => {
-  if (s === null) { vehicle = { uid: null, ok: false, expires: null }; vehicleChecked = false; save(KEY_VEHICLE, vehicle); renderVehicleStatus(); refreshViews(); }
+  if (s === null) { vehicle = { uid: null, ok: false, allowed: false, expires: null }; vehicleChecked = false; save(KEY_VEHICLE, vehicle); renderVehicleStatus(); refreshViews(); }
   else if (s.uid && !vehicleChecked) { vehicleChecked = true; checkVehicle(s.uid); }              // beim Start im Hintergrund prüfen
   const el = $('cloud-status'), btn = $('btn-cloud');
   if (!s?.error) cloudEmail = s?.email || null;
