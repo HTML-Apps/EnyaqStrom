@@ -2,12 +2,13 @@
    Onboarding beim allerersten Öffnen (Entwurf: Canvas „Onboarding“ A1–C2)
    A1 Willkommen + „Mit Google anmelden“ (Titel/Bild nach Fahrzeugprofil; Einladungslink /?auto=epiq setzt den Epiq schon vorher)
    A2 nach der Anmeldung: persönliche Begrüßung, bei Voreinstellung (USER_PRESETS) „Hendrik hat schon alles vorbereitet“
-   B1–B3 drei kurze, überspringbare Fragen: Strompreis, Abholung + km-Stand, Benachrichtigungen + Startbildschirm
+   B1–B3 kurze, überspringbare Fragen: Strompreis, Abholung + km-Stand, Startbildschirm (entfällt, wenn schon installiert)
    C  kurze Tour auf Start (nur einfache Ansicht): Status-Karte, Plus, Auswerten
    Fortschritt in localStorage „enyaq.onb“ (a1 … b3, t1 … t3, done) – übersteht das Neuladen nach der Voreinstellung.
    Wer schon Daten hat (lokal oder in der Cloud), sieht nichts davon.
    ===================================================================== */
-const KEY_ONB = 'enyaq.onb', ONB_STEPS = ['b1', 'b2', 'b3'];
+const KEY_ONB = 'enyaq.onb', ONB_ALL = ['b1', 'b2', 'b3'];
+const onbSteps = () => onbStandalone() ? ['b1', 'b2'] : ONB_ALL;          // schon installiert: Schritt „Startbildschirm“ entfällt
 const onbGet = () => { try { return localStorage.getItem(KEY_ONB) || ''; } catch (e) { return 'done'; } };
 const onbSet = (v) => { try { localStorage.setItem(KEY_ONB, v); } catch (e) { } };
 let onbInstall = null; window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); onbInstall = e; });   // „Auf den Startbildschirm“ in B3
@@ -51,11 +52,11 @@ function onbA2() {
     <p class="mt-1.5 text-base leading-snug text-slate-300">${pre ? 'Hendrik hat schon alles für dich vorbereitet:' : 'Schön, dass du da bist. Das ist eingerichtet:'}</p>
     <div class="my-4 flex justify-center"><img src="${onbHero()}" alt="" class="w-full max-w-[280px]"></div>
     <div class="border-b border-slate-800">${item(carProf().title || carName(), 'Bilder, Akku und Reichweite passend')}${isSimple() ? item('Einfache Ansicht', 'Große Kacheln, nur das Wichtigste') : ''}${item('Daten gesichert', 'in deinem Google-Konto')}</div>
-    <div class="min-h-6 flex-1"></div>${onbBtn('go', 'Los geht’s')}<p class="mt-3 text-center text-sm text-slate-400">Noch 3 kurze Fragen – dauert 1 Minute</p>`, ONB_BG);
+    <div class="min-h-6 flex-1"></div>${onbBtn('go', 'Los geht’s')}<p class="mt-3 text-center text-sm text-slate-400">Noch ${onbSteps().length} kurze Fragen – dauert 1 Minute</p>`, ONB_BG);
 }
 function onbStep(i, title, sub, body, cta) {
-  const dots = ONB_STEPS.map((_, k) => `<span class="h-[7px] rounded-full ${k === i ? 'w-[18px] bg-emerald-400' : 'w-[7px] bg-slate-700'}"></span>`).join('');
-  onbShell(`<div class="flex items-center justify-between"><span class="text-[13px] text-slate-400">Schritt ${i + 1} von 3</span><button type="button" data-onb="skip" class="py-1 text-sm text-slate-400 active:opacity-70">Überspringen</button></div>
+  const st = onbSteps(), dots = st.map((_, k) => `<span class="h-[7px] rounded-full ${k === i ? 'w-[18px] bg-emerald-400' : 'w-[7px] bg-slate-700'}"></span>`).join('');
+  onbShell(`<div class="flex items-center justify-between"><span class="text-[13px] text-slate-400">Schritt ${i + 1} von ${st.length}</span><button type="button" data-onb="skip" class="py-1 text-sm text-slate-400 active:opacity-70">Überspringen</button></div>
     <div class="mt-2.5 flex justify-center gap-1.5" aria-hidden="true">${dots}</div>
     <h1 class="mt-7 text-[26px] font-extrabold leading-tight">${title}</h1><p class="mt-2 text-[15px] leading-relaxed text-slate-300">${sub}</p>
     ${body}<div class="min-h-6 flex-1"></div>${onbBtn('next', cta || 'Weiter')}`);
@@ -76,19 +77,15 @@ function onbB2() {
      <label class="mt-4 block text-sm text-slate-400">Kilometerstand bei Abholung<input id="onb-km" type="text" inputmode="numeric" placeholder="z. B. 18" value="${s.purchaseKm != null ? s.purchaseKm : ''}" class="${inp}"></label>
      <p class="mt-1 text-[12.5px] text-slate-500">Steht im Kombi-Instrument · ungefähr reicht</p>`);
 }
-let onbOpt = { push: true, inst: true };
+let onbOpt = { inst: true };
 function onbB3() {
   const tog = (k, icon, t, s, dis) => `<button type="button" data-onb="${dis ? '' : 't-' + k}" ${dis ? 'disabled' : ''} role="switch" aria-checked="${!dis && onbOpt[k]}" class="mt-3.5 flex w-full items-center gap-3 rounded-[18px] bg-slate-900 p-3.5 text-left ${dis ? 'opacity-60' : 'active:scale-[0.99] transition'}">${icon}<span class="min-w-0 flex-1"><span class="block text-base font-semibold">${t}</span><span class="block text-[13px] leading-snug text-slate-400">${s}</span></span>${dis ? '' : `<span class="relative h-[30px] w-[50px] shrink-0 rounded-full ${onbOpt[k] ? 'bg-emerald-500' : 'bg-slate-700'}"><span class="absolute top-[3px] h-6 w-6 rounded-full bg-white ${onbOpt[k] ? 'right-[3px]' : 'left-[3px]'}"></span></span>`}</button>`;
   const ico = (p) => `<svg class="h-[26px] w-[26px] shrink-0 text-emerald-400" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true">${p}</svg>`;
-  const bell = ico('<path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/>'), phone = ico('<rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/>');
-  const signed = window.cloud && window.cloud.isSignedIn && window.cloud.isSignedIn(), pushOkay = typeof pushOk === 'function' && pushOk();
-  const pushRow = !pushOkay ? tog('push', bell, 'Benachrichtigungen', 'Dieser Browser kann keine Benachrichtigungen schicken.', true)
-    : !signed ? tog('push', bell, 'Benachrichtigungen', 'Geht nach der Anmeldung (Einstellungen › Wetter).', true)
-    : tog('push', bell, 'Benachrichtigungen', 'z. B. abends, wenn die Scheibe morgen früh vereist ist', false);
+  const phone = ico('<rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/>');
   const instRow = onbStandalone() ? tog('inst', phone, 'Auf dem Startbildschirm ✓', 'Die App ist schon installiert.', true)
     : onbInstall ? tog('inst', phone, 'Auf den Startbildschirm', 'App-Symbol neben deinen anderen Apps', false)
     : tog('inst', phone, 'Auf den Startbildschirm', 'Im Browser-Menü ⋮ auf „App installieren“ bzw. „Zum Startbildschirm“ tippen.', true);
-  onbStep(2, 'Fast fertig!', 'Zwei Kleinigkeiten, damit die App wie eine richtige App funktioniert:', pushRow + instRow + '<p id="onb-msg" class="mt-3 min-h-[1.25rem] text-sm text-amber-300" role="status"></p>', 'Fertig');
+  onbStep(2, 'Fast fertig!', 'Leg die App auf den Startbildschirm – dann öffnet sie sich wie jede andere App:', instRow + '<p id="onb-msg" class="mt-3 min-h-[1.25rem] text-sm text-amber-300" role="status"></p>', 'Fertig');
 }
 /* Tour auf Start: Ring um das Ziel, Rest abgedunkelt, Sprechblase darunter bzw. darüber */
 const onbVeh = () => { const v = $('veh-slide'); return !!v && !v.classList.contains('hidden'); };
@@ -122,8 +119,8 @@ function onbShow() {
   else onbClose();
 }
 function onbNext(from) {                                                     // nach B3 bzw. Überspringen: weiter oder Tour
-  const i = ONB_STEPS.indexOf(from);
-  if (i >= 0 && i < ONB_STEPS.length - 1) { onbSet(ONB_STEPS[i + 1]); onbShow(); return; }
+  const st = onbSteps(), i = st.indexOf(from);
+  if (i >= 0 && i < st.length - 1) { onbSet(st[i + 1]); onbShow(); return; }
   if (isSimple()) { onbSet('t1'); onbShow(); } else { onbSet('done'); onbClose(); }
 }
 document.addEventListener('click', async (e) => {
@@ -136,7 +133,7 @@ document.addEventListener('click', async (e) => {
   if (a === 'go') { onbSet('b1'); const img = document.querySelector('#car-scroll img');                // Karussell zeigt noch das andere Auto → einmal neu laden
     if (window.onbReload || (img && !img.getAttribute('src').endsWith(onbHero()))) { location.reload(); return; } onbShow(); return; }
   if (a === 'p-' || a === 'p+') { onbPrice = Math.max(0.05, Math.min(1.5, Math.round((onbPrice + (a === 'p+' ? 0.01 : -0.01)) * 100) / 100)); $('onb-price').textContent = fmt(onbPrice, 2); return; }
-  if (a === 't-push' || a === 't-inst') { const k = a.slice(2); onbOpt[k] = !onbOpt[k]; onbB3(); return; }
+  if (a === 't-inst') { const k = a.slice(2); onbOpt[k] = !onbOpt[k]; onbB3(); return; }
   if (a === 'skip') { onbNext(s); return; }
   if (a === 'next') {
     if (s === 'b1') setQuickSetting('price', onbPrice);
@@ -144,7 +141,6 @@ document.addEventListener('click', async (e) => {
       if (/^\d{4}-\d{2}-\d{2}$/.test(d)) setQuickSetting('purchase', d); if (Number.isFinite(k) && k >= 0 && k < 1e6) setQuickSetting('purchaseKm', k); }
     if (s === 'b3') { b.disabled = true;
       if (onbOpt.inst && onbInstall && !onbStandalone()) { try { onbInstall.prompt(); await onbInstall.userChoice; } catch (er) { } onbInstall = null; }
-      if (onbOpt.push && typeof pushOk === 'function' && pushOk() && window.cloud && window.cloud.isSignedIn()) { try { await icePushOn(); } catch (er) { } }
       b.disabled = false; }
     onbNext(s); return; }
   if (a === 'tnext') { onbTour(Number(onbGet().slice(1))); return; }

@@ -13,7 +13,7 @@ function syncSet(src) {
    Schlüssel = SHA-256 der E-Mail-Adresse in Kleinbuchstaben (das Repo ist öffentlich, daher keine Adresse im Klartext).
    Neuen Eintrag erzeugen: printf '%s' 'name@gmail.com' | sha256sum */
 const USER_PRESETS = {
-  febbc9e8f3e3ef17419da1192576c06011a38bf656c07d66c75bd317afb468c8: { car: 'epiq55', ui: 'simple' }
+  febbc9e8f3e3ef17419da1192576c06011a38bf656c07d66c75bd317afb468c8: { car: 'epiq55', ui: 'simple', icePark: 'garage' }   // Papa: Epiq, einfach, steht in der Garage (keine Eis-Warnung)
 };
 async function applyUserPreset() {
   try {
