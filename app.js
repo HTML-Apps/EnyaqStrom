@@ -495,8 +495,8 @@ function renderVehicleStatus() {
 /** Formular für VIN (nur beim ersten Verbinden) und Schlüssel – im Blatt (Einstellungen, Start) und im Onboarding gleich */
 function vehFormHtml(withVin, dark) {
   const inp = 'w-full min-w-0 rounded-xl border px-3 py-3 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ' + (dark ? 'border-slate-700 bg-slate-900 text-white' : 'border-slate-300 dark:border-slate-700 bg-transparent');
-  return (withVin ? `<label class="block text-left text-sm ${dark ? 'text-slate-400' : 'text-slate-600 dark:text-slate-300'}">Fahrzeug-Identnummer (VIN)<input id="sk-vin" type="text" maxlength="20" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="17 Zeichen, z. B. TMB…" class="mt-1 uppercase placeholder:normal-case ${inp}"></label>
-    <p class="-mt-1 text-left text-xs ${dark ? 'text-slate-500' : 'text-slate-500 dark:text-slate-400'}">Steht in der MyŠkoda-App beim Fahrzeug und im Fahrzeugschein (Feld E).</p>` : '')
+  return (withVin ? `<label class="block text-left text-sm ${dark ? 'text-slate-400' : 'text-slate-600 dark:text-slate-300'}">Fahrzeug-Identnummer (VIN)<input id="sk-vin" type="text" maxlength="20" autocomplete="off" autocapitalize="characters" spellcheck="false" value="${esc(String(getSettings().vin || '').toUpperCase().replace(/[\s-]/g, ''))}" placeholder="17 Zeichen, z. B. TMB…" class="mt-1 uppercase placeholder:normal-case ${inp}"></label>
+    <p class="-mt-1 text-left text-xs ${dark ? 'text-slate-500' : 'text-slate-500 dark:text-slate-400'}">${getSettings().vin ? 'Aus Fahrzeug &amp; Kauf übernommen – bitte kurz prüfen.' : 'Steht in der MyŠkoda-App beim Fahrzeug und im Fahrzeugschein (Feld E).'}</p>` : '')
     + `<label class="block text-left text-sm ${dark ? 'text-slate-400' : 'text-slate-600 dark:text-slate-300'}">${withVin ? 'Schlüssel aus der MyŠkoda-App' : 'Neuer Schlüssel'}<input id="sk-new" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Schlüssel einfügen" class="mt-1 ${inp}"></label>
     <p id="sk-msg" class="min-h-[1.25rem] text-left text-sm" role="status"></p>`;
 }
@@ -508,6 +508,7 @@ async function vehConnect(withVin) {
   const r = await fetch('/api/vehicle', { method: 'POST', headers: { ...(await authHeaders()), 'Content-Type': 'application/json' }, body: JSON.stringify(withVin ? { newKey: k, vin } : { newKey: k }) }), d = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(d.error || 'HTTP ' + r.status);
   vehicle = { ...vehicle, ok: true, allowed: true, expires: d.expires || vehicle.expires || null }; save(KEY_VEHICLE, vehicle);
+  if (withVin && !getSettings().vin) try { setQuickSetting('vin', vin); } catch (er) { }   // umgekehrt: VIN auch unter Fahrzeug & Kauf eintragen, falls dort leer
   renderVehicleStatus(); try { renderKeyWarning(); } catch (er) { } refreshViews(); try { renderWxo(); } catch (er) { }
   return d;
 }
