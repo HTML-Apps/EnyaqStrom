@@ -3,7 +3,7 @@
    im Dokument enyaqStrom/<uid>/settings/prefs, gleiche Regel wie Anbieter und Kategorien. Die PIN bleibt nur auf dem Gerät.
    Erster Abgleich: Was die Cloud hat, gilt; fehlt dort etwas und ist lokal vorhanden, wird es hochgeladen. Danach gilt die Cloud (Änderung auf einem Gerät wirkt auf allen).
    ===================================================================== */
-const SYNC_SET_KEYS = ['presetV', 'title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAcKwh', 'certDcKwh', 'certKm', 'wltpNet', 'ccEnd', 'wxoCut', 'dashFirst', 'car', 'carT', 'ui', 'carN', 'carSec', 'wxIcons', 'nRep', 'nTrips', 'nBakYm', 'nBakAt', 'nBakSnz', 'gtMirror', 'gtList', 'iceDep', 'iceWe', 'icePark', 'iceMin', 'iceK', 'cmpCar', 'cmpL', 'cmpEur', 'cmpCo2'];
+const SYNC_SET_KEYS = ['presetV', 'hero', 'title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAcKwh', 'certDcKwh', 'certKm', 'wltpNet', 'ccEnd', 'wxoCut', 'dashFirst', 'car', 'carT', 'ui', 'carN', 'carSec', 'wxIcons', 'nRep', 'nTrips', 'nBakYm', 'nBakAt', 'nBakSnz', 'gtMirror', 'gtList', 'iceDep', 'iceWe', 'icePark', 'iceMin', 'iceK', 'cmpCar', 'cmpL', 'cmpEur', 'cmpCo2'];
 /** Einstellungen für die Cloud: feste Reihenfolge, ohne leere Werte (Firestore verbietet undefined). null = nichts vorhanden. */
 function syncSet(src) {
   const o = {}; if (src && typeof src === 'object') SYNC_SET_KEYS.forEach(k => { const v = src[k]; if (v != null && v !== '' && !(typeof v === 'number' && !isFinite(v))) o[k] = v; });
@@ -48,11 +48,12 @@ window.onCloudPrefs = (d, first, uid) => {
   if (JSON.stringify(np) !== JSON.stringify(lp)) { if (np) save(KEY_PROVINFO, np); else localStorage.removeItem(KEY_PROVINFO); if (currentView === 'providers') renderProvidersView(); }
   /* Einstellungen (Fahrzeugdaten, Strompreis, Akku, Kauf …): beim ersten Abgleich gilt die Cloud; hat sie noch nichts, werden die lokalen hochgeladen */
   const ls = syncSet(load(KEY_SETTINGS, {})); let ns = d ? syncSet(d.settings) : null;
+  if (first) setTimeout(() => { try { heroFromSettings(); } catch (e) { } }, 0);   // Start-Hintergrund: aus der Cloud übernehmen bzw. lokale Wahl einmal hochladen
   if (first) window.presetP = applyUserPreset();                                      // Voreinstellung (Fahrzeug, Ansicht …) einmal je Konto – läuft nach dem Abgleich (async)
   if (first && ns == null && ls) { ns = ls; up = true; }
   if (ns && JSON.stringify(ns) !== JSON.stringify(ls)) {
     const raw = load(KEY_SETTINGS, {}) || {}; SYNC_SET_KEYS.forEach(k => delete raw[k]); save(KEY_SETTINGS, { ...raw, ...ns });   // PIN, WLTP usw. bleiben
-    applyTitle(); renderReminderBadges(); renderHeroStats(); try { fillWxoPrefs(); window.carReschedule && window.carReschedule(); } catch (e) { }
+    applyTitle(); renderReminderBadges(); renderHeroStats(); try { heroFromSettings(); } catch (e) { } try { fillWxoPrefs(); window.carReschedule && window.carReschedule(); } catch (e) { }
     try { renderReportBanner(); renderTripsBanner(); renderBakBanner(); } catch (e) { }   // Hinweise, die auf einem anderen Gerät erledigt wurden
     if (currentView === 'settings' && !$('view-settings').contains(document.activeElement)) fillSettings();   // nicht mitten in eine Eingabe schreiben
     if (currentView === 'dashboard') renderDashboard();

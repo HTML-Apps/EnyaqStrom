@@ -285,7 +285,7 @@ $('rem-banner').addEventListener('click', (e) => { const b = e.target.closest('[
 $('rem-banner').addEventListener('pointerdown', () => { clearTimeout(bannerTimer); const bar = $('rb-bar'); bar.style.transition = 'none'; bar.style.width = '100%'; });   // Antippen: Banner bleibt offen
 
 
-/** Hintergrundfarbe der Start-Seite (Farbverlauf hinter dem Enyaq): Auswahl in den Einstellungen, wirkt sofort und wird auf diesem Gerät gespeichert. */
+/** Hintergrundfarbe der Start-Seite (Farbverlauf hinter dem Auto): Auswahl in den Einstellungen, wirkt sofort; lokal gespeichert und als Einstellung „hero“ ({k, c}) mit der Cloud abgeglichen. */
 const KEY_HERO = 'enyaq.heroColor';
 const HERO_THEMES = {
   blue:     { label: 'Blau',     mid: '#0b2f8a', glow: 'rgba(80,150,255,.40)',  glow0: 'rgba(80,150,255,0)',  stops: '#000 0,#000 28px,#030b24 70px,#061a52 160px,#0b2f8a 280px,#0a2466 370px,#050f2e 470px,#000 600px' },
@@ -312,7 +312,15 @@ function applyHeroColor() {
 $('hero-swatches').innerHTML = Object.entries(HERO_THEMES).map(([k, t]) => `<button type="button" data-hero="${k}" aria-pressed="false" class="flex flex-col items-center gap-1.5 rounded-xl ring-offset-white dark:ring-offset-black active:scale-95 transition"><span class="block h-12 w-full rounded-xl border border-slate-300 dark:border-slate-700" style="background:linear-gradient(180deg,#000 0%,${t.mid} 55%,#000 100%)"></span><span class="text-xs text-slate-600 dark:text-slate-300">${t.label}</span></button>`).join('')
   + `<label data-hero="custom" aria-pressed="false" class="relative flex cursor-pointer flex-col items-center gap-1.5 rounded-xl ring-offset-white dark:ring-offset-black active:scale-95 transition"><span id="hero-custom-sw" class="block h-12 w-full rounded-xl border border-slate-300 dark:border-slate-700"></span><span class="text-xs text-slate-600 dark:text-slate-300">Eigene</span><input id="hero-custom" type="color" value="${heroCustomHex() || '#0b2f8a'}" aria-label="Eigene Farbe mischen" class="absolute inset-0 h-full w-full cursor-pointer opacity-0"></label>`;
 $('hero-custom').addEventListener('input', (e) => { save(KEY_HERO_C, e.target.value); save(KEY_HERO, 'custom'); applyHeroColor(); });
-$('hero-custom').addEventListener('click', () => { if (heroCustomHex()) { save(KEY_HERO, 'custom'); applyHeroColor(); } });
-$('hero-swatches').addEventListener('click', (e) => { const b = e.target.closest('[data-hero]'); if (!b) return; save(KEY_HERO, b.dataset.hero); applyHeroColor(); });
+$('hero-custom').addEventListener('change', heroPush);                     // erst beim Loslassen in die Cloud (nicht bei jedem Zwischenwert)
+$('hero-custom').addEventListener('click', () => { if (heroCustomHex()) { save(KEY_HERO, 'custom'); applyHeroColor(); heroPush(); } });
+$('hero-swatches').addEventListener('click', (e) => { const b = e.target.closest('[data-hero]'); if (!b) return; save(KEY_HERO, b.dataset.hero); applyHeroColor(); if (b.dataset.hero !== 'custom') heroPush(); });
+function heroPush() { setQuickSetting('hero', { k: heroThemeKey(), c: heroCustomHex() || undefined }); }
+/** nach dem Cloud-Abgleich: Farbe aus den Einstellungen übernehmen; fehlt sie dort, die lokal gewählte (nicht Standard) einmal hochladen */
+function heroFromSettings() {
+  const h = getSettings().hero;
+  if (h && h.k) { if (h.c) save(KEY_HERO_C, h.c); if (h.k !== load(KEY_HERO, 'blue') || (h.c && h.c !== heroCustomHex())) { save(KEY_HERO, h.k); applyHeroColor(); } }
+  else if (localStorage.getItem(KEY_HERO) && heroThemeKey() !== 'blue') heroPush();
+}
 applyHeroColor();
 
