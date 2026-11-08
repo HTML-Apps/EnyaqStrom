@@ -205,7 +205,7 @@
   @media (prefers-reduced-motion: reduce) { #bd-conf i, #bdg-conf i { animation: none; top: var(--y, 10%); } #bd-card, #bdg-card { animation: none; } }
 </style>
 <!-- Tailwind fertig gebaut (npm run css) – am Ende des Kopfs wie früher das CDN, damit die Reihenfolge der Regeln gleich bleibt -->
-<link rel="stylesheet" href="/app.css?v=265">
+<link rel="stylesheet" href="/app.css?v=266">
 </head>
 <body class="bg-black text-slate-100 min-h-screen">
 
@@ -1862,7 +1862,7 @@
   </div>
 </nav>
 
-<script src="/app.js?v=265"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
+<script src="/app.js?v=266"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
 <script type="module">
 /* Firebase (modular SDK). Die Konfiguration ist kein Geheimnis – geschützt wird über Auth + Firestore-Regeln. */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
@@ -1941,7 +1941,7 @@ window.cloud = {
   setPush: (id, v) => user ? setDoc(pushDoc(), { devices: { [id]: v }, updatedAt: new Date().toISOString() }, { merge: true }) : Promise.reject(new Error('Bitte zuerst bei Google anmelden.')),
   setProviders: (list) => user ? setDoc(provDoc(), { list, updatedAt: new Date().toISOString() }) : Promise.resolve(),
   token: () => user ? user.getIdToken() : Promise.resolve(null),       // Anmelde-Token für die Vercel-Funktionen
-  login: () => signInWithPopup(auth, new GoogleAuthProvider()),
+  login: () => { const pr = new GoogleAuthProvider(); pr.setCustomParameters({ prompt: 'select_account' }); return signInWithPopup(auth, pr); },   // immer Kontoauswahl (mehrere Google-Konten)
   logout: () => signOut(auth),
   push: (prev, next) => diffPush(col, sig, prev, next)
 };
