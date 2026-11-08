@@ -16,8 +16,13 @@ function fbToast(title, sub, ok, go) {
   document.body.appendChild(el); setTimeout(() => { if (el.isConnected) el.remove(); }, 9000);
 }
 /** Fehlersuche: zeigen, was beim Teilen angekommen ist (Feldnamen, Dateityp, Größe), lesbar und kopierbar */
-function fbShareDbg(dbg) {
-  const txt = dbg ? ['Inhalt: ' + (dbg.ct || '–'), ...(dbg.keys && dbg.keys.length ? dbg.keys : ['keine Felder']), dbg.err ? 'Fehler: ' + dbg.err : '', dbg.body ? 'Daten: ' + dbg.body : ''].filter(Boolean).join('\n') : 'Keine Angaben vom Service Worker (alte Version aktiv? App einmal schließen und neu öffnen).';
+async function fbSwState() {
+  try { const ks = (await caches.keys()).filter(k => /^enyaq-v/.test(k)).join(', '), r = await navigator.serviceWorker.getRegistration(), st = (w) => w ? w.state : '–';
+    return 'App-Version: ' + ((document.querySelector('script[src^="/app.js"]') || {}).src || '').split('v=')[1] + ' · Hintergrund (Cache): ' + (ks || '–') + ' · aktiv: ' + st(r && r.active) + ', wartet: ' + st(r && r.waiting) + ', lädt: ' + st(r && r.installing);
+  } catch (e) { return 'Status unbekannt'; }
+}
+function fbShareDbg(dbg, sw) {
+  const txt = (sw ? sw + '\n' : '') + (dbg ? ['Inhalt: ' + (dbg.ct || '–'), ...(dbg.keys && dbg.keys.length ? dbg.keys : ['keine Felder']), dbg.err ? 'Fehler: ' + dbg.err : '', dbg.body ? 'Daten: ' + dbg.body : ''].filter(Boolean).join('\n') : 'Keine Angaben vom Service Worker (alte Version aktiv? App einmal schließen und neu öffnen).');
   const el = document.createElement('div'); el.id = 'fb-dbg'; el.className = 'fixed inset-0 z-[90] flex items-end bg-black/60 p-3';
   el.innerHTML = `<div class="mx-auto w-full max-w-md rounded-3xl bg-slate-900 p-4 text-white shadow-2xl"><p class="text-base font-bold">Keine Datei angekommen</p><p class="mt-1 text-sm text-slate-300">Das hat das Teilen-Menü geschickt – bitte als Screenshot an Claude:</p>
     <pre class="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-all rounded-xl bg-black/50 p-2.5 text-left text-[11.5px] leading-snug text-amber-200">${esc(txt)}</pre>
@@ -29,7 +34,7 @@ async function fbShareImport() {
   if (!window.fbSharePending) return; window.fbSharePending = false;
   let r = null; try { const c = await caches.open('enyaq-share'); r = await c.match('/share-file'); if (r) await c.delete('/share-file'); } catch (e) { }
   let dbg = null; try { const c = await caches.open('enyaq-share'), d = await c.match('/share-debug'); if (d) { dbg = await d.json(); localStorage.setItem('enyaq.lastShareDbg', JSON.stringify(dbg)); } } catch (e) { }
-  if (!r) { fbShareDbg(dbg); return; }
+  if (!r) { fbShareDbg(dbg, await fbSwState()); try { const g = await navigator.serviceWorker.getRegistration(); if (g) g.update(); } catch (e) { } return; }
   const name = (() => { try { return decodeURIComponent(r.headers.get('x-name') || '') || 'fahrtenbuch.csv'; } catch (e) { return 'fahrtenbuch.csv'; } })();
   const blob = await r.blob(), file = new File([blob], name, { type: blob.type || 'text/csv' });
   try { localStorage.setItem('enyaq.lastShare', JSON.stringify({ at: new Date().toISOString(), name, type: blob.type || '' })); } catch (e) { }   // Fehlersuche: Dateityp, den MyŠkoda liefert
