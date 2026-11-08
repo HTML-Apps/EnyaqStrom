@@ -5,11 +5,11 @@
  * - Die KI-Abfrage (/api/…) wird NIE gecacht und läuft immer übers Netz.
  * Bei größeren Änderungen am Cache-Konzept CACHE_VERSION erhöhen. */
 
-const CACHE_VERSION = 'v257';
+const CACHE_VERSION = 'v258';
 const CACHE_NAME = 'enyaq-' + CACHE_VERSION;
 
 // Dateien, die beim Installieren vorab geladen werden
-const SAME_ORIGIN_ASSETS = ['./', './index.html', './app.css?v=257', './app.js?v=257', './Bilder/Enyaq/hero/1.webp'];
+const SAME_ORIGIN_ASSETS = ['./', './index.html', './app.css?v=258', './app.js?v=258', './Bilder/Enyaq/hero/1.webp'];
 const CDN_ASSETS = [
   'https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js'
 ];
@@ -37,6 +37,17 @@ self.addEventListener('activate', (event) => {
   })());
 });
 
+/** multipart/form-data als Text zerlegen → [{ name, filename, type, data }] (nur für Textdateien gedacht) */
+function shareParts(body, ct) {
+  const m = /boundary=(?:"([^"]+)"|([^;]+))/i.exec(ct || ''), b = m ? (m[1] || m[2]).trim() : (/^--([^\r\n]+)/.exec(body) || [])[1];
+  if (!b) return [];
+  return body.split('--' + b).slice(1).filter((p) => !/^--\s*$/.test(p) && p.trim() !== '--').map((p) => {
+    p = p.replace(/^\r?\n/, ''); const i = p.search(/\r?\n\r?\n/); if (i < 0) return null;
+    const head = p.slice(0, i), data = p.slice(i).replace(/^\r?\n\r?\n/, '').replace(/\r?\n$/, '');
+    const g = (re) => (re.exec(head) || [])[1] || '';
+    return { name: g(/name="([^"]*)"/i), filename: g(/filename="([^"]*)"/i), type: g(/content-type:\s*([^\r\n;]+)/i).trim(), data };
+  }).filter(Boolean);
+}
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   const url = new URL(req.url);
@@ -55,7 +66,16 @@ self.addEventListener('fetch', (event) => {
         const f = ent.map((e) => e[1]).find((v) => v && typeof v !== 'string' && v.size > 0), t = ent.map((e) => e[1]).find((v) => typeof v === 'string' && /Start of trip/.test(v));
         if (f) await cache.put('/share-file', new Response(f, { headers: { 'content-type': f.type || 'text/csv', 'x-name': encodeURIComponent(f.name || 'fahrtenbuch.csv') } }));
         else if (t) await cache.put('/share-file', new Response(t, { headers: { 'content-type': 'text/csv', 'x-name': 'fahrtenbuch.csv' } }));
-      } catch (err) { dbg.err = String(err && err.message || err); try { dbg.body = (await raw.text()).slice(0, 200); } catch (e) { } }
+      } catch (err) {
+        /* Samsung Internet: formData() scheitert („Failed to fetch“), der Rohinhalt ist aber lesbar → multipart selbst zerlegen (CSV ist Text) */
+        dbg.err = String(err && err.message || err);
+        try {
+          const body = await raw.text(), part = shareParts(body, dbg.ct).find((x) => x.filename || /Start of trip/.test(x.data));
+          dbg.keys = shareParts(body, dbg.ct).map((x) => x.name + '=' + (x.filename ? 'file:' + x.filename + '|' + x.type + '|' + x.data.length : 'text(' + x.data.length + ')'));
+          if (part && part.data) { await cache.put('/share-file', new Response(part.data, { headers: { 'content-type': part.type || 'text/csv', 'x-name': encodeURIComponent(part.filename || 'fahrtenbuch.csv') } })); dbg.fallback = true; }
+          else dbg.body = body.slice(0, 200);
+        } catch (e) { dbg.err += ' / ' + (e && e.message || e); }
+      }
       try { await cache.put('/share-debug', new Response(JSON.stringify(dbg), { headers: { 'content-type': 'application/json' } })); } catch (e) { }
       return Response.redirect(new URL('/?go=fb-share', self.location.origin).href, 303);
     })());
