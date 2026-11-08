@@ -17,8 +17,11 @@ const onbStandalone = () => { try { return matchMedia('(display-mode: standalone
   /* Einladungslink: /?auto=epiq → Fahrzeug schon vor der Anmeldung (Titel und Bild auf dem Willkommensbildschirm) */
   const q = new URLSearchParams(location.search), a = (q.get('auto') || '').toLowerCase();
   if (a) { const key = a.startsWith('epiq') ? 'epiq55' : a.startsWith('enyaq') ? 'enyaq50' : null;
+    const was = carProf().key;
     if (key && !getReadings().length) { const st = load(KEY_SETTINGS, {}) || {}; if (key === 'enyaq50') delete st.car; else st.car = key; st.title = CAR_PRESETS[key].title; save(KEY_SETTINGS, st); try { applyTitle(); } catch (e) { } }
-    q.delete('auto'); history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : '')); }
+    q.delete('auto'); const clean = location.pathname + (q.toString() ? '?' + q : '');
+    if (carProf().key !== was) { location.replace(clean); return; }                       // Karussell wurde schon mit dem alten Auto aufgebaut → sauber neu laden
+    history.replaceState(null, '', clean); }
   if (onbGet()) return;
   const s = syncSet(load(KEY_SETTINGS, {})) || {}, own = Object.keys(s).filter(k => !['car', 'title', 'ui'].includes(k));
   onbSet(getReadings().length || getCosts().length || own.length ? 'done' : 'a1');                       // vorhandene Nutzer: kein Onboarding
