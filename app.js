@@ -197,6 +197,9 @@ function paintBatt() {
 function paintCapture() { paintReading(); paintBatt(); paintBattTemp(); }
 /* Akku-Temperatur (optional, Infotainment ab ME3.8): Stepper −/+ in 1-°C-Schritten. Leer zeigt grau den zuletzt gespeicherten Wert; Mitte antippen übernimmt ihn (bzw. leert), erster −/+ startet dort */
 const BT_MIN = -30, BT_MAX = 60;
+/* Akku-Temperatur: Eingabe in 0,5-°C-Schritten wie im Kombi-Instrument; Anzeige ohne Nachkomma bei ganzen Werten (21 °C, 21,5 °C) */
+const btRound = (v) => Math.round(v * 2) / 2;
+const btFmt = (v) => fmt(v, Number.isInteger(Math.round(v * 10) / 10) ? 0 : 1);
 /** Zuletzt gespeicherte Akku-Temperatur: neuester Wert aus Ladungen (battTemp) und Rekorde → Akku °C */
 function lastBattTemp() {
   let best = null; const take = (t, v) => { if (Number.isFinite(t) && Number.isFinite(v) && (!best || t > best.t)) best = { t, v }; };
@@ -206,18 +209,18 @@ function lastBattTemp() {
 }
 function paintBattTemp() {
   const v = optNum($('bt-input').value), el = $('bt-val');
-  if (v != null && !Number.isNaN(v)) { el.textContent = String(v).replace('-', '−') + ' °C'; el.className = 'font-medium'; return; }
+  if (v != null && !Number.isNaN(v)) { el.textContent = btFmt(v).replace('-', '−') + ' °C'; el.className = 'font-medium'; return; }
   const l = lastBattTemp(); el.className = 'font-medium text-slate-400 dark:text-slate-500';
-  el.textContent = l ? 'zuletzt ' + String(Math.round(l.v)).replace('-', '−') + ' °C · ' + (new Date(l.t).toDateString() === new Date().toDateString() ? 'heute ' + hhmm(l.t) : new Date(l.t).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })) : '–';
+  el.textContent = l ? 'zuletzt ' + btFmt(l.v).replace('-', '−') + ' °C · ' + (new Date(l.t).toDateString() === new Date().toDateString() ? 'heute ' + hhmm(l.t) : new Date(l.t).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })) : '–';
 }
 (() => {
-  const step = (d) => { const v = optNum($('bt-input').value); const n = v == null || Number.isNaN(v) ? (lastBattTemp() ? Math.round(lastBattTemp().v) : 20) : Math.max(BT_MIN, Math.min(BT_MAX, v + d)); $('bt-input').value = String(n); paintBattTemp(); };
-  [['bt-minus', -1], ['bt-plus', 1]].forEach(([id, d]) => {
+  const step = (d) => { const v = optNum($('bt-input').value); const n = v == null || Number.isNaN(v) ? (lastBattTemp() ? btRound(lastBattTemp().v) : 20) : Math.max(BT_MIN, Math.min(BT_MAX, btRound(v + d))); $('bt-input').value = String(n); paintBattTemp(); };
+  [['bt-minus', -1], ['bt-minus5', -0.5], ['bt-plus5', 0.5], ['bt-plus', 1]].forEach(([id, d]) => {
     const b = $(id); let t1 = 0, t2 = 0; const stop = () => { clearTimeout(t1); clearInterval(t2); };
     b.addEventListener('pointerdown', (e) => { e.preventDefault(); step(d); t1 = setTimeout(() => { t2 = setInterval(() => step(d), 110); }, 450); });
     ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => b.addEventListener(ev, stop)); b.addEventListener('contextmenu', e => e.preventDefault());
   });
-  $('bt-clear').addEventListener('click', () => { const v = optNum($('bt-input').value), l = lastBattTemp(); $('bt-input').value = (v == null || Number.isNaN(v)) && l ? String(Math.round(l.v)) : ''; paintBattTemp(); });   // leer: letzten Wert übernehmen, sonst leeren
+  $('bt-clear').addEventListener('click', () => { const v = optNum($('bt-input').value), l = lastBattTemp(); $('bt-input').value = (v == null || Number.isNaN(v)) && l ? String(btRound(l.v)) : ''; paintBattTemp(); });   // leer: letzten Wert übernehmen, sonst leeren
 })();
 
 $('reading-input').addEventListener('input', e => { delete e.target.dataset.live; paintReading(); });
@@ -1483,7 +1486,7 @@ function renderHistory() {
     const row = (k, v) => `<div class="flex justify-between items-baseline mt-2"><span class="text-sm text-slate-500 dark:text-slate-400">${k}</span><span class="font-medium text-right">${v}</span></div>`;
     const extra = (st.comfort > 0 ? row('↳ davon 🔥 Komfort', '<span class="text-amber-600 dark:text-amber-300">' + fmt(st.comfort, 1) + ' kWh' + (unitOf(r) != null ? ' · ' + eur(st.comfort * unitOf(r)) : '') + '</span>') : '') +
       (r.odometerKm != null ? row('Kilometerstand', (st.km ? '<span class="text-xs font-normal text-slate-500">(+' + fmt(st.km, 0) + ' km)</span> ' : '') + fmt(r.odometerKm, 0) + ' km') : '') +
-      (r.battTemp != null ? row('Akku-Temperatur', String(r.battTemp).replace('-', '−') + ' °C') : '') +
+      (r.battTemp != null ? row('Akku-Temperatur', btFmt(r.battTemp).replace('-', '−') + ' °C') : '') +
       (r.socStart != null && r.socEnd != null ? row('Ladestand', (st.loss != null && st.loss >= 0 && st.loss < 60 ? '<span class="text-xs font-normal text-slate-500">(Verlust ≈ ' + fmt(st.loss, 0) + ' %)</span> ' : '') + r.socStart + ' % → ' + r.socEnd + ' %') + row('Batteriekapazität', fmt(capOf(r), 1) + ' kWh') : '') +
       (st.kwh100 != null ? row('Gesamtverbrauch/100 km', (st.method === 'charge' ? '≈ ' : '') + fmt(st.kwh100, 1) + ' kWh' + (st.cost100 != null ? ' · ' + eur(st.cost100) : ''))
         + (st.method === 'charge' ? '<p class="text-xs text-slate-500 mt-1 text-right">grob: ohne Akku-% der letzten Ladung aus den geladenen kWh berechnet</p>' : st.rough ? '<p class="text-xs text-slate-500 mt-1 text-right">kleine Akku-Entnahme – Wert ungenau</p>' : '')
@@ -6983,25 +6986,26 @@ function btJump(en, list) {
   for (const x of list || []) { if (x === en || x.id === en.id || !Number.isFinite(x.t) || !x.at) continue; const tx = Date.parse(x.at); if (tx < t0 && (!prev || tx > Date.parse(prev.at))) prev = x; }
   if (!prev) return null; const d = Math.round((en.t - prev.t) * 10) / 10; return Math.abs(d) >= BT_JUMP ? { prev, d } : null;
 }
-const btJumpD = (j) => (j.d > 0 ? '+' : '−') + fmt(Math.abs(j.d), 0) + '°';
-const btJumpTxt = (en, j) => `⚠️ ${btJumpD(j)} zum letzten Wert (${fmt(j.prev.t, 0)} °C) – bitte prüfen.`;
+const btJumpD = (j) => (j.d > 0 ? '+' : '−') + btFmt(Math.abs(j.d)) + '°';
+const btJumpTxt = (en, j) => `⚠️ ${btJumpD(j)} zum letzten Wert (${btFmt(j.prev.t)} °C) – bitte prüfen.`;
 function btCard(list) {
   const all = (list || []).filter(e => Number.isFinite(e.t) && e.at).sort((a, b) => Date.parse(a.at) - Date.parse(b.at)), last = all[all.length - 1];
-  if (btVal == null) btVal = last ? Math.round(last.t) : 15;
+  if (btVal == null) btVal = last ? btRound(last.t) : 15;
   const hist = btHist(all), comb = all.concat(hist).sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
   const span = btRange === '30' ? 30 : btRange === '365' ? 365 : null, es = span ? comb.filter(e => Date.parse(e.at) >= Date.now() - span * 864e5) : comb, nh = es.filter(e => e.h).length;
   const pill = (on) => on ? 'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300 border-transparent' : 'border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300';
-  const now = new Date(), stepB = 'flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-800 text-3xl font-semibold active:scale-90 transition select-none';
+  const now = new Date(), stepB = 'flex h-14 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-800 text-3xl font-semibold active:scale-90 transition select-none',
+    stepH = 'flex h-14 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-800 text-sm font-semibold active:scale-90 transition select-none';
   let h = `<div id="btq-card" class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 space-y-3">
     <div class="flex items-baseline justify-between gap-2"><p class="text-sm text-slate-500 dark:text-slate-400 text-left">Akku-Temperatur jetzt</p><span class="text-xs text-slate-500">${now.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })} · ${hhmm(now.getTime())}</span></div>
-    <div class="flex items-center gap-2.5"><button type="button" data-bt="-1" aria-label="1 Grad weniger" class="${stepB}">−</button><span class="flex-1 text-center font-barlow text-[56px] font-bold leading-none text-orange-500 dark:text-orange-400 tabular-nums"><span id="btq-val">${btVal}</span> <span class="text-[28px]">°C</span></span><button type="button" data-bt="1" aria-label="1 Grad mehr" class="${stepB}">+</button></div>
+    <div class="flex items-center gap-1.5"><button type="button" data-bt="-1" aria-label="1 Grad weniger" class="${stepB}">−</button><button type="button" data-bt="-0.5" aria-label="0,5 Grad weniger" class="${stepH}">−0,5</button><span class="min-w-0 flex-1 whitespace-nowrap text-center font-barlow text-[48px] font-bold leading-none text-orange-500 dark:text-orange-400 tabular-nums"><span id="btq-val">${btFmt(btVal)}</span><span class="text-[22px]"> °C</span></span><button type="button" data-bt="0.5" aria-label="0,5 Grad mehr" class="${stepH}">+0,5</button><button type="button" data-bt="1" aria-label="1 Grad mehr" class="${stepB}">+</button></div>
     <div class="flex gap-1.5">${BT_CTX.map(([k, l]) => `<button type="button" data-btctx="${k}" aria-pressed="${btCtx === k}" class="flex-1 rounded-full border py-1.5 text-xs font-semibold ${pill(btCtx === k)}">${l}</button>`).join('')}</div>
     <div class="flex items-center gap-2"><span id="btq-out" class="min-w-0 text-xs text-slate-500 dark:text-slate-400 text-left">${btOut.v != null ? 'Außen ' + fmt(btOut.v, 0) + ' °C · automatisch' : wxLoc() ? 'Außen wird geladen …' : 'Außen: Standort unter Einstellungen → Wetter'}</span><button type="button" data-bt="save" class="ml-auto h-11 shrink-0 rounded-2xl bg-emerald-600 px-6 text-sm font-semibold text-white active:scale-95 transition">Speichern</button></div>
-    ${btLastSaved ? `<div class="flex items-center justify-between gap-2 text-xs"><span class="text-left"><span class="text-emerald-600 dark:text-emerald-400">✓ ${fmt(btLastSaved.t, 0)} °C um ${hhmm(Date.parse(btLastSaved.at))} gespeichert</span>${(() => { const j = btJump(btLastSaved, getLab().bt); return j ? '<span class="block text-amber-600 dark:text-amber-400">' + btJumpTxt(btLastSaved, j) + '</span>' : ''; })()}</span><button type="button" data-bt="undo" class="font-semibold text-sky-600 dark:text-sky-300">Rückgängig</button></div>` : ''}</div>`;
+    ${btLastSaved ? `<div class="flex items-center justify-between gap-2 text-xs"><span class="text-left"><span class="text-emerald-600 dark:text-emerald-400">✓ ${btFmt(btLastSaved.t)} °C um ${hhmm(Date.parse(btLastSaved.at))} gespeichert</span>${(() => { const j = btJump(btLastSaved, getLab().bt); return j ? '<span class="block text-amber-600 dark:text-amber-400">' + btJumpTxt(btLastSaved, j) + '</span>' : ''; })()}</span><button type="button" data-bt="undo" class="font-semibold text-sky-600 dark:text-sky-300">Rückgängig</button></div>` : ''}</div>`;
   h += `<div class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 space-y-1.5"><div class="flex items-center justify-between gap-2"><p class="text-sm font-bold">Verlauf</p><div class="flex rounded-lg bg-slate-100 dark:bg-slate-800 p-0.5 text-[11px] font-semibold">${[['30', '30 T'], ['365', '1 J'], ['all', 'Alle']].map(([k, l]) => `<button type="button" data-btr="${k}" class="rounded-md px-2 py-0.5 ${btRange === k ? 'bg-white dark:bg-slate-600 shadow-sm' : 'text-slate-500 dark:text-slate-400'}">${l}</button>`).join('')}</div></div>`
     + (es.length ? btSvg(es) + `<div class="flex items-center gap-3.5 text-[11px] text-slate-500 dark:text-slate-400"><span><span class="inline-block h-[3px] w-3 bg-orange-500 align-middle"></span> Akku</span><span><span class="inline-block w-3 border-t-2 border-dashed border-sky-400 align-middle"></span> Außen</span>${nh ? '<span><span class="inline-block h-2 w-2 rounded-full border-[1.5px] border-orange-500 align-middle"></span> Historie</span>' : ''}<span class="ml-auto">${es.length} ${es.length === 1 ? 'Wert' : 'Werte'}</span></div>`
       : `<p class="py-4 text-sm text-slate-500 dark:text-slate-400 text-left">${comb.length ? 'Keine Werte in diesem Zeitraum.' : 'Noch keine Werte. Temperatur oben einstellen und speichern – die App merkt sich den letzten Wert, beim nächsten Mal reicht oft ein Tipp.'}</p>`) + '</div>';
-  if (all.length) h += `<details data-btlist ${btListOpen ? 'open' : ''} class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm px-4 py-3"><summary class="cursor-pointer text-sm font-semibold">Alle Einträge (${all.length})</summary><div class="mt-2">${all.slice().reverse().slice(0, 200).map(e => { const j = btJump(e, all); return `<div data-btedit="${esc(e.id)}" role="button" tabindex="0" aria-label="Eintrag bearbeiten" class="flex cursor-pointer items-center gap-2 border-t border-slate-100 dark:border-slate-800 py-2 text-[13px] active:bg-slate-50 dark:active:bg-slate-800/50"><span class="w-[92px] shrink-0 tabular-nums">${new Date(e.at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' })} ${hhmm(Date.parse(e.at))}</span><b class="w-12 shrink-0 tabular-nums text-orange-600 dark:text-orange-400">${fmt(e.t, 0)} °C</b><span class="min-w-0 flex-1 truncate text-xs text-slate-500 dark:text-slate-400">${j ? `<span class="text-amber-600 dark:text-amber-400" title="${fmt(Math.abs(j.d), 0)}° ${j.d > 0 ? 'über' : 'unter'} dem vorherigen Wert (${fmt(j.prev.t, 0)} °C) – bitte prüfen">⚠️ ${j.d > 0 ? '+' : '−'}${fmt(Math.abs(j.d), 0)}°</span> ` : ''}${[Number.isFinite(e.out) ? 'außen ' + fmt(e.out, 0) + ' °C' : '', ((BT_CTX.find(c => c[0] === e.ctx) || [])[1] || '') + (e.ctxAuto ? ' (auto)' : ''), btTripTxt(e)].filter(Boolean).join(' · ')}</span><button type="button" data-btdel="${esc(e.id)}" aria-label="Eintrag löschen" class="shrink-0 px-1.5 text-slate-400 active:text-red-500">✕</button></div>`; }).join('')}</div></details>`;
+  if (all.length) h += `<details data-btlist ${btListOpen ? 'open' : ''} class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm px-4 py-3"><summary class="cursor-pointer text-sm font-semibold">Alle Einträge (${all.length})</summary><div class="mt-2">${all.slice().reverse().slice(0, 200).map(e => { const j = btJump(e, all); return `<div data-btedit="${esc(e.id)}" role="button" tabindex="0" aria-label="Eintrag bearbeiten" class="flex cursor-pointer items-center gap-2 border-t border-slate-100 dark:border-slate-800 py-2 text-[13px] active:bg-slate-50 dark:active:bg-slate-800/50"><span class="w-[92px] shrink-0 tabular-nums">${new Date(e.at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' })} ${hhmm(Date.parse(e.at))}</span><b class="w-12 shrink-0 tabular-nums text-orange-600 dark:text-orange-400">${btFmt(e.t)} °C</b><span class="min-w-0 flex-1 truncate text-xs text-slate-500 dark:text-slate-400">${j ? `<span class="text-amber-600 dark:text-amber-400" title="${fmt(Math.abs(j.d), 0)}° ${j.d > 0 ? 'über' : 'unter'} dem vorherigen Wert (${fmt(j.prev.t, 0)} °C) – bitte prüfen">⚠️ ${j.d > 0 ? '+' : '−'}${fmt(Math.abs(j.d), 0)}°</span> ` : ''}${[Number.isFinite(e.out) ? 'außen ' + fmt(e.out, 0) + ' °C' : '', ((BT_CTX.find(c => c[0] === e.ctx) || [])[1] || '') + (e.ctxAuto ? ' (auto)' : ''), btTripTxt(e)].filter(Boolean).join(' · ')}</span><button type="button" data-btdel="${esc(e.id)}" aria-label="Eintrag löschen" class="shrink-0 px-1.5 text-slate-400 active:text-red-500">✕</button></div>`; }).join('')}</div></details>`;
   if (btOut.v == null && wxLoc() && Date.now() - btOut.t > 15 * 60000) btOutside().then(v => { const el = $('btq-out'); if (el) el.textContent = v != null ? 'Außen ' + fmt(v, 0) + ' °C · automatisch' : 'Außen nicht verfügbar'; });
   return h;
 }
@@ -7012,7 +7016,7 @@ $('rec-list').addEventListener('click', async (e) => {
   if (d) { if (!confirm('Diesen Eintrag löschen?')) return; const lab = getLab(); lab.bt = (lab.bt || []).filter(x => x.id !== d.dataset.btdel); setLab(lab); return; }
   const ed = e.target.closest('[data-btedit]'); if (ed) { openBtSheet(ed.dataset.btedit); return; }
   if (!b) return; const a = b.dataset.bt;
-  if (a === '1' || a === '-1') { btVal = Math.max(-30, Math.min(70, btVal + Number(a))); $('btq-val').textContent = btVal; btLastSaved = null; return; }
+  if (a === '1' || a === '-1' || a === '0.5' || a === '-0.5') { btVal = Math.max(-30, Math.min(70, btRound(btVal + Number(a)))); $('btq-val').textContent = btFmt(btVal); btLastSaved = null; return; }
   if (a === 'save') {
     const out = await btOutside(), lab = getLab(), en = { id: labId(), at: new Date().toISOString(), t: btVal };
     if (Number.isFinite(out)) en.out = Math.round(out * 10) / 10; if (btCtx) en.ctx = btCtx;
@@ -7062,14 +7066,15 @@ let btmVal = null, btmCtx = 'geparkt', btmSaved = null, btmMsg = '';
 function renderBtm() {
   const el = $('btm-card'); if (!el) return;
   const all = (getLab().bt || []).filter(e => Number.isFinite(e.t) && e.at).sort((a, b) => Date.parse(a.at) - Date.parse(b.at)), last = all[all.length - 1];
-  if (btmVal == null) btmVal = last ? Math.round(last.t) : 15;
-  const now = new Date(), stepB = 'flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-800 text-2xl font-semibold active:scale-90 transition select-none';
+  if (btmVal == null) btmVal = last ? btRound(last.t) : 15;
+  const now = new Date(), stepB = 'flex h-12 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-800 text-2xl font-semibold active:scale-90 transition select-none',
+    stepH = 'flex h-12 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-800 text-[13px] font-semibold active:scale-90 transition select-none';
   const pill = (on) => on ? 'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300 border-transparent' : 'border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300';
   const btmJ = btmSaved ? btJump(btmSaved, all) : null;
-  const info = btmMsg ? btmMsg : btmJ ? `<span class="text-amber-600 dark:text-amber-400">${btJumpTxt(btmSaved, btmJ)}</span>` : btmSaved ? `<span class="text-emerald-600 dark:text-emerald-400">✓ ${fmt(btmSaved.t, 0)} °C um ${hhmm(Date.parse(btmSaved.at))} gespeichert</span>`
-    : [btOut.v != null ? 'Außen ' + fmt(btOut.v, 0) + ' °C' : '', last ? 'zuletzt ' + fmt(last.t, 0) + ' °C · ' + new Date(last.at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }) : 'noch kein Wert'].filter(Boolean).join(' · ');
+  const info = btmMsg ? btmMsg : btmJ ? `<span class="text-amber-600 dark:text-amber-400">${btJumpTxt(btmSaved, btmJ)}</span>` : btmSaved ? `<span class="text-emerald-600 dark:text-emerald-400">✓ ${btFmt(btmSaved.t)} °C um ${hhmm(Date.parse(btmSaved.at))} gespeichert</span>`
+    : [btOut.v != null ? 'Außen ' + fmt(btOut.v, 0) + ' °C' : '', last ? 'zuletzt ' + btFmt(last.t) + ' °C · ' + new Date(last.at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }) : 'noch kein Wert'].filter(Boolean).join(' · ');
   el.innerHTML = `<div class="flex items-baseline justify-between gap-2"><p class="font-barlow text-xl font-bold uppercase tracking-[0.08em] leading-6">Akku-Temperatur</p><span class="flex shrink-0 gap-3"><button type="button" data-btm="tasks" class="text-xs font-semibold text-sky-700 dark:text-sky-300">📥 Tasks</button><button type="button" data-btm="open" class="text-xs font-semibold text-sky-700 dark:text-sky-300">Verlauf ›</button></span></div>
-    <div class="mt-2 flex items-center gap-2.5"><button type="button" data-btm="-1" aria-label="1 Grad weniger" class="${stepB}">−</button><span class="flex-1 text-center font-barlow text-[50px] font-bold leading-none text-orange-500 dark:text-orange-400 tabular-nums"><span id="btm-val">${btmVal}</span> <span class="text-[24px]">°C</span></span><button type="button" data-btm="1" aria-label="1 Grad mehr" class="${stepB}">+</button></div>
+    <div class="mt-2 flex items-center gap-1.5"><button type="button" data-btm="-1" aria-label="1 Grad weniger" class="${stepB}">−</button><button type="button" data-btm="-0.5" aria-label="0,5 Grad weniger" class="${stepH}">−0,5</button><span class="min-w-0 flex-1 whitespace-nowrap text-center font-barlow text-[42px] font-bold leading-none text-orange-500 dark:text-orange-400 tabular-nums"><span id="btm-val">${btFmt(btmVal)}</span><span class="text-[20px]"> °C</span></span><button type="button" data-btm="0.5" aria-label="0,5 Grad mehr" class="${stepH}">+0,5</button><button type="button" data-btm="1" aria-label="1 Grad mehr" class="${stepB}">+</button></div>
     <div class="mt-2.5 flex gap-1.5">${BT_CTX.map(([k, l]) => `<button type="button" data-btmctx="${k}" aria-pressed="${btmCtx === k}" class="flex-1 rounded-full border py-1.5 text-xs font-semibold ${pill(btmCtx === k)}">${l}</button>`).join('')}</div>
     <div class="min-h-2 flex-1"></div>
     <div class="flex items-center gap-2"><span class="min-w-0 ${btmJ || /⚠️/.test(btmMsg) ? 'line-clamp-2' : 'truncate'} text-xs leading-4 text-left text-slate-500 dark:text-slate-400">${info}</span>${btmSaved ? '<button type="button" data-btm="undo" class="ml-auto h-10 shrink-0 rounded-2xl bg-slate-200 dark:bg-slate-800 px-4 text-sm font-semibold text-sky-700 dark:text-sky-300 active:scale-95 transition">Rückgängig</button>' : '<button type="button" data-btm="save" class="ml-auto h-10 shrink-0 rounded-2xl bg-emerald-600 px-5 text-sm font-semibold text-white active:scale-95 transition">Speichern</button>'}</div>`;
@@ -7077,7 +7082,7 @@ function renderBtm() {
 $('btm-card').addEventListener('click', async (e) => {
   const c = e.target.closest('[data-btmctx]'); if (c) { btmCtx = btmCtx === c.dataset.btmctx ? null : c.dataset.btmctx; renderBtm(); return; }
   const b = e.target.closest('[data-btm]'); if (!b) return; const a = b.dataset.btm;
-  if (a === '1' || a === '-1') { btmVal = Math.max(-30, Math.min(70, btmVal + Number(a))); $('btm-val').textContent = btmVal; if (btmSaved || btmMsg) { btmSaved = null; btmMsg = ''; renderBtm(); } return; }
+  if (a === '1' || a === '-1' || a === '0.5' || a === '-0.5') { btmVal = Math.max(-30, Math.min(70, btRound(btmVal + Number(a)))); $('btm-val').textContent = btFmt(btmVal); if (btmSaved || btmMsg) { btmSaved = null; btmMsg = ''; renderBtm(); } return; }
   if (a === 'open') { NAV_GO.akkutemp ? NAV_GO.akkutemp() : showView('recs'); return; }
   if (a === 'tasks') { gtImport(false); return; }
   if (a === 'save') {
@@ -7259,7 +7264,7 @@ async function gtImport(silent) {
     if (n || nl) { lab.bt.sort((a, b) => Date.parse(a.at) - Date.parse(b.at)); setLab(lab); if (n) btmVal = null; try { btFillTrips(); ltFillKm(); } catch (e) { } }
     btmMsg = n || nl ? '✓ ' + [n ? n + ' Akku' : '', nl ? nl + ' Langzeit' : ''].filter(Boolean).join(' + ') + ' aus Google Tasks' : silent ? '' : 'Keine neuen „Akku …“- oder „Langzeit …“-Aufgaben.';
     const jumps = flag.map(en => [en, btJump(en, lab.bt)]).filter(x => x[1]);                    // nur Hinweis, Werte bleiben gespeichert
-    if (jumps.length) btmMsg += ' · <span class="text-amber-600 dark:text-amber-400">' + (jumps.length === 1 ? '⚠️ ' + fmt(jumps[0][0].t, 0) + ' °C, ' + btJumpD(jumps[0][1]) + ' – bitte prüfen' : '⚠️ ' + jumps.length + '× ≥ ' + BT_JUMP + '° Sprung – im Verlauf prüfen') + '</span>';
+    if (jumps.length) btmMsg += ' · <span class="text-amber-600 dark:text-amber-400">' + (jumps.length === 1 ? '⚠️ ' + btFmt(jumps[0][0].t) + ' °C, ' + btJumpD(jumps[0][1]) + ' – bitte prüfen' : '⚠️ ' + jumps.length + '× ≥ ' + BT_JUMP + '° Sprung – im Verlauf prüfen') + '</span>';
     save('enyaq.gtLast', new Date().toISOString()); try { renderVcStatus(); } catch (e) { }
     renderBtm(); try { renderLtm(); } catch (e) { } if (n && currentView === 'recs') renderRecs();
   } catch (e) { if (!silent) { btmMsg = '⚠️ Google Tasks: kein Zugriff'; renderBtm();

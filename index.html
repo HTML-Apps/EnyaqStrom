@@ -205,7 +205,7 @@
   @media (prefers-reduced-motion: reduce) { #bd-conf i, #bdg-conf i { animation: none; top: var(--y, 10%); } #bd-card, #bdg-card { animation: none; } }
 </style>
 <!-- Tailwind fertig gebaut (npm run css) – am Ende des Kopfs wie früher das CDN, damit die Reihenfolge der Regeln gleich bleibt -->
-<link rel="stylesheet" href="/app.css?v=271">
+<link rel="stylesheet" href="/app.css?v=272">
 </head>
 <body class="bg-black text-slate-100 min-h-screen">
 
@@ -516,9 +516,11 @@
         </div>
       </div>
       <div class="mt-2 flex items-center justify-between bg-slate-100 dark:bg-slate-800 rounded-xl p-1">
-        <button id="bt-minus" type="button" aria-label="Akku-Temperatur verringern" class="w-10 h-9 shrink-0 rounded-lg bg-white dark:bg-slate-700 text-xl leading-none font-medium active:scale-95 transition select-none touch-manipulation">−</button>
-        <button id="bt-clear" type="button" class="min-w-0 flex-1 text-center text-sm" title="Antippen: letzten Wert übernehmen bzw. Wert entfernen"><span class="block text-[11px] text-slate-500 dark:text-slate-400">Akku °C beim Anstecken</span><span id="bt-val" class="font-medium">–</span></button>
-        <button id="bt-plus" type="button" aria-label="Akku-Temperatur erhöhen" class="w-10 h-9 shrink-0 rounded-lg bg-white dark:bg-slate-700 text-xl leading-none font-medium active:scale-95 transition select-none touch-manipulation">+</button>
+        <button id="bt-minus" type="button" aria-label="Akku-Temperatur 1 Grad weniger" class="w-10 h-9 shrink-0 rounded-lg bg-white dark:bg-slate-700 text-xl leading-none font-medium active:scale-95 transition select-none touch-manipulation">−</button>
+        <button id="bt-minus5" type="button" aria-label="Akku-Temperatur 0,5 Grad weniger" class="ml-1 w-10 h-9 shrink-0 rounded-lg bg-white dark:bg-slate-700 text-xs leading-none font-semibold active:scale-95 transition select-none touch-manipulation">−0,5</button>
+        <button id="bt-clear" type="button" class="min-w-0 flex-1 text-center text-sm" title="Antippen: letzten Wert übernehmen bzw. Wert entfernen"><span class="block truncate text-[11px] text-slate-500 dark:text-slate-400">Akku beim Anstecken</span><span id="bt-val" class="font-medium">–</span></button>
+        <button id="bt-plus5" type="button" aria-label="Akku-Temperatur 0,5 Grad mehr" class="mr-1 w-10 h-9 shrink-0 rounded-lg bg-white dark:bg-slate-700 text-xs leading-none font-semibold active:scale-95 transition select-none touch-manipulation">+0,5</button>
+        <button id="bt-plus" type="button" aria-label="Akku-Temperatur 1 Grad mehr" class="w-10 h-9 shrink-0 rounded-lg bg-white dark:bg-slate-700 text-xl leading-none font-medium active:scale-95 transition select-none touch-manipulation">+</button>
       </div>
       <input id="soc0-input" type="hidden"><input id="soc1-input" type="hidden"><input id="bt-input" type="hidden">
     </div>
@@ -1863,7 +1865,7 @@
   </div>
 </nav>
 
-<script src="/app.js?v=271"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
+<script src="/app.js?v=272"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
 <script type="module">
 /* Firebase (modular SDK). Die Konfiguration ist kein Geheimnis – geschützt wird über Auth + Firestore-Regeln. */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';

@@ -55,7 +55,7 @@ function renderHistory() {
     const row = (k, v) => `<div class="flex justify-between items-baseline mt-2"><span class="text-sm text-slate-500 dark:text-slate-400">${k}</span><span class="font-medium text-right">${v}</span></div>`;
     const extra = (st.comfort > 0 ? row('↳ davon 🔥 Komfort', '<span class="text-amber-600 dark:text-amber-300">' + fmt(st.comfort, 1) + ' kWh' + (unitOf(r) != null ? ' · ' + eur(st.comfort * unitOf(r)) : '') + '</span>') : '') +
       (r.odometerKm != null ? row('Kilometerstand', (st.km ? '<span class="text-xs font-normal text-slate-500">(+' + fmt(st.km, 0) + ' km)</span> ' : '') + fmt(r.odometerKm, 0) + ' km') : '') +
-      (r.battTemp != null ? row('Akku-Temperatur', String(r.battTemp).replace('-', '−') + ' °C') : '') +
+      (r.battTemp != null ? row('Akku-Temperatur', btFmt(r.battTemp).replace('-', '−') + ' °C') : '') +
       (r.socStart != null && r.socEnd != null ? row('Ladestand', (st.loss != null && st.loss >= 0 && st.loss < 60 ? '<span class="text-xs font-normal text-slate-500">(Verlust ≈ ' + fmt(st.loss, 0) + ' %)</span> ' : '') + r.socStart + ' % → ' + r.socEnd + ' %') + row('Batteriekapazität', fmt(capOf(r), 1) + ' kWh') : '') +
       (st.kwh100 != null ? row('Gesamtverbrauch/100 km', (st.method === 'charge' ? '≈ ' : '') + fmt(st.kwh100, 1) + ' kWh' + (st.cost100 != null ? ' · ' + eur(st.cost100) : ''))
         + (st.method === 'charge' ? '<p class="text-xs text-slate-500 mt-1 text-right">grob: ohne Akku-% der letzten Ladung aus den geladenen kWh berechnet</p>' : st.rough ? '<p class="text-xs text-slate-500 mt-1 text-right">kleine Akku-Entnahme – Wert ungenau</p>' : '')

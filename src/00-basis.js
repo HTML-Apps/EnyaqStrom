@@ -194,6 +194,9 @@ function paintBatt() {
 function paintCapture() { paintReading(); paintBatt(); paintBattTemp(); }
 /* Akku-Temperatur (optional, Infotainment ab ME3.8): Stepper −/+ in 1-°C-Schritten. Leer zeigt grau den zuletzt gespeicherten Wert; Mitte antippen übernimmt ihn (bzw. leert), erster −/+ startet dort */
 const BT_MIN = -30, BT_MAX = 60;
+/* Akku-Temperatur: Eingabe in 0,5-°C-Schritten wie im Kombi-Instrument; Anzeige ohne Nachkomma bei ganzen Werten (21 °C, 21,5 °C) */
+const btRound = (v) => Math.round(v * 2) / 2;
+const btFmt = (v) => fmt(v, Number.isInteger(Math.round(v * 10) / 10) ? 0 : 1);
 /** Zuletzt gespeicherte Akku-Temperatur: neuester Wert aus Ladungen (battTemp) und Rekorde → Akku °C */
 function lastBattTemp() {
   let best = null; const take = (t, v) => { if (Number.isFinite(t) && Number.isFinite(v) && (!best || t > best.t)) best = { t, v }; };
@@ -203,18 +206,18 @@ function lastBattTemp() {
 }
 function paintBattTemp() {
   const v = optNum($('bt-input').value), el = $('bt-val');
-  if (v != null && !Number.isNaN(v)) { el.textContent = String(v).replace('-', '−') + ' °C'; el.className = 'font-medium'; return; }
+  if (v != null && !Number.isNaN(v)) { el.textContent = btFmt(v).replace('-', '−') + ' °C'; el.className = 'font-medium'; return; }
   const l = lastBattTemp(); el.className = 'font-medium text-slate-400 dark:text-slate-500';
-  el.textContent = l ? 'zuletzt ' + String(Math.round(l.v)).replace('-', '−') + ' °C · ' + (new Date(l.t).toDateString() === new Date().toDateString() ? 'heute ' + hhmm(l.t) : new Date(l.t).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })) : '–';
+  el.textContent = l ? 'zuletzt ' + btFmt(l.v).replace('-', '−') + ' °C · ' + (new Date(l.t).toDateString() === new Date().toDateString() ? 'heute ' + hhmm(l.t) : new Date(l.t).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })) : '–';
 }
 (() => {
-  const step = (d) => { const v = optNum($('bt-input').value); const n = v == null || Number.isNaN(v) ? (lastBattTemp() ? Math.round(lastBattTemp().v) : 20) : Math.max(BT_MIN, Math.min(BT_MAX, v + d)); $('bt-input').value = String(n); paintBattTemp(); };
-  [['bt-minus', -1], ['bt-plus', 1]].forEach(([id, d]) => {
+  const step = (d) => { const v = optNum($('bt-input').value); const n = v == null || Number.isNaN(v) ? (lastBattTemp() ? btRound(lastBattTemp().v) : 20) : Math.max(BT_MIN, Math.min(BT_MAX, btRound(v + d))); $('bt-input').value = String(n); paintBattTemp(); };
+  [['bt-minus', -1], ['bt-minus5', -0.5], ['bt-plus5', 0.5], ['bt-plus', 1]].forEach(([id, d]) => {
     const b = $(id); let t1 = 0, t2 = 0; const stop = () => { clearTimeout(t1); clearInterval(t2); };
     b.addEventListener('pointerdown', (e) => { e.preventDefault(); step(d); t1 = setTimeout(() => { t2 = setInterval(() => step(d), 110); }, 450); });
     ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => b.addEventListener(ev, stop)); b.addEventListener('contextmenu', e => e.preventDefault());
   });
-  $('bt-clear').addEventListener('click', () => { const v = optNum($('bt-input').value), l = lastBattTemp(); $('bt-input').value = (v == null || Number.isNaN(v)) && l ? String(Math.round(l.v)) : ''; paintBattTemp(); });   // leer: letzten Wert übernehmen, sonst leeren
+  $('bt-clear').addEventListener('click', () => { const v = optNum($('bt-input').value), l = lastBattTemp(); $('bt-input').value = (v == null || Number.isNaN(v)) && l ? String(btRound(l.v)) : ''; paintBattTemp(); });   // leer: letzten Wert übernehmen, sonst leeren
 })();
 
 $('reading-input').addEventListener('input', e => { delete e.target.dataset.live; paintReading(); });
