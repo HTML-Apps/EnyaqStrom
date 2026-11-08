@@ -1336,7 +1336,7 @@ function renderTrends() {
           <div class="mt-1.5 flex gap-1 text-[10px] text-slate-500 dark:text-slate-400">${vals.map(x => `<span class="flex-1 text-center">${MONTHS[x.m]}</span>`).join('')}</div>
         </div>
       </div>
-      <p class="mt-3 text-[11px] text-slate-500 dark:text-slate-400">Letzte 8 Monate · heller Balken = ${MONTHS_LONG[n.getMonth()]} (Zwischenstand) · gestrichelt = Ø${d.base && lo > 0 ? ' · Achse ab ' + lo : ''}${d.note ? ' · ' + d.note : ''}</p>`}
+      <p class="mt-3 text-left text-[11px] text-slate-500 dark:text-slate-400">Letzte 8 Monate · heller Balken = ${MONTHS_LONG[n.getMonth()]} (Zwischenstand) · gestrichelt = Ø${d.base && lo > 0 ? ' · Achse ab ' + lo : ''}${d.note ? ' · ' + d.note : ''}</p>`}
     </article>`; }).join('');
   $('trends-dots').innerHTML = defs.map((_, i) => `<span data-tdot="${i}" class="block h-2 rounded-full transition-all ${i === trendIdx ? 'w-5 bg-emerald-500' : 'w-2 bg-slate-500/60'}"></span>`).join('');
   if (trendIdx) box.scrollLeft = trendIdx * (box.firstElementChild.offsetWidth + 16);
@@ -4739,10 +4739,10 @@ function openWxoSheet() {
 }
 /* Start: Verbrauchs-Prognose und Zählerstand seitlich wischen (Standard: Prognose). Höhe folgt der sichtbaren Karte. */
 const dSw = { tr: $('dash-swipe-track'), idx: 0 };
-function dashSlides() { if (isSimple()) return [$('veh-slide'), $('ltm-card'), $('care-slide')].filter(x => x && !x.classList.contains('hidden')); return [$('ltm-card'), $('btm-card'), $('wxo-card'), $('veh-slide'), $('meter-card')].filter(x => x && !x.classList.contains('hidden') && !((x.id === 'btm-card' || x.id === 'ltm-card') && liveHero)); }
+function dashSlides() { if (isSimple()) return [$('ltm-card'), $('veh-slide'), $('care-slide')].filter(x => x && !x.classList.contains('hidden')); return [$('ltm-card'), $('btm-card'), $('wxo-card'), $('veh-slide'), $('meter-card')].filter(x => x && !x.classList.contains('hidden') && !((x.id === 'btm-card' || x.id === 'ltm-card') && liveHero)); }
 const dashIdx = (id) => Math.max(0, dashSlides().indexOf($(id)));
 /** Karte beim Öffnen: Prognose oder Zählerstand (Akku-Temperatur liegt links davon und wird nur per Wischen erreicht) */
-const dashDefaultIdx = () => isSimple() ? 0 : dashFirstSlide() === 'wx' && !$('wxo-card').classList.contains('hidden') ? dashIdx('wxo-card') : dashIdx('meter-card');
+const dashDefaultIdx = () => isSimple() ? dashIdx('veh-slide') : dashFirstSlide() === 'wx' && !$('wxo-card').classList.contains('hidden') ? dashIdx('wxo-card') : dashIdx('meter-card');
 function dashSwipeSync() {
   const sl = dashSlides(), w = dSw.tr.clientWidth + 12, i = Math.max(0, Math.min(sl.length - 1, Math.round(dSw.tr.scrollLeft / (w || 1)))); dSw.idx = i;
   const two = sl.length > 1, dd = $('dash-dots'); dd.classList.toggle('hidden', !two);
@@ -8156,7 +8156,7 @@ if (window.__noStorage) {                                                       
 /* =====================================================================
    Einfache Ansicht (Einstellungen → Fahrzeug & Kauf → Ansicht „Einfach“; Einstellung „ui“, wird mitsynchronisiert)
    Gedacht für Mitfahrer ohne Technik-Ehrgeiz (Papa-Modus). Es wird nur ausgeblendet und anders angeordnet, Daten bleiben gleich:
-   - Start: Karussell, darunter wischbar Fahrzeugstatus (kompakt) ↔ Langzeitverbrauch ↔ Akkupflege, dann Kacheln + Liste zum Auswerten
+   - Start: Karussell, darunter wischbar Langzeitverbrauch ↔ Fahrzeugstatus (Standard) ↔ Akkupflege (nimmt deren Höhe an), dann Kacheln + Liste zum Auswerten
    - Verbräuche & Effizienz und Trends stehen nicht auf Start, sondern auf eigenen Seiten (view-eff / view-trends): die Blöcke
      #eff-block und #trends-block werden beim Umschalten dorthin verschoben und in der vollen Ansicht wieder zurück
    - Akku: ohne „Mehrkonsum“ (Akku-Temperatur wird nicht notiert) und ohne Ladekurve
@@ -8215,13 +8215,12 @@ function renderCareSlide() {
   const tip = (1 - c.ok80) > 0.3 ? 'Im Alltag bis 80 % laden, 100 % nur vor langen Fahrten.' : c.lo ? 'Nicht unter 10 % fahren – lieber früher anstecken.'
     : c.full ? 'Voll laden ist in Ordnung, wenn du danach bald losfährst.' : 'Weiter so – zwischen 20 und 80 % fühlt sich der Akku wohl.';
   const len = 97.4, dash = (c.score / 100 * len).toFixed(1);
-  const box = (l, v, ok) => `<div class="min-w-0 rounded-xl bg-slate-100 dark:bg-slate-800/70 px-2.5 py-1.5"><p class="truncate text-[10.5px] text-slate-500 dark:text-slate-400">${l}</p><p class="truncate text-[13px] font-semibold ${ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}">${v}</p></div>`;
-  el.innerHTML = head + `<div class="mt-2 flex items-center gap-3.5">
-      <div class="relative h-[76px] w-[76px] shrink-0"><svg viewBox="0 0 36 36" class="h-[76px] w-[76px] -rotate-90" aria-hidden="true"><circle cx="18" cy="18" r="15.5" fill="none" stroke="currentColor" class="text-slate-200 dark:text-slate-800" stroke-width="3.5"/><circle cx="18" cy="18" r="15.5" fill="none" stroke="${lvl[1]}" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="${dash} ${len}"/></svg>
-        <span class="absolute inset-0 flex items-center justify-center font-barlow text-[30px] font-bold leading-none">${c.score}</span></div>
-      <div class="min-w-0"><p class="text-lg font-semibold leading-6" style="color:${lvl[1]}">${lvl[0]}</p><p class="mt-0.5 text-[13px] leading-snug text-slate-600 dark:text-slate-300">${tip}</p></div></div>
-    <div class="mt-2.5 grid grid-cols-2 gap-1.5">${box('Bis 80 % geladen', Math.round(c.ok80 * 100) + ' % der Ladungen', c.ok80 >= 0.7)}${box('Unter 10 % gefahren', c.lo ? c.lo + ' ×' : 'nie', !c.lo)}</div>
-    <div class="min-h-2 flex-1"></div><p class="text-xs leading-4 text-slate-500 dark:text-slate-400">letzte 90 Tage · ${c.n} Ladungen</p>`;
+  el.innerHTML = head + `<div class="mt-2 flex items-center gap-3">
+      <div class="relative h-16 w-16 shrink-0"><svg viewBox="0 0 36 36" class="h-16 w-16 -rotate-90" aria-hidden="true"><circle cx="18" cy="18" r="15.5" fill="none" stroke="currentColor" class="text-slate-200 dark:text-slate-800" stroke-width="3.5"/><circle cx="18" cy="18" r="15.5" fill="none" stroke="${lvl[1]}" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="${dash} ${len}"/></svg>
+        <span class="absolute inset-0 flex items-center justify-center font-barlow text-[26px] font-bold leading-none">${c.score}</span></div>
+      <div class="min-w-0"><p class="text-[17px] font-semibold leading-6" style="color:${lvl[1]}">${lvl[0]}</p><p class="text-[13px] leading-[18px] text-slate-600 dark:text-slate-300">${tip}</p></div></div>
+    <div class="min-h-1 flex-1"></div>
+    <p class="truncate text-xs leading-4 text-slate-500 dark:text-slate-400">Bis 80 %: <b class="${c.ok80 >= 0.7 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}">${Math.round(c.ok80 * 100)} %</b> · unter 10 %: <b class="${c.lo ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}">${c.lo ? c.lo + ' ×' : 'nie'}</b> · 90 Tage</p>`;
 }
 $('care-slide').addEventListener('click', () => NAV_GO.akku());
 $('care-slide').addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); NAV_GO.akku(); } });
