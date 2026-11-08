@@ -2738,8 +2738,8 @@ const HERO_IMGS = [{ name: 1, src: '/Bilder/Enyaq/hero/1.webp', aspect: 1.7188, 
   { name: 9, src: '/Bilder/Enyaq/hero/9.webp', aspect: 2.067, extra: 0, cut: true, pad: true }];   // pad: etwas Abstand links/rechts   // Schnittbild mit Maßen: Bemaßung hell umgefärbt, Auto freigestellt (volle Breite, zum Lesen antippen → Vollbild)
 /* Bilder je Fahrzeugprofil (ohne Eintrag: Enyaq-Bilder oben). Epiq: Bilder/Epiq/hero, aufbereitet mit tools/epiq_bilder.py */
 const EPQ = (n, aspect, o = {}) => ({ name: n, src: '/Bilder/Epiq/hero/' + n + '.webp', aspect, extra: 0, noHd: true, ...o });
-const CAR_HERO = { epiq55: [EPQ(2, 1.9536, { extra: 0.03 }), EPQ(9, 1.6176), EPQ(10, 2.4768), EPQ(11, 1.7839), EPQ(3, 1.1833, { cut: true }), EPQ(6, 1.9864, { cut: true }),
-  EPQ(1, 2.1814, { cut: true }), EPQ(5, 2.2, { pad: true }), EPQ(7, 1.8317, { tech: true }), EPQ(8, 1.7594, { tech: true }), EPQ(4, 1.3417, { tech: true })] };   // Reihenfolge im Karussell
+const CAR_HERO = { epiq55: [EPQ(2, 1.9536, { extra: 0.03 }), EPQ(9, 1.8603, { extra: 0.0754 }), EPQ(10, 2.6884, { extra: 0.0854 }), EPQ(11, 2.0326, { extra: 0.0793 }), EPQ(3, 1.1833, { cut: true }),
+  EPQ(6, 1.9864, { cut: true }), EPQ(1, 2.1814, { cut: true }), EPQ(5, 2.2, { pad: true }), EPQ(12, 1.5349, { tech: true }), EPQ(7, 2.0737, { tech: true }), EPQ(8, 1.9696, { tech: true }), EPQ(4, 1.3417, { tech: true })] };   // Reihenfolge im Karussell
 const carAutoN = () => { const v = Number(getSettings().carN); return Number.isInteger(v) && v >= 1 && v <= HERO_IMGS.length ? v : 6; };            // Einstellung: so viele Bilder wechseln automatisch
 const carAutoMs = () => { const v = Number(getSettings().carSec); return (Number.isFinite(v) && v >= 5 && v <= 600 ? v : 30) * 1000; };   // Bilder/Enyaq/Enyaq1, 2, _4 (Akku-Schnitt), 3, 4, 5 (unten bleiben 3 Punkte als Deko); automatischer Wechsel alle 30 Sekunden
 async function initCarousel() {
