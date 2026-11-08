@@ -29,7 +29,11 @@ const KEY_CACHE_UID = 'enyaq.cacheUid';                   // Konto (UID), zu dem
 function checkCacheUid(uid) {
   if (!uid) return;
   const prev = localStorage.getItem(KEY_CACHE_UID);
-  if (prev && prev !== uid) { save(KEY_READINGS, []); save(KEY_COSTS, []); save(KEY_REMINDERS, []); save(KEY_RECUR, []); localStorage.removeItem(KEY_PROVIDERS); localStorage.removeItem(KEY_PROVINFO); localStorage.removeItem(KEY_DVBAK); localStorage.removeItem('enyaq.kb'); localStorage.removeItem(KEY_CATEGORIES); localStorage.removeItem(KEY_WXLOC); localStorage.removeItem(KEY_WXCACHE); localStorage.removeItem(KEY_TEMPS); localStorage.removeItem(KEY_WRAP); save(KEY_TRIPS, []); localStorage.removeItem(KEY_TPLACES); localStorage.removeItem(KEY_TRIPS_IMP); localStorage.removeItem(KEY_TLABELS); localStorage.removeItem(KEY_TRULES); localStorage.removeItem(KEY_TDEF); const st = load(KEY_SETTINGS, null); if (st && st.wltp !== undefined) { delete st.wltp; save(KEY_SETTINGS, st); } stopLive(false); }
+  if (prev && prev !== uid) { save(KEY_READINGS, []); save(KEY_COSTS, []); save(KEY_REMINDERS, []); save(KEY_RECUR, []); localStorage.removeItem(KEY_PROVIDERS); localStorage.removeItem(KEY_PROVINFO); localStorage.removeItem(KEY_DVBAK); localStorage.removeItem('enyaq.kb'); localStorage.removeItem(KEY_CATEGORIES); localStorage.removeItem(KEY_WXLOC); localStorage.removeItem(KEY_WXCACHE); localStorage.removeItem(KEY_TEMPS); localStorage.removeItem(KEY_WRAP); save(KEY_TRIPS, []); localStorage.removeItem(KEY_TPLACES); localStorage.removeItem(KEY_TRIPS_IMP); localStorage.removeItem(KEY_TLABELS); localStorage.removeItem(KEY_TRULES); localStorage.removeItem(KEY_TDEF); stopLive(false);
+    /* auch alles Konto-Bezogene, das sonst hängen bliebe: Einstellungen (kommen aus der Cloud des neuen Kontos), Fahrzeugstatus und km-Stand
+       (sonst bis zu 1 h die Werte des vorherigen Autos), Prognose, Eis-/Frost-Hinweise, Abzeichen, letzte Route, „Fahrzeug verbinden – später“ */
+    [KEY_SETTINGS, KEY_WXO, KEY_WXO + 'S', KEY_ICE, KEY_FROST, KEY_BADGES, KEY_RT, KEY_VEH_LATER, 'enyaq.onbPreset'].forEach(k => { try { localStorage.removeItem(k); } catch (e) { } });
+    carKmCache = null; try { renderVehCard(); } catch (e) { } try { applyTitle(); } catch (e) { } }
   localStorage.setItem(KEY_CACHE_UID, uid);
 }
 let deferredCosts = null;
