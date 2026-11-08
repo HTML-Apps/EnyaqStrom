@@ -14,7 +14,7 @@ from scipy import ndimage as nd
 
 D = 'Bilder/Epiq/'
 LIGHT = np.array([226, 232, 240.])
-JOBS = {1: 'masse_alpha', 2: 'alpha', 3: 'rembg', 4: 'alpha', 5: 'masse', 6: 'masse', 7: 'rembg+shadow', 8: 'rembg+shadow', 9: 'rembg+shadow', 10: 'rembg+shadow', 11: 'rembg+shadow', 12: 'rembg+shadow'}
+JOBS = {1: 'masse_alpha', 2: 'alpha', 4: 'alpha', 5: 'masse', 6: 'masse', 7: 'rembg+shadow', 8: 'rembg+shadow', 9: 'rembg+shadow', 10: 'rembg+shadow', 11: 'rembg+shadow', 12: 'rembg+shadow'}
 _sess = None
 def rembg_alpha(im):
     global _sess
