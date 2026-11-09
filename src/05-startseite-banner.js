@@ -107,15 +107,19 @@ async function cutWhite(src) {
 /** Live-Modus: oben dauerhaft das Ladebild (Enyaq_live.webp) statt des Karussells; danach wieder Karussell mit Wechsel alle 30 Sekunden. */
 /* Ladebild je Fahrzeugprofil; es erscheint auch, solange der Fahrzeugstatus (Škoda-App) „lädt“ meldet (chargeHero) */
 const CAR_LIVE = { enyaq50: '/Bilder/Enyaq/Enyaq_live.webp', epiq55: '/Bilder/Epiq/Epiq_live.webp' };
+/* Breite Bildfläche (Desktop/Querformat): ganzes Auto statt des am Handy angeschnittenen Bilds (endet dort am Bildschirmrand) */
+const CAR_LIVE_WIDE = { enyaq50: '/Bilder/Enyaq/Enyaq_live-voll.webp' };
+const heroWide = () => { const h = $('hero-car'); return !!h && h.clientHeight > 0 && h.clientWidth / h.clientHeight >= 1.8; };
 let liveHero = false, chargeHero = false;
 function paintHeroLayers() {
-  const on = liveHero || chargeHero, img = $('car-live').querySelector('img'), src = CAR_LIVE[carProf().key] || CAR_LIVE.enyaq50;
+  const on = liveHero || chargeHero, img = $('car-live').querySelector('img'), k = carProf().key, src = (heroWide() && CAR_LIVE_WIDE[k]) || CAR_LIVE[k] || CAR_LIVE.enyaq50;
   if (img && img.getAttribute('src') !== src) { img.src = src; img.removeAttribute('width'); img.removeAttribute('height'); }
   if (img) img.alt = carShort() + ' lädt';
   $('car-live').classList.toggle('opacity-0', !on); $('car-live').setAttribute('aria-hidden', String(!on));
   $('car-scroll').classList.toggle('opacity-0', on); $('car-scroll').classList.toggle('pointer-events-none', on);
   $('car-dashes').classList.toggle('invisible', on);
 }
+addEventListener('resize', () => { clearTimeout(window.heroWideT); window.heroWideT = setTimeout(() => { if (liveHero || chargeHero) paintHeroLayers(); }, 200); });
 function setLiveHero(on) {
   if (on === liveHero) return; liveHero = on; paintHeroLayers();
   $('view-dashboard').classList.toggle('live-mode', on);                 // Zählerkarte rückt nach oben
