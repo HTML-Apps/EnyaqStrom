@@ -2768,6 +2768,8 @@ let liveHero = false, chargeHero = false;
 function paintHeroLayers() {
   const on = liveHero || chargeHero, img = $('car-live').querySelector('img'), k = carProf().key, src = (heroWide() && CAR_LIVE_WIDE[k]) || CAR_LIVE[k] || CAR_LIVE.enyaq50;
   if (img && img.getAttribute('src') !== src) { img.src = src; img.removeAttribute('width'); img.removeAttribute('height'); }
+  if (img) { const wide = src === CAR_LIVE_WIDE[k]; img.classList.toggle('object-left-bottom', wide); img.classList.toggle('object-bottom', !wide);
+    const m = $('hero-car').closest('main'), d = wide && m ? $('hero-car').getBoundingClientRect().left - m.getBoundingClientRect().left : 0; img.style.transform = d ? 'translateX(' + (-d) + 'px)' : ''; }   // ganzes Bild links bündig: Kabel endet am linken Rand der Ansicht
   if (img) img.alt = carShort() + ' lädt';
   $('car-live').classList.toggle('opacity-0', !on); $('car-live').setAttribute('aria-hidden', String(!on));
   $('car-scroll').classList.toggle('opacity-0', on); $('car-scroll').classList.toggle('pointer-events-none', on);
