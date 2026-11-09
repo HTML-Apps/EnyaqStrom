@@ -27,7 +27,7 @@ function load(key, fallback) {
 }
 function save(key, value) {
   try { localStorage.setItem(key, JSON.stringify(value)); return true; }
-  catch (e) { console.error('localStorage schreiben fehlgeschlagen', e); alert('Speichern im Browser nicht möglich (Speicher voll oder gesperrt).'); return false; }
+  catch (e) { console.error('localStorage schreiben fehlgeschlagen', e); appNote('Speichern im Browser nicht möglich (Speicher voll oder gesperrt).'); return false; }
 }
 const getReadings = () => load(KEY_READINGS, []);
 

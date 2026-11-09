@@ -313,7 +313,7 @@ $('fab-cancel').addEventListener('click', () => $('btn-edit-cancel').click());
 $('fab-save').addEventListener('click', () => $('btn-edit-save').click());
 $('btn-edit').addEventListener('click', () => setEditMode(true));
 $('btn-edit-cancel').addEventListener('click', () => setEditMode(false));
-$('btn-edit-save').addEventListener('click', () => {
+$('btn-edit-save').addEventListener('click', async () => {
   const stored = getReadings(), currentPrice = getSettings().price;
   const all = stored.map((r, i) => ({
     r, date: new Date(cell(i, 'date').value), place: domPlace(i), neu: Math.round(parseNum(cell(i, 'new').value) * 10) / 10,
@@ -321,28 +321,28 @@ $('btn-edit-save').addEventListener('click', () => {
     kwh: optNum(cell(i, 'kwh').value), price: optNum(cell(i, 'price').value), prov: cell(i, 'prov')?.value || '', fee: optNum(cell(i, 'fee')?.value ?? ''), del: cell(i, 'delbtn').dataset.del === '1'
   }));
   const live = all.filter(x => !x.del);
-  if (live.some(x => isNaN(x.date) || (x.place === 'home' && (!isFinite(x.neu) || x.neu < 0)))) { alert('Bitte gültige Datums- und Zählerstandswerte eingeben.'); return; }
-  if (live.some(x => x.place !== 'home' && ([x.kwh, x.price, x.fee].some(Number.isNaN) || [x.kwh, x.price, x.fee].some(v => v != null && v < 0)))) { alert('Bitte kWh, Preis und Gebühren prüfen (Zahl, nicht negativ).'); return; }
+  if (live.some(x => isNaN(x.date) || (x.place === 'home' && (!isFinite(x.neu) || x.neu < 0)))) { appNote('Bitte gültige Datums- und Zählerstandswerte eingeben.'); return; }
+  if (live.some(x => x.place !== 'home' && ([x.kwh, x.price, x.fee].some(Number.isNaN) || [x.kwh, x.price, x.fee].some(v => v != null && v < 0)))) { appNote('Bitte kWh, Preis und Gebühren prüfen (Zahl, nicht negativ).'); return; }
   if (all.some(x => [x.km, x.s0, x.s1].some(Number.isNaN) || (x.km != null && x.km < 0) || [x.s0, x.s1].some(v => v != null && (v < 0 || v > 100)) || (x.s0 != null && x.s1 != null && x.s1 <= x.s0))) {
-    alert('Bitte km-Stand und Akku-Prozente prüfen (0–100 %, Ende größer als Start).'); return;
+    appNote('Bitte km-Stand und Akku-Prozente prüfen (0–100 %, Ende größer als Start).'); return;
   }
-  if (all.some(x => Number.isNaN(x.bt) || (x.bt != null && (x.bt < BT_MIN || x.bt > BT_MAX)))) { alert('Bitte die Akku-Temperatur prüfen (' + BT_MIN + ' bis ' + BT_MAX + ' °C) oder das Feld leer lassen.'); return; }
-  if (all.some(x => Number.isNaN(x.cf) || (x.cf != null && (x.cf < 0 || x.cf > 50)))) { alert('Bitte die Komfortenergie prüfen (0 bis 50 kWh) oder das Feld leer lassen.'); return; }
-  if (all.some(x => !isFinite(x.cap) || x.cap < 10 || x.cap > 200)) { alert('Bitte eine gültige Batteriekapazität in kWh eingeben (10 bis 200).'); return; }
+  if (all.some(x => Number.isNaN(x.bt) || (x.bt != null && (x.bt < BT_MIN || x.bt > BT_MAX)))) { appNote('Bitte die Akku-Temperatur prüfen (' + BT_MIN + ' bis ' + BT_MAX + ' °C) oder das Feld leer lassen.'); return; }
+  if (all.some(x => Number.isNaN(x.cf) || (x.cf != null && (x.cf < 0 || x.cf > 50)))) { appNote('Bitte die Komfortenergie prüfen (0 bis 50 kWh) oder das Feld leer lassen.'); return; }
+  if (all.some(x => !isFinite(x.cap) || x.cap < 10 || x.cap > 200)) { appNote('Bitte eine gültige Batteriekapazität in kWh eingeben (10 bis 200).'); return; }
   const storedCosts = getCosts();                        // Kosten-Karten (dieselbe Bearbeiten-Ansicht)
   const callC = storedCosts.map((c, j) => ({ c, date: new Date(ccell(j, 'date')?.value), cat: ccell(j, 'cat')?.value ?? c.category ?? '', title: (ccell(j, 'title')?.value ?? c.title ?? '').trim(),
     amount: (v => String(v).trim() === '' ? 0 : parseNum(v))(ccell(j, 'amount')?.value ?? String(c.amount)), /* leer = 0 € */ km: optNum(ccell(j, 'km')?.value ?? ''), note: (ccell(j, 'note')?.value ?? c.note ?? '').trim(), del: ccell(j, 'cdel')?.dataset.del === '1' }));
   const cLive = callC.filter(x => !x.del);
-  if (cLive.some(x => isNaN(x.date) || !isFinite(x.amount))) { alert('Bitte bei den Kosten ein gültiges Datum und einen gültigen Betrag eingeben (0 € ist erlaubt).'); return; }
-  if (cLive.some(x => Number.isNaN(x.km) || (x.km != null && (x.km < 0 || x.km > 999999)))) { alert('Bitte bei den Kosten einen gültigen km-Stand eingeben (0 bis 999999) oder das Feld leer lassen.'); return; }
+  if (cLive.some(x => isNaN(x.date) || !isFinite(x.amount))) { appNote('Bitte bei den Kosten ein gültiges Datum und einen gültigen Betrag eingeben (0 € ist erlaubt).'); return; }
+  if (cLive.some(x => Number.isNaN(x.km) || (x.km != null && (x.km < 0 || x.km > 999999)))) { appNote('Bitte bei den Kosten einen gültigen km-Stand eingeben (0 bis 999999) oder das Feld leer lassen.'); return; }
   const gone = all.filter(x => x.del).length + callC.filter(x => x.del).length;
-  if (gone && !confirm(gone + (gone === 1 ? ' Eintrag wird' : ' Einträge werden') + ' gelöscht (auch in der Cloud). Fortfahren?')) return;
+  if (gone && !(await ask(gone + (gone === 1 ? ' Eintrag wird' : ' Einträge werden') + ' gelöscht, auch in der Cloud.', { title: 'Löschen?', ok: 'Löschen', danger: true }))) return;
   const items = all.filter(x => !x.del);
 
   items.sort((a, b) => a.date - b.date);                 // chronologisch, falls Datum geändert wurde
   let chk = null;                                        // Zählerstand muss nur zwischen Zuhause-Einträgen steigen
   const drop = items.some(x => { if (x.place !== 'home') return false; const bad = chk != null && x.neu < chk && !x.reset; chk = x.neu; return bad; });
-  if (drop && !confirm('Mindestens ein Zählerstand ist kleiner als der vorherige. Trotzdem speichern?')) return;
+  if (drop && !(await ask('Mindestens ein Zählerstand ist kleiner als der vorherige.', { title: 'Trotzdem speichern?', ok: 'Speichern' }))) return;
 
   let prevHomeNew = null;                                // Zählerkette: nur Zuhause-Einträge
   const result = items.map(x => {
@@ -435,7 +435,7 @@ $('btn-export').addEventListener('click', () => {
 });
 
 /** Ladeanbieter (ergänzen) und Einstellungen (nach Rückfrage) aus einer Sicherung übernehmen. */
-function importPrefsFromBackup(text) {
+async function importPrefsFromBackup(text) {
   let d; try { d = JSON.parse(text); } catch { return; }
   if (Array.isArray(d.providers)) { const cur = getProviders(), add = d.providers.filter(n => typeof n === 'string' && n.trim() && !cur.some(m => m.toLowerCase() === n.trim().toLowerCase())).map(n => n.trim().slice(0, 30));
     if (add.length) setProviders(cur.concat(add).slice(0, 20)); }
@@ -460,7 +460,7 @@ function importPrefsFromBackup(text) {
     const fids = new Set(base.fc.map(x => String(x.id))), af = (Array.isArray(d.lab.fc) ? d.lab.fc : []).filter(x => x && x.id && x.km > 0 && !fids.has(String(x.id)));
     if (!cur || ac.length || ar.length || as.length || nr || al.length || ab.length || at.length || aw.length || af.length) setLab({ fc: base.fc.concat(af), curves: base.curves.concat(ac), recs: base.recs.concat(ar), speeds: base.speeds.concat(as), routes: rts, lt: base.lt.concat(al), bt: base.bt.concat(ab), tires: base.tires.concat(at), wish: base.wish.concat(aw) });
   }
-  if (d.settings && typeof d.settings === 'object' && Object.keys(d.settings).length && confirm('Die Sicherung enthält auch Einstellungen (Strompreis, Akku, Fahrzeugdaten, Kauftag …).\n\nOK = Einstellungen aus der Sicherung übernehmen\nAbbrechen = aktuelle Einstellungen behalten')) {
+  if (d.settings && typeof d.settings === 'object' && Object.keys(d.settings).length && await ask('Die Sicherung enthält auch Einstellungen (Strompreis, Akku, Fahrzeugdaten, Kauftag …).', { title: 'Einstellungen übernehmen?', ok: 'Übernehmen', cancel: 'Aktuelle behalten' })) {
     const keep = load(KEY_SETTINGS, {}) || {}, n = { ...d.settings }; delete n.pin; if (keep.pin) n.pin = keep.pin;
     if (!(Number(n.price) >= 0)) delete n.price;
     save(KEY_SETTINGS, n); pushPrefs(); if (currentView === 'settings') fillSettings();
@@ -540,7 +540,7 @@ $('import-file').addEventListener('change', async (e) => {
     const mergedC = curCosts.filter(c => !ic.costs.some(i => sameId(c, i))).concat(ic.costs).sort((a, b) => new Date(a.date) - new Date(b.date));
     const freshR = ir.filter(i => !curRem.some(c => sameId(c, i)));
     const mergedR = curRem.filter(c => !ir.some(i => sameId(c, i))).concat(ir);
-    if ((current.length > 0 || curCosts.length > 0 || curRem.length > 0) && !confirm(imported.length + ' Ladungen (' + fresh.length + ' neu), ' + ic.costs.length + ' Kosten (' + freshC.length + ' neu) und ' + ir.length + ' Erinnerungen (' + freshR.length + ' neu) in der Datei. Mit den vorhandenen Daten zusammenführen?')) return;
+    if ((current.length > 0 || curCosts.length > 0 || curRem.length > 0) && !(await ask(imported.length + ' Ladungen (' + fresh.length + ' neu), ' + ic.costs.length + ' Kosten (' + freshC.length + ' neu) und ' + ir.length + ' Erinnerungen (' + freshR.length + ' neu) in der Datei.', { title: 'Mit vorhandenen Daten zusammenführen?', ok: 'Zusammenführen' }))) return;
     if (!commitReadings(merged)) return;                 // Zusammenführen (gleiche ID: Datei gewinnt); wird bei Anmeldung auch in die Cloud geschrieben
     if (ic.costs.length) commitCosts(mergedC);
     if (ir.length) commitReminders(mergedR);
@@ -548,7 +548,7 @@ $('import-file').addEventListener('change', async (e) => {
     const newCats = ic.categories.filter(n => !getCategories().some(m => m.toLowerCase() === n.toLowerCase()));
     if (newCats.length) setCategories(getCategories().concat(newCats));
     const nT = importTripsFromBackup(text);                // Fahrten + Orte/Etiketten/Regeln (ältere Dateien haben sie nicht)
-    importPrefsFromBackup(text);                           // Ladeanbieter und Einstellungen (ältere Dateien haben sie nicht)
+    await importPrefsFromBackup(text);                           // Ladeanbieter und Einstellungen (ältere Dateien haben sie nicht)
     stopLive(false);                                     // Live-Basis wäre veraltet
     flash($('io-msg'), fresh.length + ' neue Ladungen, ' + freshC.length + ' neue Kosten, ' + freshR.length + ' neue Erinnerungen' + (nT ? ' und ' + nT + ' neue Fahrten' : '') + ' importiert.', true);
   } catch (err) {

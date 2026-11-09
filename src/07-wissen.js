@@ -204,7 +204,7 @@ $('kb-save').addEventListener('click', async () => {
   $('kb-dialog').classList.add('hidden');
   if (pend.length) {
     try { const up = await kbUpload(item, pend, tokP), k2 = getKb(); setKb({ cats: k2.cats, items: k2.items.map(y => String(y.id) === String(item.id) ? { ...y, files: (y.files || []).concat(up) } : y) }); }
-    catch (e) { if (e && e.status === 401) window.cloud.driveForget(); alert('Beleg-Upload fehlgeschlagen: ' + dvErrText(e)); }
+    catch (e) { if (e && e.status === 401) window.cloud.driveForget(); appNote('Beleg-Upload fehlgeschlagen: ' + dvErrText(e)); }
   }
 });
 /* Mängel: Felder im Bearbeiten-Dialog */
@@ -248,7 +248,7 @@ $('kb-dialog').addEventListener('click', async (e) => {
   if (act === 'edit') editKb(x.id);
   else if (act === 'again') { setKb({ cats: kb.cats, items: kb.items.map(y => y === x ? { ...y, occ: (y.occ || []).concat(new Date().toISOString()), at: new Date().toISOString() } : y) }); openKb(x.id); }
   else if (act.startsWith('st-')) { const st = act.slice(3); setKb({ cats: kb.cats, items: kb.items.map(y => y === x ? { ...y, st, stAt: new Date().toISOString(), at: new Date().toISOString() } : y) }); openKb(x.id); }
-  else if (act === 'del') { if (confirm('„' + x.title + '“ löschen?' + (x.files && x.files.length ? ' Die Belege bleiben in Google Drive.' : ''))) { setKb({ cats: kb.cats, items: kb.items.filter(y => y !== x) }); $('kb-dialog').classList.add('hidden'); } }
+  else if (act === 'del') { const prevKb = JSON.parse(JSON.stringify(kb)); setKb({ cats: kb.cats, items: kb.items.filter(y => y !== x) }); $('kb-dialog').classList.add('hidden'); undoDel('„' + x.title + '“ gelöscht', () => setKb(prevKb)); }
   else if (act === 'share') {
     const t = [x.title, x.text || ''].concat((x.links || []).map(l => (l.label ? l.label + ': ' : '') + l.url)).filter(Boolean).join('\n');
     try { if (navigator.share) await navigator.share({ title: x.title, text: t }); else { await navigator.clipboard.writeText(t); b.textContent = 'Kopiert ✓'; } } catch (err) { }

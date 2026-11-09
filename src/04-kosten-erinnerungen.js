@@ -102,7 +102,7 @@ $('cost-cats').addEventListener('click', e => {
   costCat = costCat === b.dataset.cat ? '' : b.dataset.cat;                       // erneut tippen = Auswahl aufheben
   renderCostsView();
 });
-$('btn-cost-save').addEventListener('click', () => {
+$('btn-cost-save').addEventListener('click', async () => {
   const amtRaw = $('cost-amount').value.trim(), amount = amtRaw === '' ? 0 : parseNum(amtRaw), km = optNum($('cost-km').value), d = new Date($('cost-date').value), msg = $('cost-msg');   // leer = 0 € (kostenlose Info, z. B. mit Beleg)
   if (!isFinite(amount) || amount < 0) { flash(msg, 'Bitte einen gültigen Betrag eingeben (0 € ist erlaubt).', false); return; }
   if (amount === 0 && $('cost-recur').checked) { flash(msg, 'Wiederkehrende Kosten brauchen einen Betrag größer 0.', false); return; }
@@ -120,7 +120,7 @@ $('btn-cost-save').addEventListener('click', () => {
     const tid = Date.now(); entry.id = tid * 1000; entry.recurId = tid;
     tpl = cleanRem({ id: tid, title: entry.title, amount: entry.amount, category: costCat || undefined, note: note || undefined, intervalMonths: Number($('cost-recur-int').value), startDate: entry.date, nextIdx: 1 });
     const due = recurDueCount(tpl);
-    if (due > 0 && !confirm('Das Datum liegt in der Vergangenheit: ' + due + ' weitere Buchung' + (due === 1 ? '' : 'en') + ' bis heute werden zusätzlich angelegt. Fortfahren?')) return;
+    if (due > 0 && !(await ask('Das Datum liegt in der Vergangenheit: ' + due + ' weitere Buchung' + (due === 1 ? '' : 'en') + ' bis heute werden zusätzlich angelegt.', { title: 'Fortfahren?', ok: 'Anlegen' }))) return;
   }
   const costs = getCosts(); costs.push(entry); costs.sort((a, b) => new Date(a.date) - new Date(b.date));
   const status = commitCosts(costs);
@@ -351,22 +351,22 @@ function renderReminders() {
 $('rem-done-toggle').addEventListener('click', () => { const l = $('rem-done-list'); l.classList.toggle('hidden'); $('rem-done-arrow').textContent = l.classList.contains('hidden') ? '▾' : '▴'; });
 const remById = (id) => getReminders().find(r => String(r.id) === String(id));
 /** Laufzeit erneuert: läuft ab heute neu (Haltbarkeit bleibt), Eintrag im Verlauf */
-function remRenew(r) {
-  if (!confirm('„' + r.title + '“ heute erneuert? Die Laufzeit beginnt dann neu.')) return;
+async function remRenew(r) {
+  if (!(await ask('Die Laufzeit beginnt dann heute neu.', { title: '„' + r.title + '“ heute erneuert?', ok: 'Erneuert' }))) return;
   const t = todayYMD(), log = remLog(r).map(e => { const o = { at: e.at }; if (e.km > 0) o.km = e.km; if (e.cost > 0) o.cost = e.cost; return o; });
   if (!log.length && r.startDate) log.push({ at: parseYMD(r.startDate).toISOString() });   // bisheriger Beginn als erster Verlaufseintrag
   log.push({ at: new Date().toISOString() });
   const upd = { ...r, startDate: t, dueDate: runDue(t, r.lifeN, r.lifeUnit) || undefined, log: log.slice(-REM_LOG_MAX) };
   commitReminders(getReminders().map(x => String(x.id) === String(r.id) ? cleanRem(upd) : x)); renderReminders();
 }
-function remListClick(e) {
+async function remListClick(e) {
   const b = e.target.closest('[data-act]'); if (!b) return;
   const li = b.closest('li[data-id]'), r = li && remById(li.dataset.id); if (!r) return;
   const act = b.dataset.act;
   if (act === 'renew') { remRenew(r); return; }
   if (act === 'done') openDone(r); else if (act === 'edit') openRemDialog(r); else if (act === 'ics') downloadIcs([r]);
   else if (act === 'reopen') { commitReminders(getReminders().map(x => String(x.id) === String(r.id) ? cleanRem({ ...x, doneAt: undefined }) : x)); renderReminders(); }
-  else if (act === 'del' && confirm('„' + r.title + '“ endgültig löschen?')) { commitReminders(getReminders().filter(x => String(x.id) !== String(r.id))); renderReminders(); }
+  else if (act === 'del') { const prevR = getReminders(); commitReminders(prevR.filter(x => String(x.id) !== String(r.id))); renderReminders(); undoDel('„' + r.title + '“ gelöscht', () => { commitReminders(prevR); renderReminders(); }); }
 }
 $('rem-list').addEventListener('click', remListClick);
 $('rem-run-list').addEventListener('click', remListClick);
@@ -407,8 +407,8 @@ $('rem-add').addEventListener('click', () => openRemDialog());
 $('rem-cancel').addEventListener('click', closeRemDialog);
 $('rem-dialog').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeRemDialog(); });
 $('rem-delete').addEventListener('click', () => {
-  const r = remEditId != null && remById(remEditId); if (!r || !confirm('„' + r.title + '“ löschen?')) return;
-  commitReminders(getReminders().filter(x => String(x.id) !== String(r.id))); closeRemDialog(); renderReminders();
+  const r = remEditId != null && remById(remEditId); if (!r) return;
+  const prevR = getReminders(); commitReminders(prevR.filter(x => String(x.id) !== String(r.id))); closeRemDialog(); renderReminders(); undoDel('„' + r.title + '“ gelöscht', () => { commitReminders(prevR); renderReminders(); });
 });
 $('rem-save').addEventListener('click', () => {
   const title = $('rem-title').value.trim().replace(/\s+/g, ' '), cat = $('rem-cat').value, note = $('rem-note').value.trim();
@@ -525,7 +525,7 @@ function buildIcs(list) {
 }
 function downloadIcs(list) {
   const withDate = list.filter(r => r.dueDate);
-  if (!withDate.length) { alert('Diese Erinnerung hat kein Fälligkeitsdatum (nur km) und kann nicht in den Kalender.'); return; }
+  if (!withDate.length) { appNote('Diese Erinnerung hat kein Fälligkeitsdatum (nur km) und kann nicht in den Kalender.'); return; }
   const a = document.createElement('a'), name = withDate.length === 1 ? 'enyaq-' + withDate[0].title.toLowerCase().replace(/[^a-z0-9äöüß]+/g, '-').replace(/^-|-$/g, '').slice(0, 30) : 'enyaq-erinnerungen';
   a.href = URL.createObjectURL(new Blob([buildIcs(withDate)], { type: 'text/calendar;charset=utf-8' })); a.download = (name || 'enyaq-erinnerung') + '.ics';
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
@@ -625,10 +625,10 @@ function renderRecurring() {
     <p class="text-xs text-slate-500 dark:text-slate-400">${RECUR_LABEL[t.intervalMonths] || 'alle ' + t.intervalMonths + ' Monate'} · nächste Buchung ${fmtDate(recurDate(t, t.nextIdx || 0).toISOString())}</p></div>
     <button type="button" data-end="${esc(t.id)}" class="shrink-0 px-3 py-1.5 rounded-xl border border-red-500 text-red-600 dark:text-red-400 text-xs font-medium active:scale-95 transition">Beenden</button></li>`).join('');
 }
-$('recur-list').addEventListener('click', (e) => {
+$('recur-list').addEventListener('click', async (e) => {
   const b = e.target.closest('[data-end]'); if (!b) return;
   const t = getRecurring().find(x => String(x.id) === b.dataset.end); if (!t) return;
-  if (!confirm('„' + t.title + '“ nicht mehr automatisch buchen? Bereits gebuchte Kosten bleiben erhalten.')) return;
+  if (!(await ask('Bereits gebuchte Kosten bleiben erhalten.', { title: '„' + t.title + '“ nicht mehr automatisch buchen?', ok: 'Beenden', danger: true }))) return;
   commitRecurring(getRecurring().filter(x => String(x.id) !== String(t.id))); renderRecurring();
 });
 $('cost-recur').addEventListener('change', () => $('cost-recur-opts').classList.toggle('hidden', !$('cost-recur').checked));

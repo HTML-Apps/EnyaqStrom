@@ -135,7 +135,7 @@ $('cv-sheet').addEventListener('click', async (e) => {
   const b = e.target.closest('[data-cvs]'); if (!b) return; const act = b.dataset.cvs, lab = getLab();
   if (act === 'close') $('cv-sheet').classList.add('hidden');
   else if (act === 'pick') $('cv-file').click();
-  else if (act === 'del') { if (confirm('Diese Ladekurve löschen?')) { lab.curves = lab.curves.filter(x => x.id !== cvEdit); setLab(lab); $('cv-sheet').classList.add('hidden'); } }
+  else if (act === 'del') { const snap = labSnap(); lab.curves = lab.curves.filter(x => x.id !== cvEdit); setLab(lab); $('cv-sheet').classList.add('hidden'); labUndo('Ladekurve gelöscht', snap); }
   else if (act === 'save') {
     const n = (id) => deDec($(id).value), m = $('cv-msg'), s0 = n('cv-s0'), s1 = n('cv-s1'), kwh = n('cv-kwh'), min = n('cv-min'), mx = n('cv-max');
     if (!(s0 >= 0 && s1 <= 100 && s1 > s0)) { m.textContent = 'Bitte Start- und Ende-% eintragen (Ende größer als Start).'; return; }
@@ -149,7 +149,7 @@ $('cv-sheet').addEventListener('click', async (e) => {
     Object.keys(c).forEach(k => c[k] === undefined && delete c[k]);
     let tokP = null; if (cvPend.length) { if (!window.cloud?.isSignedIn()) { m.textContent = 'Für das Foto bitte bei Google anmelden.'; return; } tokP = window.cloud.driveToken(); tokP.catch(() => { }); }
     lab.curves = old ? lab.curves.map(x => x.id === old.id ? c : x) : lab.curves.concat(c); cvSel = c.id; setLab(lab); $('cv-sheet').classList.add('hidden');
-    if (cvPend.length) { try { const up = await dvUploadFor({ id: c.id, date: c.date + 'T12:00:00Z', title: 'Ladekurve ' + c.name, category: 'Ladekurve', amount: 0 }, cvPend.slice(), tokP); const l2 = getLab(); l2.curves = l2.curves.map(x => x.id === c.id ? { ...x, files: (x.files || []).concat(up) } : x); setLab(l2); } catch (er) { if (er && er.status === 401) window.cloud.driveForget(); alert('Foto-Upload fehlgeschlagen: ' + dvErrText(er)); } cvPend.length = 0; }
+    if (cvPend.length) { try { const up = await dvUploadFor({ id: c.id, date: c.date + 'T12:00:00Z', title: 'Ladekurve ' + c.name, category: 'Ladekurve', amount: 0 }, cvPend.slice(), tokP); const l2 = getLab(); l2.curves = l2.curves.map(x => x.id === c.id ? { ...x, files: (x.files || []).concat(up) } : x); setLab(l2); } catch (er) { if (er && er.status === 401) window.cloud.driveForget(); appNote('Foto-Upload fehlgeschlagen: ' + dvErrText(er)); } cvPend.length = 0; }
   }
 });
 $('cv-file').addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; if (f) { cvPend.length = 0; cvPend.push(f); $('cv-fmsg').textContent = f.name + ' · wird beim Speichern hochgeladen'; } e.target.value = ''; });
@@ -317,7 +317,7 @@ function openLtSheet(id) {
 }
 $('rec-sheet').addEventListener('click', (ev) => {
   const b = ev.target.closest('[data-lts]'); if (!b) return; const act = b.dataset.lts, lab = getLab(); lab.lt = lab.lt || [];
-  if (act === 'del') { if (!confirm('Diese Ablesung löschen?')) return; lab.lt = lab.lt.filter(x => x.id !== ltEdit); setLab(lab); }
+  if (act === 'del') { const snap = labSnap(); lab.lt = lab.lt.filter(x => x.id !== ltEdit); setLab(lab); labUndo('Ablesung gelöscht', snap); }
   else if (act === 'save') {
     const k = deDec($('lt-k').value), km = deDec(String($('lt-km').value).replace(/\./g, '')), opt = (id) => { const v = deDec($(id).value); return Number.isFinite(v) && v > 0 ? v : undefined; };
     if (!(k > 5 && k < 50)) { $('lt-msg').textContent = 'Bitte den Verbrauch in kWh/100 km eintragen (z. B. 15,3).'; return; }
@@ -393,7 +393,7 @@ $('rec-list').addEventListener('click', async (e) => {
   const b = e.target.closest('[data-bt]'), c = e.target.closest('[data-btctx]'), r = e.target.closest('[data-btr]'), d = e.target.closest('[data-btdel]');
   if (c) { btCtx = btCtx === c.dataset.btctx ? null : c.dataset.btctx; renderRecs(); return; }
   if (r) { btRange = r.dataset.btr; renderRecs(); return; }
-  if (d) { if (!confirm('Diesen Eintrag löschen?')) return; const lab = getLab(); lab.bt = (lab.bt || []).filter(x => x.id !== d.dataset.btdel); setLab(lab); return; }
+  if (d) { const snap = labSnap(), lab = getLab(); lab.bt = (lab.bt || []).filter(x => x.id !== d.dataset.btdel); setLab(lab); labUndo('Eintrag gelöscht', snap); return; }
   const ed = e.target.closest('[data-btedit]'); if (ed) { openBtSheet(ed.dataset.btedit); return; }
   if (!b) return; const a = b.dataset.bt;
   if (a === '1' || a === '-1' || a === '0.5' || a === '-0.5') { btVal = Math.max(-30, Math.min(70, btRound(btVal + Number(a)))); $('btq-val').textContent = btFmt(btVal); btLastSaved = null; return; }
@@ -426,7 +426,7 @@ $('rec-sheet').addEventListener('click', (ev) => {
   if (c) { btEditCtx = btEditCtx === c.dataset.btsctx ? null : c.dataset.btsctx; $('bts-ctx').querySelectorAll('[data-btsctx]').forEach(x => { const on = x.dataset.btsctx === btEditCtx;
     ['bg-orange-100', 'text-orange-700', 'dark:bg-orange-950', 'dark:text-orange-300', 'border-transparent'].forEach(k => x.classList.toggle(k, on)); ['border-slate-300', 'dark:border-slate-700', 'text-slate-600', 'dark:text-slate-300'].forEach(k => x.classList.toggle(k, !on)); }); return; }
   const b = ev.target.closest('[data-bts]'); if (!b) return; const act = b.dataset.bts, lab = getLab(); lab.bt = lab.bt || [];
-  if (act === 'del') { if (!confirm('Diesen Eintrag löschen?')) return; lab.bt = lab.bt.filter(x => x.id !== btEdit); setLab(lab); }
+  if (act === 'del') { const snap = labSnap(); lab.bt = lab.bt.filter(x => x.id !== btEdit); setLab(lab); labUndo('Eintrag gelöscht', snap); }
   else if (act === 'save') {
     const t = deDec($('bts-t').value), out = deDec($('bts-out').value), at = new Date(($('bts-date').value || '') + 'T' + ($('bts-time').value || '12:00'));
     if (!Number.isFinite(t) || t < -30 || t > 70) { $('bts-msg').textContent = 'Bitte eine Akku-Temperatur zwischen −30 und 70 °C eintragen.'; return; }

@@ -84,7 +84,7 @@ $('help-copy').addEventListener('click', async () => { try { await navigator.cli
 $('help-close').addEventListener('click', () => $('help-dialog').classList.add('hidden'));
 $('help-dialog').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden'); });   // Tippen neben das Fenster schließt
 $('btn-cloud').addEventListener('click', async () => {
-  if (!window.cloud) { alert('Firebase konnte nicht geladen werden (offline?).'); return; }
+  if (!window.cloud) { appNote('Firebase konnte nicht geladen werden (offline?).'); return; }
   try { cloudEmail ? await window.cloud.logout() : await window.cloud.login(); }
   catch (e) { window.onCloudStatus({ error: e.code || e.message }); }
 });

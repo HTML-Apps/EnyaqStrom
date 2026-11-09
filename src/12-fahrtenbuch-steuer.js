@@ -135,7 +135,7 @@ $('btn-tlab-add').addEventListener('click', () => {
   setTripPrefs({ labels: ls.concat({ id: 'l' + Date.now(), name, color: freeColor(ls) }) });
 });
 $('tlab-new').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('btn-tlab-add').click(); } });
-$('tlab-list').addEventListener('click', (e) => {
+$('tlab-list').addEventListener('click', async (e) => {
   const b = e.target.closest('[data-tlcol],[data-tlren],[data-tldel]'); if (!b) return; const ls = getTLabels();
   if (b.dataset.tlcol) { const l = ls.find(x => x.id === b.dataset.tlcol), c = freeColor(ls.filter(x => x.id !== l.id).concat({ color: l.color }), LABEL_COLORS.indexOf(l.color));   // nächste Farbe, die kein anderes Etikett hat
     if (!c) { $('tlab-msg').textContent = 'Alle Farben sind vergeben.'; return; } setTripPrefs({ labels: ls.map(x => x.id === l.id ? { ...x, color: c } : x) }); return; }
@@ -144,7 +144,7 @@ $('tlab-list').addEventListener('click', (e) => {
     setTripPrefs({ labels: ls.map(x => x.id === l.id ? { ...x, name: n } : x) }); return; }
   if (b.dataset.tldel) { if (ls.length <= 1) { $('tlab-msg').textContent = 'Mindestens ein Etikett muss bleiben.'; return; }
     const l = ls.find(x => x.id === b.dataset.tldel), nRule = getTRules().filter(r => r.label === l.id).length;
-    if (!confirm('Etikett „' + l.name + '“ entfernen?' + (nRule ? ' ' + nRule + (nRule === 1 ? ' Regel wird' : ' Regeln werden') + ' mit entfernt.' : '') + ' Fahrten mit diesem Etikett bekommen wieder ihr automatisches Etikett.')) return;
+    if (!(await ask((nRule ? nRule + (nRule === 1 ? ' Regel wird' : ' Regeln werden') + ' mit entfernt. ' : '') + 'Fahrten mit diesem Etikett bekommen wieder ihr automatisches Etikett.', { title: 'Etikett „' + l.name + '“ entfernen?', ok: 'Entfernen', danger: true }))) return;
     setTripPrefs({ labels: ls.filter(x => x.id !== l.id), rules: getTRules().filter(r => r.label !== l.id) }); }
 });
 $('tlab-def').addEventListener('change', (e) => setTripPrefs({ defLabel: e.target.value }));

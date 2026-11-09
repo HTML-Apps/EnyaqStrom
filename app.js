@@ -30,7 +30,7 @@ function load(key, fallback) {
 }
 function save(key, value) {
   try { localStorage.setItem(key, JSON.stringify(value)); return true; }
-  catch (e) { console.error('localStorage schreiben fehlgeschlagen', e); alert('Speichern im Browser nicht möglich (Speicher voll oder gesperrt).'); return false; }
+  catch (e) { console.error('localStorage schreiben fehlgeschlagen', e); appNote('Speichern im Browser nicht möglich (Speicher voll oder gesperrt).'); return false; }
 }
 const getReadings = () => load(KEY_READINGS, []);
 
@@ -714,7 +714,7 @@ function flash(el, text, ok) {
   setTimeout(() => el.classList.add('hidden'), 4000);
 }
 
-$('btn-save').addEventListener('click', () => {
+$('btn-save').addEventListener('click', async () => {
   const readings = getReadings(), place = capPlace, home = place === 'home';
   const km = optNum($('km-input').value), s0 = optNum($('soc0-input').value), s1 = optNum($('soc1-input').value);
   if ([km, s0, s1].some(Number.isNaN) || (km != null && km < 0) || [s0, s1].some(v => v != null && (v < 0 || v > 100)) || (s0 != null && s1 != null && s1 <= s0)) {
@@ -728,7 +728,7 @@ $('btn-save').addEventListener('click', () => {
     const prev = lastHome(readings);                      // Vorgänger am Zähler (Bosch/Unterwegs-Einträge zählen nicht)
     let reset = false;                                    // Zähler zurückgesetzt? Dann zählt die Ladung ab 0
     if (prev && value < prev.totalReading) {
-      if (!confirm('Der Wert (' + fmt(value) + ') ist kleiner als der letzte Stand (' + fmt(prev.totalReading) + ').\n\nWurde der Zähler zurückgesetzt (Start bei 0)?\nOK = ja, die Ladung wird ab 0 gerechnet.\nAbbrechen = Eingabe prüfen.')) return;
+      if (!(await ask('Der Wert (' + fmt(value) + ') ist kleiner als der letzte Stand (' + fmt(prev.totalReading) + '). Wurde der Zähler zurückgesetzt? Dann wird die Ladung ab 0 gerechnet.', { title: 'Zähler zurückgesetzt?', ok: 'Ja, ab 0 rechnen', cancel: 'Eingabe prüfen' }))) return;
       reset = true;
     }
     const consumed = reset ? value : (prev ? Math.max(0, Math.round((value - prev.totalReading) * 10) / 10) : 0);   // Differenz zum Vorgänger
@@ -886,42 +886,42 @@ $('set-year').addEventListener('input', (e) => {
 });
 $('btn-save-settings').addEventListener('click', () => {
   const price = parseNum($('set-price').value);
-  if (!isFinite(price) || price < 0) { alert('Bitte einen gültigen Strompreis eingeben (z. B. 0,307).'); return; }
+  if (!isFinite(price) || price < 0) { appNote('Bitte einen gültigen Strompreis eingeben (z. B. 0,307).'); return; }
   const carT = {}; for (const k of Object.keys(CAR_TECH)) {                       // technische Werte: leer = Wert des Fahrzeugtyps
     const raw = $('set-ct-' + k).value.trim(); if (!raw) continue; const v = parseNum(['cw', 'A'].includes(k) ? raw : raw.replace(/[.\s]/g, '')), [lo, hi] = CAR_TECH[k];
-    if (!(v >= lo && v <= hi)) { alert('Bitte einen Wert zwischen ' + fmt(lo, lo < 1 ? 2 : 0) + ' und ' + fmt(hi, hi < 1 ? 2 : 0) + ' eintragen oder das Feld leer lassen.'); $('set-ct-' + k).focus(); return; }
+    if (!(v >= lo && v <= hi)) { appNote('Bitte einen Wert zwischen ' + fmt(lo, lo < 1 ? 2 : 0) + ' und ' + fmt(hi, hi < 1 ? 2 : 0) + ' eintragen oder das Feld leer lassen.'); $('set-ct-' + k).focus(); return; }
     carT[k] = v;
   }
   const battery = parseNum($('set-battery').value);
-  if (!isFinite(battery) || battery < 10 || battery > 200) { alert('Bitte eine gültige Nettokapazität in kWh eingeben (z. B. 52).'); return; }
+  if (!isFinite(battery) || battery < 10 || battery > 200) { appNote('Bitte eine gültige Nettokapazität in kWh eingeben (z. B. 52).'); return; }
   const power = parseNum($('set-power').value);
-  if (!isFinite(power) || power < 0.5 || power > 50) { alert('Bitte eine gültige Ladeleistung in kW eingeben (z. B. 7).'); return; }
+  if (!isFinite(power) || power < 0.5 || power > 50) { appNote('Bitte eine gültige Ladeleistung in kW eingeben (z. B. 7).'); return; }
   const remDays = $('set-rem-days').value.trim() === '' ? 14 : parseNum($('set-rem-days').value), remKm = $('set-rem-km').value.trim() === '' ? 500 : parseNum($('set-rem-km').value);
   const ym = (id) => { const v = $(id).value.trim(); return /^\d{4}-(0[1-9]|1[0-2])$/.test(v) ? v : undefined; }, nextHu = ym('set-next-hu'), nextService = ym('set-next-svc');
-  if (!Number.isInteger(remDays) || remDays < 0 || remDays > 365) { alert('Bitte die Vorwarnung in Tagen als ganze Zahl von 0 bis 365 eingeben.'); return; }
-  if (!Number.isInteger(remKm) || remKm < 0 || remKm > 20000) { alert('Bitte die Vorwarnung in km als ganze Zahl von 0 bis 20000 eingeben.'); return; }
+  if (!Number.isInteger(remDays) || remDays < 0 || remDays > 365) { appNote('Bitte die Vorwarnung in Tagen als ganze Zahl von 0 bis 365 eingeben.'); return; }
+  if (!Number.isInteger(remKm) || remKm < 0 || remKm > 20000) { appNote('Bitte die Vorwarnung in km als ganze Zahl von 0 bis 20000 eingeben.'); return; }
   const pd = $('set-purchase').value, purchase = /^\d{4}-\d{2}-\d{2}$/.test(pd) && !isNaN(Date.parse(pd)) ? pd : '2026-06-08';
   const wl = $('set-wltp').value.trim() === '' ? undefined : parseFloat($('set-wltp').value.replace(',', '.'));
   const wln = $('set-wltp-net').value.trim() === '' ? undefined : parseFloat($('set-wltp-net').value.replace(',', '.'));
   const tnum = (id) => { const t = $(id).value.trim().replace('−', '-').replace(',', '.'); return t === '' ? undefined : Number(t); };
   const rlo = tnum('set-ref-lo'), rhi = tnum('set-ref-hi');
   if ([rlo, rhi].some(v => v !== undefined && !(Number.isFinite(v) && v >= -20 && v <= 45)) || (rlo !== undefined) !== (rhi !== undefined) || (rlo !== undefined && rhi - rlo < 2)) {
-    alert('Bitte beim Referenzbereich der Akku-Temperatur beide Werte eintragen (−20 bis 45 °C, „bis“ mindestens 2 °C über „von“) oder beide Felder leer lassen.'); return; }
+    appNote('Bitte beim Referenzbereich der Akku-Temperatur beide Werte eintragen (−20 bis 45 °C, „bis“ mindestens 2 °C über „von“) oder beide Felder leer lassen.'); return; }
   const deNum = (v) => { const t = v.trim(); if (t === '') return undefined; return Number((/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(t) ? t.replace(/\./g, '') : t).replace(',', '.')); };   // 16.969 = sechzehntausend…, 32.500,50 = Euro mit Cent
   const pk = deNum($('set-purchase-km').value), pp = deNum($('set-purchase-price').value);
   const certAcKwh = deNum($('set-cert-ac').value), certDcKwh = deNum($('set-cert-dc').value), certKm = deNum($('set-cert-km').value);
-  if ([certAcKwh, certDcKwh].some(v => v !== undefined && !(Number.isFinite(v) && v >= 0 && v <= 1e6)) || (certAcKwh !== undefined) !== (certDcKwh !== undefined) || (certAcKwh !== undefined && certAcKwh + certDcKwh <= 0)) { alert('Bitte beim Akku-Zertifikat beide Werte (AC und DC in kWh) eintragen oder beide Felder leer lassen.'); return; }
-  if (certKm !== undefined && !(certKm >= 0 && certKm <= 2e6)) { alert('Bitte den km-Stand des Akku-Zertifikats als Zahl eingeben oder das Feld leer lassen.'); return; }
-  if (pk !== undefined && !(pk >= 0 && pk <= 2e6)) { alert('Bitte den Kilometerstand bei Kauf als Zahl eingeben (z. B. 16.969) oder das Feld leer lassen.'); return; }
-  if (pp !== undefined && !(pp >= 0 && pp <= 1e7)) { alert('Bitte den Kaufpreis in Euro als Zahl eingeben (z. B. 32.500) oder das Feld leer lassen.'); return; }
-  if (wl !== undefined && !(wl > 5 && wl < 40)) { alert('Bitte den WLTP-Verbrauch in kWh/100 km eingeben (z. B. 16,0) oder das Feld leer lassen.'); return; }
-  if (wln !== undefined && !(wln > 5 && wln < 40)) { alert('Bitte den WLTP-Verbrauch ohne Ladeverluste in kWh/100 km eingeben (z. B. 14,7) oder das Feld leer lassen.'); return; }
+  if ([certAcKwh, certDcKwh].some(v => v !== undefined && !(Number.isFinite(v) && v >= 0 && v <= 1e6)) || (certAcKwh !== undefined) !== (certDcKwh !== undefined) || (certAcKwh !== undefined && certAcKwh + certDcKwh <= 0)) { appNote('Bitte beim Akku-Zertifikat beide Werte (AC und DC in kWh) eintragen oder beide Felder leer lassen.'); return; }
+  if (certKm !== undefined && !(certKm >= 0 && certKm <= 2e6)) { appNote('Bitte den km-Stand des Akku-Zertifikats als Zahl eingeben oder das Feld leer lassen.'); return; }
+  if (pk !== undefined && !(pk >= 0 && pk <= 2e6)) { appNote('Bitte den Kilometerstand bei Kauf als Zahl eingeben (z. B. 16.969) oder das Feld leer lassen.'); return; }
+  if (pp !== undefined && !(pp >= 0 && pp <= 1e7)) { appNote('Bitte den Kaufpreis in Euro als Zahl eingeben (z. B. 32.500) oder das Feld leer lassen.'); return; }
+  if (wl !== undefined && !(wl > 5 && wl < 40)) { appNote('Bitte den WLTP-Verbrauch in kWh/100 km eingeben (z. B. 16,0) oder das Feld leer lassen.'); return; }
+  if (wln !== undefined && !(wln > 5 && wln < 40)) { appNote('Bitte den WLTP-Verbrauch ohne Ladeverluste in kWh/100 km eingeben (z. B. 14,7) oder das Feld leer lassen.'); return; }
   const vin = $('set-vin').value.trim().toUpperCase().replace(/\s+/g, ''), yr = $('set-year').value.trim();
-  if (vin && !/^[A-HJ-NPR-Z0-9]{17}$/.test(vin)) { alert('Die Fahrgestellnummer (FIN) hat 17 Zeichen aus Ziffern und Buchstaben (ohne I, O und Q). Bitte prüfen oder das Feld leer lassen.'); return; }
+  if (vin && !/^[A-HJ-NPR-Z0-9]{17}$/.test(vin)) { appNote('Die Fahrgestellnummer (FIN) hat 17 Zeichen aus Ziffern und Buchstaben (ohne I, O und Q). Bitte prüfen oder das Feld leer lassen.'); return; }
   if (yr) {                                                                         // Baujahr immer als MM/JJJJ, nicht in der Zukunft
     const m = /^(0[1-9]|1[0-2])\/(\d{4})$/.exec(yr), now = new Date();
-    if (!m) { alert('Bitte das Baujahr im Format MM/JJJJ eingeben (z. B. 11/2023) oder das Feld leer lassen.'); $('set-year').focus(); return; }
-    if (+m[2] < 1990 || +m[2] * 12 + +m[1] > now.getFullYear() * 12 + now.getMonth() + 1) { alert('Das Baujahr ' + yr + ' kann nicht stimmen: Es muss zwischen 01/1990 und ' + String(now.getMonth() + 1).padStart(2, '0') + '/' + now.getFullYear() + ' liegen.'); $('set-year').focus(); return; }
+    if (!m) { appNote('Bitte das Baujahr im Format MM/JJJJ eingeben (z. B. 11/2023) oder das Feld leer lassen.'); $('set-year').focus(); return; }
+    if (+m[2] < 1990 || +m[2] * 12 + +m[1] > now.getFullYear() * 12 + now.getMonth() + 1) { appNote('Das Baujahr ' + yr + ' kann nicht stimmen: Es muss zwischen 01/1990 und ' + String(now.getMonth() + 1).padStart(2, '0') + '/' + now.getFullYear() + ' liegen.'); $('set-year').focus(); return; }
   }
   const txt = (id, n) => $(id).value.trim().replace(/\s+/g, ' ').slice(0, n) || undefined;
   const carWas = carProf().key;                                                   // Fahrzeugtyp gewechselt → neu laden (Karussell-Bilder, Titel)
@@ -947,7 +947,7 @@ $('wipe-ok').addEventListener('click', () => {
   if ($('wipe-input').value.trim().toUpperCase() !== WIPE_WORD) return;     // doppelte Absicherung, falls der Button doch aktiv wäre
   closeWipe();
   {
-    commitReadings([]); commitCosts([]); commitReminders([]); commitRecurring([]); commitTrips([]); localStorage.removeItem(KEY_TRIPS_IMP); localStorage.removeItem(KEY_TLABELS); localStorage.removeItem(KEY_TRULES); localStorage.removeItem(KEY_TDEF); setTPlaces([]); localStorage.removeItem(KEY_SETTINGS); localStorage.removeItem(KEY_WXLOC); localStorage.removeItem(KEY_WXCACHE); localStorage.removeItem(KEY_TEMPS); localStorage.removeItem(KEY_WRAP); localStorage.removeItem(KEY_DRIVE); localStorage.removeItem(KEY_HERO); localStorage.removeItem(KEY_HERO_C); applyHeroColor(); pushPrefs(); setProviders([]); setCategories(DEFAULT_CATEGORIES.slice()); fillSettings(); alert('Alle Daten wurden gelöscht.');
+    commitReadings([]); commitCosts([]); commitReminders([]); commitRecurring([]); commitTrips([]); localStorage.removeItem(KEY_TRIPS_IMP); localStorage.removeItem(KEY_TLABELS); localStorage.removeItem(KEY_TRULES); localStorage.removeItem(KEY_TDEF); setTPlaces([]); localStorage.removeItem(KEY_SETTINGS); localStorage.removeItem(KEY_WXLOC); localStorage.removeItem(KEY_WXCACHE); localStorage.removeItem(KEY_TEMPS); localStorage.removeItem(KEY_WRAP); localStorage.removeItem(KEY_DRIVE); localStorage.removeItem(KEY_HERO); localStorage.removeItem(KEY_HERO_C); applyHeroColor(); pushPrefs(); setProviders([]); setCategories(DEFAULT_CATEGORIES.slice()); fillSettings(); appNote('Alle Daten wurden gelöscht.');
   }
 });
 
@@ -1745,7 +1745,7 @@ $('fab-cancel').addEventListener('click', () => $('btn-edit-cancel').click());
 $('fab-save').addEventListener('click', () => $('btn-edit-save').click());
 $('btn-edit').addEventListener('click', () => setEditMode(true));
 $('btn-edit-cancel').addEventListener('click', () => setEditMode(false));
-$('btn-edit-save').addEventListener('click', () => {
+$('btn-edit-save').addEventListener('click', async () => {
   const stored = getReadings(), currentPrice = getSettings().price;
   const all = stored.map((r, i) => ({
     r, date: new Date(cell(i, 'date').value), place: domPlace(i), neu: Math.round(parseNum(cell(i, 'new').value) * 10) / 10,
@@ -1753,28 +1753,28 @@ $('btn-edit-save').addEventListener('click', () => {
     kwh: optNum(cell(i, 'kwh').value), price: optNum(cell(i, 'price').value), prov: cell(i, 'prov')?.value || '', fee: optNum(cell(i, 'fee')?.value ?? ''), del: cell(i, 'delbtn').dataset.del === '1'
   }));
   const live = all.filter(x => !x.del);
-  if (live.some(x => isNaN(x.date) || (x.place === 'home' && (!isFinite(x.neu) || x.neu < 0)))) { alert('Bitte gültige Datums- und Zählerstandswerte eingeben.'); return; }
-  if (live.some(x => x.place !== 'home' && ([x.kwh, x.price, x.fee].some(Number.isNaN) || [x.kwh, x.price, x.fee].some(v => v != null && v < 0)))) { alert('Bitte kWh, Preis und Gebühren prüfen (Zahl, nicht negativ).'); return; }
+  if (live.some(x => isNaN(x.date) || (x.place === 'home' && (!isFinite(x.neu) || x.neu < 0)))) { appNote('Bitte gültige Datums- und Zählerstandswerte eingeben.'); return; }
+  if (live.some(x => x.place !== 'home' && ([x.kwh, x.price, x.fee].some(Number.isNaN) || [x.kwh, x.price, x.fee].some(v => v != null && v < 0)))) { appNote('Bitte kWh, Preis und Gebühren prüfen (Zahl, nicht negativ).'); return; }
   if (all.some(x => [x.km, x.s0, x.s1].some(Number.isNaN) || (x.km != null && x.km < 0) || [x.s0, x.s1].some(v => v != null && (v < 0 || v > 100)) || (x.s0 != null && x.s1 != null && x.s1 <= x.s0))) {
-    alert('Bitte km-Stand und Akku-Prozente prüfen (0–100 %, Ende größer als Start).'); return;
+    appNote('Bitte km-Stand und Akku-Prozente prüfen (0–100 %, Ende größer als Start).'); return;
   }
-  if (all.some(x => Number.isNaN(x.bt) || (x.bt != null && (x.bt < BT_MIN || x.bt > BT_MAX)))) { alert('Bitte die Akku-Temperatur prüfen (' + BT_MIN + ' bis ' + BT_MAX + ' °C) oder das Feld leer lassen.'); return; }
-  if (all.some(x => Number.isNaN(x.cf) || (x.cf != null && (x.cf < 0 || x.cf > 50)))) { alert('Bitte die Komfortenergie prüfen (0 bis 50 kWh) oder das Feld leer lassen.'); return; }
-  if (all.some(x => !isFinite(x.cap) || x.cap < 10 || x.cap > 200)) { alert('Bitte eine gültige Batteriekapazität in kWh eingeben (10 bis 200).'); return; }
+  if (all.some(x => Number.isNaN(x.bt) || (x.bt != null && (x.bt < BT_MIN || x.bt > BT_MAX)))) { appNote('Bitte die Akku-Temperatur prüfen (' + BT_MIN + ' bis ' + BT_MAX + ' °C) oder das Feld leer lassen.'); return; }
+  if (all.some(x => Number.isNaN(x.cf) || (x.cf != null && (x.cf < 0 || x.cf > 50)))) { appNote('Bitte die Komfortenergie prüfen (0 bis 50 kWh) oder das Feld leer lassen.'); return; }
+  if (all.some(x => !isFinite(x.cap) || x.cap < 10 || x.cap > 200)) { appNote('Bitte eine gültige Batteriekapazität in kWh eingeben (10 bis 200).'); return; }
   const storedCosts = getCosts();                        // Kosten-Karten (dieselbe Bearbeiten-Ansicht)
   const callC = storedCosts.map((c, j) => ({ c, date: new Date(ccell(j, 'date')?.value), cat: ccell(j, 'cat')?.value ?? c.category ?? '', title: (ccell(j, 'title')?.value ?? c.title ?? '').trim(),
     amount: (v => String(v).trim() === '' ? 0 : parseNum(v))(ccell(j, 'amount')?.value ?? String(c.amount)), /* leer = 0 € */ km: optNum(ccell(j, 'km')?.value ?? ''), note: (ccell(j, 'note')?.value ?? c.note ?? '').trim(), del: ccell(j, 'cdel')?.dataset.del === '1' }));
   const cLive = callC.filter(x => !x.del);
-  if (cLive.some(x => isNaN(x.date) || !isFinite(x.amount))) { alert('Bitte bei den Kosten ein gültiges Datum und einen gültigen Betrag eingeben (0 € ist erlaubt).'); return; }
-  if (cLive.some(x => Number.isNaN(x.km) || (x.km != null && (x.km < 0 || x.km > 999999)))) { alert('Bitte bei den Kosten einen gültigen km-Stand eingeben (0 bis 999999) oder das Feld leer lassen.'); return; }
+  if (cLive.some(x => isNaN(x.date) || !isFinite(x.amount))) { appNote('Bitte bei den Kosten ein gültiges Datum und einen gültigen Betrag eingeben (0 € ist erlaubt).'); return; }
+  if (cLive.some(x => Number.isNaN(x.km) || (x.km != null && (x.km < 0 || x.km > 999999)))) { appNote('Bitte bei den Kosten einen gültigen km-Stand eingeben (0 bis 999999) oder das Feld leer lassen.'); return; }
   const gone = all.filter(x => x.del).length + callC.filter(x => x.del).length;
-  if (gone && !confirm(gone + (gone === 1 ? ' Eintrag wird' : ' Einträge werden') + ' gelöscht (auch in der Cloud). Fortfahren?')) return;
+  if (gone && !(await ask(gone + (gone === 1 ? ' Eintrag wird' : ' Einträge werden') + ' gelöscht, auch in der Cloud.', { title: 'Löschen?', ok: 'Löschen', danger: true }))) return;
   const items = all.filter(x => !x.del);
 
   items.sort((a, b) => a.date - b.date);                 // chronologisch, falls Datum geändert wurde
   let chk = null;                                        // Zählerstand muss nur zwischen Zuhause-Einträgen steigen
   const drop = items.some(x => { if (x.place !== 'home') return false; const bad = chk != null && x.neu < chk && !x.reset; chk = x.neu; return bad; });
-  if (drop && !confirm('Mindestens ein Zählerstand ist kleiner als der vorherige. Trotzdem speichern?')) return;
+  if (drop && !(await ask('Mindestens ein Zählerstand ist kleiner als der vorherige.', { title: 'Trotzdem speichern?', ok: 'Speichern' }))) return;
 
   let prevHomeNew = null;                                // Zählerkette: nur Zuhause-Einträge
   const result = items.map(x => {
@@ -1867,7 +1867,7 @@ $('btn-export').addEventListener('click', () => {
 });
 
 /** Ladeanbieter (ergänzen) und Einstellungen (nach Rückfrage) aus einer Sicherung übernehmen. */
-function importPrefsFromBackup(text) {
+async function importPrefsFromBackup(text) {
   let d; try { d = JSON.parse(text); } catch { return; }
   if (Array.isArray(d.providers)) { const cur = getProviders(), add = d.providers.filter(n => typeof n === 'string' && n.trim() && !cur.some(m => m.toLowerCase() === n.trim().toLowerCase())).map(n => n.trim().slice(0, 30));
     if (add.length) setProviders(cur.concat(add).slice(0, 20)); }
@@ -1892,7 +1892,7 @@ function importPrefsFromBackup(text) {
     const fids = new Set(base.fc.map(x => String(x.id))), af = (Array.isArray(d.lab.fc) ? d.lab.fc : []).filter(x => x && x.id && x.km > 0 && !fids.has(String(x.id)));
     if (!cur || ac.length || ar.length || as.length || nr || al.length || ab.length || at.length || aw.length || af.length) setLab({ fc: base.fc.concat(af), curves: base.curves.concat(ac), recs: base.recs.concat(ar), speeds: base.speeds.concat(as), routes: rts, lt: base.lt.concat(al), bt: base.bt.concat(ab), tires: base.tires.concat(at), wish: base.wish.concat(aw) });
   }
-  if (d.settings && typeof d.settings === 'object' && Object.keys(d.settings).length && confirm('Die Sicherung enthält auch Einstellungen (Strompreis, Akku, Fahrzeugdaten, Kauftag …).\n\nOK = Einstellungen aus der Sicherung übernehmen\nAbbrechen = aktuelle Einstellungen behalten')) {
+  if (d.settings && typeof d.settings === 'object' && Object.keys(d.settings).length && await ask('Die Sicherung enthält auch Einstellungen (Strompreis, Akku, Fahrzeugdaten, Kauftag …).', { title: 'Einstellungen übernehmen?', ok: 'Übernehmen', cancel: 'Aktuelle behalten' })) {
     const keep = load(KEY_SETTINGS, {}) || {}, n = { ...d.settings }; delete n.pin; if (keep.pin) n.pin = keep.pin;
     if (!(Number(n.price) >= 0)) delete n.price;
     save(KEY_SETTINGS, n); pushPrefs(); if (currentView === 'settings') fillSettings();
@@ -1972,7 +1972,7 @@ $('import-file').addEventListener('change', async (e) => {
     const mergedC = curCosts.filter(c => !ic.costs.some(i => sameId(c, i))).concat(ic.costs).sort((a, b) => new Date(a.date) - new Date(b.date));
     const freshR = ir.filter(i => !curRem.some(c => sameId(c, i)));
     const mergedR = curRem.filter(c => !ir.some(i => sameId(c, i))).concat(ir);
-    if ((current.length > 0 || curCosts.length > 0 || curRem.length > 0) && !confirm(imported.length + ' Ladungen (' + fresh.length + ' neu), ' + ic.costs.length + ' Kosten (' + freshC.length + ' neu) und ' + ir.length + ' Erinnerungen (' + freshR.length + ' neu) in der Datei. Mit den vorhandenen Daten zusammenführen?')) return;
+    if ((current.length > 0 || curCosts.length > 0 || curRem.length > 0) && !(await ask(imported.length + ' Ladungen (' + fresh.length + ' neu), ' + ic.costs.length + ' Kosten (' + freshC.length + ' neu) und ' + ir.length + ' Erinnerungen (' + freshR.length + ' neu) in der Datei.', { title: 'Mit vorhandenen Daten zusammenführen?', ok: 'Zusammenführen' }))) return;
     if (!commitReadings(merged)) return;                 // Zusammenführen (gleiche ID: Datei gewinnt); wird bei Anmeldung auch in die Cloud geschrieben
     if (ic.costs.length) commitCosts(mergedC);
     if (ir.length) commitReminders(mergedR);
@@ -1980,7 +1980,7 @@ $('import-file').addEventListener('change', async (e) => {
     const newCats = ic.categories.filter(n => !getCategories().some(m => m.toLowerCase() === n.toLowerCase()));
     if (newCats.length) setCategories(getCategories().concat(newCats));
     const nT = importTripsFromBackup(text);                // Fahrten + Orte/Etiketten/Regeln (ältere Dateien haben sie nicht)
-    importPrefsFromBackup(text);                           // Ladeanbieter und Einstellungen (ältere Dateien haben sie nicht)
+    await importPrefsFromBackup(text);                           // Ladeanbieter und Einstellungen (ältere Dateien haben sie nicht)
     stopLive(false);                                     // Live-Basis wäre veraltet
     flash($('io-msg'), fresh.length + ' neue Ladungen, ' + freshC.length + ' neue Kosten, ' + freshR.length + ' neue Erinnerungen' + (nT ? ' und ' + nT + ' neue Fahrten' : '') + ' importiert.', true);
   } catch (err) {
@@ -2095,7 +2095,7 @@ $('cost-cats').addEventListener('click', e => {
   costCat = costCat === b.dataset.cat ? '' : b.dataset.cat;                       // erneut tippen = Auswahl aufheben
   renderCostsView();
 });
-$('btn-cost-save').addEventListener('click', () => {
+$('btn-cost-save').addEventListener('click', async () => {
   const amtRaw = $('cost-amount').value.trim(), amount = amtRaw === '' ? 0 : parseNum(amtRaw), km = optNum($('cost-km').value), d = new Date($('cost-date').value), msg = $('cost-msg');   // leer = 0 € (kostenlose Info, z. B. mit Beleg)
   if (!isFinite(amount) || amount < 0) { flash(msg, 'Bitte einen gültigen Betrag eingeben (0 € ist erlaubt).', false); return; }
   if (amount === 0 && $('cost-recur').checked) { flash(msg, 'Wiederkehrende Kosten brauchen einen Betrag größer 0.', false); return; }
@@ -2113,7 +2113,7 @@ $('btn-cost-save').addEventListener('click', () => {
     const tid = Date.now(); entry.id = tid * 1000; entry.recurId = tid;
     tpl = cleanRem({ id: tid, title: entry.title, amount: entry.amount, category: costCat || undefined, note: note || undefined, intervalMonths: Number($('cost-recur-int').value), startDate: entry.date, nextIdx: 1 });
     const due = recurDueCount(tpl);
-    if (due > 0 && !confirm('Das Datum liegt in der Vergangenheit: ' + due + ' weitere Buchung' + (due === 1 ? '' : 'en') + ' bis heute werden zusätzlich angelegt. Fortfahren?')) return;
+    if (due > 0 && !(await ask('Das Datum liegt in der Vergangenheit: ' + due + ' weitere Buchung' + (due === 1 ? '' : 'en') + ' bis heute werden zusätzlich angelegt.', { title: 'Fortfahren?', ok: 'Anlegen' }))) return;
   }
   const costs = getCosts(); costs.push(entry); costs.sort((a, b) => new Date(a.date) - new Date(b.date));
   const status = commitCosts(costs);
@@ -2344,22 +2344,22 @@ function renderReminders() {
 $('rem-done-toggle').addEventListener('click', () => { const l = $('rem-done-list'); l.classList.toggle('hidden'); $('rem-done-arrow').textContent = l.classList.contains('hidden') ? '▾' : '▴'; });
 const remById = (id) => getReminders().find(r => String(r.id) === String(id));
 /** Laufzeit erneuert: läuft ab heute neu (Haltbarkeit bleibt), Eintrag im Verlauf */
-function remRenew(r) {
-  if (!confirm('„' + r.title + '“ heute erneuert? Die Laufzeit beginnt dann neu.')) return;
+async function remRenew(r) {
+  if (!(await ask('Die Laufzeit beginnt dann heute neu.', { title: '„' + r.title + '“ heute erneuert?', ok: 'Erneuert' }))) return;
   const t = todayYMD(), log = remLog(r).map(e => { const o = { at: e.at }; if (e.km > 0) o.km = e.km; if (e.cost > 0) o.cost = e.cost; return o; });
   if (!log.length && r.startDate) log.push({ at: parseYMD(r.startDate).toISOString() });   // bisheriger Beginn als erster Verlaufseintrag
   log.push({ at: new Date().toISOString() });
   const upd = { ...r, startDate: t, dueDate: runDue(t, r.lifeN, r.lifeUnit) || undefined, log: log.slice(-REM_LOG_MAX) };
   commitReminders(getReminders().map(x => String(x.id) === String(r.id) ? cleanRem(upd) : x)); renderReminders();
 }
-function remListClick(e) {
+async function remListClick(e) {
   const b = e.target.closest('[data-act]'); if (!b) return;
   const li = b.closest('li[data-id]'), r = li && remById(li.dataset.id); if (!r) return;
   const act = b.dataset.act;
   if (act === 'renew') { remRenew(r); return; }
   if (act === 'done') openDone(r); else if (act === 'edit') openRemDialog(r); else if (act === 'ics') downloadIcs([r]);
   else if (act === 'reopen') { commitReminders(getReminders().map(x => String(x.id) === String(r.id) ? cleanRem({ ...x, doneAt: undefined }) : x)); renderReminders(); }
-  else if (act === 'del' && confirm('„' + r.title + '“ endgültig löschen?')) { commitReminders(getReminders().filter(x => String(x.id) !== String(r.id))); renderReminders(); }
+  else if (act === 'del') { const prevR = getReminders(); commitReminders(prevR.filter(x => String(x.id) !== String(r.id))); renderReminders(); undoDel('„' + r.title + '“ gelöscht', () => { commitReminders(prevR); renderReminders(); }); }
 }
 $('rem-list').addEventListener('click', remListClick);
 $('rem-run-list').addEventListener('click', remListClick);
@@ -2400,8 +2400,8 @@ $('rem-add').addEventListener('click', () => openRemDialog());
 $('rem-cancel').addEventListener('click', closeRemDialog);
 $('rem-dialog').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeRemDialog(); });
 $('rem-delete').addEventListener('click', () => {
-  const r = remEditId != null && remById(remEditId); if (!r || !confirm('„' + r.title + '“ löschen?')) return;
-  commitReminders(getReminders().filter(x => String(x.id) !== String(r.id))); closeRemDialog(); renderReminders();
+  const r = remEditId != null && remById(remEditId); if (!r) return;
+  const prevR = getReminders(); commitReminders(prevR.filter(x => String(x.id) !== String(r.id))); closeRemDialog(); renderReminders(); undoDel('„' + r.title + '“ gelöscht', () => { commitReminders(prevR); renderReminders(); });
 });
 $('rem-save').addEventListener('click', () => {
   const title = $('rem-title').value.trim().replace(/\s+/g, ' '), cat = $('rem-cat').value, note = $('rem-note').value.trim();
@@ -2518,7 +2518,7 @@ function buildIcs(list) {
 }
 function downloadIcs(list) {
   const withDate = list.filter(r => r.dueDate);
-  if (!withDate.length) { alert('Diese Erinnerung hat kein Fälligkeitsdatum (nur km) und kann nicht in den Kalender.'); return; }
+  if (!withDate.length) { appNote('Diese Erinnerung hat kein Fälligkeitsdatum (nur km) und kann nicht in den Kalender.'); return; }
   const a = document.createElement('a'), name = withDate.length === 1 ? 'enyaq-' + withDate[0].title.toLowerCase().replace(/[^a-z0-9äöüß]+/g, '-').replace(/^-|-$/g, '').slice(0, 30) : 'enyaq-erinnerungen';
   a.href = URL.createObjectURL(new Blob([buildIcs(withDate)], { type: 'text/calendar;charset=utf-8' })); a.download = (name || 'enyaq-erinnerung') + '.ics';
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
@@ -2618,10 +2618,10 @@ function renderRecurring() {
     <p class="text-xs text-slate-500 dark:text-slate-400">${RECUR_LABEL[t.intervalMonths] || 'alle ' + t.intervalMonths + ' Monate'} · nächste Buchung ${fmtDate(recurDate(t, t.nextIdx || 0).toISOString())}</p></div>
     <button type="button" data-end="${esc(t.id)}" class="shrink-0 px-3 py-1.5 rounded-xl border border-red-500 text-red-600 dark:text-red-400 text-xs font-medium active:scale-95 transition">Beenden</button></li>`).join('');
 }
-$('recur-list').addEventListener('click', (e) => {
+$('recur-list').addEventListener('click', async (e) => {
   const b = e.target.closest('[data-end]'); if (!b) return;
   const t = getRecurring().find(x => String(x.id) === b.dataset.end); if (!t) return;
-  if (!confirm('„' + t.title + '“ nicht mehr automatisch buchen? Bereits gebuchte Kosten bleiben erhalten.')) return;
+  if (!(await ask('Bereits gebuchte Kosten bleiben erhalten.', { title: '„' + t.title + '“ nicht mehr automatisch buchen?', ok: 'Beenden', danger: true }))) return;
   commitRecurring(getRecurring().filter(x => String(x.id) !== String(t.id))); renderRecurring();
 });
 $('cost-recur').addEventListener('change', () => $('cost-recur-opts').classList.toggle('hidden', !$('cost-recur').checked));
@@ -3876,7 +3876,7 @@ $('kb-save').addEventListener('click', async () => {
   $('kb-dialog').classList.add('hidden');
   if (pend.length) {
     try { const up = await kbUpload(item, pend, tokP), k2 = getKb(); setKb({ cats: k2.cats, items: k2.items.map(y => String(y.id) === String(item.id) ? { ...y, files: (y.files || []).concat(up) } : y) }); }
-    catch (e) { if (e && e.status === 401) window.cloud.driveForget(); alert('Beleg-Upload fehlgeschlagen: ' + dvErrText(e)); }
+    catch (e) { if (e && e.status === 401) window.cloud.driveForget(); appNote('Beleg-Upload fehlgeschlagen: ' + dvErrText(e)); }
   }
 });
 /* Mängel: Felder im Bearbeiten-Dialog */
@@ -3920,7 +3920,7 @@ $('kb-dialog').addEventListener('click', async (e) => {
   if (act === 'edit') editKb(x.id);
   else if (act === 'again') { setKb({ cats: kb.cats, items: kb.items.map(y => y === x ? { ...y, occ: (y.occ || []).concat(new Date().toISOString()), at: new Date().toISOString() } : y) }); openKb(x.id); }
   else if (act.startsWith('st-')) { const st = act.slice(3); setKb({ cats: kb.cats, items: kb.items.map(y => y === x ? { ...y, st, stAt: new Date().toISOString(), at: new Date().toISOString() } : y) }); openKb(x.id); }
-  else if (act === 'del') { if (confirm('„' + x.title + '“ löschen?' + (x.files && x.files.length ? ' Die Belege bleiben in Google Drive.' : ''))) { setKb({ cats: kb.cats, items: kb.items.filter(y => y !== x) }); $('kb-dialog').classList.add('hidden'); } }
+  else if (act === 'del') { const prevKb = JSON.parse(JSON.stringify(kb)); setKb({ cats: kb.cats, items: kb.items.filter(y => y !== x) }); $('kb-dialog').classList.add('hidden'); undoDel('„' + x.title + '“ gelöscht', () => setKb(prevKb)); }
   else if (act === 'share') {
     const t = [x.title, x.text || ''].concat((x.links || []).map(l => (l.label ? l.label + ': ' : '') + l.url)).filter(Boolean).join('\n');
     try { if (navigator.share) await navigator.share({ title: x.title, text: t }); else { await navigator.clipboard.writeText(t); b.textContent = 'Kopiert ✓'; } } catch (err) { }
@@ -4032,7 +4032,7 @@ $('help-copy').addEventListener('click', async () => { try { await navigator.cli
 $('help-close').addEventListener('click', () => $('help-dialog').classList.add('hidden'));
 $('help-dialog').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden'); });   // Tippen neben das Fenster schließt
 $('btn-cloud').addEventListener('click', async () => {
-  if (!window.cloud) { alert('Firebase konnte nicht geladen werden (offline?).'); return; }
+  if (!window.cloud) { appNote('Firebase konnte nicht geladen werden (offline?).'); return; }
   try { cloudEmail ? await window.cloud.logout() : await window.cloud.login(); }
   catch (e) { window.onCloudStatus({ error: e.code || e.message }); }
 });
@@ -5601,7 +5601,7 @@ function renderWrapList() {
 }
 $('btn-wrap-preview').addEventListener('click', () => {
   const { runStart, runPrev } = wrPeriods(), p = { kind: 't', id: 'preview', preview: true, t0: runStart, t1: Date.now(), label: wrDY(runStart) + ' – heute', prev: runPrev }, st = wrStats(p);
-  if (st.n < 1 || !(st.km > 0)) { alert('Für die Vorschau fehlen im laufenden Zeitraum noch Ladungen mit km-Stand.'); return; }
+  if (st.n < 1 || !(st.km > 0)) { appNote('Für die Vorschau fehlen im laufenden Zeitraum noch Ladungen mit km-Stand.'); return; }
   p.st = st; showView('dashboard'); wrOpen(p);
 });
 try { renderWrapCard(); } catch (e) { }
@@ -5823,7 +5823,7 @@ async function dvUploadEdit(blk, scope) {
 }
 async function dvRemove(blk, scope, fid) {
   const cur = getCosts().find(c => String(c.id) === scope.slice(1)), f = cur && (cur.files || []).find(x => x.id === fid); if (!f) return;
-  if (!confirm('Beleg „' + f.name + '“ aus dem Eintrag entfernen und in Google Drive löschen?')) return;
+  if (!(await ask('„' + f.name + '“ wird aus dem Eintrag entfernt und in Google Drive gelöscht.', { title: 'Beleg löschen?', ok: 'Löschen', danger: true }))) return;
   if (!window.cloud?.isSignedIn()) { dvMsg(blk, 'Bitte zuerst bei Google anmelden.'); return; }
   const tokP = window.cloud.driveToken(); tokP.catch(() => { }); dvMsg(blk, 'Verbinde mit Google Drive …');
   try { const tok = await tokP; try { await dvFetch(tok, 'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(fid), { method: 'DELETE' }); } catch (e) { if (e.status !== 404) throw e; }   // 404 = in Drive schon weg
@@ -5988,7 +5988,7 @@ $('btn-tlab-add').addEventListener('click', () => {
   setTripPrefs({ labels: ls.concat({ id: 'l' + Date.now(), name, color: freeColor(ls) }) });
 });
 $('tlab-new').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('btn-tlab-add').click(); } });
-$('tlab-list').addEventListener('click', (e) => {
+$('tlab-list').addEventListener('click', async (e) => {
   const b = e.target.closest('[data-tlcol],[data-tlren],[data-tldel]'); if (!b) return; const ls = getTLabels();
   if (b.dataset.tlcol) { const l = ls.find(x => x.id === b.dataset.tlcol), c = freeColor(ls.filter(x => x.id !== l.id).concat({ color: l.color }), LABEL_COLORS.indexOf(l.color));   // nächste Farbe, die kein anderes Etikett hat
     if (!c) { $('tlab-msg').textContent = 'Alle Farben sind vergeben.'; return; } setTripPrefs({ labels: ls.map(x => x.id === l.id ? { ...x, color: c } : x) }); return; }
@@ -5997,7 +5997,7 @@ $('tlab-list').addEventListener('click', (e) => {
     setTripPrefs({ labels: ls.map(x => x.id === l.id ? { ...x, name: n } : x) }); return; }
   if (b.dataset.tldel) { if (ls.length <= 1) { $('tlab-msg').textContent = 'Mindestens ein Etikett muss bleiben.'; return; }
     const l = ls.find(x => x.id === b.dataset.tldel), nRule = getTRules().filter(r => r.label === l.id).length;
-    if (!confirm('Etikett „' + l.name + '“ entfernen?' + (nRule ? ' ' + nRule + (nRule === 1 ? ' Regel wird' : ' Regeln werden') + ' mit entfernt.' : '') + ' Fahrten mit diesem Etikett bekommen wieder ihr automatisches Etikett.')) return;
+    if (!(await ask((nRule ? nRule + (nRule === 1 ? ' Regel wird' : ' Regeln werden') + ' mit entfernt. ' : '') + 'Fahrten mit diesem Etikett bekommen wieder ihr automatisches Etikett.', { title: 'Etikett „' + l.name + '“ entfernen?', ok: 'Entfernen', danger: true }))) return;
     setTripPrefs({ labels: ls.filter(x => x.id !== l.id), rules: getTRules().filter(r => r.label !== l.id) }); }
 });
 $('tlab-def').addEventListener('change', (e) => setTripPrefs({ defLabel: e.target.value }));
@@ -6593,7 +6593,7 @@ $('au-sheet').addEventListener('click', (e) => {
   if (e.target === $('au-sheet')) { $('au-sheet').classList.add('hidden'); return; }
   const b = e.target.closest('[data-cc]'); if (!b) return; const act = b.dataset.cc;
   if (act === 'close') { $('au-sheet').classList.add('hidden'); return; }
-  if (act === 'del') { if (!confirm('Ablaufdatum und Erinnerung entfernen?')) return; ccSetEnd(null); $('au-sheet').classList.add('hidden'); return; }
+  if (act === 'del') { (async () => { if (await ask('Ablaufdatum und Erinnerung entfernen?', { ok: 'Entfernen', danger: true })) { ccSetEnd(null); $('au-sheet').classList.add('hidden'); } })(); return; }
   const v = $('cc-end').value; if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || isNaN(Date.parse(v))) { $('cc-msg').textContent = 'Bitte ein gültiges Datum wählen.'; return; }
   ccSetEnd(v, $('cc-rem').checked); $('au-sheet').classList.add('hidden');
 });
@@ -6778,7 +6778,7 @@ $('cv-sheet').addEventListener('click', async (e) => {
   const b = e.target.closest('[data-cvs]'); if (!b) return; const act = b.dataset.cvs, lab = getLab();
   if (act === 'close') $('cv-sheet').classList.add('hidden');
   else if (act === 'pick') $('cv-file').click();
-  else if (act === 'del') { if (confirm('Diese Ladekurve löschen?')) { lab.curves = lab.curves.filter(x => x.id !== cvEdit); setLab(lab); $('cv-sheet').classList.add('hidden'); } }
+  else if (act === 'del') { const snap = labSnap(); lab.curves = lab.curves.filter(x => x.id !== cvEdit); setLab(lab); $('cv-sheet').classList.add('hidden'); labUndo('Ladekurve gelöscht', snap); }
   else if (act === 'save') {
     const n = (id) => deDec($(id).value), m = $('cv-msg'), s0 = n('cv-s0'), s1 = n('cv-s1'), kwh = n('cv-kwh'), min = n('cv-min'), mx = n('cv-max');
     if (!(s0 >= 0 && s1 <= 100 && s1 > s0)) { m.textContent = 'Bitte Start- und Ende-% eintragen (Ende größer als Start).'; return; }
@@ -6792,7 +6792,7 @@ $('cv-sheet').addEventListener('click', async (e) => {
     Object.keys(c).forEach(k => c[k] === undefined && delete c[k]);
     let tokP = null; if (cvPend.length) { if (!window.cloud?.isSignedIn()) { m.textContent = 'Für das Foto bitte bei Google anmelden.'; return; } tokP = window.cloud.driveToken(); tokP.catch(() => { }); }
     lab.curves = old ? lab.curves.map(x => x.id === old.id ? c : x) : lab.curves.concat(c); cvSel = c.id; setLab(lab); $('cv-sheet').classList.add('hidden');
-    if (cvPend.length) { try { const up = await dvUploadFor({ id: c.id, date: c.date + 'T12:00:00Z', title: 'Ladekurve ' + c.name, category: 'Ladekurve', amount: 0 }, cvPend.slice(), tokP); const l2 = getLab(); l2.curves = l2.curves.map(x => x.id === c.id ? { ...x, files: (x.files || []).concat(up) } : x); setLab(l2); } catch (er) { if (er && er.status === 401) window.cloud.driveForget(); alert('Foto-Upload fehlgeschlagen: ' + dvErrText(er)); } cvPend.length = 0; }
+    if (cvPend.length) { try { const up = await dvUploadFor({ id: c.id, date: c.date + 'T12:00:00Z', title: 'Ladekurve ' + c.name, category: 'Ladekurve', amount: 0 }, cvPend.slice(), tokP); const l2 = getLab(); l2.curves = l2.curves.map(x => x.id === c.id ? { ...x, files: (x.files || []).concat(up) } : x); setLab(l2); } catch (er) { if (er && er.status === 401) window.cloud.driveForget(); appNote('Foto-Upload fehlgeschlagen: ' + dvErrText(er)); } cvPend.length = 0; }
   }
 });
 $('cv-file').addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; if (f) { cvPend.length = 0; cvPend.push(f); $('cv-fmsg').textContent = f.name + ' · wird beim Speichern hochgeladen'; } e.target.value = ''; });
@@ -6960,7 +6960,7 @@ function openLtSheet(id) {
 }
 $('rec-sheet').addEventListener('click', (ev) => {
   const b = ev.target.closest('[data-lts]'); if (!b) return; const act = b.dataset.lts, lab = getLab(); lab.lt = lab.lt || [];
-  if (act === 'del') { if (!confirm('Diese Ablesung löschen?')) return; lab.lt = lab.lt.filter(x => x.id !== ltEdit); setLab(lab); }
+  if (act === 'del') { const snap = labSnap(); lab.lt = lab.lt.filter(x => x.id !== ltEdit); setLab(lab); labUndo('Ablesung gelöscht', snap); }
   else if (act === 'save') {
     const k = deDec($('lt-k').value), km = deDec(String($('lt-km').value).replace(/\./g, '')), opt = (id) => { const v = deDec($(id).value); return Number.isFinite(v) && v > 0 ? v : undefined; };
     if (!(k > 5 && k < 50)) { $('lt-msg').textContent = 'Bitte den Verbrauch in kWh/100 km eintragen (z. B. 15,3).'; return; }
@@ -7036,7 +7036,7 @@ $('rec-list').addEventListener('click', async (e) => {
   const b = e.target.closest('[data-bt]'), c = e.target.closest('[data-btctx]'), r = e.target.closest('[data-btr]'), d = e.target.closest('[data-btdel]');
   if (c) { btCtx = btCtx === c.dataset.btctx ? null : c.dataset.btctx; renderRecs(); return; }
   if (r) { btRange = r.dataset.btr; renderRecs(); return; }
-  if (d) { if (!confirm('Diesen Eintrag löschen?')) return; const lab = getLab(); lab.bt = (lab.bt || []).filter(x => x.id !== d.dataset.btdel); setLab(lab); return; }
+  if (d) { const snap = labSnap(), lab = getLab(); lab.bt = (lab.bt || []).filter(x => x.id !== d.dataset.btdel); setLab(lab); labUndo('Eintrag gelöscht', snap); return; }
   const ed = e.target.closest('[data-btedit]'); if (ed) { openBtSheet(ed.dataset.btedit); return; }
   if (!b) return; const a = b.dataset.bt;
   if (a === '1' || a === '-1' || a === '0.5' || a === '-0.5') { btVal = Math.max(-30, Math.min(70, btRound(btVal + Number(a)))); $('btq-val').textContent = btFmt(btVal); btLastSaved = null; return; }
@@ -7069,7 +7069,7 @@ $('rec-sheet').addEventListener('click', (ev) => {
   if (c) { btEditCtx = btEditCtx === c.dataset.btsctx ? null : c.dataset.btsctx; $('bts-ctx').querySelectorAll('[data-btsctx]').forEach(x => { const on = x.dataset.btsctx === btEditCtx;
     ['bg-orange-100', 'text-orange-700', 'dark:bg-orange-950', 'dark:text-orange-300', 'border-transparent'].forEach(k => x.classList.toggle(k, on)); ['border-slate-300', 'dark:border-slate-700', 'text-slate-600', 'dark:text-slate-300'].forEach(k => x.classList.toggle(k, !on)); }); return; }
   const b = ev.target.closest('[data-bts]'); if (!b) return; const act = b.dataset.bts, lab = getLab(); lab.bt = lab.bt || [];
-  if (act === 'del') { if (!confirm('Diesen Eintrag löschen?')) return; lab.bt = lab.bt.filter(x => x.id !== btEdit); setLab(lab); }
+  if (act === 'del') { const snap = labSnap(); lab.bt = lab.bt.filter(x => x.id !== btEdit); setLab(lab); labUndo('Eintrag gelöscht', snap); }
   else if (act === 'save') {
     const t = deDec($('bts-t').value), out = deDec($('bts-out').value), at = new Date(($('bts-date').value || '') + 'T' + ($('bts-time').value || '12:00'));
     if (!Number.isFinite(t) || t < -30 || t > 70) { $('bts-msg').textContent = 'Bitte eine Akku-Temperatur zwischen −30 und 70 °C eintragen.'; return; }
@@ -7475,7 +7475,7 @@ $('tire-sheet').addEventListener('click', (e) => {
   const si = e.target.closest('[data-tsin]'); if (si) { si.parentElement.querySelectorAll('[data-tsin]').forEach(x => { const on = x === si; x.classList.toggle('bg-white', on); x.classList.toggle('dark:bg-slate-600', on); x.classList.toggle('shadow-sm', on); x.classList.toggle('text-slate-500', !on); x.classList.toggle('dark:text-slate-400', !on); }); return; }
   const b = e.target.closest('[data-tss]'); if (!b) return; const act = b.dataset.tss, lab = getLab(); lab.tires = lab.tires || [];
   if (act === 'close') { $('tire-sheet').classList.add('hidden'); return; }
-  if (act === 'del') { if (!confirm('Diese Messung löschen?')) return; lab.tires = lab.tires.filter(x => x.id !== tireEdit); setLab(lab); $('tire-sheet').classList.add('hidden'); return; }
+  if (act === 'del') { const snap = labSnap(); lab.tires = lab.tires.filter(x => x.id !== tireEdit); setLab(lab); $('tire-sheet').classList.add('hidden'); labUndo('Messung gelöscht', snap); return; }
   const v = {}; let n = 0, bad = false;
   TIRE_POS.forEach(p => { v[p] = [0, 1, 2].map(i => { const t = document.querySelector(`[data-tv="${p}:${i}"]`).value.trim(); if (t === '') return null; const x = deDec(t); if (!(x >= 0 && x <= 15)) { bad = true; return null; } n++; return Math.round(x * 10) / 10; }); });
   if (bad) { $('tire-msg').textContent = 'Bitte Profiltiefen in mm zwischen 0 und 15 eintragen (z. B. 6,8).'; return; }
@@ -7577,7 +7577,7 @@ $('wish-sheet').addEventListener('click', async (e) => {
   if (act === 'paste') { let t = ''; try { t = await navigator.clipboard.readText(); } catch (er) { } if (t && wishAddLink(t)) return; $('wish-lrow').classList.remove('hidden'); $('wish-lmsg').textContent = t ? $('wish-lmsg').textContent : 'Zwischenablage nicht lesbar – Link hier einfügen:'; $('wish-lin').focus(); return; }
   if (act === 'addl') { wishAddLink($('wish-lin').value); return; }
   if (act === 'close') { $('wish-sheet').classList.add('hidden'); return; }
-  if (act === 'del') { if (!confirm('Diesen Wunsch löschen?')) return; lab.wish = lab.wish.filter(x => x.id !== wishEdit); setLab(lab); $('wish-sheet').classList.add('hidden'); return; }
+  if (act === 'del') { const snap = labSnap(); lab.wish = lab.wish.filter(x => x.id !== wishEdit); setLab(lab); $('wish-sheet').classList.add('hidden'); labUndo('Wunsch gelöscht', snap); return; }
   const title = $('wish-title').value.trim(); if (!title) { $('wish-msg').textContent = 'Bitte angeben, was du dir wünschst.'; return; }
   const lt = $('wish-lin').value.trim(); if (lt && !wishAddLink(lt)) return;
   const price = deDec($('wish-price').value), prioEl = document.querySelector('#wish-prio [data-wprio].border-transparent');
@@ -7729,7 +7729,7 @@ $('rec-sheet').addEventListener('click', (e) => {
   else if (act === 'hpload') hpRefresh();
   else if (act === 'trip') { const box = $('rec-trips'), ts = getTrips().filter(t => t.km >= 3 && t.k100 > 0).sort((a, b) => Date.parse(b.s) - Date.parse(a.s)).slice(0, 12);
     box.innerHTML = ts.length ? ts.map(t => `<button type="button" data-trip="${esc(String(t.id))}" class="flex w-full items-center justify-between gap-2 rounded-xl bg-slate-100 dark:bg-slate-800 px-3 py-2 text-left text-sm"><span class="min-w-0 truncate">${new Date(t.s).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })} · ${fmt(t.km, 0)} km${t.v ? ' · Ø ' + fmt(t.v, 0) + ' km/h' : ''}${recTown(t.a0) && recTown(t.a1) ? ' · ' + esc(recTown(t.a0)) + ' → ' + esc(recTown(t.a1)) : ''}</span><b class="shrink-0 tabular-nums">${fmt(t.k100, 1)}</b></button>`).join('') : '<p class="text-xs text-slate-500">Keine Fahrten im Fahrtenbuch.</p>'; box.classList.toggle('hidden'); }
-  else if (act === 'del') { if (confirm('Diesen Rekord löschen?')) { lab.recs = lab.recs.filter(x => x.id !== recEdit); setLab(lab); $('rec-sheet').classList.add('hidden'); } }
+  else if (act === 'del') { const snap = labSnap(); lab.recs = lab.recs.filter(x => x.id !== recEdit); setLab(lab); $('rec-sheet').classList.add('hidden'); labUndo('Rekord gelöscht', snap); }
   else if (act === 'save') {
     const m = $('rec-msg'), route = $('rec-route').value.trim().slice(0, 40), k = deDec($('rec-k').value), opt = (id) => { const v = deDec($(id).value); return Number.isFinite(v) ? v : undefined; };
     if (!route) { m.textContent = 'Bitte eine Strecke angeben.'; return; } if (!(k > 3 && k < 60)) { m.textContent = 'Bitte den Verbrauch in kWh/100 km eintragen (z. B. 10,8).'; return; }
@@ -7761,7 +7761,7 @@ function openSpdSheet(id) {
 $('rec-sheet').addEventListener('click', (e) => {
   const sb = e.target.closest('[data-seg] [data-v]'); if (sb) { sb.parentElement.querySelectorAll('[data-v]').forEach(x => { const on = x === sb; x.classList.toggle('bg-white', on); x.classList.toggle('dark:bg-slate-600', on); x.classList.toggle('shadow-sm', on); x.classList.toggle('text-slate-500', !on); x.classList.toggle('dark:text-slate-400', !on); }); return; }
   const b = e.target.closest('[data-ss]'); if (!b) return; const act = b.dataset.ss, lab = getLab();
-  if (act === 'del') { if (!confirm('Diese Messreihe löschen?')) return; lab.speeds = lab.speeds.filter(x => x.id !== spdEdit); spdSel = null; setLab(lab); }
+  if (act === 'del') { const snap = labSnap(); lab.speeds = lab.speeds.filter(x => x.id !== spdEdit); spdSel = null; setLab(lab); labUndo('Messreihe gelöscht', snap); }
   else if (act === 'save') {
     const pick = (n) => { const x = document.querySelector(`[data-seg="${n}"] .bg-white`); return x ? x.dataset.v : ''; };
     const rows = SPD_V.map(v => ({ v, k: deDec($('spd-' + v).value) })).filter(r => r.k > 3 && r.k < 60);
@@ -8195,7 +8195,7 @@ function rtSheetPrev() {
 $('au-sheet').addEventListener('click', (e) => {
   const b = e.target.closest('[data-rts]'); if (!b) return; const act = b.dataset.rts, id = $('au-sheet-box').dataset.rtid;
   if (act === 'close') { $('au-sheet').classList.add('hidden'); return; }
-  if (act === 'del') { if (!confirm('Diese gemerkte Fahrt löschen?')) return; const lab = getLab(); lab.fc = lab.fc.filter(x => x.id !== id); setLab(lab); $('au-sheet').classList.add('hidden'); rtTabs(); return; }
+  if (act === 'del') { const snap = labSnap(), lab = getLab(); lab.fc = lab.fc.filter(x => x.id !== id); setLab(lab); $('au-sheet').classList.add('hidden'); rtTabs(); labUndo('Gemerkte Fahrt gelöscht', snap); return; }
   const v = rtSheetVals(); if (!v) return; const msg = $('rts-msg');
   if (v.rawReal !== undefined && !(v.rawReal > 3 && v.rawReal < 60)) { msg.textContent = 'Echten Verbrauch bitte in kWh/100 km eingeben (z. B. 18,9).'; msg.classList.remove('hidden'); return; }
   if (v.soc !== undefined && !(v.soc >= -20 && v.soc < v.x.soc0)) { msg.textContent = 'Akku bei Ankunft muss unter dem Start-Akku (' + v.x.soc0 + ' %) liegen.'; msg.classList.remove('hidden'); return; }
@@ -8702,3 +8702,47 @@ document.addEventListener('click', async (e) => {
   setTimeout(() => { if (!known && onbGet() === 'a1' && !$('onb')) onbShow(); }, 4000);
   if (onbGet() !== 'a1') onbShow();                                          // nach dem Neuladen an der gleichen Stelle weiter
 })();
+
+// ───── src/20-dialoge.js ─────
+/* =====================================================================
+   Eigene Dialoge statt der grauen Browser-Fenster alert()/confirm():
+   appNote(text)            Hinweis unten über der Navigation (verschwindet von selbst)
+   ask(text, {…})        Rückfrage als eigenes Fenster → Promise<boolean>
+   undoDel(text, undo)   „Gelöscht · Rückgängig“ statt vorheriger Rückfrage
+   ===================================================================== */
+const NOTE_POS = 'fixed inset-x-3 bottom-[calc(76px+env(safe-area-inset-bottom))] z-[85] mx-auto flex max-w-md items-center gap-3 rounded-2xl border px-3 py-2.5 text-white shadow-2xl';
+function noteEl(id, cls, inner, ms) {
+  const old = $(id); if (old) old.remove(); clearTimeout(window[id + 'T']);
+  const el = document.createElement('div'); el.id = id; el.setAttribute('role', 'status'); el.setAttribute('aria-live', 'polite'); el.className = NOTE_POS + ' ' + cls; el.innerHTML = inner;
+  document.body.appendChild(el); window[id + 'T'] = setTimeout(() => { if (el.isConnected) el.remove(); }, ms); return el;
+}
+function appNote(msg, kind) {
+  const ok = kind === 'ok', t = String(msg == null ? '' : msg);
+  const el = noteEl('app-note', ok ? 'border-emerald-600 bg-emerald-950' : 'border-amber-600 bg-amber-950',
+    `<span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${ok ? 'bg-emerald-600' : 'bg-amber-600'}"><svg class="h-[18px] w-[18px]" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true">${ok ? '<path d="M5 12.5l4.5 4.5L19 7"/>' : '<path d="M12 7v6M12 17h.01"/>'}</svg></span>
+    <span class="min-w-0 flex-1 whitespace-pre-line text-left text-sm leading-snug">${esc(t)}</span><button type="button" aria-label="Schließen" class="shrink-0 self-start px-1 text-lg leading-none opacity-70">×</button>`,
+    Math.min(12000, Math.max(4500, t.length * 70)));
+  el.querySelector('button').addEventListener('click', () => el.remove());
+}
+function undoDel(msg, undo) {
+  const el = noteEl('app-undo', 'border-slate-600 bg-slate-800',
+    `<span class="min-w-0 flex-1 text-sm font-semibold">${esc(msg)}</span><button type="button" data-u="1" class="shrink-0 rounded-xl bg-white/10 px-3 py-2 text-sm font-bold text-emerald-300 active:bg-white/20">Rückgängig</button><button type="button" aria-label="Schließen" class="shrink-0 px-1 text-lg leading-none opacity-70">×</button>`, 7000);
+  el.addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; el.remove(); if (b.dataset.u) { try { undo(); appNote('Wiederhergestellt', 'ok'); } catch (err) { console.error(err); } } });
+}
+function ask(msg, o) {
+  o = o || {};
+  return new Promise((done) => {
+    const prevFocus = document.activeElement, wrap = document.createElement('div');
+    wrap.className = 'fixed inset-0 z-[95] flex items-end justify-center bg-slate-950/60 p-3 sm:items-center'; wrap.setAttribute('role', 'dialog'); wrap.setAttribute('aria-modal', 'true');
+    wrap.innerHTML = `<div class="w-full max-w-md rounded-[26px] border border-slate-200 bg-white p-5 text-left text-slate-900 shadow-2xl dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+      ${o.title ? `<p class="text-lg font-bold">${esc(o.title)}</p>` : ''}<p class="${o.title ? 'mt-2 text-sm text-slate-600 dark:text-slate-300' : 'text-[15px]'} whitespace-pre-line leading-relaxed">${esc(msg)}</p>
+      <div class="mt-5 flex gap-2"><button type="button" data-a="0" class="h-12 flex-1 rounded-2xl bg-slate-100 px-3 text-sm font-semibold active:bg-slate-200 dark:bg-slate-800 dark:active:bg-slate-700">${esc(o.cancel || 'Abbrechen')}</button>
+      <button type="button" data-a="1" class="h-12 flex-1 rounded-2xl px-3 text-sm font-bold text-white ${o.danger ? 'bg-red-600 active:bg-red-700' : 'bg-emerald-600 active:bg-emerald-700'}">${esc(o.ok || 'OK')}</button></div></div>`;
+    const end = (v) => { document.removeEventListener('keydown', key, true); wrap.remove(); try { prevFocus && prevFocus.focus && prevFocus.focus(); } catch (e) { } done(v); };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); end(false); } };
+    wrap.addEventListener('click', (e) => { if (e.target === wrap) return end(false); const b = e.target.closest('[data-a]'); if (b) end(b.dataset.a === '1'); });
+    document.addEventListener('keydown', key, true); document.body.appendChild(wrap); wrap.querySelector('[data-a="1"]').focus();
+  });
+}
+const labSnap = () => JSON.parse(JSON.stringify(getLab()));
+function labUndo(msg, snap) { undoDel(msg, () => { setLab(snap); try { renderBtm(); renderLtm(); } catch (e) { } }); }

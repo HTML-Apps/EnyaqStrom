@@ -132,7 +132,7 @@ function flash(el, text, ok) {
   setTimeout(() => el.classList.add('hidden'), 4000);
 }
 
-$('btn-save').addEventListener('click', () => {
+$('btn-save').addEventListener('click', async () => {
   const readings = getReadings(), place = capPlace, home = place === 'home';
   const km = optNum($('km-input').value), s0 = optNum($('soc0-input').value), s1 = optNum($('soc1-input').value);
   if ([km, s0, s1].some(Number.isNaN) || (km != null && km < 0) || [s0, s1].some(v => v != null && (v < 0 || v > 100)) || (s0 != null && s1 != null && s1 <= s0)) {
@@ -146,7 +146,7 @@ $('btn-save').addEventListener('click', () => {
     const prev = lastHome(readings);                      // Vorgänger am Zähler (Bosch/Unterwegs-Einträge zählen nicht)
     let reset = false;                                    // Zähler zurückgesetzt? Dann zählt die Ladung ab 0
     if (prev && value < prev.totalReading) {
-      if (!confirm('Der Wert (' + fmt(value) + ') ist kleiner als der letzte Stand (' + fmt(prev.totalReading) + ').\n\nWurde der Zähler zurückgesetzt (Start bei 0)?\nOK = ja, die Ladung wird ab 0 gerechnet.\nAbbrechen = Eingabe prüfen.')) return;
+      if (!(await ask('Der Wert (' + fmt(value) + ') ist kleiner als der letzte Stand (' + fmt(prev.totalReading) + '). Wurde der Zähler zurückgesetzt? Dann wird die Ladung ab 0 gerechnet.', { title: 'Zähler zurückgesetzt?', ok: 'Ja, ab 0 rechnen', cancel: 'Eingabe prüfen' }))) return;
       reset = true;
     }
     const consumed = reset ? value : (prev ? Math.max(0, Math.round((value - prev.totalReading) * 10) / 10) : 0);   // Differenz zum Vorgänger
@@ -304,42 +304,42 @@ $('set-year').addEventListener('input', (e) => {
 });
 $('btn-save-settings').addEventListener('click', () => {
   const price = parseNum($('set-price').value);
-  if (!isFinite(price) || price < 0) { alert('Bitte einen gültigen Strompreis eingeben (z. B. 0,307).'); return; }
+  if (!isFinite(price) || price < 0) { appNote('Bitte einen gültigen Strompreis eingeben (z. B. 0,307).'); return; }
   const carT = {}; for (const k of Object.keys(CAR_TECH)) {                       // technische Werte: leer = Wert des Fahrzeugtyps
     const raw = $('set-ct-' + k).value.trim(); if (!raw) continue; const v = parseNum(['cw', 'A'].includes(k) ? raw : raw.replace(/[.\s]/g, '')), [lo, hi] = CAR_TECH[k];
-    if (!(v >= lo && v <= hi)) { alert('Bitte einen Wert zwischen ' + fmt(lo, lo < 1 ? 2 : 0) + ' und ' + fmt(hi, hi < 1 ? 2 : 0) + ' eintragen oder das Feld leer lassen.'); $('set-ct-' + k).focus(); return; }
+    if (!(v >= lo && v <= hi)) { appNote('Bitte einen Wert zwischen ' + fmt(lo, lo < 1 ? 2 : 0) + ' und ' + fmt(hi, hi < 1 ? 2 : 0) + ' eintragen oder das Feld leer lassen.'); $('set-ct-' + k).focus(); return; }
     carT[k] = v;
   }
   const battery = parseNum($('set-battery').value);
-  if (!isFinite(battery) || battery < 10 || battery > 200) { alert('Bitte eine gültige Nettokapazität in kWh eingeben (z. B. 52).'); return; }
+  if (!isFinite(battery) || battery < 10 || battery > 200) { appNote('Bitte eine gültige Nettokapazität in kWh eingeben (z. B. 52).'); return; }
   const power = parseNum($('set-power').value);
-  if (!isFinite(power) || power < 0.5 || power > 50) { alert('Bitte eine gültige Ladeleistung in kW eingeben (z. B. 7).'); return; }
+  if (!isFinite(power) || power < 0.5 || power > 50) { appNote('Bitte eine gültige Ladeleistung in kW eingeben (z. B. 7).'); return; }
   const remDays = $('set-rem-days').value.trim() === '' ? 14 : parseNum($('set-rem-days').value), remKm = $('set-rem-km').value.trim() === '' ? 500 : parseNum($('set-rem-km').value);
   const ym = (id) => { const v = $(id).value.trim(); return /^\d{4}-(0[1-9]|1[0-2])$/.test(v) ? v : undefined; }, nextHu = ym('set-next-hu'), nextService = ym('set-next-svc');
-  if (!Number.isInteger(remDays) || remDays < 0 || remDays > 365) { alert('Bitte die Vorwarnung in Tagen als ganze Zahl von 0 bis 365 eingeben.'); return; }
-  if (!Number.isInteger(remKm) || remKm < 0 || remKm > 20000) { alert('Bitte die Vorwarnung in km als ganze Zahl von 0 bis 20000 eingeben.'); return; }
+  if (!Number.isInteger(remDays) || remDays < 0 || remDays > 365) { appNote('Bitte die Vorwarnung in Tagen als ganze Zahl von 0 bis 365 eingeben.'); return; }
+  if (!Number.isInteger(remKm) || remKm < 0 || remKm > 20000) { appNote('Bitte die Vorwarnung in km als ganze Zahl von 0 bis 20000 eingeben.'); return; }
   const pd = $('set-purchase').value, purchase = /^\d{4}-\d{2}-\d{2}$/.test(pd) && !isNaN(Date.parse(pd)) ? pd : '2026-06-08';
   const wl = $('set-wltp').value.trim() === '' ? undefined : parseFloat($('set-wltp').value.replace(',', '.'));
   const wln = $('set-wltp-net').value.trim() === '' ? undefined : parseFloat($('set-wltp-net').value.replace(',', '.'));
   const tnum = (id) => { const t = $(id).value.trim().replace('−', '-').replace(',', '.'); return t === '' ? undefined : Number(t); };
   const rlo = tnum('set-ref-lo'), rhi = tnum('set-ref-hi');
   if ([rlo, rhi].some(v => v !== undefined && !(Number.isFinite(v) && v >= -20 && v <= 45)) || (rlo !== undefined) !== (rhi !== undefined) || (rlo !== undefined && rhi - rlo < 2)) {
-    alert('Bitte beim Referenzbereich der Akku-Temperatur beide Werte eintragen (−20 bis 45 °C, „bis“ mindestens 2 °C über „von“) oder beide Felder leer lassen.'); return; }
+    appNote('Bitte beim Referenzbereich der Akku-Temperatur beide Werte eintragen (−20 bis 45 °C, „bis“ mindestens 2 °C über „von“) oder beide Felder leer lassen.'); return; }
   const deNum = (v) => { const t = v.trim(); if (t === '') return undefined; return Number((/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(t) ? t.replace(/\./g, '') : t).replace(',', '.')); };   // 16.969 = sechzehntausend…, 32.500,50 = Euro mit Cent
   const pk = deNum($('set-purchase-km').value), pp = deNum($('set-purchase-price').value);
   const certAcKwh = deNum($('set-cert-ac').value), certDcKwh = deNum($('set-cert-dc').value), certKm = deNum($('set-cert-km').value);
-  if ([certAcKwh, certDcKwh].some(v => v !== undefined && !(Number.isFinite(v) && v >= 0 && v <= 1e6)) || (certAcKwh !== undefined) !== (certDcKwh !== undefined) || (certAcKwh !== undefined && certAcKwh + certDcKwh <= 0)) { alert('Bitte beim Akku-Zertifikat beide Werte (AC und DC in kWh) eintragen oder beide Felder leer lassen.'); return; }
-  if (certKm !== undefined && !(certKm >= 0 && certKm <= 2e6)) { alert('Bitte den km-Stand des Akku-Zertifikats als Zahl eingeben oder das Feld leer lassen.'); return; }
-  if (pk !== undefined && !(pk >= 0 && pk <= 2e6)) { alert('Bitte den Kilometerstand bei Kauf als Zahl eingeben (z. B. 16.969) oder das Feld leer lassen.'); return; }
-  if (pp !== undefined && !(pp >= 0 && pp <= 1e7)) { alert('Bitte den Kaufpreis in Euro als Zahl eingeben (z. B. 32.500) oder das Feld leer lassen.'); return; }
-  if (wl !== undefined && !(wl > 5 && wl < 40)) { alert('Bitte den WLTP-Verbrauch in kWh/100 km eingeben (z. B. 16,0) oder das Feld leer lassen.'); return; }
-  if (wln !== undefined && !(wln > 5 && wln < 40)) { alert('Bitte den WLTP-Verbrauch ohne Ladeverluste in kWh/100 km eingeben (z. B. 14,7) oder das Feld leer lassen.'); return; }
+  if ([certAcKwh, certDcKwh].some(v => v !== undefined && !(Number.isFinite(v) && v >= 0 && v <= 1e6)) || (certAcKwh !== undefined) !== (certDcKwh !== undefined) || (certAcKwh !== undefined && certAcKwh + certDcKwh <= 0)) { appNote('Bitte beim Akku-Zertifikat beide Werte (AC und DC in kWh) eintragen oder beide Felder leer lassen.'); return; }
+  if (certKm !== undefined && !(certKm >= 0 && certKm <= 2e6)) { appNote('Bitte den km-Stand des Akku-Zertifikats als Zahl eingeben oder das Feld leer lassen.'); return; }
+  if (pk !== undefined && !(pk >= 0 && pk <= 2e6)) { appNote('Bitte den Kilometerstand bei Kauf als Zahl eingeben (z. B. 16.969) oder das Feld leer lassen.'); return; }
+  if (pp !== undefined && !(pp >= 0 && pp <= 1e7)) { appNote('Bitte den Kaufpreis in Euro als Zahl eingeben (z. B. 32.500) oder das Feld leer lassen.'); return; }
+  if (wl !== undefined && !(wl > 5 && wl < 40)) { appNote('Bitte den WLTP-Verbrauch in kWh/100 km eingeben (z. B. 16,0) oder das Feld leer lassen.'); return; }
+  if (wln !== undefined && !(wln > 5 && wln < 40)) { appNote('Bitte den WLTP-Verbrauch ohne Ladeverluste in kWh/100 km eingeben (z. B. 14,7) oder das Feld leer lassen.'); return; }
   const vin = $('set-vin').value.trim().toUpperCase().replace(/\s+/g, ''), yr = $('set-year').value.trim();
-  if (vin && !/^[A-HJ-NPR-Z0-9]{17}$/.test(vin)) { alert('Die Fahrgestellnummer (FIN) hat 17 Zeichen aus Ziffern und Buchstaben (ohne I, O und Q). Bitte prüfen oder das Feld leer lassen.'); return; }
+  if (vin && !/^[A-HJ-NPR-Z0-9]{17}$/.test(vin)) { appNote('Die Fahrgestellnummer (FIN) hat 17 Zeichen aus Ziffern und Buchstaben (ohne I, O und Q). Bitte prüfen oder das Feld leer lassen.'); return; }
   if (yr) {                                                                         // Baujahr immer als MM/JJJJ, nicht in der Zukunft
     const m = /^(0[1-9]|1[0-2])\/(\d{4})$/.exec(yr), now = new Date();
-    if (!m) { alert('Bitte das Baujahr im Format MM/JJJJ eingeben (z. B. 11/2023) oder das Feld leer lassen.'); $('set-year').focus(); return; }
-    if (+m[2] < 1990 || +m[2] * 12 + +m[1] > now.getFullYear() * 12 + now.getMonth() + 1) { alert('Das Baujahr ' + yr + ' kann nicht stimmen: Es muss zwischen 01/1990 und ' + String(now.getMonth() + 1).padStart(2, '0') + '/' + now.getFullYear() + ' liegen.'); $('set-year').focus(); return; }
+    if (!m) { appNote('Bitte das Baujahr im Format MM/JJJJ eingeben (z. B. 11/2023) oder das Feld leer lassen.'); $('set-year').focus(); return; }
+    if (+m[2] < 1990 || +m[2] * 12 + +m[1] > now.getFullYear() * 12 + now.getMonth() + 1) { appNote('Das Baujahr ' + yr + ' kann nicht stimmen: Es muss zwischen 01/1990 und ' + String(now.getMonth() + 1).padStart(2, '0') + '/' + now.getFullYear() + ' liegen.'); $('set-year').focus(); return; }
   }
   const txt = (id, n) => $(id).value.trim().replace(/\s+/g, ' ').slice(0, n) || undefined;
   const carWas = carProf().key;                                                   // Fahrzeugtyp gewechselt → neu laden (Karussell-Bilder, Titel)
@@ -365,7 +365,7 @@ $('wipe-ok').addEventListener('click', () => {
   if ($('wipe-input').value.trim().toUpperCase() !== WIPE_WORD) return;     // doppelte Absicherung, falls der Button doch aktiv wäre
   closeWipe();
   {
-    commitReadings([]); commitCosts([]); commitReminders([]); commitRecurring([]); commitTrips([]); localStorage.removeItem(KEY_TRIPS_IMP); localStorage.removeItem(KEY_TLABELS); localStorage.removeItem(KEY_TRULES); localStorage.removeItem(KEY_TDEF); setTPlaces([]); localStorage.removeItem(KEY_SETTINGS); localStorage.removeItem(KEY_WXLOC); localStorage.removeItem(KEY_WXCACHE); localStorage.removeItem(KEY_TEMPS); localStorage.removeItem(KEY_WRAP); localStorage.removeItem(KEY_DRIVE); localStorage.removeItem(KEY_HERO); localStorage.removeItem(KEY_HERO_C); applyHeroColor(); pushPrefs(); setProviders([]); setCategories(DEFAULT_CATEGORIES.slice()); fillSettings(); alert('Alle Daten wurden gelöscht.');
+    commitReadings([]); commitCosts([]); commitReminders([]); commitRecurring([]); commitTrips([]); localStorage.removeItem(KEY_TRIPS_IMP); localStorage.removeItem(KEY_TLABELS); localStorage.removeItem(KEY_TRULES); localStorage.removeItem(KEY_TDEF); setTPlaces([]); localStorage.removeItem(KEY_SETTINGS); localStorage.removeItem(KEY_WXLOC); localStorage.removeItem(KEY_WXCACHE); localStorage.removeItem(KEY_TEMPS); localStorage.removeItem(KEY_WRAP); localStorage.removeItem(KEY_DRIVE); localStorage.removeItem(KEY_HERO); localStorage.removeItem(KEY_HERO_C); applyHeroColor(); pushPrefs(); setProviders([]); setCategories(DEFAULT_CATEGORIES.slice()); fillSettings(); appNote('Alle Daten wurden gelöscht.');
   }
 });
 

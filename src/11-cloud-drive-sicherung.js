@@ -213,7 +213,7 @@ async function dvUploadEdit(blk, scope) {
 }
 async function dvRemove(blk, scope, fid) {
   const cur = getCosts().find(c => String(c.id) === scope.slice(1)), f = cur && (cur.files || []).find(x => x.id === fid); if (!f) return;
-  if (!confirm('Beleg „' + f.name + '“ aus dem Eintrag entfernen und in Google Drive löschen?')) return;
+  if (!(await ask('„' + f.name + '“ wird aus dem Eintrag entfernt und in Google Drive gelöscht.', { title: 'Beleg löschen?', ok: 'Löschen', danger: true }))) return;
   if (!window.cloud?.isSignedIn()) { dvMsg(blk, 'Bitte zuerst bei Google anmelden.'); return; }
   const tokP = window.cloud.driveToken(); tokP.catch(() => { }); dvMsg(blk, 'Verbinde mit Google Drive …');
   try { const tok = await tokP; try { await dvFetch(tok, 'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(fid), { method: 'DELETE' }); } catch (e) { if (e.status !== 404) throw e; }   // 404 = in Drive schon weg

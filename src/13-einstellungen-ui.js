@@ -275,7 +275,7 @@ $('au-sheet').addEventListener('click', (e) => {
   if (e.target === $('au-sheet')) { $('au-sheet').classList.add('hidden'); return; }
   const b = e.target.closest('[data-cc]'); if (!b) return; const act = b.dataset.cc;
   if (act === 'close') { $('au-sheet').classList.add('hidden'); return; }
-  if (act === 'del') { if (!confirm('Ablaufdatum und Erinnerung entfernen?')) return; ccSetEnd(null); $('au-sheet').classList.add('hidden'); return; }
+  if (act === 'del') { (async () => { if (await ask('Ablaufdatum und Erinnerung entfernen?', { ok: 'Entfernen', danger: true })) { ccSetEnd(null); $('au-sheet').classList.add('hidden'); } })(); return; }
   const v = $('cc-end').value; if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || isNaN(Date.parse(v))) { $('cc-msg').textContent = 'Bitte ein gültiges Datum wählen.'; return; }
   ccSetEnd(v, $('cc-rem').checked); $('au-sheet').classList.add('hidden');
 });

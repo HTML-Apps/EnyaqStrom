@@ -82,7 +82,7 @@ $('tire-sheet').addEventListener('click', (e) => {
   const si = e.target.closest('[data-tsin]'); if (si) { si.parentElement.querySelectorAll('[data-tsin]').forEach(x => { const on = x === si; x.classList.toggle('bg-white', on); x.classList.toggle('dark:bg-slate-600', on); x.classList.toggle('shadow-sm', on); x.classList.toggle('text-slate-500', !on); x.classList.toggle('dark:text-slate-400', !on); }); return; }
   const b = e.target.closest('[data-tss]'); if (!b) return; const act = b.dataset.tss, lab = getLab(); lab.tires = lab.tires || [];
   if (act === 'close') { $('tire-sheet').classList.add('hidden'); return; }
-  if (act === 'del') { if (!confirm('Diese Messung löschen?')) return; lab.tires = lab.tires.filter(x => x.id !== tireEdit); setLab(lab); $('tire-sheet').classList.add('hidden'); return; }
+  if (act === 'del') { const snap = labSnap(); lab.tires = lab.tires.filter(x => x.id !== tireEdit); setLab(lab); $('tire-sheet').classList.add('hidden'); labUndo('Messung gelöscht', snap); return; }
   const v = {}; let n = 0, bad = false;
   TIRE_POS.forEach(p => { v[p] = [0, 1, 2].map(i => { const t = document.querySelector(`[data-tv="${p}:${i}"]`).value.trim(); if (t === '') return null; const x = deDec(t); if (!(x >= 0 && x <= 15)) { bad = true; return null; } n++; return Math.round(x * 10) / 10; }); });
   if (bad) { $('tire-msg').textContent = 'Bitte Profiltiefen in mm zwischen 0 und 15 eintragen (z. B. 6,8).'; return; }
@@ -184,7 +184,7 @@ $('wish-sheet').addEventListener('click', async (e) => {
   if (act === 'paste') { let t = ''; try { t = await navigator.clipboard.readText(); } catch (er) { } if (t && wishAddLink(t)) return; $('wish-lrow').classList.remove('hidden'); $('wish-lmsg').textContent = t ? $('wish-lmsg').textContent : 'Zwischenablage nicht lesbar – Link hier einfügen:'; $('wish-lin').focus(); return; }
   if (act === 'addl') { wishAddLink($('wish-lin').value); return; }
   if (act === 'close') { $('wish-sheet').classList.add('hidden'); return; }
-  if (act === 'del') { if (!confirm('Diesen Wunsch löschen?')) return; lab.wish = lab.wish.filter(x => x.id !== wishEdit); setLab(lab); $('wish-sheet').classList.add('hidden'); return; }
+  if (act === 'del') { const snap = labSnap(); lab.wish = lab.wish.filter(x => x.id !== wishEdit); setLab(lab); $('wish-sheet').classList.add('hidden'); labUndo('Wunsch gelöscht', snap); return; }
   const title = $('wish-title').value.trim(); if (!title) { $('wish-msg').textContent = 'Bitte angeben, was du dir wünschst.'; return; }
   const lt = $('wish-lin').value.trim(); if (lt && !wishAddLink(lt)) return;
   const price = deDec($('wish-price').value), prioEl = document.querySelector('#wish-prio [data-wprio].border-transparent');
@@ -336,7 +336,7 @@ $('rec-sheet').addEventListener('click', (e) => {
   else if (act === 'hpload') hpRefresh();
   else if (act === 'trip') { const box = $('rec-trips'), ts = getTrips().filter(t => t.km >= 3 && t.k100 > 0).sort((a, b) => Date.parse(b.s) - Date.parse(a.s)).slice(0, 12);
     box.innerHTML = ts.length ? ts.map(t => `<button type="button" data-trip="${esc(String(t.id))}" class="flex w-full items-center justify-between gap-2 rounded-xl bg-slate-100 dark:bg-slate-800 px-3 py-2 text-left text-sm"><span class="min-w-0 truncate">${new Date(t.s).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })} · ${fmt(t.km, 0)} km${t.v ? ' · Ø ' + fmt(t.v, 0) + ' km/h' : ''}${recTown(t.a0) && recTown(t.a1) ? ' · ' + esc(recTown(t.a0)) + ' → ' + esc(recTown(t.a1)) : ''}</span><b class="shrink-0 tabular-nums">${fmt(t.k100, 1)}</b></button>`).join('') : '<p class="text-xs text-slate-500">Keine Fahrten im Fahrtenbuch.</p>'; box.classList.toggle('hidden'); }
-  else if (act === 'del') { if (confirm('Diesen Rekord löschen?')) { lab.recs = lab.recs.filter(x => x.id !== recEdit); setLab(lab); $('rec-sheet').classList.add('hidden'); } }
+  else if (act === 'del') { const snap = labSnap(); lab.recs = lab.recs.filter(x => x.id !== recEdit); setLab(lab); $('rec-sheet').classList.add('hidden'); labUndo('Rekord gelöscht', snap); }
   else if (act === 'save') {
     const m = $('rec-msg'), route = $('rec-route').value.trim().slice(0, 40), k = deDec($('rec-k').value), opt = (id) => { const v = deDec($(id).value); return Number.isFinite(v) ? v : undefined; };
     if (!route) { m.textContent = 'Bitte eine Strecke angeben.'; return; } if (!(k > 3 && k < 60)) { m.textContent = 'Bitte den Verbrauch in kWh/100 km eintragen (z. B. 10,8).'; return; }
@@ -368,7 +368,7 @@ function openSpdSheet(id) {
 $('rec-sheet').addEventListener('click', (e) => {
   const sb = e.target.closest('[data-seg] [data-v]'); if (sb) { sb.parentElement.querySelectorAll('[data-v]').forEach(x => { const on = x === sb; x.classList.toggle('bg-white', on); x.classList.toggle('dark:bg-slate-600', on); x.classList.toggle('shadow-sm', on); x.classList.toggle('text-slate-500', !on); x.classList.toggle('dark:text-slate-400', !on); }); return; }
   const b = e.target.closest('[data-ss]'); if (!b) return; const act = b.dataset.ss, lab = getLab();
-  if (act === 'del') { if (!confirm('Diese Messreihe löschen?')) return; lab.speeds = lab.speeds.filter(x => x.id !== spdEdit); spdSel = null; setLab(lab); }
+  if (act === 'del') { const snap = labSnap(); lab.speeds = lab.speeds.filter(x => x.id !== spdEdit); spdSel = null; setLab(lab); labUndo('Messreihe gelöscht', snap); }
   else if (act === 'save') {
     const pick = (n) => { const x = document.querySelector(`[data-seg="${n}"] .bg-white`); return x ? x.dataset.v : ''; };
     const rows = SPD_V.map(v => ({ v, k: deDec($('spd-' + v).value) })).filter(r => r.k > 3 && r.k < 60);

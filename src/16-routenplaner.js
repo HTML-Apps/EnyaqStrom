@@ -418,7 +418,7 @@ function rtSheetPrev() {
 $('au-sheet').addEventListener('click', (e) => {
   const b = e.target.closest('[data-rts]'); if (!b) return; const act = b.dataset.rts, id = $('au-sheet-box').dataset.rtid;
   if (act === 'close') { $('au-sheet').classList.add('hidden'); return; }
-  if (act === 'del') { if (!confirm('Diese gemerkte Fahrt löschen?')) return; const lab = getLab(); lab.fc = lab.fc.filter(x => x.id !== id); setLab(lab); $('au-sheet').classList.add('hidden'); rtTabs(); return; }
+  if (act === 'del') { const snap = labSnap(), lab = getLab(); lab.fc = lab.fc.filter(x => x.id !== id); setLab(lab); $('au-sheet').classList.add('hidden'); rtTabs(); labUndo('Gemerkte Fahrt gelöscht', snap); return; }
   const v = rtSheetVals(); if (!v) return; const msg = $('rts-msg');
   if (v.rawReal !== undefined && !(v.rawReal > 3 && v.rawReal < 60)) { msg.textContent = 'Echten Verbrauch bitte in kWh/100 km eingeben (z. B. 18,9).'; msg.classList.remove('hidden'); return; }
   if (v.soc !== undefined && !(v.soc >= -20 && v.soc < v.x.soc0)) { msg.textContent = 'Akku bei Ankunft muss unter dem Start-Akku (' + v.x.soc0 + ' %) liegen.'; msg.classList.remove('hidden'); return; }

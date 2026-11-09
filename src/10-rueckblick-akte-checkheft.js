@@ -670,7 +670,7 @@ function renderWrapList() {
 }
 $('btn-wrap-preview').addEventListener('click', () => {
   const { runStart, runPrev } = wrPeriods(), p = { kind: 't', id: 'preview', preview: true, t0: runStart, t1: Date.now(), label: wrDY(runStart) + ' – heute', prev: runPrev }, st = wrStats(p);
-  if (st.n < 1 || !(st.km > 0)) { alert('Für die Vorschau fehlen im laufenden Zeitraum noch Ladungen mit km-Stand.'); return; }
+  if (st.n < 1 || !(st.km > 0)) { appNote('Für die Vorschau fehlen im laufenden Zeitraum noch Ladungen mit km-Stand.'); return; }
   p.st = st; showView('dashboard'); wrOpen(p);
 });
 try { renderWrapCard(); } catch (e) { }
