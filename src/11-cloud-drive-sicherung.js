@@ -66,7 +66,10 @@ window.onCloudPrefs = (d, first, uid) => {
   /* Labor: zusammenführen (neuester Stand je Element), nie durch einen älteren oder fehlenden Cloud-Stand löschen */
   const lq = load(KEY_LAB, null), cq = d && d.lab && typeof d.lab === 'object' ? d.lab : null; let nq = labMerge(lq, cq);
   if (nq && labCanon(labNoFc(nq)) !== labCanon(labNoFc(cq))) up = true;                    // gemerkte Fahrten laufen über das eigene Routen-Dokument
-  if (labCanon(nq) !== labCanon(lq)) { if (nq) save(KEY_LAB, nq); try { renderCurve(); if (currentView === 'recs') renderRecs(); if (currentView === 'tires') renderTires(); if (currentView === 'wish') renderWish(); if (currentView === 'route') rtTabs(); } catch (e) { } }
+  if (labCanon(nq) !== labCanon(lq)) { if (nq) save(KEY_LAB, nq); try { renderCurve(); if (currentView === 'recs') renderRecs(); if (currentView === 'tires') renderTires(); if (currentView === 'wish') renderWish(); if (currentView === 'route') rtTabs(); } catch (e) { }
+    /* neuer Akku-Wert von einem anderen Gerät: Widget zeigt wieder den zuletzt gespeicherten Wert */
+    const lastBt = (o) => { const a = (o && o.bt) || []; return a.length ? a[a.length - 1].id : null; };
+    if (lastBt(nq) !== lastBt(lq)) { try { btmVal = null; renderBtm(); renderLtm(); } catch (e) { } } }
   try { if (currentView === 'route') rtCloudPlan(); } catch (e) { }
   if (up) window.cloud.setPrefs({ wltp: nw, wxLoc: nl, provInfo: np, settings: ns, kb: nk, lab: labNoFc(nq) }).catch(() => { });
 };
