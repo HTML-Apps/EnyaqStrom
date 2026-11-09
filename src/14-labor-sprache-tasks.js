@@ -531,7 +531,7 @@ function gtParse(title) {
   const s = ' ' + s0.replace(/akku\s*-?\s*(temperatur|temp\.?)?/g, ' ').replace(/[:=]/g, ' ') + ' ';
   let v = null, m = /(?:^|[^\d,.])(minus\s*|-\s*)?(\d{1,2}(?:[.,]\d)?)(?![\d.,])/.exec(s);
   if (m) v = (m[1] ? -1 : 1) * Number(m[2].replace(',', '.'));
-  else { const w = /(?:^|\s)(minus\s+)?([a-zäöüß]+)/g; let x; while ((x = w.exec(s))) { const n = gtWordNum(x[2]); if (n != null) { v = (x[1] ? -1 : 1) * n; break; } } }
+  else { const w = /(?:^|\s)(minus\s+)?([a-zäöüß]+?)(einhalb)?(?=\s)/g; let x; while ((x = w.exec(s))) { const n = gtWordNum(x[2]); if (n != null) { const h = x[3] || /^\s*(komma\s*fünf|und\s*ein\s*halb|einhalb)\b/.test(s.slice(w.lastIndex)) ? 0.5 : 0; v = (x[1] ? -1 : 1) * (n + h); break; } } }   // „einundzwanzig Komma fünf“, „einundzwanzigeinhalb“
   if (v == null || !Number.isFinite(v) || v < -30 || v > 70) return null;
   const ctx = /nach\s*(der\s*)?fahrt|gefahren/.test(s) ? 'fahrt' : /geparkt|parken|im stand/.test(s) ? 'geparkt' : /vor\s*(dem\s*)?laden|laden/.test(s) ? 'laden' : null;
   return { t: Math.round(v * 10) / 10, ctx };
@@ -601,8 +601,37 @@ let gtBusy = false;
 function renderVcStatus() {
   const el = $('vc-status'); if (!el) return; const last = load('enyaq.gtLast', null), signed = window.cloud?.isSignedIn?.();
   el.innerHTML = !signed ? '<span class="text-amber-600 dark:text-amber-400">●</span> Bitte zuerst bei Google anmelden'
-    : '<span class="text-emerald-600 dark:text-emerald-400">●</span> Google Tasks ' + (window.cloud.driveReady() ? 'verbunden' : 'eingerichtet') + (last ? ' · zuletzt ' + fmtDate(last) : '');
+    : '<span class="text-emerald-600 dark:text-emerald-400">●</span> Google Tasks ' + (gLinked() ? 'automatisch' : window.cloud.driveReady() ? 'verbunden' : 'eingerichtet') + (last ? ' · zuletzt ' + fmtDate(last) : '');
+  const box = $('gt-auto'); if (!box) return; box.classList.toggle('hidden', !signed); if (!signed) return;
+  box.innerHTML = gLinked()
+    ? `<div class="flex items-center gap-2"><p class="min-w-0 flex-1 text-[13px]"><b class="text-emerald-700 dark:text-emerald-400">✓ Automatisch:</b> neue Sprach-Aufgaben kommen beim Öffnen der App ohne Google-Fenster. Auch die Drive-Sicherung braucht kein Fenster mehr.</p><button type="button" data-gl="off" class="shrink-0 rounded-xl border border-slate-300 dark:border-slate-600 px-3 py-2 text-xs font-semibold active:scale-95 transition">Trennen</button></div>`
+    : `<p class="text-[13px] font-semibold">Ohne Tippen übernehmen?</p><p class="mt-0.5 text-xs text-slate-500 dark:text-slate-400">Einmal bei Google zustimmen, dann holt die App neue Aufgaben beim Öffnen selbst – ohne das Google-Fenster. Die Freigabe liegt verschlüsselt auf dem eigenen Server und lässt sich hier jederzeit trennen.</p>
+       <button type="button" data-gl="on" class="mt-2 h-10 w-full rounded-xl bg-emerald-600 text-sm font-semibold text-white active:scale-95 transition">Automatisch verbinden</button><p id="gl-msg" class="mt-1 min-h-[1rem] text-xs" role="status"></p>`;
 }
+/* Dauerhafte Google-Freigabe (api/google.js): Merker je Konto in „enyaq.gLinked“ (= uid), Stand beim Anmelden vom Server */
+let gLinkUid = null;
+const gLinked = () => { try { return !!window.cloud?.isSignedIn?.() && !!gLinkUid && localStorage.getItem('enyaq.gLinked') === gLinkUid; } catch (e) { return false; } };
+async function gLinkCheck(uid) {
+  if (gLinkUid === uid && !window.gtLinkResult) return; gLinkUid = uid;
+  try { const r = await fetch('/api/google?action=status', { headers: await authHeaders() }), j = await r.json().catch(() => ({}));
+    if (r.ok) { if (j.linked) localStorage.setItem('enyaq.gLinked', uid); else localStorage.removeItem('enyaq.gLinked'); } } catch (e) { }
+  renderVcStatus();
+  const res = window.gtLinkResult; if (res) { window.gtLinkResult = null;
+    if (res.ok) { localStorage.setItem('enyaq.gLinked', uid); renderVcStatus(); try { fbToast('Google Tasks automatisch verbunden', 'Neue Sprach-Aufgaben kommen ab jetzt ohne Tippen.', true); } catch (e) { } gtImport(true); }
+    else try { fbToast('Google nicht verbunden', res.m || 'Bitte nochmal versuchen.', false); } catch (e) { } }
+  else if (localStorage.getItem('enyaq.gLinked') === uid) gtImport(true);
+}
+document.addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-gl]'); if (!b) return; b.disabled = true; const m = $('gl-msg');
+  try {
+    if (b.dataset.gl === 'on') { if (m) m.textContent = 'Öffne Google …';
+      const r = await fetch('/api/google?action=start', { headers: await authHeaders() }), j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.url) throw new Error(j.error || 'HTTP ' + r.status); location.href = j.url; return; }
+    const r = await fetch('/api/google', { method: 'POST', headers: { ...(await authHeaders()), 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'unlink' }) });
+    if (!r.ok) throw new Error('HTTP ' + r.status); localStorage.removeItem('enyaq.gLinked'); try { window.cloud.driveForget(); } catch (er) { } renderVcStatus();
+  } catch (er) { if (m) { m.className = 'mt-1 min-h-[1rem] text-xs text-red-600 dark:text-red-400'; m.textContent = er.message; } b.disabled = false; }
+});
+{ const stOrig = window.onCloudStatus; window.onCloudStatus = (st) => { stOrig(st); if (st && st.uid) gLinkCheck(st.uid); else if (st === null) { gLinkUid = null; renderVcStatus(); } }; }
 async function gtImport(silent) {
   if (gtBusy) return; if (!window.cloud?.isSignedIn()) { if (!silent) { btmMsg = 'Für Google Tasks bitte anmelden.'; renderBtm(); } return; }
   if (silent && !window.cloud.driveReady()) return;

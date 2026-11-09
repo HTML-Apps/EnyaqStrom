@@ -205,7 +205,7 @@
   @media (prefers-reduced-motion: reduce) { #bd-conf i, #bdg-conf i { animation: none; top: var(--y, 10%); } #bd-card, #bdg-card { animation: none; } }
 </style>
 <!-- Tailwind fertig gebaut (npm run css) – am Ende des Kopfs wie früher das CDN, damit die Reihenfolge der Regeln gleich bleibt -->
-<link rel="stylesheet" href="/app.css?v=274">
+<link rel="stylesheet" href="/app.css?v=275">
 </head>
 <body class="bg-black text-slate-100 min-h-screen">
 
@@ -1479,6 +1479,7 @@
         <div class="min-w-0"><h2 class="text-lg font-bold leading-6">So funktioniert’s</h2><p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Im Auto per Gemini oder Android Auto eine Aufgabe in Google Tasks anlegen, z. B. „Hey Google, erstelle eine Aufgabe: Akku 12 Grad“. Die App übernimmt sie beim Öffnen und hakt sie ab.</p></div>
       </div>
       <div class="mt-3 flex items-center gap-2"><span id="vc-status" class="min-w-0 flex-1 text-[13px] text-left"></span><button id="vc-fetch" type="button" aria-label="Jetzt aus Google Tasks holen" title="Jetzt aus Google Tasks holen" class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-800 text-lg active:scale-95 transition">📥</button></div>
+      <div id="gt-auto" class="mt-3 hidden rounded-2xl bg-slate-100 dark:bg-slate-800/70 p-3 text-left"></div>
     </div>
     <div class="rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
       <div class="flex items-start gap-3 pb-3 border-b-2 border-emerald-500/70">
@@ -1865,7 +1866,7 @@
   </div>
 </nav>
 
-<script src="/app.js?v=274"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
+<script src="/app.js?v=275"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
 <script type="module">
 /* Firebase (modular SDK). Die Konfiguration ist kein Geheimnis – geschützt wird über Auth + Firestore-Regeln. */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
@@ -1925,9 +1926,15 @@ window.cloud = {
   pushCosts: (prev, next) => diffPush(costsCol, costSig, prev, next),
   pushReminders: (prev, next) => diffPush(remCol, remSig, prev, next),
   pushRecurring: (prev, next) => diffPush(recCol, recSig, prev, next),
-  driveReady: () => !!driveTok && Date.now() < driveExp,
+  driveReady: () => (!!driveTok && Date.now() < driveExp) || (!!user && localStorage.getItem('enyaq.gLinked') === user.uid),   // mit dauerhafter Freigabe (api/google.js) geht es auch ohne Tipp
   driveForget: () => { driveTok = null; driveExp = 0; },
-  driveToken: async (force) => {                                               // Zugriffstoken für Google Drive (Berechtigung drive.file = nur Dateien, die diese App selbst anlegt); öffnet bei Bedarf kurz das Google-Fenster, also nur nach einem Tipp aufrufen
+  driveToken: async (force) => {                                               // Zugriffstoken für Google Drive (Berechtigung drive.file = nur Dateien, die diese App selbst anlegt); öffnet bei Bedarf kurz das Google-Fenster, also nur nach einem Tipp aufrufe
+    if (user && !force && !(driveTok && Date.now() < driveExp) && localStorage.getItem('enyaq.gLinked') === user.uid) {   // dauerhafte Freigabe: Token vom eigenen Server, kein Fenster
+      try { const r = await fetch('/api/google?action=token', { headers: { Authorization: 'Bearer ' + await user.getIdToken() } }), j = await r.json().catch(() => ({}));
+        if (r.ok && j.access_token) { driveTok = j.access_token; driveExp = Date.now() + Math.max(60, (j.expires_in || 3600) - 300) * 1000; return driveTok; }
+        if (r.status === 404 || r.status === 410) localStorage.removeItem('enyaq.gLinked');
+      } catch (e) { }
+    }n
     if (!user) throw new Error('Bitte zuerst bei Google anmelden.');
     if (!force && driveTok && Date.now() < driveExp) return driveTok;
     const pr = new GoogleAuthProvider(); pr.addScope('https://www.googleapis.com/auth/drive.file'); pr.addScope('https://www.googleapis.com/auth/tasks'); if (user.email) pr.setCustomParameters({ login_hint: user.email });

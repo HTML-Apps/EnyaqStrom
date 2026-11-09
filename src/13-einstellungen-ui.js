@@ -310,7 +310,8 @@ initStatImg();                                           // Statistik-Bild laden
    damit ein Neuladen wieder auf Start beginnt. */
 function openDeepLink() {
   const q = new URLSearchParams(location.search), go = (q.get('go') || location.hash.replace(/^#/, '') || '').toLowerCase();
-  if (go === 'fb-share') window.fbSharePending = true;                // aus dem Teilen-Menü: Fahrtenbuch-Datei liegt bereit (src/18-teilen.js)
+  if (go === 'fb-share') window.fbSharePending = true;
+  if (go === 'gt-ok' || go === 'gt-err') window.gtLinkResult = { ok: go === 'gt-ok', m: q.get('m') || '' };   // Rücksprung von der Google-Zustimmung (api/google.js)                // aus dem Teilen-Menü: Fahrtenbuch-Datei liegt bereit (src/18-teilen.js)
   const T = { 'laden': ['capture', () => setCapPlace('home')], 'laden-zuhause': ['capture', () => setCapPlace('home')], 'laden-bosch': ['capture', () => setCapPlace('bosch')],
     'laden-unterwegs': ['capture', () => setCapPlace('away')], 'kosten': ['costs'], 'historie': ['history', () => { histFilter = 'all'; }], 'fahrten': ['history', () => { histFilter = 'fahrten'; }],
     'berichte': ['report'], 'einstellungen': ['settings'] };
