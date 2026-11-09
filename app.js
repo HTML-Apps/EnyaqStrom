@@ -6909,7 +6909,10 @@ function ltSvg(es, app, wl) {
   const st = y1 - y0 > 6 ? 2 : 1, tk = []; for (let v = y0; v <= y1; v += st) tk.push(v);
   const multiYear = new Date(es[0].date).getFullYear() !== new Date(es[es.length - 1].date).getFullYear();
   const lbl = (d) => new Date(d + 'T12:00:00').toLocaleDateString('de-DE', multiYear ? { month: '2-digit', year: '2-digit' } : { day: '2-digit', month: '2-digit' });
-  const xi = es.length <= 5 ? es.map((_, i) => i) : [0, Math.round((es.length - 1) / 2), es.length - 1];
+  /* Datums-Beschriftungen ohne Überlappung: zuerst letzter und erster Punkt, dann die übrigen, wenn ≥ 40 px Abstand und anderes Datum */
+  const xi = [], xs = [], xl = new Set(), xc = (i) => Math.min(W - R - 6, Math.max(L + 6, X(es[i].date)));
+  [es.length - 1, 0].concat(es.map((_, i) => i).slice(1, -1).sort((a, b) => Math.abs(a - (es.length - 1) / 2) - Math.abs(b - (es.length - 1) / 2))).forEach(i => {
+    const x = xc(i), t = lbl(es[i].date); if (xl.has(t) || xs.some(v => Math.abs(v - x) < 40)) return; xi.push(i); xs.push(x); xl.add(t); });
   /* Wert-Beschriftungen ausdünnen: zuerst letzter, höchster, niedrigster und erster Wert, dann die übrigen –
      nur wenn kein anderes Label näher als 30 px daneben steht (bzw. vertikal klar getrennt ist) */
   const lab = new Set(), placed = [], n = es.length, iMax = es.reduce((a, e, i) => e.k100 > es[a].k100 ? i : a, 0), iMin = es.reduce((a, e, i) => e.k100 < es[a].k100 ? i : a, 0);
@@ -6918,10 +6921,10 @@ function ltSvg(es, app, wl) {
   return `<svg viewBox="0 0 ${W} ${H}" class="mt-1 w-full" role="img" aria-label="Langzeitverbrauch über die Zeit">`
     + tk.map(v => `<line x1="${L}" x2="${W - R}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="currentColor" class="text-slate-200 dark:text-slate-800"/><text x="${L - 6}" y="${(Y(v) + 3.5).toFixed(1)}" text-anchor="end" font-size="9.5" fill="#94a3b8">${v}</text>`).join('')
     + (app != null ? `<line x1="${L}" x2="${W - R}" y1="${Y(app).toFixed(1)}" y2="${Y(app).toFixed(1)}" stroke="#38bdf8" stroke-dasharray="4 3"/><text x="${W - R}" y="${(Y(app) + (wl != null && app < wl ? 11 : -4)).toFixed(1)}" text-anchor="end" font-size="9" fill="#0ea5e9">App: ${fmt(app, 1)} (ab Steckdose)</text>` : '')
-    + (wl != null ? `<line x1="${L}" x2="${W - R}" y1="${Y(wl).toFixed(1)}" y2="${Y(wl).toFixed(1)}" stroke="#a78bfa" stroke-width="1.6" stroke-dasharray="2 3"/><text x="${L + 2}" y="${(Y(wl) + (app != null && app > wl ? 11 : -4)).toFixed(1)}" font-size="9" fill="#8b5cf6">WLTP ohne Verluste ${fmt(wl, 1)}</text>` : '')
+    + (wl != null ? `<line x1="${L}" x2="${W - R}" y1="${Y(wl).toFixed(1)}" y2="${Y(wl).toFixed(1)}" stroke="#a78bfa" stroke-width="1.6" stroke-dasharray="2 3"/><text x="${app != null ? L + 2 : W - R}" y="${(Y(wl) + (app != null && app > wl ? 11 : -4)).toFixed(1)}"${app != null ? '' : ' text-anchor="end"'} font-size="9" fill="#8b5cf6">WLTP ohne Verluste ${fmt(wl, 1)}</text>` : '')
     + (es.length > 1 ? `<polyline points="${es.map(e => X(e.date).toFixed(1) + ',' + Y(e.k100).toFixed(1)).join(' ')}" fill="none" stroke="#10b981" stroke-width="2.4" stroke-linejoin="round"/>` : '')
     + es.map((e, i) => `<circle cx="${X(e.date).toFixed(1)}" cy="${Y(e.k100).toFixed(1)}" r="${n > 30 ? 2.2 : 3.5}" fill="#10b981"/>${lab.has(i) ? `<text x="${Math.min(W - R - 8, Math.max(L + 10, X(e.date))).toFixed(1)}" y="${(Y(e.k100) + (app != null && Math.abs(Y(e.k100) - 4 - Y(app)) < 12 ? 14 : -8)).toFixed(1)}" text-anchor="middle" font-size="9.5" fill="currentColor" class="text-slate-500 dark:text-slate-300">${fmt(e.k100, 1)}</text>` : ''}`).join('')
-    + xi.map(i => `<text x="${Math.min(W - R - 6, Math.max(L + 6, X(es[i].date))).toFixed(1)}" y="${H - 5}" text-anchor="middle" font-size="9.5" fill="#94a3b8">${lbl(es[i].date)}</text>`).join('') + '</svg>';
+    + xi.map(i => `<text x="${xc(i).toFixed(1)}" y="${H - 5}" text-anchor="middle" font-size="9.5" fill="#94a3b8">${lbl(es[i].date)}</text>`).join('') + '</svg>';
 }
 function ltCard(list) {
   const es = (list || []).filter(e => e.k100 > 0 && e.date).sort((a, b) => a.date.localeCompare(b.date) || (a.km || 0) - (b.km || 0)), app = ltApp(), wn = wltpNet();
