@@ -28,3 +28,4 @@
 - Einstellungs-Sync schreibt nur geänderte Schlüssel: `pushPrefs` vergleicht mit dem letzten Cloud-Stand `enyaq.setBase` und nutzt `cloud.patchPrefs` (setDoc mit `mergeFields`, Löschen per `deleteField`). Nie wieder das ganze `settings`-Objekt pushen, sonst überschreibt ein Gerät mit altem Stand neuere Werte.
 - Heller Modus: Seitenhintergrund `bg-slate-100` (dunkel `bg-black`); Seitenüberschriften `text-slate-900 dark:text-white`; der Start-Kopf (`#hero-bg`) bleibt dunkel und läuft unten per Maske aus.
 - Hell/Dunkel per Klasse (`darkMode: 'class'`): Früh-Skript im `<head>` setzt `html.dark` aus `enyaq.theme` (auto/light/dark, nur dieses Gerät), Umschalter `#theme-seg` unter Fahrzeug & Kauf. Eigenes CSS mit `html.dark …` / `html:not(.dark) …` statt `@media (prefers-color-scheme)`, in JS `isDark()`; Wechsel löst `themechange` aus.
+- Start-Hintergrundfarbe (`KEY_HERO`) und Darstellung (`enyaq.theme`) gelten nur je Gerät, nicht in `SYNC_SET_KEYS` aufnehmen.

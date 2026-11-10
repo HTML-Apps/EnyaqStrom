@@ -2987,13 +2987,9 @@ $('hero-custom').addEventListener('input', (e) => { save(KEY_HERO_C, e.target.va
 $('hero-custom').addEventListener('change', heroPush);                     // erst beim Loslassen in die Cloud (nicht bei jedem Zwischenwert)
 $('hero-custom').addEventListener('click', () => { if (heroCustomHex()) { save(KEY_HERO, 'custom'); applyHeroColor(); heroPush(); } });
 $('hero-swatches').addEventListener('click', (e) => { const b = e.target.closest('[data-hero]'); if (!b) return; save(KEY_HERO, b.dataset.hero); applyHeroColor(); if (b.dataset.hero !== 'custom') heroPush(); });
-function heroPush() { setQuickSetting('hero', { k: heroThemeKey(), c: heroCustomHex() || undefined }); }
-/** nach dem Cloud-Abgleich: Farbe aus den Einstellungen übernehmen; fehlt sie dort, die lokal gewählte (nicht Standard) einmal hochladen */
-function heroFromSettings() {
-  const h = getSettings().hero;
-  if (h && h.k) { if (h.c) save(KEY_HERO_C, h.c); if (h.k !== load(KEY_HERO, 'blue') || (h.c && h.c !== heroCustomHex())) { save(KEY_HERO, h.k); applyHeroColor(); } }
-  else if (localStorage.getItem(KEY_HERO) && heroThemeKey() !== 'blue') heroPush();
-}
+/* Start-Hintergrund gilt nur für dieses Gerät (KEY_HERO / KEY_HERO_C, nicht in der Cloud) – so kann jedes Gerät eine eigene Farbe haben */
+function heroPush() { }
+function heroFromSettings() { }
 applyHeroColor();
 
 
@@ -5625,7 +5621,7 @@ try { renderWrapCard(); } catch (e) { }
    im Dokument enyaqStrom/<uid>/settings/prefs, gleiche Regel wie Anbieter und Kategorien. Die PIN bleibt nur auf dem Gerät.
    Erster Abgleich: Was die Cloud hat, gilt; fehlt dort etwas und ist lokal vorhanden, wird es hochgeladen. Danach gilt die Cloud (Änderung auf einem Gerät wirkt auf allen).
    ===================================================================== */
-const SYNC_SET_KEYS = ['presetV', 'hero', 'title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAcKwh', 'certDcKwh', 'certKm', 'wltpNet', 'ccEnd', 'wxoCut', 'dashFirst', 'car', 'carT', 'ui', 'carN', 'carSec', 'wxIcons', 'nRep', 'nTrips', 'nBakYm', 'nBakAt', 'nBakSnz', 'gtMirror', 'gtList', 'iceDep', 'iceWe', 'icePark', 'iceMin', 'iceK', 'cmpCar', 'cmpL', 'cmpEur', 'cmpCo2'];
+const SYNC_SET_KEYS = ['presetV', 'title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAcKwh', 'certDcKwh', 'certKm', 'wltpNet', 'ccEnd', 'wxoCut', 'dashFirst', 'car', 'carT', 'ui', 'carN', 'carSec', 'wxIcons', 'nRep', 'nTrips', 'nBakYm', 'nBakAt', 'nBakSnz', 'gtMirror', 'gtList', 'iceDep', 'iceWe', 'icePark', 'iceMin', 'iceK', 'cmpCar', 'cmpL', 'cmpEur', 'cmpCo2'];
 /** Einstellungen für die Cloud: feste Reihenfolge, ohne leere Werte (Firestore verbietet undefined). null = nichts vorhanden. */
 function syncSet(src) {
   const o = {}; if (src && typeof src === 'object') SYNC_SET_KEYS.forEach(k => { const v = src[k]; if (v != null && v !== '' && !(typeof v === 'number' && !isFinite(v))) o[k] = v; });

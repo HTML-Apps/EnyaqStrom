@@ -332,12 +332,8 @@ $('hero-custom').addEventListener('input', (e) => { save(KEY_HERO_C, e.target.va
 $('hero-custom').addEventListener('change', heroPush);                     // erst beim Loslassen in die Cloud (nicht bei jedem Zwischenwert)
 $('hero-custom').addEventListener('click', () => { if (heroCustomHex()) { save(KEY_HERO, 'custom'); applyHeroColor(); heroPush(); } });
 $('hero-swatches').addEventListener('click', (e) => { const b = e.target.closest('[data-hero]'); if (!b) return; save(KEY_HERO, b.dataset.hero); applyHeroColor(); if (b.dataset.hero !== 'custom') heroPush(); });
-function heroPush() { setQuickSetting('hero', { k: heroThemeKey(), c: heroCustomHex() || undefined }); }
-/** nach dem Cloud-Abgleich: Farbe aus den Einstellungen übernehmen; fehlt sie dort, die lokal gewählte (nicht Standard) einmal hochladen */
-function heroFromSettings() {
-  const h = getSettings().hero;
-  if (h && h.k) { if (h.c) save(KEY_HERO_C, h.c); if (h.k !== load(KEY_HERO, 'blue') || (h.c && h.c !== heroCustomHex())) { save(KEY_HERO, h.k); applyHeroColor(); } }
-  else if (localStorage.getItem(KEY_HERO) && heroThemeKey() !== 'blue') heroPush();
-}
+/* Start-Hintergrund gilt nur für dieses Gerät (KEY_HERO / KEY_HERO_C, nicht in der Cloud) – so kann jedes Gerät eine eigene Farbe haben */
+function heroPush() { }
+function heroFromSettings() { }
 applyHeroColor();
 

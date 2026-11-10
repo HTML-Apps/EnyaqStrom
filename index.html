@@ -225,7 +225,7 @@
   @media (prefers-reduced-motion: reduce) { #bd-conf i, #bdg-conf i { animation: none; top: var(--y, 10%); } #bd-card, #bdg-card { animation: none; } }
 </style>
 <!-- Tailwind fertig gebaut (npm run css) – am Ende des Kopfs wie früher das CDN, damit die Reihenfolge der Regeln gleich bleibt -->
-<link rel="stylesheet" href="/app.css?v=285">
+<link rel="stylesheet" href="/app.css?v=286">
 </head>
 <body class="bg-slate-100 text-slate-900 dark:bg-black dark:text-slate-100 min-h-screen">
 
@@ -1223,6 +1223,7 @@
         <div class="py-4 first:pt-4 last:pb-0">
           <p class="block text-sm font-medium text-slate-700 dark:text-slate-300">Hintergrundfarbe der Start-Seite</p>
           <div id="hero-swatches" class="mt-2 grid grid-cols-5 gap-2" role="group" aria-label="Hintergrundfarbe der Start-Seite"></div>
+          <p class="mt-1.5 text-xs text-slate-500 dark:text-slate-400">Gilt nur für dieses Gerät – so kann jedes Gerät eine eigene Farbe haben.</p>
         </div>
         <div class="py-4 first:pt-4 last:pb-0">
           <p class="block text-sm font-medium text-slate-700 dark:text-slate-300">Darstellung</p>
@@ -1894,7 +1895,7 @@
   </div>
 </nav>
 
-<script src="/app.js?v=285"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
+<script src="/app.js?v=286"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
 <script type="module">
 /* Firebase (modular SDK). Die Konfiguration ist kein Geheimnis – geschützt wird über Auth + Firestore-Regeln. */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
