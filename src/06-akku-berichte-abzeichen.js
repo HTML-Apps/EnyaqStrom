@@ -471,9 +471,9 @@ function renderStat() {
   const rs = getReadings(), now = new Date(), cy = now.getFullYear(), cm = now.getMonth(), D = 864e5, MON = 30.4375;
   const kmT = (v) => v != null ? fmt(v, 0) + ' km' : '–', pts = rs.filter(r => r.odometerKm > 0).map(r => [Date.parse(r.date), r.odometerKm])
     .concat(getCosts().filter(c => c.odometerKm > 0).map(c => [Date.parse(c.date), c.odometerKm])).filter(q => Number.isFinite(q[0])).sort((a, b) => a[0] - b[0]);
-  const km = lastKnownKm(), t = (y, m) => new Date(y, m, 1).getTime();
+  const km = Math.max(lastKnownKm() || 0, (carKmCache && carKmCache.km) || 0) || null, t = (y, m) => new Date(y, m, 1).getTime();   // neuester Stand, auch vom Auto
   $('st-odo').textContent = km != null ? fmt(km, 0) + ' km' : '–';
-  $('st-km-year').textContent = kmT(rangeKm(t(cy, 0), t(cy + 1, 0))); $('st-km-month').textContent = kmT(rangeKm(t(cy, cm), t(cy, cm + 1)));
+  $('st-km-year').textContent = kmT(heroKm(new Date(cy, 0, 1)));   // wie oben auf Start (mit km-Stand bei Kauf) $('st-km-month').textContent = kmT(rangeKm(t(cy, cm), t(cy, cm + 1)));
   $('st-km-lastyear').textContent = kmT(rangeKm(t(cy - 1, 0), t(cy, 0))); $('st-km-lastmonth').textContent = kmT(rangeKm(t(cy, cm - 1), t(cy, cm)));
   let perDay = null;
   if (pts.length > 1) { const days = (pts[pts.length - 1][0] - pts[0][0]) / D, dk = pts[pts.length - 1][1] - pts[0][1]; if (days >= 1 && dk > 0) perDay = dk / days; }

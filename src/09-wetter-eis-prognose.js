@@ -220,7 +220,7 @@ async function wxoSoc() {
   try {
     const res = await fetch('/api/vehicle', { headers: await authHeaders() }), d = await res.json().catch(() => ({}));
     if (!res.ok || d.soc == null) return old;
-    if (d.odometerKm != null) { carKmCache = { t: Date.now(), km: Math.round(d.odometerKm), at: d.capturedAt || null }; odoNote(d); }
+    if (d.odometerKm != null) { carKmCache = { t: Date.now(), km: Math.round(d.odometerKm), at: d.capturedAt || null }; odoNote(d); try { renderHeroStats(); } catch (e) { } }
     save(KEY_WXO + 'S', { t: Date.now(), soc: d.soc, d }); try { renderVehCard(); } catch (e) { } try { if (!ltmSaved) renderLtm(); } catch (e) { } return d.soc;
   } catch (e) { return old; }
 }

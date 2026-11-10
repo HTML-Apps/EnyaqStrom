@@ -17,7 +17,18 @@ function rangeKm(s0, e0) {
   const before = pts.filter(q => q[0] < s0), b = before[before.length - 1];
   const km = inR[inR.length - 1][1] - (b ? b[1] : inR[0][1]); return km > 0 ? km : null;
 }
-const yearKm = (y) => rangeKm(new Date(y, 0, 1).getTime(), new Date(y + 1, 0, 1).getTime());
+/** Kilometer oben auf Start ab `from` bis heute: aktueller Stand (neuester aus Ladungen/Kosten oder vom Auto, der größere) minus Startstand.
+    Startstand: „km-Stand bei Kauf“ aus den Einstellungen, wenn der Kauf im Zeitraum liegt (seit Kauf / Kaufjahr), sonst der letzte Stand vor dem Zeitraum, sonst der erste darin. */
+function heroKm(from) {
+  const pts = getReadings().filter(r => r.odometerKm > 0).map(r => [Date.parse(r.date), r.odometerKm])
+    .concat(getCosts().filter(c => c.odometerKm > 0).map(c => [Date.parse(c.date), c.odometerKm])).sort((a, b) => a[0] - b[0]);
+  const cur = Math.max(pts.length ? pts[pts.length - 1][1] : 0, (carKmCache && carKmCache.km) || 0); if (!cur) return null;
+  const t0 = from.getTime(), pk = Number(getSettings().purchaseKm), bought = Date.parse(purchaseDay() + 'T00:00:00');
+  let start;
+  if (pk > 0 && bought >= t0) start = pk;
+  else { const before = pts.filter(q => q[0] < t0), first = pts.find(q => q[0] >= t0); start = before.length ? before[before.length - 1][1] : first ? first[1] : null; }
+  const km = start != null ? cur - start : null; return km > 0 ? km : null;
+}
 /** Die drei Werte für 'year' (laufendes Jahr) oder 'since' (ab Kaufmonat bis heute): Kilometer, Kosten (Laden + Kosten – Einnahmen), Geladen (alle Orte). */
 function heroVals(mode) {
   const now = new Date(), cy = now.getFullYear(), [py, pm] = purchaseMonth().split('-').map(Number);
@@ -26,7 +37,7 @@ function heroVals(mode) {
   const has = getReadings().some(r => inR(r.date)) || getCosts().some(c => inR(c.date));
   let cost = 0, kwh = 0;
   if (has) for (let y = from.getFullYear(), m = from.getMonth(); y < cy || (y === cy && m <= end.getMonth()); m++) { if (m > 11) { m = 0; y++; if (y > cy) break; } cost += costTotals(y, m).total; kwh += monthReport(y, m, 'all').kwh; }
-  const km = mode === 'since' ? rangeKm(from.getTime(), now.getTime() + 1) : yearKm(cy);
+  const km = heroKm(from);
   const lab = (name) => mode === 'since' ? 'seit ' + purchaseLabel() : name + ' ' + cy;                         // seit Kauf: nur „seit Juni 2026“ (Monat aus den Einstellungen), Jahr: „Kilometer 2026“
   return [{ value: km != null ? fmt(km, 0) : '–', label: lab('Kilometer') }, { value: has ? fmt(cost, 0) : '–', label: lab('Kosten') }, { value: has ? fmt(kwh, 0) : '–', label: lab('Geladen') }];
 }
