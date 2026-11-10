@@ -283,6 +283,12 @@ $('trips-more').addEventListener('click', () => { tripDays += 30; renderTrips();
 $('set-cmp-car').addEventListener('change', (e) => setQuickSetting('cmpCar', e.target.value.trim().slice(0, 40) || undefined));
 [['set-cmp-l', 'cmpL', 1, 30], ['set-cmp-eur', 'cmpEur', 0.5, 5], ['set-cmp-co2', 'cmpCo2', -0.01, 2000]].forEach(([id, k, lo, hi]) => $(id).addEventListener('change', (e) => { const v = deDec(e.target.value);
   if (e.target.value.trim() === '') { setQuickSetting(k, undefined); return; } if (Number.isFinite(v) && v > lo && v < hi) { setQuickSetting(k, Math.round(v * 100) / 100); e.target.value = String(Math.round(v * 100) / 100).replace('.', ','); } else e.target.value = getSettings()[k] ? String(getSettings()[k]).replace('.', ',') : ''; }));
+/* zusätzlich schon beim Tippen speichern (kurz verzögert): am Handy feuert „change“ nicht, wenn die App direkt nach der Eingabe verlassen wird */
+[['set-cmp-l', 'cmpL', 1, 30], ['set-cmp-eur', 'cmpEur', 0.5, 5], ['set-cmp-co2', 'cmpCo2', -0.01, 2000], ['set-cmp-car', 'cmpCar']].forEach(([id, k, lo, hi]) => { let tm = null;
+  $(id).addEventListener('input', (e) => { clearTimeout(tm); tm = setTimeout(() => { const raw = e.target.value.trim();
+    if (k === 'cmpCar') { const v = raw.slice(0, 40) || undefined; if (v !== getSettings().cmpCar) setQuickSetting(k, v); return; }
+    if (raw === '') { if (getSettings()[k] != null) setQuickSetting(k, undefined); return; }
+    const v = Math.round(deDec(raw) * 100) / 100; if (Number.isFinite(v) && v > lo && v < hi && v !== Number(getSettings()[k])) setQuickSetting(k, v); }, 900); }); });
 $('trips-go-set').addEventListener('click', () => openSettings('fahrten'));
 $('trips-list').addEventListener('click', (e) => {
   const tg = e.target.closest('[data-ttag]');

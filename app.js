@@ -3981,7 +3981,7 @@ function checkCacheUid(uid) {
   if (prev && prev !== uid) { save(KEY_READINGS, []); save(KEY_COSTS, []); save(KEY_REMINDERS, []); save(KEY_RECUR, []); localStorage.removeItem(KEY_PROVIDERS); localStorage.removeItem(KEY_PROVINFO); localStorage.removeItem(KEY_DVBAK); localStorage.removeItem('enyaq.kb'); localStorage.removeItem(KEY_CATEGORIES); localStorage.removeItem(KEY_WXLOC); localStorage.removeItem(KEY_WXCACHE); localStorage.removeItem(KEY_TEMPS); localStorage.removeItem(KEY_WRAP); save(KEY_TRIPS, []); localStorage.removeItem(KEY_TPLACES); localStorage.removeItem(KEY_TRIPS_IMP); localStorage.removeItem(KEY_TLABELS); localStorage.removeItem(KEY_TRULES); localStorage.removeItem(KEY_TDEF); stopLive(false);
     /* auch alles Konto-Bezogene, das sonst hängen bliebe: Einstellungen (kommen aus der Cloud des neuen Kontos), Fahrzeugstatus und km-Stand
        (sonst bis zu 1 h die Werte des vorherigen Autos), Prognose, Eis-/Frost-Hinweise, Abzeichen, letzte Route, „Fahrzeug verbinden – später“ */
-    [KEY_SETTINGS, KEY_WXO, KEY_WXO + 'S', KEY_ICE, KEY_FROST, KEY_BADGES, KEY_RT, KEY_VEH_LATER, 'enyaq.onbPreset'].forEach(k => { try { localStorage.removeItem(k); } catch (e) { } });
+    [KEY_SETTINGS, KEY_WXO, KEY_WXO + 'S', KEY_ICE, KEY_FROST, KEY_BADGES, KEY_RT, KEY_VEH_LATER, 'enyaq.onbPreset', 'enyaq.setBase'].forEach(k => { try { localStorage.removeItem(k); } catch (e) { } });
     carKmCache = null; try { renderVehCard(); } catch (e) { } try { applyTitle(); } catch (e) { } }
   localStorage.setItem(KEY_CACHE_UID, uid);
 }
@@ -5641,10 +5641,18 @@ async function applyUserPreset() {
     if (carProf().key !== carWas && (!onb || onb === 'done')) setTimeout(() => location.reload(), 1500);   // im Onboarding lädt erst „Los geht’s“ neu                                   // Karussell-Bilder und Fahrzeugwerte des neuen Profils (Cloud-Schreiben liegt in der Offline-Warteschlange)
   } catch (e) { console.warn('Voreinstellung:', e); }
 }
+/* Einstellungen: Stand des letzten Abgleichs mit der Cloud (KEY_SETBASE). Hochgeladen werden nur Schlüssel, die sich seitdem auf diesem Gerät geändert haben –
+   sonst überschreibt ein Gerät mit altem Stand (z. B. lange offener PC-Tab, automatischer Tasks-Import) neuere Werte vom Handy (z. B. Vergleichs-Benziner). */
+const KEY_SETBASE = 'enyaq.setBase';
 function pushPrefs() {
   if (!window.cloud?.isSignedIn()) return;
-  const w = Number(getSettings().wltp);
-  window.cloud.setPrefs({ wltp: w > 0 ? w : null, wxLoc: wxLoc() || null, provInfo: load(KEY_PROVINFO, null), settings: syncSet(load(KEY_SETTINGS, {})), kb: load('enyaq.kb', null), lab: labNoFc(load(KEY_LAB, null)) }).catch(() => { });
+  const w = Number(getSettings().wltp), o = { wltp: w > 0 ? w : null, wxLoc: wxLoc() || null, provInfo: load(KEY_PROVINFO, null), kb: load('enyaq.kb', null), lab: labNoFc(load(KEY_LAB, null)) };
+  const cur = syncSet(load(KEY_SETTINGS, {})) || {}, base = load(KEY_SETBASE, null);
+  if (!window.cloud.patchPrefs) { window.cloud.setPrefs({ ...o, settings: syncSet(load(KEY_SETTINGS, {})) }).catch(() => { }); return; }
+  const set = {}, del = [];
+  if (base) SYNC_SET_KEYS.forEach(k => { if (JSON.stringify(cur[k]) !== JSON.stringify(base[k])) { if (cur[k] === undefined) del.push(k); else set[k] = cur[k]; } });   // ohne Abgleichsstand (vor dem ersten Empfang) keine Einstellungen schreiben
+  window.cloud.patchPrefs(o, set, del).catch(() => { });
+  if (base) save(KEY_SETBASE, { ...base, ...set, ...Object.fromEntries(del.map(k => [k, undefined])) });
 }
 window.onCloudPrefs = (d, first, uid) => {
   if (first) checkCacheUid(uid);
@@ -5662,6 +5670,7 @@ window.onCloudPrefs = (d, first, uid) => {
   if (first) setTimeout(() => { try { heroFromSettings(); } catch (e) { } }, 0);   // Start-Hintergrund: aus der Cloud übernehmen bzw. lokale Wahl einmal hochladen
   if (first) window.presetP = applyUserPreset();                                      // Voreinstellung (Fahrzeug, Ansicht …) einmal je Konto – läuft nach dem Abgleich (async)
   if (first && ns == null && ls) { ns = ls; up = true; }
+  if (d) save(KEY_SETBASE, ns || {});                                                   // Abgleichsstand: das, was jetzt in der Cloud steht
   if (ns && JSON.stringify(ns) !== JSON.stringify(ls)) {
     const raw = load(KEY_SETTINGS, {}) || {}; SYNC_SET_KEYS.forEach(k => delete raw[k]); save(KEY_SETTINGS, { ...raw, ...ns });   // PIN, WLTP usw. bleiben
     applyTitle(); renderReminderBadges(); renderHeroStats(); try { heroFromSettings(); } catch (e) { } try { fillWxoPrefs(); window.carReschedule && window.carReschedule(); } catch (e) { }
@@ -6137,6 +6146,12 @@ $('trips-more').addEventListener('click', () => { tripDays += 30; renderTrips();
 $('set-cmp-car').addEventListener('change', (e) => setQuickSetting('cmpCar', e.target.value.trim().slice(0, 40) || undefined));
 [['set-cmp-l', 'cmpL', 1, 30], ['set-cmp-eur', 'cmpEur', 0.5, 5], ['set-cmp-co2', 'cmpCo2', -0.01, 2000]].forEach(([id, k, lo, hi]) => $(id).addEventListener('change', (e) => { const v = deDec(e.target.value);
   if (e.target.value.trim() === '') { setQuickSetting(k, undefined); return; } if (Number.isFinite(v) && v > lo && v < hi) { setQuickSetting(k, Math.round(v * 100) / 100); e.target.value = String(Math.round(v * 100) / 100).replace('.', ','); } else e.target.value = getSettings()[k] ? String(getSettings()[k]).replace('.', ',') : ''; }));
+/* zusätzlich schon beim Tippen speichern (kurz verzögert): am Handy feuert „change“ nicht, wenn die App direkt nach der Eingabe verlassen wird */
+[['set-cmp-l', 'cmpL', 1, 30], ['set-cmp-eur', 'cmpEur', 0.5, 5], ['set-cmp-co2', 'cmpCo2', -0.01, 2000], ['set-cmp-car', 'cmpCar']].forEach(([id, k, lo, hi]) => { let tm = null;
+  $(id).addEventListener('input', (e) => { clearTimeout(tm); tm = setTimeout(() => { const raw = e.target.value.trim();
+    if (k === 'cmpCar') { const v = raw.slice(0, 40) || undefined; if (v !== getSettings().cmpCar) setQuickSetting(k, v); return; }
+    if (raw === '') { if (getSettings()[k] != null) setQuickSetting(k, undefined); return; }
+    const v = Math.round(deDec(raw) * 100) / 100; if (Number.isFinite(v) && v > lo && v < hi && v !== Number(getSettings()[k])) setQuickSetting(k, v); }, 900); }); });
 $('trips-go-set').addEventListener('click', () => openSettings('fahrten'));
 $('trips-list').addEventListener('click', (e) => {
   const tg = e.target.closest('[data-ttag]');

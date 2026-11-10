@@ -30,10 +30,18 @@ async function applyUserPreset() {
     if (carProf().key !== carWas && (!onb || onb === 'done')) setTimeout(() => location.reload(), 1500);   // im Onboarding lädt erst „Los geht’s“ neu                                   // Karussell-Bilder und Fahrzeugwerte des neuen Profils (Cloud-Schreiben liegt in der Offline-Warteschlange)
   } catch (e) { console.warn('Voreinstellung:', e); }
 }
+/* Einstellungen: Stand des letzten Abgleichs mit der Cloud (KEY_SETBASE). Hochgeladen werden nur Schlüssel, die sich seitdem auf diesem Gerät geändert haben –
+   sonst überschreibt ein Gerät mit altem Stand (z. B. lange offener PC-Tab, automatischer Tasks-Import) neuere Werte vom Handy (z. B. Vergleichs-Benziner). */
+const KEY_SETBASE = 'enyaq.setBase';
 function pushPrefs() {
   if (!window.cloud?.isSignedIn()) return;
-  const w = Number(getSettings().wltp);
-  window.cloud.setPrefs({ wltp: w > 0 ? w : null, wxLoc: wxLoc() || null, provInfo: load(KEY_PROVINFO, null), settings: syncSet(load(KEY_SETTINGS, {})), kb: load('enyaq.kb', null), lab: labNoFc(load(KEY_LAB, null)) }).catch(() => { });
+  const w = Number(getSettings().wltp), o = { wltp: w > 0 ? w : null, wxLoc: wxLoc() || null, provInfo: load(KEY_PROVINFO, null), kb: load('enyaq.kb', null), lab: labNoFc(load(KEY_LAB, null)) };
+  const cur = syncSet(load(KEY_SETTINGS, {})) || {}, base = load(KEY_SETBASE, null);
+  if (!window.cloud.patchPrefs) { window.cloud.setPrefs({ ...o, settings: syncSet(load(KEY_SETTINGS, {})) }).catch(() => { }); return; }
+  const set = {}, del = [];
+  if (base) SYNC_SET_KEYS.forEach(k => { if (JSON.stringify(cur[k]) !== JSON.stringify(base[k])) { if (cur[k] === undefined) del.push(k); else set[k] = cur[k]; } });   // ohne Abgleichsstand (vor dem ersten Empfang) keine Einstellungen schreiben
+  window.cloud.patchPrefs(o, set, del).catch(() => { });
+  if (base) save(KEY_SETBASE, { ...base, ...set, ...Object.fromEntries(del.map(k => [k, undefined])) });
 }
 window.onCloudPrefs = (d, first, uid) => {
   if (first) checkCacheUid(uid);
@@ -51,6 +59,7 @@ window.onCloudPrefs = (d, first, uid) => {
   if (first) setTimeout(() => { try { heroFromSettings(); } catch (e) { } }, 0);   // Start-Hintergrund: aus der Cloud übernehmen bzw. lokale Wahl einmal hochladen
   if (first) window.presetP = applyUserPreset();                                      // Voreinstellung (Fahrzeug, Ansicht …) einmal je Konto – läuft nach dem Abgleich (async)
   if (first && ns == null && ls) { ns = ls; up = true; }
+  if (d) save(KEY_SETBASE, ns || {});                                                   // Abgleichsstand: das, was jetzt in der Cloud steht
   if (ns && JSON.stringify(ns) !== JSON.stringify(ls)) {
     const raw = load(KEY_SETTINGS, {}) || {}; SYNC_SET_KEYS.forEach(k => delete raw[k]); save(KEY_SETTINGS, { ...raw, ...ns });   // PIN, WLTP usw. bleiben
     applyTitle(); renderReminderBadges(); renderHeroStats(); try { heroFromSettings(); } catch (e) { } try { fillWxoPrefs(); window.carReschedule && window.carReschedule(); } catch (e) { }
