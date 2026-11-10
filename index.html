@@ -175,6 +175,12 @@
     #desk-rem { display: block; position: fixed; top: 0; right: 0; bottom: 0; width: var(--dr); overflow-y: auto; background: #05080f; border-left: 1px solid rgb(30 41 59); padding: 20px 16px 24px; z-index: 30; }
     #desk-rem #view-reminders { margin: 0; }
     #desk-rem #view-reminders h1 { font-size: 1.3rem; letter-spacing: .1em; overflow: visible; }
+    /* Einstellungen: deren Bereichsliste steht fest links (statt Schnellmenü), ohne Abdunkeln daneben; unten „Start“ zurück */
+    html.set-desk #set-drawer { right: auto; width: var(--dl); z-index: 41; pointer-events: auto !important; }
+    html.set-desk #set-drawer-bg, html.set-desk #set-burger { display: none !important; }
+    html.set-desk #set-drawer-panel { width: var(--dl); max-width: none; transform: none !important; transition: none; box-shadow: none; border-right: 1px solid rgb(30 41 59); display: flex; flex-direction: column; }
+    html.set-desk #sd-home { display: flex !important; margin-top: auto; border-top: 1px solid rgba(148, 163, 184, .25); border-radius: 0; padding-top: 16px; }
+    html.set-desk #sd-list + p { margin-top: 1rem; }
   }
   .no-scrollbar { scrollbar-width: none; } .no-scrollbar::-webkit-scrollbar { display: none; }
   /* Einfache Ansicht (Einstellungen → Fahrzeug & Kauf → Ansicht): weniger Funktionen, Start mit Kacheln, unten Start · Erfassen · Auswerten. Daten bleiben unberührt. */
@@ -205,7 +211,7 @@
   @media (prefers-reduced-motion: reduce) { #bd-conf i, #bdg-conf i { animation: none; top: var(--y, 10%); } #bd-card, #bdg-card { animation: none; } }
 </style>
 <!-- Tailwind fertig gebaut (npm run css) – am Ende des Kopfs wie früher das CDN, damit die Reihenfolge der Regeln gleich bleibt -->
-<link rel="stylesheet" href="/app.css?v=280">
+<link rel="stylesheet" href="/app.css?v=281">
 </head>
 <body class="bg-black text-slate-100 min-h-screen">
 
@@ -1599,6 +1605,7 @@
       <button type="button" data-go="reminders" class="sd-item flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left active:bg-slate-100 dark:active:bg-slate-800"><svg class="h-[22px] w-[22px] shrink-0 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5h11M9 12h11M9 19h11"/><path d="M4 5l1 1 2-2M4 12l1 1 2-2M4 19l1 1 2-2"/></svg>Erinnerungen ansehen</button>
       <button type="button" data-sec="gefahr" class="sd-item flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-red-600 dark:text-red-300 active:bg-slate-100 dark:active:bg-slate-800"><svg class="h-[22px] w-[22px] shrink-0 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>Alle Daten löschen</button>
     </div>
+    <button id="sd-home" type="button" data-go="dashboard" class="hidden mt-auto w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-[15px] font-semibold text-emerald-700 dark:text-emerald-300 hover:bg-slate-100 dark:hover:bg-slate-800"><svg class="h-[22px] w-[22px] shrink-0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h5v-6h4v6h5V9.5"/></svg>Start</button>
   </nav>
 </div>
 <!-- Neues Abzeichen: Pop-up mit Konfetti (wie die Festkarte) -->
@@ -1866,7 +1873,7 @@
   </div>
 </nav>
 
-<script src="/app.js?v=280"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
+<script src="/app.js?v=281"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
 <script type="module">
 /* Firebase (modular SDK). Die Konfiguration ist kein Geheimnis – geschützt wird über Auth + Firestore-Regeln. */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';

@@ -5,7 +5,8 @@ let currentView = 'dashboard', histHeadVisible = true;
 function isDesk() { try { return matchMedia('(min-width: 1280px)').matches; } catch (e) { return false; } }
 function showView(name) {
   if (name === 'reminders' && isDesk()) { renderReminders(); return; }      // PC: Erinnerungen stehen fest rechts
-  currentView = name; if (name === 'history') histHeadVisible = true;     // frisch geöffnet: Kopfzeile steht oben im Bild
+  currentView = name; if (name === 'history') histHeadVisible = true;
+  document.documentElement.classList.toggle('set-desk', name === 'settings');   // PC: Einstellungs-Menü fest links (CSS nur ab 1280 px)     // frisch geöffnet: Kopfzeile steht oben im Bild
   document.querySelectorAll('.view').forEach(v => { if (v.id === 'view-reminders' && v.parentElement && v.parentElement.id === 'desk-rem') return; v.classList.toggle('hidden', v.id !== 'view-' + name); });
   if (isDesk()) try { deskNavMark(name); } catch (e) { }
   document.querySelectorAll('.nav-btn').forEach(b => {
