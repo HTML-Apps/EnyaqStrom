@@ -1021,7 +1021,7 @@ function renderChart() {
   if (chart) chart.destroy();
   if (!hasData) return;
 
-  const dark = matchMedia('(prefers-color-scheme: dark)').matches;
+  const dark = isDark();
   const text = dark ? '#cbd5e1' : '#475569', grid = dark ? 'rgba(148,163,184,.15)' : 'rgba(100,116,139,.15)';
   chart = new Chart($('chart'), {
     data: {
@@ -1315,7 +1315,7 @@ function renderLossChart() {
   $('loss-note').textContent = n ? 'Basis: ' + n + ' Ladungen · Kapazität je Ladung gespeichert · enthält u. a. Batterieheizung und Wandlerverluste' : '';
   if (lossChart) lossChart.destroy();
   if (!has) return;
-  const dark = matchMedia('(prefers-color-scheme: dark)').matches, text = dark ? '#cbd5e1' : '#475569', grid = dark ? 'rgba(148,163,184,.15)' : 'rgba(100,116,139,.15)';
+  const dark = isDark(), text = dark ? '#cbd5e1' : '#475569', grid = dark ? 'rgba(148,163,184,.15)' : 'rgba(100,116,139,.15)';
   lossChart = new Chart($('loss-chart'), {
     data: { labels, datasets: [
       { type: 'bar', label: 'Verlust (kWh)', data: kwh, backgroundColor: '#f59e0b', borderRadius: 6, yAxisID: 'y' },
@@ -3317,7 +3317,7 @@ function renderBattery() {
   const roll = [];
   rows.forEach(r => { const w = rows.filter(x => x.t > r.t - BAT.win * day && x.t <= r.t); if (w.length >= 6) { const f = batFit(w); if (f) roll.push({ x: r.t, y: f.K }); } });
   const use = fit ? fit.use : rows, drop = fit ? fit.drop : [], t0 = rows[0].t - 3 * day, t1 = Math.max(now, rows[rows.length - 1].t) + 3 * day;
-  const dark = matchMedia('(prefers-color-scheme: dark)').matches, text = dark ? '#cbd5e1' : '#475569', grid = dark ? 'rgba(148,163,184,.15)' : 'rgba(100,116,139,.15)', yrs = (t1 - t0) > 300 * day;
+  const dark = isDark(), text = dark ? '#cbd5e1' : '#475569', grid = dark ? 'rgba(148,163,184,.15)' : 'rgba(100,116,139,.15)', yrs = (t1 - t0) > 300 * day;
   const ds = [{ type: 'scatter', label: 'Einzelne Ladung', data: use.map(x => ({ x: x.t, y: +x.k.toFixed(2) })), backgroundColor: '#94a3b8', pointRadius: 3.5 }];
   if (drop.length) ds.push({ type: 'scatter', label: 'Ausreißer', data: drop.map(x => ({ x: x.t, y: +x.k.toFixed(2) })), backgroundColor: '#ef4444', pointRadius: 3.5 });
   if (roll.length >= 2) ds.push({ type: 'line', label: 'Gleitend (3 Monate)', data: roll, borderColor: '#10b981', backgroundColor: '#10b981', pointRadius: 0, tension: .25, borderWidth: 2.5 });
@@ -4877,7 +4877,7 @@ function wxRender(data, l) {
 /** Diagramm als Chart.js-Canvas (wie die Diagramme auf Start): Farben bleiben auch bei aggressiven Handy-Dunkelmodi erhalten. */
 function wxDraw(days, isDry) {
   const cv = $('wx-chart'); if (!cv || typeof Chart === 'undefined' || !days.length) return;
-  const dark = matchMedia('(prefers-color-scheme: dark)').matches, text = dark ? '#cbd5e1' : '#475569', line = dark ? '#94a3b8' : '#64748b', green = '#10b981';
+  const dark = isDark(), text = dark ? '#cbd5e1' : '#475569', line = dark ? '#94a3b8' : '#64748b', green = '#10b981';
   const top = Math.max(40, Math.ceil(Math.max(...days.map(x => x.p || 0)) / 10) * 10 + 10);
   const extra = { id: 'wxExtra', afterDatasetsDraw(ch) {                                // gestrichelte 10-%-Linie + Prozentwerte über den Balken
     const { ctx, chartArea: a, scales: { y } } = ch, yy = y.getPixelForValue(WX_DRY);
@@ -4980,7 +4980,7 @@ function renderHeat() {
   const rs = getReadings(), days = new Map(), wdN = [0, 0, 0, 0, 0, 0, 0]; let nCh = 0, first = null;
   rs.forEach((r, i) => { if (!isCharge(rs, i)) return; const t = Date.parse(r.date); if (!Number.isFinite(t)) return; const k = wxIso(new Date(t)), o = days.get(k) || { n: 0, kwh: 0 }; o.n++; o.kwh += r.consumedSinceLast || 0; days.set(k, o); wdN[(new Date(t).getDay() + 6) % 7]++; nCh++; if (first == null || t < first) first = t; });
   $('st-heat-card').classList.toggle('hidden', nCh < 3); if (nCh < 3) return;
-  const dark = matchMedia('(prefers-color-scheme: dark)').matches, text = dark ? '#cbd5e1' : '#475569', empty = dark ? '#1e293b' : '#e2e8f0', ramp = dark ? ['#065f46', '#059669', '#10b981', '#6ee7b7'] : ['#bbf7d0', '#6ee7b7', '#10b981', '#047857'];
+  const dark = isDark(), text = dark ? '#cbd5e1' : '#475569', empty = dark ? '#1e293b' : '#e2e8f0', ramp = dark ? ['#065f46', '#059669', '#10b981', '#6ee7b7'] : ['#bbf7d0', '#6ee7b7', '#10b981', '#047857'];
   const mon = (d) => { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; }, today = new Date(), thisMon = mon(today);
   const N = Math.min(53, Math.max(16, Math.round((thisMon - mon(new Date(first))) / (7 * 864e5)) + 1)), start = new Date(thisMon); start.setDate(start.getDate() - 7 * (N - 1));
   const vals = [...days.values()].map(o => o.kwh).filter(v => v > 0).sort((a, b) => a - b), q = (f) => vals.length ? vals[Math.min(vals.length - 1, Math.floor(f * vals.length))] : 0, lvl = (o) => o.kwh <= 0 ? 0 : o.kwh >= q(.75) ? 3 : o.kwh >= q(.5) ? 2 : o.kwh >= q(.25) ? 1 : 0;
@@ -5430,7 +5430,7 @@ async function renderTempChart() {
   if (typeof Chart === 'undefined') { note.textContent = 'Diagramm nicht verfügbar (Chart.js nicht geladen).'; return; }
   const n = pts.length, mx = pts.reduce((a, p) => a + p.x, 0) / n, my = pts.reduce((a, p) => a + p.y, 0) / n, sxx = pts.reduce((a, p) => a + (p.x - mx) ** 2, 0), sxy = pts.reduce((a, p) => a + (p.x - mx) * (p.y - my), 0);
   const slope = sxx > 0 ? sxy / sxx : 0, icpt = my - slope * mx, xmin = Math.min(...pts.map(p => p.x)), xmax = Math.max(...pts.map(p => p.x)), trend = n >= 5 && xmax - xmin >= 6;
-  const dark = matchMedia('(prefers-color-scheme: dark)').matches, text = dark ? '#cbd5e1' : '#475569', grid = dark ? 'rgba(148,163,184,.15)' : 'rgba(100,116,139,.15)';
+  const dark = isDark(), text = dark ? '#cbd5e1' : '#475569', grid = dark ? 'rgba(148,163,184,.15)' : 'rgba(100,116,139,.15)';
   const ds = [{ type: 'scatter', data: pts, backgroundColor: '#94a3b8', pointRadius: 3.5 }];
   if (trend) ds.push({ type: 'line', data: [{ x: xmin, y: +(icpt + slope * xmin).toFixed(2) }, { x: xmax, y: +(icpt + slope * xmax).toFixed(2) }], borderColor: '#10b981', backgroundColor: '#10b981', pointRadius: 0, borderWidth: 2.5 });
   wrap.classList.remove('hidden');
@@ -6655,6 +6655,13 @@ function openDeepLink() {
   return !!t;
 }
 openDeepLink();
+
+/* Darstellung: Automatisch / Hell / Dunkel (setTheme aus dem Früh-Skript in index.html). Danach aktuelle Ansicht neu zeichnen, damit Diagramme die passenden Farben bekommen */
+function paintThemeSeg() { const v = themePref(); document.querySelectorAll('#theme-seg [data-theme]').forEach(b => { const on = b.dataset.theme === v; b.setAttribute('aria-pressed', on);
+  b.classList.toggle('bg-white', on); b.classList.toggle('dark:bg-slate-600', on); b.classList.toggle('shadow-sm', on); b.classList.toggle('font-semibold', on); }); }
+$('theme-seg').addEventListener('click', (e) => { const b = e.target.closest('[data-theme]'); if (b) setTheme(b.dataset.theme); });
+document.addEventListener('themechange', () => { paintThemeSeg(); try { if (currentView !== 'settings') showView(currentView); else if (typeof renderDashboard === 'function') renderDashboard(); } catch (e) { } });
+paintThemeSeg();
 
 // ───── src/14-labor-sprache-tasks.js ─────
 /* =====================================================================

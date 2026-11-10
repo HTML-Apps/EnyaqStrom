@@ -48,7 +48,7 @@ function renderHeat() {
   const rs = getReadings(), days = new Map(), wdN = [0, 0, 0, 0, 0, 0, 0]; let nCh = 0, first = null;
   rs.forEach((r, i) => { if (!isCharge(rs, i)) return; const t = Date.parse(r.date); if (!Number.isFinite(t)) return; const k = wxIso(new Date(t)), o = days.get(k) || { n: 0, kwh: 0 }; o.n++; o.kwh += r.consumedSinceLast || 0; days.set(k, o); wdN[(new Date(t).getDay() + 6) % 7]++; nCh++; if (first == null || t < first) first = t; });
   $('st-heat-card').classList.toggle('hidden', nCh < 3); if (nCh < 3) return;
-  const dark = matchMedia('(prefers-color-scheme: dark)').matches, text = dark ? '#cbd5e1' : '#475569', empty = dark ? '#1e293b' : '#e2e8f0', ramp = dark ? ['#065f46', '#059669', '#10b981', '#6ee7b7'] : ['#bbf7d0', '#6ee7b7', '#10b981', '#047857'];
+  const dark = isDark(), text = dark ? '#cbd5e1' : '#475569', empty = dark ? '#1e293b' : '#e2e8f0', ramp = dark ? ['#065f46', '#059669', '#10b981', '#6ee7b7'] : ['#bbf7d0', '#6ee7b7', '#10b981', '#047857'];
   const mon = (d) => { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; }, today = new Date(), thisMon = mon(today);
   const N = Math.min(53, Math.max(16, Math.round((thisMon - mon(new Date(first))) / (7 * 864e5)) + 1)), start = new Date(thisMon); start.setDate(start.getDate() - 7 * (N - 1));
   const vals = [...days.values()].map(o => o.kwh).filter(v => v > 0).sort((a, b) => a - b), q = (f) => vals.length ? vals[Math.min(vals.length - 1, Math.floor(f * vals.length))] : 0, lvl = (o) => o.kwh <= 0 ? 0 : o.kwh >= q(.75) ? 3 : o.kwh >= q(.5) ? 2 : o.kwh >= q(.25) ? 1 : 0;
@@ -498,7 +498,7 @@ async function renderTempChart() {
   if (typeof Chart === 'undefined') { note.textContent = 'Diagramm nicht verfügbar (Chart.js nicht geladen).'; return; }
   const n = pts.length, mx = pts.reduce((a, p) => a + p.x, 0) / n, my = pts.reduce((a, p) => a + p.y, 0) / n, sxx = pts.reduce((a, p) => a + (p.x - mx) ** 2, 0), sxy = pts.reduce((a, p) => a + (p.x - mx) * (p.y - my), 0);
   const slope = sxx > 0 ? sxy / sxx : 0, icpt = my - slope * mx, xmin = Math.min(...pts.map(p => p.x)), xmax = Math.max(...pts.map(p => p.x)), trend = n >= 5 && xmax - xmin >= 6;
-  const dark = matchMedia('(prefers-color-scheme: dark)').matches, text = dark ? '#cbd5e1' : '#475569', grid = dark ? 'rgba(148,163,184,.15)' : 'rgba(100,116,139,.15)';
+  const dark = isDark(), text = dark ? '#cbd5e1' : '#475569', grid = dark ? 'rgba(148,163,184,.15)' : 'rgba(100,116,139,.15)';
   const ds = [{ type: 'scatter', data: pts, backgroundColor: '#94a3b8', pointRadius: 3.5 }];
   if (trend) ds.push({ type: 'line', data: [{ x: xmin, y: +(icpt + slope * xmin).toFixed(2) }, { x: xmax, y: +(icpt + slope * xmax).toFixed(2) }], borderColor: '#10b981', backgroundColor: '#10b981', pointRadius: 0, borderWidth: 2.5 });
   wrap.classList.remove('hidden');

@@ -321,3 +321,10 @@ function openDeepLink() {
   return !!t;
 }
 openDeepLink();
+
+/* Darstellung: Automatisch / Hell / Dunkel (setTheme aus dem Früh-Skript in index.html). Danach aktuelle Ansicht neu zeichnen, damit Diagramme die passenden Farben bekommen */
+function paintThemeSeg() { const v = themePref(); document.querySelectorAll('#theme-seg [data-theme]').forEach(b => { const on = b.dataset.theme === v; b.setAttribute('aria-pressed', on);
+  b.classList.toggle('bg-white', on); b.classList.toggle('dark:bg-slate-600', on); b.classList.toggle('shadow-sm', on); b.classList.toggle('font-semibold', on); }); }
+$('theme-seg').addEventListener('click', (e) => { const b = e.target.closest('[data-theme]'); if (b) setTheme(b.dataset.theme); });
+document.addEventListener('themechange', () => { paintThemeSeg(); try { if (currentView !== 'settings') showView(currentView); else if (typeof renderDashboard === 'function') renderDashboard(); } catch (e) { } });
+paintThemeSeg();

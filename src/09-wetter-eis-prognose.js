@@ -473,7 +473,7 @@ function wxRender(data, l) {
 /** Diagramm als Chart.js-Canvas (wie die Diagramme auf Start): Farben bleiben auch bei aggressiven Handy-Dunkelmodi erhalten. */
 function wxDraw(days, isDry) {
   const cv = $('wx-chart'); if (!cv || typeof Chart === 'undefined' || !days.length) return;
-  const dark = matchMedia('(prefers-color-scheme: dark)').matches, text = dark ? '#cbd5e1' : '#475569', line = dark ? '#94a3b8' : '#64748b', green = '#10b981';
+  const dark = isDark(), text = dark ? '#cbd5e1' : '#475569', line = dark ? '#94a3b8' : '#64748b', green = '#10b981';
   const top = Math.max(40, Math.ceil(Math.max(...days.map(x => x.p || 0)) / 10) * 10 + 10);
   const extra = { id: 'wxExtra', afterDatasetsDraw(ch) {                                // gestrichelte 10-%-Linie + Prozentwerte über den Balken
     const { ctx, chartArea: a, scales: { y } } = ch, yy = y.getPixelForValue(WX_DRY);

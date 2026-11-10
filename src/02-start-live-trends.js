@@ -47,7 +47,7 @@ function renderChart() {
   if (chart) chart.destroy();
   if (!hasData) return;
 
-  const dark = matchMedia('(prefers-color-scheme: dark)').matches;
+  const dark = isDark();
   const text = dark ? '#cbd5e1' : '#475569', grid = dark ? 'rgba(148,163,184,.15)' : 'rgba(100,116,139,.15)';
   chart = new Chart($('chart'), {
     data: {
@@ -341,7 +341,7 @@ function renderLossChart() {
   $('loss-note').textContent = n ? 'Basis: ' + n + ' Ladungen · Kapazität je Ladung gespeichert · enthält u. a. Batterieheizung und Wandlerverluste' : '';
   if (lossChart) lossChart.destroy();
   if (!has) return;
-  const dark = matchMedia('(prefers-color-scheme: dark)').matches, text = dark ? '#cbd5e1' : '#475569', grid = dark ? 'rgba(148,163,184,.15)' : 'rgba(100,116,139,.15)';
+  const dark = isDark(), text = dark ? '#cbd5e1' : '#475569', grid = dark ? 'rgba(148,163,184,.15)' : 'rgba(100,116,139,.15)';
   lossChart = new Chart($('loss-chart'), {
     data: { labels, datasets: [
       { type: 'bar', label: 'Verlust (kWh)', data: kwh, backgroundColor: '#f59e0b', borderRadius: 6, yAxisID: 'y' },

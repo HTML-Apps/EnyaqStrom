@@ -328,7 +328,7 @@ function renderBattery() {
   const roll = [];
   rows.forEach(r => { const w = rows.filter(x => x.t > r.t - BAT.win * day && x.t <= r.t); if (w.length >= 6) { const f = batFit(w); if (f) roll.push({ x: r.t, y: f.K }); } });
   const use = fit ? fit.use : rows, drop = fit ? fit.drop : [], t0 = rows[0].t - 3 * day, t1 = Math.max(now, rows[rows.length - 1].t) + 3 * day;
-  const dark = matchMedia('(prefers-color-scheme: dark)').matches, text = dark ? '#cbd5e1' : '#475569', grid = dark ? 'rgba(148,163,184,.15)' : 'rgba(100,116,139,.15)', yrs = (t1 - t0) > 300 * day;
+  const dark = isDark(), text = dark ? '#cbd5e1' : '#475569', grid = dark ? 'rgba(148,163,184,.15)' : 'rgba(100,116,139,.15)', yrs = (t1 - t0) > 300 * day;
   const ds = [{ type: 'scatter', label: 'Einzelne Ladung', data: use.map(x => ({ x: x.t, y: +x.k.toFixed(2) })), backgroundColor: '#94a3b8', pointRadius: 3.5 }];
   if (drop.length) ds.push({ type: 'scatter', label: 'Ausreißer', data: drop.map(x => ({ x: x.t, y: +x.k.toFixed(2) })), backgroundColor: '#ef4444', pointRadius: 3.5 });
   if (roll.length >= 2) ds.push({ type: 'line', label: 'Gleitend (3 Monate)', data: roll, borderColor: '#10b981', backgroundColor: '#10b981', pointRadius: 0, tension: .25, borderWidth: 2.5 });
