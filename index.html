@@ -225,7 +225,7 @@
   @media (prefers-reduced-motion: reduce) { #bd-conf i, #bdg-conf i { animation: none; top: var(--y, 10%); } #bd-card, #bdg-card { animation: none; } }
 </style>
 <!-- Tailwind fertig gebaut (npm run css) – am Ende des Kopfs wie früher das CDN, damit die Reihenfolge der Regeln gleich bleibt -->
-<link rel="stylesheet" href="/app.css?v=294">
+<link rel="stylesheet" href="/app.css?v=295">
 </head>
 <body class="bg-slate-100 text-slate-900 dark:bg-black dark:text-slate-100 min-h-screen">
 
@@ -1338,6 +1338,11 @@
           <div class="mt-2 flex items-center gap-2"><button id="gt-sync" type="button" class="shrink-0 rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm font-semibold active:scale-95 transition">Jetzt abgleichen</button><span id="gt-sync-msg" class="min-w-0 text-xs text-left text-slate-500 dark:text-slate-400"></span></div>
         </div>
         <div class="py-4 first:pt-4 last:pb-0">
+          <p class="block text-sm font-medium text-slate-700 dark:text-slate-300">Fällige Erinnerungen</p>
+          <label class="mt-2 flex items-center justify-between gap-3"><span><span class="block text-sm font-medium text-slate-700 dark:text-slate-300">Am Fälligkeitstag benachrichtigen</span><span class="block text-xs text-left text-slate-500 dark:text-slate-400">Push-Nachricht auf dieses Gerät gegen 18 Uhr, einmal am Tag der Fälligkeit – bei km-Erinnerungen am Abend, an dem der km-Stand sie erreicht. Überfällige zeigt nur die App.</span></span><input id="set-rem-push" type="checkbox" class="h-5 w-5 shrink-0 accent-emerald-600"></label>
+          <div class="mt-2 flex items-center gap-2"><button id="rem-test" type="button" class="shrink-0 rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm font-semibold active:scale-95 transition">Testnachricht senden</button><span id="rem-push-msg" class="min-w-0 text-xs text-left text-slate-500 dark:text-slate-400"></span></div>
+        </div>
+        <div class="py-4 first:pt-4 last:pb-0">
           <p class="block text-sm font-medium text-slate-700 dark:text-slate-300">Nächste Fälligkeiten (Checkheft)</p>
           <div class="grid grid-cols-2 gap-2 mt-2">
           <div><label for="set-next-hu" class="text-sm font-medium text-slate-700 dark:text-slate-300">Nächste HU</label><input id="set-next-hu" type="month" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
@@ -1473,11 +1478,6 @@
           <p id="set-ice-info" class="mt-1.5 text-xs text-left text-slate-500 dark:text-slate-400"></p>
           <label class="mt-3 flex items-center justify-between gap-3"><span><span class="block text-sm font-medium text-slate-700 dark:text-slate-300">Abends benachrichtigen</span><span class="block text-xs text-left text-slate-500 dark:text-slate-400">Push-Nachricht auf dieses Gerät gegen 18 Uhr, auch bei geschlossener App – nur wenn die Scheibe vereisen dürfte.</span></span><input id="set-ice-push" type="checkbox" class="h-5 w-5 shrink-0 accent-emerald-600"></label>
           <div class="mt-2 flex items-center gap-2"><button id="ice-test" type="button" class="shrink-0 rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm font-semibold active:scale-95 transition">Testnachricht senden</button><span id="ice-push-msg" class="min-w-0 text-xs text-left text-slate-500 dark:text-slate-400"></span></div>
-        </div>
-        <div class="py-4 first:pt-4 last:pb-0">
-          <p class="block text-sm font-medium text-slate-700 dark:text-slate-300">Fällige Erinnerungen</p>
-          <label class="mt-2 flex items-center justify-between gap-3"><span><span class="block text-sm font-medium text-slate-700 dark:text-slate-300">Am Fälligkeitstag benachrichtigen</span><span class="block text-xs text-left text-slate-500 dark:text-slate-400">Push-Nachricht auf dieses Gerät gegen 18 Uhr, einmal am Tag der Fälligkeit – bei km-Erinnerungen am Abend, an dem der km-Stand sie erreicht. Überfällige zeigt nur die App.</span></span><input id="set-rem-push" type="checkbox" class="h-5 w-5 shrink-0 accent-emerald-600"></label>
-          <div class="mt-2 flex items-center gap-2"><button id="rem-test" type="button" class="shrink-0 rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm font-semibold active:scale-95 transition">Testnachricht senden</button><span id="rem-push-msg" class="min-w-0 text-xs text-left text-slate-500 dark:text-slate-400"></span></div>
         </div>
       </div>
     </div>
@@ -1912,7 +1912,7 @@
   </div>
 </nav>
 
-<script src="/app.js?v=294"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
+<script src="/app.js?v=295"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
 <script type="module">
 /* Firebase (modular SDK). Die Konfiguration ist kein Geheimnis – geschützt wird über Auth + Firestore-Regeln. */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';

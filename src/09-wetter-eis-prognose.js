@@ -296,6 +296,7 @@ function vehSlideEasy(d, soc, tgt, charging, plugged, locked, at) {
 }
 function renderVehCard() {
   try { renderVehSlide(); } catch (e) { }
+  try { renderHeroStats(); } catch (e) { }   // km über dem Auto mit dem neuen km-Stand
   try { const c = load(KEY_WXO + 'S', null), d = c && c.d, at = d && (Date.parse(d.capturedAt) || c.t);
     setChargeHero(!!(apiEnabled() && d && (d.chargeState === 'CHARGING' || d.chargePowerKw > 0) && at && Date.now() - at < 3 * 3600e3)); } catch (e) { }
   const el = $('veh-card'), wrap = $('hero-car'); if (!el) return;

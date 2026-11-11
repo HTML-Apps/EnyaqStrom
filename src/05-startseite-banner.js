@@ -22,7 +22,8 @@ function rangeKm(s0, e0) {
 function heroKm(from) {
   const pts = getReadings().filter(r => r.odometerKm > 0).map(r => [Date.parse(r.date), r.odometerKm])
     .concat(getCosts().filter(c => c.odometerKm > 0).map(c => [Date.parse(c.date), c.odometerKm])).sort((a, b) => a[0] - b[0]);
-  const cur = Math.max(pts.length ? pts[pts.length - 1][1] : 0, (carKmCache && carKmCache.km) || 0); if (!cur) return null;
+  let vk = 0; try { const c = load(KEY_WXO + 'S', null); vk = c && c.d && c.d.odometerKm > 0 ? Math.round(c.d.odometerKm) : 0; } catch (e) { }   // km-Stand aus dem letzten Fahrzeugstatus (auch wenn er nur aus dem Zwischenspeicher kommt)
+  const cur = Math.max(pts.length ? pts[pts.length - 1][1] : 0, (carKmCache && carKmCache.km) || 0, vk); if (!cur) return null;
   const t0 = from.getTime(), pk = Number(getSettings().purchaseKm), bought = Date.parse(purchaseDay() + 'T00:00:00');
   let start;
   if (pk > 0 && bought >= t0) start = pk;
