@@ -2302,6 +2302,7 @@ function remLines(r, s, km) {
 const KEY_REMTAB = 'enyaq.remTab';
 let remTab = load(KEY_REMTAB, 'due') === 'run' ? 'run' : 'due';
 function renderReminders() {
+  try { fillIcePush(); } catch (e) { }   // Push-Schalter unten auf der Seite: aktuellen Stand zeigen
   const km = lastKnownKm(), all = sortedOpenReminders(km), open = all.filter(x => !isRun(x.r)), done = getReminders().filter(r => r.doneAt && !isRun(r)).sort((a, b) => new Date(b.doneAt) - new Date(a.doneAt));
   const runs = getReminders().filter(r => isRun(r)).map(r => ({ r, s: remStatus(r, km) })).sort((a, b) => String(a.r.startDate || '9999').localeCompare(String(b.r.startDate || '9999')) || a.r.title.localeCompare(b.r.title, 'de'));   // am längsten laufend zuerst
   const lv = all.filter(x => x.s.level !== 'ok'), n = lv.length, over = lv.filter(x => x.s.level === 'over').length;
@@ -8364,7 +8365,7 @@ const b64u = (s) => { const p = '='.repeat((4 - s.length % 4) % 4), b = atob((s 
 async function pushState() { if (!pushOk()) return null; try { const reg = await navigator.serviceWorker.ready; return await reg.pushManager.getSubscription(); } catch (e) { return null; } }
 async function fillIcePush() {
   const cb = $('set-ice-push'), cr = $('set-rem-push'); if (!cb) return; if (!pushOk()) { cb.checked = false; cb.disabled = true; if (cr) { cr.checked = false; cr.disabled = true; } pushMsg('Dieser Browser unterstützt keine Push-Nachrichten.'); return; }
-  const sub = await pushState(), ok = !!sub && Notification.permission === 'granted'; cb.checked = ok && load('enyaq.icePush', false); if (cr) cr.checked = ok && load('enyaq.remPush', false);
+  const sub = await pushState(), ok = !!sub && Notification.permission === 'granted'; cb.checked = ok && load('enyaq.icePush', false); if (cr) cr.checked = ok && load('enyaq.remPush', false); if ($('set-rem-push-b')) $('set-rem-push-b').checked = !!(cr && cr.checked);
   if (!$('ice-push-msg').textContent) pushMsg(Notification.permission === 'denied' ? 'Benachrichtigungen sind für diese App blockiert – in den Android-Einstellungen erlauben.' : '');
 }
 /* Ein Gerät, zwei Arten: Eis-Warnung (ice) und fällige Erinnerungen (rem). Angemeldet, solange eins davon an ist; der Server schickt je Art nur an Geräte mit Häkchen. */
@@ -8379,17 +8380,20 @@ async function pushSave() {
 }
 async function pushKind(key, on) { const was = load(key, false); save(key, on); try { await pushSave(); } catch (e) { save(key, was); throw e; } }
 const icePushOn = () => pushKind('enyaq.icePush', true), icePushOff = () => pushKind('enyaq.icePush', false).catch(() => { });
-const remPushMsg = (t, bad) => { const el = $('rem-push-msg'); if (el) { el.textContent = t || ''; el.classList.toggle('text-red-600', !!bad); el.classList.toggle('dark:text-red-400', !!bad); } };
-$('set-rem-push').addEventListener('change', async (e) => {
-  const cb = e.target; cb.disabled = true;
+/* Schalter + Test gibt es zweimal (Einstellungen › Wetter und unten auf der Seite Erinnerungen) – beide zeigen denselben Stand */
+const remPushMsg = (t, bad) => ['rem-push-msg', 'rem-push-msg-b'].forEach(id => { const el = $(id); if (el) { el.textContent = t || ''; el.classList.toggle('text-red-600', !!bad); el.classList.toggle('dark:text-red-400', !!bad); } });
+const remPushBoxes = (v) => ['set-rem-push', 'set-rem-push-b'].forEach(id => { if ($(id)) $(id).checked = v; });
+const remPushChange = async (e) => {
+  const cb = e.target; cb.disabled = true; remPushBoxes(cb.checked);
   try { remPushMsg(cb.checked ? 'Wird eingerichtet …' : ''); await pushKind('enyaq.remPush', cb.checked); remPushMsg(cb.checked ? '✓ Dieses Gerät meldet fällige Erinnerungen abends am Fälligkeitstag.' : 'Aus für dieses Gerät.'); }
-  catch (er) { cb.checked = false; remPushMsg((er && er.message) || 'Einrichten fehlgeschlagen.', true); }
+  catch (er) { remPushBoxes(false); remPushMsg((er && er.message) || 'Einrichten fehlgeschlagen.', true); }
   cb.disabled = false;
-});
-$('rem-test').addEventListener('click', async () => {
-  const b = $('rem-test'); b.disabled = true; remPushMsg('Sende …');
+};
+['set-rem-push', 'set-rem-push-b'].forEach(id => $(id).addEventListener('change', remPushChange));
+const remTest = async (ev) => {
+  const b = ev.currentTarget; b.disabled = true; remPushMsg('Sende …');
   try {
-    if (!load('enyaq.remPush', false) || !(await pushState())) { await pushKind('enyaq.remPush', true); $('set-rem-push').checked = true; }
+    if (!load('enyaq.remPush', false) || !(await pushState())) { await pushKind('enyaq.remPush', true); remPushBoxes(true); }
     const r = await fetch('/api/ice-push', { method: 'POST', headers: { ...(await authHeaders()), 'Content-Type': 'application/json' }, body: JSON.stringify({ test: 'rem' }) }), j = await r.json().catch(() => ({}));
     if (r.status === 503 && j.error === 'not_configured') remPushMsg('Server noch nicht eingerichtet – in Vercel fehlen: ' + (j.need || []).join(', ') + '.', true);
     else if (r.status === 404) remPushMsg('Kein Gerät angemeldet – Schalter oben einschalten.', true);
@@ -8397,7 +8401,8 @@ $('rem-test').addEventListener('click', async () => {
     else remPushMsg(j.ok ? '✓ Gesendet' + (j.real ? ' (mit deinen heute fälligen Erinnerungen)' : ' (Beispiel – heute ist nichts fällig)') + ' – kommt gleich an.' : 'Nicht zugestellt – Gerät bitte neu anmelden (Schalter aus und an).', !j.ok);
   } catch (er) { remPushMsg((er && er.message) || 'Senden fehlgeschlagen.', true); }
   b.disabled = false;
-});
+};
+['rem-test', 'rem-test-b'].forEach(id => $(id).addEventListener('click', remTest));
 $('set-ice-push').addEventListener('change', async (e) => {
   const cb = e.target; cb.disabled = true;
   try { if (cb.checked) { pushMsg('Wird eingerichtet …'); await icePushOn(); pushMsg('✓ Dieses Gerät bekommt die Eis-Warnung abends.'); } else { await icePushOff(); pushMsg('Aus für dieses Gerät.'); } }

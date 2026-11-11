@@ -299,6 +299,7 @@ function remLines(r, s, km) {
 const KEY_REMTAB = 'enyaq.remTab';
 let remTab = load(KEY_REMTAB, 'due') === 'run' ? 'run' : 'due';
 function renderReminders() {
+  try { fillIcePush(); } catch (e) { }   // Push-Schalter unten auf der Seite: aktuellen Stand zeigen
   const km = lastKnownKm(), all = sortedOpenReminders(km), open = all.filter(x => !isRun(x.r)), done = getReminders().filter(r => r.doneAt && !isRun(r)).sort((a, b) => new Date(b.doneAt) - new Date(a.doneAt));
   const runs = getReminders().filter(r => isRun(r)).map(r => ({ r, s: remStatus(r, km) })).sort((a, b) => String(a.r.startDate || '9999').localeCompare(String(b.r.startDate || '9999')) || a.r.title.localeCompare(b.r.title, 'de'));   // am längsten laufend zuerst
   const lv = all.filter(x => x.s.level !== 'ok'), n = lv.length, over = lv.filter(x => x.s.level === 'over').length;
