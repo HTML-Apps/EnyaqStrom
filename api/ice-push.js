@@ -108,8 +108,8 @@ function remDue(rems, today, km, prevKm) {
     return byDate || byKm ? { r, byKm: byKm && !byDate } : null; }).filter(Boolean);
 }
 function remMessage(due, km) {
-  const sub = (o) => o.byKm ? 'Fällig bei ' + kmF(o.r.dueKm) + ' km · aktuell ' + kmF(km) + ' km' : 'Heute fällig' + (Number(o.r.dueKm) > 0 ? ' – oder bei ' + kmF(o.r.dueKm) + ' km' : '');
-  if (due.length === 1) { const o = due[0]; return { title: 'Heute fällig: ' + o.r.title, body: sub(o) + (o.r.note ? '\n' + String(o.r.note).slice(0, 120) : '') }; }
+  const sub = (o) => o.byKm ? 'Fällig bei ' + kmF(o.r.dueKm) + ' km · aktuell ' + kmF(km) + ' km' : 'Heute fällig';
+  if (due.length === 1) { const o = due[0]; return { title: o.r.title, body: sub(o) + (o.r.note ? '\n' + String(o.r.note).slice(0, 120) : '') }; }
   return { title: due.length + ' Erinnerungen heute fällig', body: due.map(o => o.r.title).join(' · ').slice(0, 180) };
 }
 const remPayload = (m, today) => ({ ...m, kind: 'rem', tag: 'rem-' + today, url: '/?go=reminders' });
@@ -129,7 +129,7 @@ export default async function handler(req, res) {
       if (body.test === 'rem') {                                               // Erinnerungs-Test: echte heute fällige, sonst ein typisches Beispiel
         const list = all.filter(d => d.rem); if (!list.length) return res.status(404).json({ error: 'no_device' });
         const today = iso(new Date()); let due = []; try { due = remDue(await fsList(`enyaqStrom/${user.uid}/reminders`), today, null, null); } catch (e) { }
-        const m = due.length ? remMessage(due, null) : { title: 'Heute fällig: Inspektion', body: 'Heute fällig – oder bei 30.000 km' };
+        const m = due.length ? remMessage(due, null) : { title: 'Inspektion', body: 'Heute fällig' };
         return res.status(200).json({ ...(await send(list, { ...remPayload(m, today), tag: 'rem-test' })), devices: list.length, real: due.length });
       }
       const list = all.filter(d => d.ice).length ? all.filter(d => d.ice) : all; if (!list.length) return res.status(404).json({ error: 'no_device' });
