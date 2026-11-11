@@ -40,7 +40,10 @@ function pushPrefs() {
   if (!window.cloud.patchPrefs) { window.cloud.setPrefs({ ...o, settings: syncSet(load(KEY_SETTINGS, {})) }).catch(() => { }); return; }
   const set = {}, del = [];
   if (base) SYNC_SET_KEYS.forEach(k => { if (JSON.stringify(cur[k]) !== JSON.stringify(base[k])) { if (cur[k] === undefined) del.push(k); else set[k] = cur[k]; } });   // ohne Abgleichsstand (vor dem ersten Empfang) keine Einstellungen schreiben
-  window.cloud.patchPrefs(o, set, del).catch(() => { });
+  if (window.cloud.mergePrefs && o.lab) {
+    const { lab, ...rest } = o;   // Messwerte: mit dem Cloud-Stand zusammenführen statt ersetzen
+    window.cloud.mergePrefs(rest, set, del, (cl) => labNoFc(labMerge(lab, cl && typeof cl === 'object' ? cl : null))).catch(() => window.cloud.patchPrefs(o, set, del).catch(() => { }));
+  } else window.cloud.patchPrefs(o, set, del).catch(() => { });
   if (base) save(KEY_SETBASE, { ...base, ...set, ...Object.fromEntries(del.map(k => [k, undefined])) });
 }
 window.onCloudPrefs = (d, first, uid) => {

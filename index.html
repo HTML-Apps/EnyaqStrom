@@ -225,7 +225,7 @@
   @media (prefers-reduced-motion: reduce) { #bd-conf i, #bdg-conf i { animation: none; top: var(--y, 10%); } #bd-card, #bdg-card { animation: none; } }
 </style>
 <!-- Tailwind fertig gebaut (npm run css) – am Ende des Kopfs wie früher das CDN, damit die Reihenfolge der Regeln gleich bleibt -->
-<link rel="stylesheet" href="/app.css?v=289">
+<link rel="stylesheet" href="/app.css?v=290">
 </head>
 <body class="bg-slate-100 text-slate-900 dark:bg-black dark:text-slate-100 min-h-screen">
 
@@ -1895,12 +1895,12 @@
   </div>
 </nav>
 
-<script src="/app.js?v=289"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
+<script src="/app.js?v=290"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
 <script type="module">
 /* Firebase (modular SDK). Die Konfiguration ist kein Geheimnis – geschützt wird über Auth + Firestore-Regeln. */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
 import { getAuth, onAuthStateChanged, signInWithPopup, reauthenticateWithPopup, GoogleAuthProvider, signOut } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, doc, onSnapshot, writeBatch, setDoc, deleteField } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, doc, onSnapshot, writeBatch, setDoc, deleteField, runTransaction } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
 
 const app = initializeApp({
   apiKey: "AIzaSyDM_1SM3ueFYhAB7zkHO8SG5VVOCsMu_0c", authDomain: "daily-companion-24975.firebaseapp.com",
@@ -1974,6 +1974,15 @@ window.cloud = {
   isSignedIn: () => !!user,
   userInfo: () => user ? { name: user.displayName || '', email: user.email || '', photo: user.photoURL || '' } : null,
   setPrefs: (o) => user ? setDoc(prefDoc(), { ...o, updatedAt: new Date().toISOString() }) : Promise.resolve(),
+  /* Wie patchPrefs, aber die Labor-Daten werden in einer Transaktion mit dem aktuellen Cloud-Stand zusammengeführt (mergeLab(cloudLab) → lab),
+     damit ein Gerät mit altem Stand keine neueren Messwerte anderer Geräte überschreibt. Offline schlägt die Transaktion fehl → Aufrufer nimmt patchPrefs. */
+  mergePrefs: (o, set, del, mergeLab) => {
+    if (!user) return Promise.resolve();
+    const st = { ...set }; (del || []).forEach(k => { st[k] = deleteField(); });
+    const fields = Object.keys(o).concat(['lab', 'updatedAt'], Object.keys(st).map(k => 'settings.' + k));
+    return runTransaction(db, async (tx) => { const snap = await tx.get(prefDoc()), cur = snap.exists() ? snap.data() : {};
+      tx.set(prefDoc(), { ...o, lab: mergeLab(cur.lab || null), settings: st, updatedAt: new Date().toISOString() }, { mergeFields: fields }); });
+  },
   /* Nur Geändertes schreiben: übrige Felder (o) ganz, bei den Einstellungen nur die genannten Schlüssel – ein Gerät mit altem Stand überschreibt so keine neueren Werte anderer Geräte */
   patchPrefs: (o, set, del) => {
     if (!user) return Promise.resolve();

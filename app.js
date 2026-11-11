@@ -5691,7 +5691,10 @@ function pushPrefs() {
   if (!window.cloud.patchPrefs) { window.cloud.setPrefs({ ...o, settings: syncSet(load(KEY_SETTINGS, {})) }).catch(() => { }); return; }
   const set = {}, del = [];
   if (base) SYNC_SET_KEYS.forEach(k => { if (JSON.stringify(cur[k]) !== JSON.stringify(base[k])) { if (cur[k] === undefined) del.push(k); else set[k] = cur[k]; } });   // ohne Abgleichsstand (vor dem ersten Empfang) keine Einstellungen schreiben
-  window.cloud.patchPrefs(o, set, del).catch(() => { });
+  if (window.cloud.mergePrefs && o.lab) {
+    const { lab, ...rest } = o;   // Messwerte: mit dem Cloud-Stand zusammenführen statt ersetzen
+    window.cloud.mergePrefs(rest, set, del, (cl) => labNoFc(labMerge(lab, cl && typeof cl === 'object' ? cl : null))).catch(() => window.cloud.patchPrefs(o, set, del).catch(() => { }));
+  } else window.cloud.patchPrefs(o, set, del).catch(() => { });
   if (base) save(KEY_SETBASE, { ...base, ...set, ...Object.fromEntries(del.map(k => [k, undefined])) });
 }
 window.onCloudPrefs = (d, first, uid) => {
@@ -6726,7 +6729,7 @@ function labStamp(o) {
   LAB_LISTS.forEach(k => { const pm = new Map((prev[k] || []).map(x => [String(x.id), x])), ids = new Set();
     o[k] = (o[k] || []).map(x => { ids.add(String(x.id)); const old = pm.get(String(x.id)), a = { ...x }; delete a.u; const b = old ? { ...old } : null; if (b) delete b.u;
       return !old || JSON.stringify(a) !== JSON.stringify(b) ? { ...a, u: now } : { ...a, u: old.u || 0 }; });
-    pm.forEach((x, id) => { if (!ids.has(id)) del[id] = now; }); });
+    pm.forEach((x, id) => { if (!ids.has(id)) { del[id] = now; if (x.src) del['src:' + x.src] = now; } }); });   // Quelle merken: gelöschte Sprachbefehle nicht erneut holen
   const pr = prev.routes || {}, nr = {}; Object.entries(o.routes || {}).forEach(([k, v]) => { const a = { ...v }; delete a.u; const b = pr[k] ? { ...pr[k] } : null; if (b) delete b.u; nr[k] = !b || JSON.stringify(a) !== JSON.stringify(b) ? { ...a, u: now } : { ...a, u: pr[k].u || 0 }; });
   Object.keys(pr).forEach(k => { if (!nr[k]) del['r_' + k] = now; });
   const cut = now - 400 * 864e5; Object.keys(del).forEach(k => { if (del[k] < cut) delete del[k]; });
@@ -6737,7 +6740,9 @@ function labMerge(a, b) {
   const del = { ...(a.del || {}) }; Object.entries(b.del || {}).forEach(([k, t]) => { if (!(del[k] >= t)) del[k] = t; });
   const out = { del };
   LAB_LISTS.forEach(k => { const m = new Map(); [a[k] || [], b[k] || []].forEach(l => l.forEach(x => { const id = String(x.id), c = m.get(id); if (!c || (x.u || 0) > (c.u || 0)) m.set(id, x); }));
-    out[k] = [...m.values()].filter(x => !(del[String(x.id)] >= (x.u || 0))); });
+    let l = [...m.values()].filter(x => !(del[String(x.id)] >= (x.u || 0)));
+    const bySrc = new Map(); l.forEach(x => { if (!x.src) return; const c = bySrc.get(x.src); if (!c || String(x.id) < String(c.id)) bySrc.set(x.src, x); });   // dieselbe Aufgabe auf zwei Geräten geholt: eine behalten
+    out[k] = l.filter(x => !x.src || bySrc.get(x.src) === x); });
   const ra = a.routes || {}, rb = b.routes || {}; out.routes = {};
   new Set(Object.keys(ra).concat(Object.keys(rb))).forEach(k => { const x = ra[k], y = rb[k], w = !x ? y : !y ? x : (y.u || 0) > (x.u || 0) ? y : x; if (!(del['r_' + k] >= (w.u || 0))) out.routes[k] = w; });
   if (!a.speeds && !b.speeds && (a.speed || b.speed)) out.speed = a.speed || b.speed;
@@ -7360,23 +7365,33 @@ async function gtImport(silent) {
       if (!lr.ok) throw new Error(/SERVICE_DISABLED|accessNotConfigured|has not been used|disabled/i.test(w.reason + ' ' + w.msg) ? 'Die Google Tasks API ist im Google-Projekt noch nicht aktiviert (Cloud Console → APIs & Dienste → Bibliothek → Google Tasks API).'
         : /insufficient|SCOPE/i.test(w.reason + ' ' + w.msg) ? 'Die Tasks-Berechtigung wurde nicht erteilt – im Google-Fenster bitte den Haken bei Google Tasks setzen.' : 'Kein Zugriff (' + (w.reason || lr.status) + ')' + (w.msg ? ': ' + w.msg.slice(0, 120) : ''));
     } else if (!lr.ok) throw new Error('Google Tasks ' + lr.status);
-    const lists = (await lr.json()).items || [], lab = getLab(); lab.bt = lab.bt || []; lab.lt = lab.lt || []; const have = new Set(lab.bt.concat(lab.lt).map(e => e.src).filter(Boolean)); let n = 0, nl = 0, skip = 0; const flag = [];
+    /* Erst speichern, dann in Google Tasks abhaken (sonst gehen Werte verloren, wenn die App mitten im Abruf geschlossen wird).
+       Nachholen: in den letzten 14 Tagen erledigte Aufgaben, deren Wert fehlt (nicht selbst gelöscht), werden ebenfalls übernommen. */
+    const lists = (await lr.json()).items || [], lab0 = getLab(), del0 = (load(KEY_LAB, null) || {}).del || {};   // getLab() liefert del nicht mit
+    const have = new Set((lab0.bt || []).concat(lab0.lt || []).map(e => e.src).filter(Boolean)); let n = 0, nl = 0, skip = 0; const flag = [], addBt = [], addLt = [], done = [];
+    const since = new Date(Date.now() - 14 * 864e5).toISOString();
     for (const L of lists) {
-      const tr = await fetch(api + '/lists/' + encodeURIComponent(L.id) + '/tasks?showCompleted=false&maxResults=100', { headers: H }); if (!tr.ok) continue;
-      for (const t of ((await tr.json()).items || [])) {
-        if (L.title === GT_LIST) continue;                                            // gespiegelte Fälligkeiten nicht einlesen
-        const lv = gtParseLt(t.title), v = lv == null ? gtParse(t.title) : null; if (lv == null && !v) continue; const src = 'gt:' + t.id;
+      if (L.title === GT_LIST) continue;                                              // gespiegelte Fälligkeiten nicht einlesen
+      const q = async (qs) => { const r = await fetch(api + '/lists/' + encodeURIComponent(L.id) + '/tasks?' + qs, { headers: H }); return r.ok ? ((await r.json()).items || []) : []; };
+      const open = await q('showCompleted=false&maxResults=100'), closed = (await q('showCompleted=true&showHidden=true&completedMin=' + encodeURIComponent(since) + '&maxResults=100')).filter(t => t.status === 'completed');
+      for (const t of open.concat(closed)) {
+        const lv = gtParseLt(t.title), v = lv == null ? gtParse(t.title) : null; if (lv == null && !v) continue; const src = 'gt:' + t.id, isOpen = t.status !== 'completed';
+        if (have.has(src) || del0['src:' + src] || ((load(KEY_LAB, null) || {}).del || {})['src:' + src]) { if (isOpen) { skip++; done.push([L.id, t.id]); } continue; }   // schon da (oder bewusst gelöscht): nur noch abhaken
+        const at = (isOpen ? t.updated : t.completed || t.updated) || new Date().toISOString();
         if (lv != null) {                                                             // Langzeitverbrauch (Bordcomputer „Seit Kauf“)
-          if (!have.has(src)) { const at = t.updated || new Date().toISOString(), k = await gtKmAt(at), e = { id: labId(), date: wxIso(new Date(at)), at, k100: lv, src, note: 'per Sprachbefehl' }; if (k.km > 0) e.km = k.km; if (k.est || !(k.km > 0)) e.kmEst = true; lab.lt.push(e); have.add(src); nl++; }
-        } else if (!have.has(src)) {
-          const at = t.updated || new Date().toISOString(), en = { id: labId(), at, t: v.t, src }; if (v.ctx) en.ctx = v.ctx;
+          const k = await gtKmAt(at), e = { id: labId(), date: wxIso(new Date(at)), at, k100: lv, src, note: 'per Sprachbefehl' }; if (k.km > 0) e.km = k.km; if (k.est || !(k.km > 0)) e.kmEst = true; addLt.push(e); nl++;
+        } else {
+          const en = { id: labId(), at, t: v.t, src }; if (v.ctx) en.ctx = v.ctx;
           const out = await gtOutAt(at); if (Number.isFinite(out)) en.out = out;
-          lab.bt.push(en); have.add(src); n++; flag.push(en);
-        } else skip++;
-        await fetch(api + '/lists/' + encodeURIComponent(L.id) + '/tasks/' + encodeURIComponent(t.id), { method: 'PATCH', headers: { ...H, 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'completed' }) }).catch(() => { });
+          addBt.push(en); n++; flag.push(en);
+        }
+        have.add(src); if (isOpen) done.push([L.id, t.id]);
       }
     }
-    if (n || nl) { lab.bt.sort((a, b) => Date.parse(a.at) - Date.parse(b.at)); setLab(lab); if (n) btmVal = null; try { btFillTrips(); ltFillKm(); } catch (e) { } }
+    const lab = getLab(); lab.bt = lab.bt || []; lab.lt = lab.lt || [];               // frisch lesen: während des Abrufs kann der Cloud-Abgleich Einträge ergänzt haben
+    if (n || nl) { const hv = new Set(lab.bt.concat(lab.lt).map(e => e.src).filter(Boolean)); addBt.forEach(e => { if (!hv.has(e.src)) lab.bt.push(e); }); addLt.forEach(e => { if (!hv.has(e.src)) lab.lt.push(e); });
+      lab.bt.sort((a, b) => Date.parse(a.at) - Date.parse(b.at)); setLab(lab); if (n) btmVal = null; try { btFillTrips(); ltFillKm(); } catch (e) { } }
+    for (const [lid, tid] of done) await fetch(api + '/lists/' + encodeURIComponent(lid) + '/tasks/' + encodeURIComponent(tid), { method: 'PATCH', headers: { ...H, 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'completed' }) }).catch(() => { });
     btmMsg = n || nl ? '✓ ' + [n ? n + ' Akku' : '', nl ? nl + ' Langzeit' : ''].filter(Boolean).join(' + ') + ' aus Google Tasks' : silent ? '' : 'Keine neuen „Akku …“- oder „Langzeit …“-Aufgaben.';
     const jumps = flag.map(en => [en, btJump(en, lab.bt)]).filter(x => x[1]);                    // nur Hinweis, Werte bleiben gespeichert
     if (jumps.length) btmMsg += ' · <span class="text-amber-600 dark:text-amber-400">' + (jumps.length === 1 ? '⚠️ ' + btFmt(jumps[0][0].t) + ' °C, ' + btJumpD(jumps[0][1]) + ' – bitte prüfen' : '⚠️ ' + jumps.length + '× ≥ ' + BT_JUMP + '° Sprung – im Verlauf prüfen') + '</span>';
