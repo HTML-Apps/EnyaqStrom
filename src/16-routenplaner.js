@@ -454,19 +454,41 @@ const pushMsg = (t, bad) => { const el = $('ice-push-msg'); if (el) { el.textCon
 const b64u = (s) => { const p = '='.repeat((4 - s.length % 4) % 4), b = atob((s + p).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(b, c => c.charCodeAt(0)); };
 async function pushState() { if (!pushOk()) return null; try { const reg = await navigator.serviceWorker.ready; return await reg.pushManager.getSubscription(); } catch (e) { return null; } }
 async function fillIcePush() {
-  const cb = $('set-ice-push'); if (!cb) return; if (!pushOk()) { cb.checked = false; cb.disabled = true; pushMsg('Dieser Browser unterstützt keine Push-Nachrichten.'); return; }
-  const sub = await pushState(); cb.checked = !!sub && Notification.permission === 'granted' && load('enyaq.icePush', false);
+  const cb = $('set-ice-push'), cr = $('set-rem-push'); if (!cb) return; if (!pushOk()) { cb.checked = false; cb.disabled = true; if (cr) { cr.checked = false; cr.disabled = true; } pushMsg('Dieser Browser unterstützt keine Push-Nachrichten.'); return; }
+  const sub = await pushState(), ok = !!sub && Notification.permission === 'granted'; cb.checked = ok && load('enyaq.icePush', false); if (cr) cr.checked = ok && load('enyaq.remPush', false);
   if (!$('ice-push-msg').textContent) pushMsg(Notification.permission === 'denied' ? 'Benachrichtigungen sind für diese App blockiert – in den Android-Einstellungen erlauben.' : '');
 }
-async function icePushOn() {
+/* Ein Gerät, zwei Arten: Eis-Warnung (ice) und fällige Erinnerungen (rem). Angemeldet, solange eins davon an ist; der Server schickt je Art nur an Geräte mit Häkchen. */
+async function pushSave() {
+  const f = { ice: !!load('enyaq.icePush', false), rem: !!load('enyaq.remPush', false) };
+  if (!f.ice && !f.rem) { try { await window.cloud.setPush(devId(), null); } catch (e) { } try { const s = await pushState(); if (s) await s.unsubscribe(); } catch (e) { } return; }
   if (!window.cloud?.isSignedIn()) throw new Error('Bitte zuerst bei Google anmelden.');
   const perm = await Notification.requestPermission(); if (perm !== 'granted') throw new Error('Benachrichtigungen nicht erlaubt.');
   const reg = await navigator.serviceWorker.ready; let sub = await reg.pushManager.getSubscription();
   if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64u(VAPID_PUBLIC) });
-  await window.cloud.setPush(devId(), { sub: JSON.stringify(sub.toJSON()), at: new Date().toISOString(), ua: (navigator.userAgentData && navigator.userAgentData.platform) || (/(Android|iPhone|Windows|Mac)/.exec(navigator.userAgent) || [''])[0] });
-  save('enyaq.icePush', true);
+  await window.cloud.setPush(devId(), { sub: JSON.stringify(sub.toJSON()), at: new Date().toISOString(), ua: (navigator.userAgentData && navigator.userAgentData.platform) || (/(Android|iPhone|Windows|Mac)/.exec(navigator.userAgent) || [''])[0], ice: f.ice, rem: f.rem });
 }
-async function icePushOff() { save('enyaq.icePush', false); try { await window.cloud.setPush(devId(), null); } catch (e) { } try { const s = await pushState(); if (s) await s.unsubscribe(); } catch (e) { } }
+async function pushKind(key, on) { const was = load(key, false); save(key, on); try { await pushSave(); } catch (e) { save(key, was); throw e; } }
+const icePushOn = () => pushKind('enyaq.icePush', true), icePushOff = () => pushKind('enyaq.icePush', false).catch(() => { });
+const remPushMsg = (t, bad) => { const el = $('rem-push-msg'); if (el) { el.textContent = t || ''; el.classList.toggle('text-red-600', !!bad); el.classList.toggle('dark:text-red-400', !!bad); } };
+$('set-rem-push').addEventListener('change', async (e) => {
+  const cb = e.target; cb.disabled = true;
+  try { remPushMsg(cb.checked ? 'Wird eingerichtet …' : ''); await pushKind('enyaq.remPush', cb.checked); remPushMsg(cb.checked ? '✓ Dieses Gerät meldet fällige Erinnerungen abends am Fälligkeitstag.' : 'Aus für dieses Gerät.'); }
+  catch (er) { cb.checked = false; remPushMsg((er && er.message) || 'Einrichten fehlgeschlagen.', true); }
+  cb.disabled = false;
+});
+$('rem-test').addEventListener('click', async () => {
+  const b = $('rem-test'); b.disabled = true; remPushMsg('Sende …');
+  try {
+    if (!load('enyaq.remPush', false) || !(await pushState())) { await pushKind('enyaq.remPush', true); $('set-rem-push').checked = true; }
+    const r = await fetch('/api/ice-push', { method: 'POST', headers: { ...(await authHeaders()), 'Content-Type': 'application/json' }, body: JSON.stringify({ test: 'rem' }) }), j = await r.json().catch(() => ({}));
+    if (r.status === 503 && j.error === 'not_configured') remPushMsg('Server noch nicht eingerichtet – in Vercel fehlen: ' + (j.need || []).join(', ') + '.', true);
+    else if (r.status === 404) remPushMsg('Kein Gerät angemeldet – Schalter oben einschalten.', true);
+    else if (!r.ok) remPushMsg('Fehler: ' + (j.error || r.status), true);
+    else remPushMsg(j.ok ? '✓ Gesendet' + (j.real ? ' (mit deinen heute fälligen Erinnerungen)' : ' (Beispiel – heute ist nichts fällig)') + ' – kommt gleich an.' : 'Nicht zugestellt – Gerät bitte neu anmelden (Schalter aus und an).', !j.ok);
+  } catch (er) { remPushMsg((er && er.message) || 'Senden fehlgeschlagen.', true); }
+  b.disabled = false;
+});
 $('set-ice-push').addEventListener('change', async (e) => {
   const cb = e.target; cb.disabled = true;
   try { if (cb.checked) { pushMsg('Wird eingerichtet …'); await icePushOn(); pushMsg('✓ Dieses Gerät bekommt die Eis-Warnung abends.'); } else { await icePushOff(); pushMsg('Aus für dieses Gerät.'); } }

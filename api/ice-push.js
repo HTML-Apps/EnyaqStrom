@@ -1,12 +1,15 @@
-// Eis-Warnung als Push-Benachrichtigung.
-// GET  (Vercel-Zeitplan, täglich am frühen Abend): für jedes Konto mit eingeschalteter Benachrichtigung das Eis-Risiko für morgen früh
-//      berechnen (gleiche Formel wie in der App) und bei „möglich“/„wahrscheinlich“ eine Nachricht an alle angemeldeten Geräte schicken.
-// POST (aus der App, mit Anmelde-Token): { test: true } schickt sofort eine Testnachricht an die eigenen Geräte.
+// Abendliche Push-Benachrichtigungen: Eis-Warnung und fällige Erinnerungen (zwei getrennte Nachrichten).
+// GET  (Vercel-Zeitplan, täglich am frühen Abend), je Konto:
+//      · Eis: Risiko für morgen früh (gleiche Formel wie in der App), bei „möglich“/„wahrscheinlich“ an Geräte mit Eis-Warnung (devices[id].ice, fehlt = an).
+//      · Erinnerungen: nur am Fälligkeitstag (dueDate = heute) bzw. an dem Abend, an dem der km-Stand die Fälligkeit überschreitet
+//        (Stand vom Vorabend in settings/pushState.remKm) – überfällige nicht erneut. An Geräte mit devices[id].rem = true.
+// POST (aus der App, mit Anmelde-Token): { test: true } Eis-Testnachricht, { test: 'rem' } Erinnerungs-Testnachricht an die eigenen Geräte.
 // Benötigte Vercel-Variablen: VAPID_PRIVATE_KEY (Web-Push), FIREBASE_SERVICE_ACCOUNT (JSON des Firebase-Dienstkontos, nur Lesen),
 // optional CRON_SECRET (schützt den Zeitplan-Aufruf; ohne Variable nur Aufrufe von Vercels Zeitplan).
 import webpush from 'web-push';
 import { SignJWT, importPKCS8 } from 'jose';
 import { verifyUser } from '../lib/auth.js';
+import { fsSetStrings } from '../lib/fs.js';
 
 const PROJECT_ID = 'daily-companion-24975';
 const VAPID_PUBLIC = 'BHJg47_9-WGwpnQQkZCKyGtmbned4D9fOyJ-EsYRKqD6dizXoA60UIYNjR1_vL-y0yxFN8PAuYsjQhKLEHcC128';
@@ -65,8 +68,8 @@ function message(r, st) {
   return { title: r.lvl >= 2 ? 'Eisgefahr' : 'Eisgefahr möglich',
     body: `${deg(r.T)} um ${st.dep} · ${sky}, ${wind}\n| Scheibe ≈ ${deg(r.minTg)}${r.glaze ? ' · Eisschicht nach Nässe' : ''}` };
 }
-async function riskFor(uid) {
-  const [prefs, places] = await Promise.all([fsGet(`enyaqStrom/${uid}/settings/prefs`), fsGet(`enyaqStrom/${uid}/settings/places`)]);
+async function riskFor(uid, prefs0) {
+  const [prefs, places] = await Promise.all([prefs0 !== undefined ? prefs0 : fsGet(`enyaqStrom/${uid}/settings/prefs`), fsGet(`enyaqStrom/${uid}/settings/places`)]);
   const st = iceSet(prefs && prefs.settings); if (st.park === 'garage') return { st, r: null };
   const home = places && Array.isArray(places.places) ? places.places.find(p => p && p.kind === 'home' && Number.isFinite(p.lat)) : null, loc = home || (prefs && prefs.wxLoc);
   if (!loc || !Number.isFinite(loc.lat)) return { st, r: null, why: 'kein Ort „Zuhause“' };
@@ -75,7 +78,41 @@ async function riskFor(uid) {
   const w = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}&hourly=temperature_2m,dew_point_2m,cloud_cover,wind_speed_10m,precipitation&wind_speed_unit=ms&timezone=Europe%2FBerlin&forecast_days=3`);
   if (!w.ok) throw new Error('Wetter ' + w.status); return { st, r: iceEval((await w.json()).hourly, day, st) };
 }
-async function devices(uid) { const d = await fsGet(`enyaqStrom/${uid}/settings/push`); return Object.entries((d && d.devices) || {}).filter(([, v]) => v && v.sub).map(([id, v]) => ({ id, sub: JSON.parse(v.sub) })); }
+async function devices(uid) { const d = await fsGet(`enyaqStrom/${uid}/settings/push`); return Object.entries((d && d.devices) || {}).filter(([, v]) => v && v.sub).map(([id, v]) => ({ id, sub: JSON.parse(v.sub), ice: v.ice !== false, rem: v.rem === true })); }
+
+/* ---- Fällige Erinnerungen ---- */
+async function fsList(path) {                                                   // alle Dokumente einer Sammlung → [Felder]
+  const out = []; let page = '';
+  do { const r = await fetch(FS + '/' + path + '?pageSize=300' + (page ? '&pageToken=' + encodeURIComponent(page) : ''), { headers: { Authorization: 'Bearer ' + await gToken() } });
+    if (r.status === 404) return out; if (!r.ok) throw new Error('Firestore ' + r.status + ' bei ' + path); const j = await r.json();
+    (j.documents || []).forEach(d => out.push(Object.fromEntries(Object.entries(d.fields || {}).map(([k, x]) => [k, val(x)])))); page = j.nextPageToken || ''; } while (page);
+  return out;
+}
+async function fsLatest(uid, coll, n) {                                         // neueste n Dokumente nach „date“
+  const r = await fetch(FS + '/enyaqStrom/' + uid + ':runQuery', { method: 'POST', headers: { Authorization: 'Bearer ' + await gToken(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ structuredQuery: { from: [{ collectionId: coll }], orderBy: [{ field: { fieldPath: 'date' }, direction: 'DESCENDING' }], limit: n } }) });
+  if (!r.ok) return []; return (await r.json()).filter(x => x.document).map(x => Object.fromEntries(Object.entries(x.document.fields || {}).map(([k, v]) => [k, val(v)])));
+}
+/** Aktueller km-Stand: größter Wert aus den letzten Ladungen, Kosten und Langzeit-Ablesungen (wie „lastKnownKm“ in der App) */
+async function kmNow(uid, prefs) {
+  const [rs, cs] = await Promise.all([fsLatest(uid, 'readings', 8), fsLatest(uid, 'costs', 8)]);
+  const lt = prefs && prefs.lab && Array.isArray(prefs.lab.lt) ? prefs.lab.lt : [];
+  const v = rs.concat(cs).map(x => Number(x.odometerKm)).concat(lt.map(x => Number(x && x.km))).filter(k => k > 0);
+  return v.length ? Math.max(...v) : null;
+}
+const kmF = (k) => Math.round(k).toLocaleString('de-DE');
+/** Heute fällige Erinnerungen: Datum = heute, oder km-Fälligkeit seit gestern Abend überschritten (prevKm < dueKm ≤ km). Laufzeiten und erledigte nicht. */
+function remDue(rems, today, km, prevKm) {
+  return rems.filter(r => r && r.title && r.kind !== 'run' && !r.doneAt).map(r => {
+    const byDate = r.dueDate === today, byKm = Number(r.dueKm) > 0 && km != null && prevKm != null && prevKm < r.dueKm && km >= r.dueKm;
+    return byDate || byKm ? { r, byKm: byKm && !byDate } : null; }).filter(Boolean);
+}
+function remMessage(due, km) {
+  const sub = (o) => o.byKm ? 'Fällig bei ' + kmF(o.r.dueKm) + ' km · aktuell ' + kmF(km) + ' km' : 'Heute fällig' + (Number(o.r.dueKm) > 0 ? ' – oder bei ' + kmF(o.r.dueKm) + ' km' : '');
+  if (due.length === 1) { const o = due[0]; return { title: 'Heute fällig: ' + o.r.title, body: sub(o) + (o.r.note ? '\n' + String(o.r.note).slice(0, 120) : '') }; }
+  return { title: due.length + ' Erinnerungen heute fällig', body: due.map(o => o.r.title).join(' · ').slice(0, 180) };
+}
+const remPayload = (m, today) => ({ ...m, kind: 'rem', tag: 'rem-' + today, url: '/?go=reminders' });
 async function send(list, payload) {
   let ok = 0, gone = 0;
   for (const d of list) { try { await webpush.sendNotification(d.sub, JSON.stringify(payload), { TTL: 6 * 3600, urgency: 'normal' }); ok++; } catch (e) { if (e.statusCode === 404 || e.statusCode === 410) gone++; } }
@@ -88,7 +125,14 @@ export default async function handler(req, res) {
   try {
     if (req.method === 'POST') {                                               // Testnachricht an die eigenen Geräte
       const user = await verifyUser(req); if (!user) return res.status(401).json({ error: 'unauthorized' });
-      const list = await devices(user.uid); if (!list.length) return res.status(404).json({ error: 'no_device' });
+      const all = await devices(user.uid), body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
+      if (body.test === 'rem') {                                               // Erinnerungs-Test: echte heute fällige, sonst ein typisches Beispiel
+        const list = all.filter(d => d.rem); if (!list.length) return res.status(404).json({ error: 'no_device' });
+        const today = iso(new Date()); let due = []; try { due = remDue(await fsList(`enyaqStrom/${user.uid}/reminders`), today, null, null); } catch (e) { }
+        const m = due.length ? remMessage(due, null) : { title: 'Heute fällig: Inspektion', body: 'Heute fällig – oder bei 30.000 km' };
+        return res.status(200).json({ ...(await send(list, { ...remPayload(m, today), tag: 'rem-test' })), devices: list.length, real: due.length });
+      }
+      const list = all.filter(d => d.ice).length ? all.filter(d => d.ice) : all; if (!list.length) return res.status(404).json({ error: 'no_device' });
       // Test = genau so, wie die echte Warnung aussieht: bei Eis-Risiko mit den echten Werten für morgen, sonst mit einem typischen Beispiel
       let st = iceSet(null), r = null; try { const x = await riskFor(user.uid); st = x.st; r = x.r; } catch (e) { }
       if (!r || r.lvl < 1) r = { lvl: 2, T: -1, minTg: -4.4, cc: 5, ws: 0.6, glaze: false };
@@ -99,10 +143,19 @@ export default async function handler(req, res) {
     if (secret ? auth !== 'Bearer ' + secret && req.query.key !== secret : !ua.startsWith('vercel-cron')) return res.status(401).json({ error: 'unauthorized' });
     const out = [];
     for (const uid of await fsUids()) {
-      try { const list = await devices(uid); if (!list.length) continue; const { st, r, why } = await riskFor(uid);
-        if (!r || r.lvl < st.min) { out.push({ uid: uid.slice(0, 6), lvl: r ? r.lvl : null, why: why || 'kein Eis' }); continue; }
-        out.push({ uid: uid.slice(0, 6), lvl: r.lvl, ...(await send(list, { ...message(r, st), tag: 'ice-' + r.day, url: '/', icon: '/Bilder/ice-icon.png?v=2' })) });
-      } catch (e) { out.push({ uid: uid.slice(0, 6), error: String(e.message || e).slice(0, 120) }); }
+      const o = { uid: uid.slice(0, 6) };
+      try { const all = await devices(uid); if (!all.length) continue; const prefs = await fsGet(`enyaqStrom/${uid}/settings/prefs`), iceL = all.filter(d => d.ice), remL = all.filter(d => d.rem);
+        if (iceL.length) { try { const { st, r, why } = await riskFor(uid, prefs);
+            if (!r || r.lvl < st.min) Object.assign(o, { lvl: r ? r.lvl : null, why: why || 'kein Eis' });
+            else Object.assign(o, { lvl: r.lvl, ice: await send(iceL, { ...message(r, st), tag: 'ice-' + r.day, url: '/', icon: '/Bilder/ice-icon.png?v=2' }) });
+          } catch (e) { o.iceErr = String(e.message || e).slice(0, 120); } }
+        if (remL.length) { try { const today = iso(new Date()), st = await fsGet(`enyaqStrom/${uid}/settings/pushState`), prevKm = st && Number(st.remKm) > 0 ? Number(st.remKm) : null;
+            const km = await kmNow(uid, prefs), due = remDue(await fsList(`enyaqStrom/${uid}/reminders`), today, km, prevKm);
+            if (km != null && km !== prevKm) await fsSetStrings(`enyaqStrom/${uid}/settings/pushState`, { remKm: String(km), at: new Date().toISOString() }).catch(() => { });
+            o.rem = due.length ? await send(remL, remPayload(remMessage(due, km), today)) : 0;
+          } catch (e) { o.remErr = String(e.message || e).slice(0, 120); } }
+        out.push(o);
+      } catch (e) { out.push({ ...o, error: String(e.message || e).slice(0, 120) }); }
     }
     return res.status(200).json({ at: new Date().toISOString(), users: out });
   } catch (e) { return res.status(500).json({ error: String(e.message || e).slice(0, 200) }); }
