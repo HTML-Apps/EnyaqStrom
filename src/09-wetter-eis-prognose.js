@@ -233,14 +233,14 @@ function renderVehSlide() {
   const c = load(KEY_WXO + 'S', null), d = c && c.d, on = !isDesk() && apiEnabled() && d && d.soc != null;
   el.classList.toggle('hidden', !on); el.classList.toggle('flex', !!on); setTimeout(() => { try { dashSwipeSync(); } catch (e) { } }, 0); if (!on) return;
   const soc = Math.round(d.soc), tgt = Number(d.targetSoc) || null, charging = d.chargeState === 'CHARGING' || d.chargePowerKw > 0, plugged = d.plug === 'CONNECTED';
-  const lk = d.doorsLocked || d.locked, locked = lk === 'YES' ? true : lk === 'NO' ? false : null, ok = locked !== false && !/OPEN/.test(d.doors || '') && !/OPEN/.test(d.windows || '');
+  const lk = d.doorsLocked || d.locked, locked = lk === 'YES' ? true : lk === 'NO' ? false : null;
   const at = d.capturedAt ? new Date(d.capturedAt) : new Date(c.t);
   if (isSimple()) { el.innerHTML = vehSlideEasy(d, soc, tgt, charging, plugged, locked, at); return; }
   const tile = (a, b, col) => `<div class="min-w-0 rounded-xl bg-slate-100 dark:bg-slate-800/70 px-2.5 py-1.5"><p class="text-[10.5px] text-left text-slate-500 dark:text-slate-400">${a}</p><p class="truncate text-[13px] font-semibold ${col || ''}">${b}</p></div>`;
-  el.innerHTML = `<div class="flex items-center justify-between gap-2"><p class="font-barlow text-xl font-bold uppercase tracking-[0.08em] leading-6">Fahrzeugstatus</p><span class="text-[11px] ${ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}">● ${ok ? 'Alles OK' : 'Bitte prüfen'}</span></div>
+  el.innerHTML = `<div class="flex items-center justify-between gap-2"><p class="shrink-0 font-barlow text-xl font-bold uppercase tracking-[0.08em] leading-6">Fahrzeugstatus</p>${vehBadge(vehHealth(d))}</div>
     <div class="mt-1.5 flex items-baseline gap-2"><span class="font-barlow text-[36px] font-bold leading-none">${soc} %</span>${d.rangeKm != null ? `<span class="text-[15px] font-semibold">${fmt(d.rangeKm, 0)} km</span>` : ''}<span class="ml-auto text-[10.5px] text-slate-500 dark:text-slate-400">${at.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })} · ${hhmm(at.getTime())}</span></div>
     <div class="relative mt-2 h-3 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800"><div class="h-full rounded-full bg-gradient-to-r ${socBarCls(soc)} ${charging ? 'animate-pulse' : ''}" style="width:${Math.max(2, Math.min(100, soc))}%"></div>${tgt ? `<div class="absolute inset-y-0 border-l-2 border-slate-900/70 dark:border-white/80" style="left:${tgt}%"></div>` : ''}</div>
-    <div class="min-h-2 flex-1"></div>
+    ${vehReason(vehHealth(d))}<div class="min-h-2 flex-1"></div>
     <div class="grid grid-cols-2 gap-1.5">${[
       locked != null ? tile('Verriegelt', locked ? '🔒 geschlossen' : '🔓 geöffnet', locked ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400') : tile('Ladestatus', d.chargeState === 'READY_FOR_CHARGING' ? 'bereit' : charging ? 'lädt' : 'kein Laden'),
       charging ? tile('Lädt', (d.chargePowerKw > 0 ? fmt(d.chargePowerKw, 1) + ' kW' : '') + (d.minutesToFull > 0 ? ' · voll ' + hhmm(at.getTime() + d.minutesToFull * 60000) : ''), 'text-sky-600 dark:text-sky-300') : tile('Ladekabel', plugged ? 'verbunden' : 'nicht verbunden'),
@@ -254,14 +254,39 @@ const VEH_ICO = {
   plug: '<path d="M9 3v4M15 3v4M7 7h10v4a5 5 0 0 1-10 0z"/><path d="M12 16v5"/>', plugin: '<path d="M9 3v4M15 3v4M7 7h10v4a5 5 0 0 1-10 0z"/><path d="M12 16v3"/><path d="M8 21h8"/>', bolt: '<path d="M13 3L5 14h6l-1 7 8-11h-6z"/>'
 };
 const vehIco = (k, cls, label) => `<span role="img" aria-label="${label}" class="flex h-[26px] w-[26px] items-center justify-center rounded-[9px] ${cls}"><svg class="h-[18px] w-[18px]" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true">${VEH_ICO[k]}</svg></span>`;
+/** Abzeichen „Fahrzeugstatus“: ok (zu & aus) / warn (mit Grund) / unknown. Laut Škoda-Doku heißt ein fehlendes Feld „unbekannt“, nicht „in Ordnung“.
+    Warnleuchten, Fehler oder Service liefert die API nicht – „Alles OK“ heißt nur: verriegelt, Türen/Fenster zu, Licht aus. */
+function vehHealth(d) {
+  const v = (x) => (x == null || /UNSUPPORTED|UNKNOWN|INVALID/i.test(String(x)) ? null : String(x));
+  const lk = v(d.doorsLocked) || v(d.locked), locked = lk === 'YES' ? true : lk === 'NO' ? false : null, doors = v(d.doors), win = v(d.windows), li = v(d.lights);
+  const issues = [locked === false && 'nicht verriegelt', doors && /OPEN/.test(doors) && 'Tür offen', win && /OPEN/.test(win) && 'Fenster offen', li && /^ON$/.test(li) && 'Licht an'].filter(Boolean);
+  const cap = (t) => t.charAt(0).toUpperCase() + t.slice(1);
+  if (issues.length) return { s: 'warn', t: 'Bitte prüfen', full: cap(issues.join(' · ')), issues };   // t: kurz fürs Abzeichen, full: Grund (eigene Zeile)
+  if (locked == null) return { s: 'unknown', t: 'Unbekannt', full: 'Verriegelung gerade nicht gemeldet', issues };
+  return { s: 'ok', t: 'Alles OK', full: 'Alles OK', issues };
+}
+/** Grund als eigene Zeile unter dem Balken (nur bei Hinweis / unbekannt) */
+function vehReason(h, onDark) {
+  if (h.s === 'ok') return '';
+  const cls = h.s === 'warn' ? (onDark ? 'bg-amber-500/15 text-amber-300' : 'bg-amber-500/15 text-amber-700 dark:text-amber-300') : (onDark ? 'bg-white/5 text-slate-300' : 'bg-slate-500/10 text-slate-600 dark:text-slate-300');
+  const ic = h.s === 'warn' ? '<path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4M12 17h.01"/>' : '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5v.2M12 17h.01"/>';
+  return `<div class="mt-2 mb-1 flex items-center gap-2 rounded-xl px-2.5 py-1.5 text-[12.5px] font-semibold ${cls}"><svg class="h-4 w-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true">${ic}</svg><span class="min-w-0">${esc(h.full)}</span></div>`;
+}
+/** Abzeichen; onDark = PC-Karte auf dunklem Glas */
+function vehBadge(h, onDark) {
+  const col = h.s === 'ok' ? (onDark ? 'text-emerald-400' : 'text-emerald-600 dark:text-emerald-400') : h.s === 'warn' ? (onDark ? 'text-amber-400' : 'text-amber-600 dark:text-amber-400') : (onDark ? 'text-slate-400' : 'text-slate-500 dark:text-slate-400');
+  const tip = h.s === 'unknown' ? 'Status unbekannt: Das Auto meldet gerade nicht, ob es verriegelt ist' : h.s === 'ok' ? 'Verriegelt, Türen und Fenster zu, Licht aus' : h.full;
+  const txt = onDark && h.s !== 'ok' ? '' : ' ' + esc(h.t);   // PC-Karte: wenig Platz neben dem Titel, der Grund steht dort in eigener Zeile
+  return `<span class="min-w-0 truncate whitespace-nowrap text-[11px] font-semibold ${col}" title="${esc(tip)}">●${txt}</span>`;
+}
 function vehSlideEasy(d, soc, tgt, charging, plugged, locked, at) {
-  const open = locked === false, openDW = /OPEN/.test(d.doors || '') || /OPEN/.test(d.windows || '');
-  const lockI = open || openDW ? vehIco('locko', 'bg-amber-500/20 text-amber-500 dark:text-amber-400', open ? 'offen' : 'Tür oder Fenster offen') : locked ? vehIco('lockc', 'text-slate-400', 'verriegelt') : '';
+  const h = vehHealth(d), warn = h.s === 'warn';
+  const lockI = warn ? vehIco('locko', 'bg-amber-500/20 text-amber-500 dark:text-amber-400', h.full) : locked ? vehIco('lockc', 'text-slate-400', 'verriegelt') : '';
   const plugI = charging ? vehIco('bolt', 'bg-sky-500/20 text-sky-600 dark:text-sky-400', 'lädt') : plugged ? vehIco('plugin', 'text-sky-600 dark:text-sky-400', 'Kabel verbunden') : vehIco('plug', 'text-slate-300 dark:text-slate-600', 'Kabel nicht verbunden');
   const today = wxIso(at) === wxIso(new Date()), atTxt = (today ? '' : at.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }) + ' · ') + hhmm(at.getTime());   // heute: nur Uhrzeit (Platz)
   const tgtTxt = tgt ? 'Ladeziel ' + tgt + ' %' : '';
   const foot = charging ? `<b class="font-semibold text-sky-600 dark:text-sky-400">Lädt${d.chargePowerKw > 0 ? ' · ' + fmt(d.chargePowerKw, 1) + ' kW' : ''}${d.minutesToFull > 0 ? ' · voll ca. ' + hhmm(at.getTime() + d.minutesToFull * 60000) : ''}</b>`
-    : open ? '<b class="font-semibold text-amber-600 dark:text-amber-400">Auto ist nicht verriegelt</b>' : openDW ? '<b class="font-semibold text-amber-600 dark:text-amber-400">Tür oder Fenster offen</b>'
+    : warn ? `<b class="font-semibold text-amber-600 dark:text-amber-400">${esc(h.issues.length === 1 && h.issues[0] === 'nicht verriegelt' ? 'Auto ist nicht verriegelt' : h.full)}</b>`
     : plugged ? `<b class="font-semibold text-sky-600 dark:text-sky-400">Kabel steckt${tgtTxt ? ' · ' + tgtTxt : ''}</b>` : tgtTxt;
   const fill = charging ? 'from-sky-600 to-sky-400' : socBarCls(soc), stripes = charging ? '<div class="absolute inset-0 veh-stripes"></div>' : '';
   return `<div class="flex items-center gap-1.5"><p class="min-w-0 flex-1 truncate font-barlow text-[19px] font-bold uppercase tracking-[0.06em] leading-6">Fahrzeugstatus</p>${lockI}${plugI}<span class="ml-0.5 shrink-0 whitespace-nowrap text-[11px] text-slate-500 dark:text-slate-400">${atTxt}</span></div>
@@ -279,7 +304,6 @@ function renderVehCard() {
   const soc = Math.round(d.soc), tgt = Number(d.targetSoc) || null, cs = d.chargeState || '', charging = cs === 'CHARGING' || d.chargePowerKw > 0;
   const plugged = d.plug === 'CONNECTED', lk = d.doorsLocked || d.locked, locked = lk === 'YES' ? true : lk === 'NO' ? false : null;
   const at = d.capturedAt ? new Date(d.capturedAt) : new Date(c.t), atTxt = at.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }) + ' · ' + hhmm(at.getTime());
-  const ok = locked !== false && !/OPEN/.test(d.doors || '') && !/OPEN/.test(d.windows || '') && !/^ON$/.test(d.lights || '');
   const row = (i, a, b, col) => `<div class="flex items-center justify-between gap-2 border-t border-white/10 py-1.5 text-[12.5px]"><span class="flex items-center gap-2 text-slate-200">${i}${a}</span><span class="font-semibold ${col || 'text-slate-200'}">${b}</span></div>`;
   const ico = (path) => `<svg class="h-4 w-4 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true">${path}</svg>`;
   const I = { lock: ico('<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>'), plug: ico('<path d="M9 2v6M15 2v6M7 8h10v4a5 5 0 0 1-10 0V8zM12 17v5"/>'), tgt: ico('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>'), odo: ico('<path d="M4 18a8 8 0 1 1 16 0"/><path d="M12 18l4-5"/>'), bolt: ico('<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>') };
@@ -291,10 +315,10 @@ function renderVehCard() {
     d.odometerKm != null ? row(I.odo, 'km-Stand', fmt(Math.round(d.odometerKm), 0) + ' km') : ''
   ].join('');
   el.innerHTML = `<div class="rounded-[20px] border border-white/10 bg-slate-900/55 px-4 py-3.5 text-white backdrop-blur-md">
-    <div class="flex items-center justify-between"><span class="font-barlow text-[15px] font-bold uppercase tracking-[0.08em]">Fahrzeugstatus</span><span class="text-[11px] ${ok ? 'text-emerald-400' : 'text-amber-400'}">● ${ok ? 'Alles OK' : 'Bitte prüfen'}</span></div>
+    <div class="flex items-center justify-between gap-2"><span class="shrink-0 font-barlow text-[15px] font-bold uppercase tracking-[0.08em]">Fahrzeugstatus</span>${vehBadge(vehHealth(d), true)}</div>
     <div class="mt-2 flex items-baseline gap-2"><span class="font-barlow text-[40px] font-bold leading-none">${soc} %</span>${d.rangeKm != null ? `<span class="text-[15px] font-semibold">${fmt(d.rangeKm, 0)} km</span>` : ''}</div>
     <div class="relative mb-2.5 mt-2 h-3.5 overflow-hidden rounded-full bg-slate-800"><div class="h-full rounded-full bg-gradient-to-r ${socBarCls(soc)} ${charging ? 'animate-pulse' : ''}" style="width:${Math.max(2, Math.min(100, soc))}%"></div>${tgt ? `<div class="absolute -inset-y-0.5 border-l-2 border-white/80" style="left:${tgt}%"></div>` : ''}</div>
-    ${rows}<p class="mt-1.5 text-[10.5px] text-slate-400">Stand vom Auto: ${atTxt}</p></div>`;
+    ${vehReason(vehHealth(d), true)}${rows}<p class="mt-1.5 text-[10.5px] text-slate-400">Stand vom Auto: ${atTxt}</p></div>`;
 }
 const WXO_H1 = 7, WXO_H2 = 16;                                                        // Anzeige: Temperatur zur Hin- und Rückfahrt (nur Anzeige, gerechnet wird mit dem Tagesmittel)
 const wxoTT = (v) => fmt(Math.round(v), 0).replace('-', '−') + '°';
