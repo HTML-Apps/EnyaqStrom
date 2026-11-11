@@ -136,7 +136,7 @@ export default async function handler(req, res) {
       // Test = genau so, wie die echte Warnung aussieht: bei Eis-Risiko mit den echten Werten für morgen, sonst mit einem typischen Beispiel
       let st = iceSet(null), r = null; try { const x = await riskFor(user.uid); st = x.st; r = x.r; } catch (e) { }
       if (!r || r.lvl < 1) r = { lvl: 2, T: -1, minTg: -4.4, cc: 5, ws: 0.6, glaze: false };
-      const payload = { ...message(r, st), tag: 'ice-test', url: '/', icon: '/Bilder/ice-icon.png?v=2' };
+      const payload = { ...message(r, st), tag: 'ice-test', url: '/', icon: '/Bilder/ice-icon.png?v=3' };
       return res.status(200).json({ ...(await send(list, payload)), devices: list.length });
     }
     const secret = process.env.CRON_SECRET, auth = req.headers.authorization || '', ua = String(req.headers['user-agent'] || '');
@@ -147,7 +147,7 @@ export default async function handler(req, res) {
       try { const all = await devices(uid); if (!all.length) continue; const prefs = await fsGet(`enyaqStrom/${uid}/settings/prefs`), iceL = all.filter(d => d.ice), remL = all.filter(d => d.rem);
         if (iceL.length) { try { const { st, r, why } = await riskFor(uid, prefs);
             if (!r || r.lvl < st.min) Object.assign(o, { lvl: r ? r.lvl : null, why: why || 'kein Eis' });
-            else Object.assign(o, { lvl: r.lvl, ice: await send(iceL, { ...message(r, st), tag: 'ice-' + r.day, url: '/', icon: '/Bilder/ice-icon.png?v=2' }) });
+            else Object.assign(o, { lvl: r.lvl, ice: await send(iceL, { ...message(r, st), tag: 'ice-' + r.day, url: '/', icon: '/Bilder/ice-icon.png?v=3' }) });
           } catch (e) { o.iceErr = String(e.message || e).slice(0, 120); } }
         if (remL.length) { try { const today = iso(new Date()), st = await fsGet(`enyaqStrom/${uid}/settings/pushState`), prevKm = st && Number(st.remKm) > 0 ? Number(st.remKm) : null;
             const km = await kmNow(uid, prefs), due = remDue(await fsList(`enyaqStrom/${uid}/reminders`), today, km, prevKm);
