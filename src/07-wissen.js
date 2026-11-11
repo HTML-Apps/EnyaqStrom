@@ -7,12 +7,20 @@ const KEY_KB = 'enyaq.kb', KB_MG = 'Mängel', KB_UP = 'Updates', KB_DEF_CATS = [
 /* Software-Updates = feste Wissen-Kategorie „Updates“: ver, how 'ota'|'werkstatt', inst 'JJJJ-MM-TT', km, base (Ausgangsstand, kein Vergleich), done (Auswertung gemeldet).
    Vergleich je 30 Tage vor/nach der Installation (vorher höchstens bis zum vorigen Update). */
 const UP_DAYS = 30, isUp = (x) => x && x.cat === KB_UP;
+/* Angekündigt: pend (noch nicht installiert, kein inst), ann = angekündigt am. Changelog: chg [{ t, seen? }] („Was ist neu“, je Punkt „bemerkt“), text = „Mein Eindruck“. */
+const isPend = (x) => isUp(x) && !!x.pend;
+const upPend = (kb) => (kb || getKb()).items.filter(isPend).sort((a, b) => String(b.ann || b.at || '').localeCompare(String(a.ann || a.at || '')));
+const chgN = (x) => (x.chg || []).length;
+const chgParse = (t) => String(t || '').split(/\r?\n/).map(l => l.replace(/^\s*(?:[-–—•·*▪◦●○✓✔☑]|\d+[.)])\s*/, '').trim()).filter(l => l.length > 1 && !/:$/.test(l)).slice(0, 40).map(l => l.slice(0, 200));
+const CHG_IC = [[/navi|route|routen|karte|ladestopp/i, '🧭'], [/lad|dc\b|ac\b|akku|batter|reichweit|vorkondition|kwh/i, '⚡'], [/klima|heiz|temperatur|wärme|kälte/i, '🌡️'], [/myškoda|myskoda|\bapp\b|smartphone|handy|fernzugriff/i, '📱'],
+  [/fehler|bug|behob|stabilität/i, '🛠️'], [/assist|tempomat|spurhalt|park|kamera|fahrerl/i, '🚗'], [/infotain|display|anzeige|widget|sprach|laura|bluetooth|carplay|android auto/i, '🖥️']];
+const chgIc = (t) => (CHG_IC.find(([r]) => r.test(t)) || [0, '•'])[1];
 const upList = (kb) => (kb || getKb()).items.filter(x => isUp(x) && x.inst).sort((a, b) => a.inst.localeCompare(b.inst));
 const upCur = (kb) => { const l = upList(kb); return l.length ? l[l.length - 1] : null; };
 const upAge = (x) => Math.floor((Date.now() - Date.parse(x.inst + 'T00:00:00')) / 864e5);
-const upTag = (x) => { const [t, c] = x.base ? ['Ausgangsstand', 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200'] : upAge(x) < UP_DAYS ? ['Vergleich läuft', 'bg-sky-100 text-sky-800 dark:bg-sky-900/60 dark:text-sky-200'] : ['✓ ausgewertet', 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-200']; return `<span class="shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${c}">${t}</span>`; };
-const upIcon = (x) => x.base ? '🏁' : x.how === 'werkstatt' ? '🔧' : '📡';
-const upMeta = (x) => [x.inst ? mgDate(x.inst) : '', x.km ? fmt(x.km, 0) + ' km' : '', x.base ? '' : x.how === 'werkstatt' ? 'Werkstatt' : 'OTA'].filter(Boolean).join(' · ');
+const upTag = (x) => { const [t, c] = x.pend ? ['📩 angekündigt', 'bg-sky-100 text-sky-800 dark:bg-sky-900/60 dark:text-sky-200'] : x.base ? ['Ausgangsstand', 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200'] : upAge(x) < UP_DAYS ? ['Vergleich läuft', 'bg-sky-100 text-sky-800 dark:bg-sky-900/60 dark:text-sky-200'] : ['✓ ausgewertet', 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-200']; return `<span class="shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${c}">${t}</span>`; };
+const upIcon = (x) => x.pend ? '📩' : x.base ? '🏁' : x.how === 'werkstatt' ? '🔧' : '📡';
+const upMeta = (x) => (x.pend ? ['angekündigt' + (x.ann ? ' seit ' + mgDate(x.ann) : ''), chgN(x) ? chgN(x) + ' Neuerungen' : ''] : [x.inst ? mgDate(x.inst) : '', x.km ? fmt(x.km, 0) + ' km' : '', x.base ? '' : x.how === 'werkstatt' ? 'Werkstatt' : 'OTA', chgN(x) ? chgN(x) + ' Neuerungen' : '']).filter(Boolean).join(' · ');
 /* Mängel-Tagebuch = feste Wissen-Kategorie „Mängel“. Zusatzfelder je Eintrag: st 'offen'|'gemeldet'|'erledigt', art (Art des Mangels), seen 'JJJJ-MM-TT', km, occ [ISO] (wieder aufgetreten). */
 const MG_ST = { offen: ['offen', 'bg-rose-100 text-rose-700 dark:bg-rose-900/60 dark:text-rose-200'], gemeldet: ['gemeldet', 'bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200'], erledigt: ['erledigt', 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-200'] };
 const MG_ART = [['geraeusch', '🔊', 'Geräusch'], ['software', '💻', 'Software'], ['elektrik', '⚡', 'Elektrik'], ['karosserie', '🚪', 'Karosserie'], ['laden', '🔌', 'Laden'], ['sonst', '🛠️', 'Sonstiges']];
@@ -35,20 +43,26 @@ function renderKb() {
   $('kb-cats').innerHTML = [['', 'Alle (' + kb.items.length + ')']].concat(kb.cats.filter(c => n(c) || c === KB_MG || c === KB_UP).map(c => [c, KB_ICON(c) + ' ' + c + (c === KB_MG ? '' : ' (' + n(c) + ')')]))
     .map(([k, l]) => `<button type="button" data-kbc="${esc(k)}" class="shrink-0 rounded-lg px-2.5 py-1.5 ${k === kbCat ? 'bg-emerald-600/20 text-emerald-700 dark:text-emerald-300 font-semibold' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300'}">${esc(l)}${k === KB_MG && nOpen ? ` <span class="ml-0.5 rounded-md bg-rose-600 px-1.5 text-[10px] font-bold text-white">${nOpen}</span>` : ''}</button>`).join('');
   const mgs = kb.items.filter(isMg), cnt = (st) => mgs.filter(x => mgSt(x) === st).length;
-  const uc = upCur(kb);
+  const uc = upCur(kb), pend = kbCat === KB_UP && !q ? upPend(kb) : [];
+  $('kb-up-pend').classList.toggle('hidden', !pend.length);
+  $('kb-up-pend').innerHTML = pend.map(x => `<div class="rounded-3xl border border-sky-400/60 bg-gradient-to-br from-sky-600 to-sky-800 p-4 text-left text-white shadow-sm">
+      <div class="flex items-center text-xs font-bold tracking-[0.08em] text-sky-100"><span class="flex-1">📩 ANGEKÜNDIGT</span><span class="font-medium tracking-normal">${x.ann ? 'seit ' + esc(mgDate(x.ann).slice(0, 6)) : ''}</span></div>
+      <p class="mt-1 text-xl font-bold">${esc(x.title)}</p><p class="truncate text-[13px] text-sky-50/90">${chgN(x) ? chgN(x) + (chgN(x) === 1 ? ' Neuerung' : ' Neuerungen') + ' · u. a. ' + esc(x.chg[0].t) : 'Noch kein Changelog eingetragen'}</p>
+      <div class="mt-3 grid grid-cols-[1fr_1.3fr] gap-2"><button type="button" data-kb="${esc(x.id)}" class="h-11 rounded-xl bg-white/15 text-sm font-semibold active:bg-white/25">${chgN(x) ? 'Changelog' : 'Öffnen'}</button><button type="button" data-upinst="${esc(x.id)}" class="h-11 rounded-xl bg-white text-sm font-extrabold text-sky-800 active:scale-95 transition">✓ Ist installiert</button></div></div>`).join('');
+  $('kb-list-h').textContent = pend.length ? 'Installiert' : 'Alle Einträge';
   $('kb-mg-bar').classList.toggle('hidden', kbCat !== KB_MG && !(kbCat === KB_UP && uc));
   $('kb-mg-sum').innerHTML = kbCat === KB_UP ? (uc ? 'Aktuell: <b class="text-slate-800 dark:text-slate-100">' + esc(uc.ver || '?') + '</b> seit ' + mgDate(uc.inst) : '') : esc(mgs.length ? cnt('offen') + ' offen · ' + cnt('gemeldet') + ' gemeldet · ' + cnt('erledigt') + ' erledigt' : 'Noch keine Mängel notiert');
   $('kb-mg-share').classList.toggle('hidden', kbCat !== KB_MG || !(cnt('offen') + cnt('gemeldet')));
   $('kb-up-start').classList.toggle('hidden', !(kbCat === KB_UP && !uc));
-  const hit = (x) => (!kbCat || x.cat === kbCat) && (!q || [x.title, x.text, x.cat].concat((x.links || []).map(l => l.url + ' ' + (l.label || ''))).join(' ').toLowerCase().includes(q));
-  const ord = { offen: 0, gemeldet: 1, erledigt: 2 }, list = kb.items.filter(hit).sort((a, b) => kbCat === KB_MG ? (ord[mgSt(a)] - ord[mgSt(b)]) || String(b.seen || b.at || '').localeCompare(String(a.seen || a.at || '')) : kbCat === KB_UP ? String(b.inst || '').localeCompare(String(a.inst || '')) : a.title.localeCompare(b.title, 'de')), pins = list.filter(x => x.pin), rest = list.filter(x => !x.pin);
+  const hit = (x) => (!kbCat || x.cat === kbCat) && (!q || [x.title, x.text, x.cat, (x.chg || []).map(c => c.t).join(' ')].concat((x.links || []).map(l => l.url + ' ' + (l.label || ''))).join(' ').toLowerCase().includes(q));
+  const ord = { offen: 0, gemeldet: 1, erledigt: 2 }, list = kb.items.filter(hit).sort((a, b) => kbCat === KB_MG ? (ord[mgSt(a)] - ord[mgSt(b)]) || String(b.seen || b.at || '').localeCompare(String(a.seen || a.at || '')) : kbCat === KB_UP ? (!!b.pend - !!a.pend) || String(b.inst || '').localeCompare(String(a.inst || '')) : a.title.localeCompare(b.title, 'de')), pins = list.filter(x => x.pin), rest = list.filter(x => !x.pin);
   $('kb-pin-wrap').classList.toggle('hidden', !pins.length);
   $('kb-pins').innerHTML = pins.map(x => `<button type="button" data-kb="${esc(x.id)}" class="flex h-14 min-w-0 items-center gap-2.5 rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm px-2.5 text-left active:scale-[0.98] transition">
       <span class="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] ${KB_TINT(x.cat)}">${KB_ICON(x.cat)}</span>
       <span class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold leading-5">${esc(x.title)}</span><span class="block truncate text-[11px] leading-4 ${x.links && x.links.length ? 'text-sky-600 dark:text-sky-300' : 'text-slate-500 dark:text-slate-400'}">${x.links && x.links.length ? '↗ Link öffnen' : esc(kbSub(x))}</span></span>
       <svg class="h-3.5 w-3.5 shrink-0 text-slate-400" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3l7 7-3 1-4 4 1 5-2 1-4-5-5 5-1-1 5-5-5-4 1-2 5 1 4-4z"/></svg></button>`).join('');
-  $('kb-list-wrap').classList.toggle('hidden', !rest.length);
-  $('kb-list').innerHTML = rest.map(x => `<li><button type="button" data-kb="${esc(x.id)}" class="flex w-full items-center gap-3 px-3.5 py-3 text-left active:bg-slate-100 dark:active:bg-slate-800">
+  const rest2 = rest.filter(x => !pend.includes(x)); $('kb-list-wrap').classList.toggle('hidden', !rest2.length);
+  $('kb-list').innerHTML = rest2.map(x => `<li><button type="button" data-kb="${esc(x.id)}" class="flex w-full items-center gap-3 px-3.5 py-3 text-left active:bg-slate-100 dark:active:bg-slate-800">
       <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${KB_TINT(x.cat)}">${isMg(x) ? mgArt(x)[1] : isUp(x) ? upIcon(x) : KB_ICON(x.cat)}</span>
       <span class="min-w-0 flex-1"><span class="block truncate font-medium">${esc(x.title)}</span><span class="block truncate text-xs text-slate-500 dark:text-slate-400">${esc(isMg(x) ? mgMeta(x) : isUp(x) ? upMeta(x) : kbSub(x))}</span></span>${isMg(x) ? mgTag(x) : isUp(x) ? upTag(x) : '<span class="text-slate-400">›</span>'}</button></li>`).join('');
   $('kb-empty').classList.toggle('hidden', list.length > 0);
@@ -58,6 +72,7 @@ function renderKb() {
 function renderKbStart() {
   const kb = getKb(), n = kb.items.length, pins = kb.items.filter(x => x.pin).sort((a, b) => a.title.localeCompare(b.title, 'de'));
   try { upCheckDone(); } catch (e) { }
+  try { renderUpBanner(); } catch (e) { }
   const mo = mgOpen(kb); $('go-kb-n').textContent = ' · ' + (mo ? mo + (mo === 1 ? ' offener Mangel' : ' offene Mängel') : n ? n + (n === 1 ? ' Eintrag' : ' Einträge') : 'Handbuch, Tipps & mehr');
   $('kb-start-pins').classList.toggle('hidden', !pins.length);
   /* Angepinnte Einträge als Unterzeilen von „Wissen“ (Baumlinie); mit Link öffnet ein Tipp direkt den Link, sonst den Eintrag */
@@ -82,15 +97,43 @@ function openKb(id) {
       ${(x.occ || []).length ? `<p class="mt-1 text-left text-xs text-slate-500 dark:text-slate-400">Wieder aufgetreten: ${x.occ.map(o => mgDate(o).slice(0, 6)).join(', ')} · insgesamt ${x.occ.length + 1}×</p>` : ''}
       <div class="mt-2.5 grid grid-cols-2 gap-1.5"><button type="button" data-kbact="again" class="rounded-xl bg-white dark:bg-slate-800 py-2 text-xs font-semibold active:scale-95 transition">＋ wieder aufgetreten</button>
         ${mgSt(x) === 'offen' ? '<button type="button" data-kbact="st-gemeldet" class="rounded-xl bg-white dark:bg-slate-800 py-2 text-xs font-semibold active:scale-95 transition">→ gemeldet</button>' : mgSt(x) === 'gemeldet' ? '<button type="button" data-kbact="st-erledigt" class="rounded-xl bg-white dark:bg-slate-800 py-2 text-xs font-semibold active:scale-95 transition">✓ erledigt</button>' : '<button type="button" data-kbact="st-offen" class="rounded-xl bg-white dark:bg-slate-800 py-2 text-xs font-semibold active:scale-95 transition">↺ wieder offen</button>'}</div></div>` : ''}
-    ${isUp(x) ? `<div class="rounded-2xl bg-sky-50 dark:bg-sky-950/30 p-3 text-sm"><div class="flex items-center justify-between gap-2"><span class="font-semibold">${upIcon(x)} Version ${esc(x.ver || '?')}</span>${upTag(x)}</div><p class="mt-1 text-left text-slate-600 dark:text-slate-300">${esc(upMeta(x))}</p>
-      ${x.base ? '<p class="mt-2 text-left text-xs text-slate-500 dark:text-slate-400">Ausgangsstand: ab hier wird jedes neue Update mit der Zeit davor verglichen.</p>' : '<div id="kb-up-cmp" class="mt-2"><p class="text-xs text-slate-500 dark:text-slate-400">Vergleich wird berechnet …</p></div>'}</div>` : ''}
-    ${x.text ? `<div class="rounded-2xl bg-slate-100 dark:bg-slate-800/60 p-3 text-sm leading-6 whitespace-pre-wrap break-words">${kbLinkify(x.text)}</div>` : ''}
+    ${isUp(x) ? upBox(x) : ''}
+    ${isUp(x) && x.text ? '<p class="-mb-2 px-1 text-left text-xs font-bold uppercase tracking-wide text-slate-500">Mein Eindruck</p>' : ''}${x.text ? `<div class="rounded-2xl bg-slate-100 dark:bg-slate-800/60 p-3 text-sm leading-6 whitespace-pre-wrap break-words">${kbLinkify(x.text)}</div>` : ''}
     ${x.files && x.files.length ? `<div><p class="mb-1.5 text-xs text-slate-500 dark:text-slate-400">Belege</p><div class="flex flex-wrap gap-1.5">${x.files.map(f => `<a href="${dvLink(f.id)}" target="_blank" rel="noopener" class="inline-flex max-w-full items-center gap-1 rounded-lg bg-slate-100 dark:bg-slate-800 px-2.5 py-1.5 text-xs"><span aria-hidden="true">📎</span><span class="truncate">${esc(f.name)}</span></a>`).join('')}</div></div>` : ''}
     <div class="grid grid-cols-3 gap-2 pt-1"><button type="button" data-kbact="edit" class="py-2.5 rounded-xl bg-slate-200 dark:bg-slate-800 text-sm font-medium active:scale-95 transition">Bearbeiten</button><button type="button" data-kbact="share" class="py-2.5 rounded-xl bg-slate-200 dark:bg-slate-800 text-sm font-medium active:scale-95 transition">Teilen</button><button type="button" data-kbact="del" class="py-2.5 rounded-xl bg-slate-200 dark:bg-slate-800 text-sm font-medium text-red-600 dark:text-red-300 active:scale-95 transition">Löschen</button></div>
     <button type="button" data-kbact="close" class="w-full py-3 rounded-2xl bg-emerald-600 text-white font-semibold active:scale-95 transition">Schließen</button>`;
   $('kb-dialog').classList.remove('hidden');
-  if (isUp(x) && !x.base) upCompare(x).then(h => { if (kbCur === x.id && $('kb-up-cmp')) $('kb-up-cmp').innerHTML = h; }).catch(e => { console.error(e); if ($('kb-up-cmp')) $('kb-up-cmp').innerHTML = '<p class="text-xs text-red-600">Vergleich nicht möglich.</p>'; });
+  if (isUp(x) && !x.base && !x.pend) upCompare(x).then(h => { if (kbCur === x.id && $('kb-up-cmp')) $('kb-up-cmp').innerHTML = h; }).catch(e => { console.error(e); if ($('kb-up-cmp')) $('kb-up-cmp').innerHTML = '<p class="text-xs text-red-600">Vergleich nicht möglich.</p>'; });
 }
+/** Update im Detail: Kopf (Version, Stand), bei „angekündigt“ der Knopf „Ist installiert“, sonst der Vergleich; darunter „Was ist neu“ (je Punkt „bemerkt“ antippbar) */
+function upBox(x) {
+  const head = `<div class="rounded-2xl bg-sky-50 dark:bg-sky-950/30 p-3 text-sm"><div class="flex items-center justify-between gap-2"><span class="font-semibold">${upIcon(x)} Version ${esc(x.ver || '?')}</span>${upTag(x)}</div><p class="mt-1 text-left text-slate-600 dark:text-slate-300">${esc(upMeta(x))}</p>
+    ${x.pend ? '<p class="mt-2 text-left text-xs text-slate-500 dark:text-slate-400">Sobald es drauf ist: „Ist installiert“ übernimmt Datum und km-Stand vom Auto und startet den Vergleich vorher/nachher.</p><button type="button" data-kbact="inst" class="mt-2.5 h-11 w-full rounded-xl bg-sky-600 text-sm font-bold text-white active:scale-95 transition">✓ Ist installiert</button>'
+      : x.base ? '<p class="mt-2 text-left text-xs text-slate-500 dark:text-slate-400">Ausgangsstand: ab hier wird jedes neue Update mit der Zeit davor verglichen.</p>' : '<div id="kb-up-cmp" class="mt-2"><p class="text-xs text-slate-500 dark:text-slate-400">Vergleich wird berechnet …</p></div>'}</div>`;
+  if (!chgN(x)) return head;
+  const pts = x.chg.map((c, i) => `<div class="flex items-start gap-2.5 border-t border-slate-200 py-2 text-left text-[13.5px] leading-snug dark:border-slate-800"><span class="w-5 shrink-0 text-center" aria-hidden="true">${chgIc(c.t)}</span><span class="min-w-0 flex-1">${esc(c.t)}</span>
+      ${x.pend ? '' : `<button type="button" data-kbact="chg-${i}" aria-pressed="${!!c.seen}" class="shrink-0 whitespace-nowrap rounded-lg px-1.5 py-0.5 text-[11px] ${c.seen ? 'font-bold text-emerald-600 dark:text-emerald-400' : 'border border-slate-300 text-slate-500 dark:border-slate-600 dark:text-slate-400'}">${c.seen ? '✓ bemerkt' : 'bemerkt?'}</button>`}</div>`).join('');
+  return head + `<div class="rounded-2xl bg-white p-3 dark:bg-slate-800/40"><p class="pb-1 text-left text-xs font-bold uppercase tracking-wide text-slate-500">Was ist neu · ${chgN(x)} ${chgN(x) === 1 ? 'Punkt' : 'Punkte'}</p>${pts}</div>`;
+}
+/** Angekündigtes Update als installiert markieren: Datum heute, km-Stand vom Auto (sonst letzter bekannter) → Vergleich startet */
+async function upInstall(id, btn) {
+  const x0 = getKb().items.find(y => String(y.id) === String(id)); if (!x0) return; if (btn) btn.textContent = '…';
+  let km = null; try { km = (await fetchCarKm()).km; } catch (e) { try { const c = ltmCarKm(); km = (c && c.km) || lastKnownKm(); } catch (e2) { } }
+  const kb = getKb(), x = kb.items.find(y => String(y.id) === String(id)); if (!x) return;
+  const it = { ...x, inst: wxIso(new Date()), at: new Date().toISOString() }; delete it.pend; if (km > 0) it.km = Math.round(km);
+  setKb({ cats: kb.cats, items: kb.items.map(y => String(y.id) === String(id) ? it : y) });
+  appNote(it.title + ' installiert – der Vergleich vorher/nachher läuft jetzt ' + UP_DAYS + ' Tage.', 'ok');
+  if (!$('kb-dialog').classList.contains('hidden') && String(kbCur) === String(id)) openKb(id);
+}
+$('kb-up-pend').addEventListener('click', (e) => { const i = e.target.closest('[data-upinst]'); if (i) { upInstall(i.dataset.upinst, i); return; } const o = e.target.closest('[data-kb]'); if (o) openKb(o.dataset.kb); });
+/* Start: Hinweis, solange ein Update angekündigt ist (nicht in der einfachen Ansicht) */
+function renderUpBanner() {
+  const el = $('up-banner'); if (!el) return; const x = upPend()[0];
+  el.classList.toggle('hidden', !x || isSimple()); if (!x) return;
+  $('up-banner-h').textContent = 'Update ' + (x.ver || '') + ' angekündigt';
+  $('up-banner-s').textContent = chgN(x) ? x.chg[0].t + (chgN(x) > 1 ? ' · +' + (chgN(x) - 1) + ' weitere' : '') : 'Changelog eintragen, „Ist installiert“ tippen, sobald es drauf ist';
+}
+$('up-banner-go').addEventListener('click', () => { const x = upPend()[0]; showView('kb'); kbCat = KB_UP; renderKb(); if (x) openKb(x.id); });
 /* Vorher/Nachher-Vergleich eines Updates → HTML. Verbrauch ab Akku je Strecke zwischen zwei Ladungen; temperaturbereinigt über die Abweichung vom eigenen Wettermodell. */
 async function upCompare(x) {
   const t0 = Date.parse(x.inst + 'T00:00:00'), prev = upList().filter(y => y.inst < x.inst).pop(), D = 864e5;
@@ -144,8 +187,9 @@ function editKb(id) {
   $('kb-cat').value = x ? x.cat : (kbCat || kb.cats.find(c => c !== KB_MG) || kb.cats[0]);
   kbMg = { st: x ? mgSt(x) : 'offen', art: x && x.art ? x.art : '' }; $('kb-mg-date').value = x && x.seen ? x.seen : wxIso(new Date()); $('kb-mg-date').max = wxIso(new Date());
   $('kb-mg-km').value = x && x.km ? String(x.km) : (() => { try { const c = ltmCarKm(); if (c && c.km) return String(c.km); const k = lastKnownKm(); return k ? String(Math.round(k)) : ''; } catch (e) { return ''; } })();
-  kbUp = { how: x && x.how === 'werkstatt' ? 'werkstatt' : 'ota' }; $('kb-up-ver').value = x && x.ver ? x.ver : ''; $('kb-up-date').value = x && x.inst ? x.inst : wxIso(new Date()); $('kb-up-date').max = wxIso(new Date());
-  $('kb-up-km').value = x && x.km ? String(x.km) : $('kb-mg-km').value; $('kb-up-base').checked = !!(x ? x.base : kbUpBaseNext); kbUpBaseNext = false;
+  kbUp = { how: x && x.how === 'werkstatt' ? 'werkstatt' : 'ota', st: 'ann' }; $('kb-up-ver').value = x && x.ver ? x.ver : ''; $('kb-up-date').value = x && x.inst ? x.inst : wxIso(new Date()); $('kb-up-date').max = wxIso(new Date());
+  $('kb-up-km').value = x && x.km ? String(x.km) : $('kb-mg-km').value; $('kb-up-base').checked = !!(x ? x.base : kbUpBaseNext);
+  kbUp.st = x ? (x.pend ? 'ann' : 'inst') : kbUpBaseNext ? 'inst' : 'ann'; kbUpBaseNext = false; $('kb-up-chg').value = x && x.chg ? x.chg.map(c => '• ' + c.t).join('\n') : '';
   kbMgPaint();
   $('kb-links').innerHTML = (x && x.links && x.links.length ? x.links : [{ url: '' }]).map(l => kbLinkRow(l.url, l.label)).join('');
   $('kb-files').innerHTML = kbFilesHtml(kbFiles); $('kb-msg').classList.add('hidden');
@@ -184,7 +228,7 @@ $('kb-save').addEventListener('click', async () => {
   const title = $('kb-title').value.trim().replace(/\s+/g, ' ').slice(0, 80), cat = $('kb-cat').value === '__new' ? getKb().cats[0] : $('kb-cat').value;
   const upVer = $('kb-up-ver').value.trim().slice(0, 24);
   if (cat === KB_UP && !upVer) { kbErr('Bitte die Software-Version eintragen (z. B. 3.7).'); return; }
-  if (cat === KB_UP && !$('kb-up-date').value) { kbErr('Bitte das Datum der Installation eintragen.'); return; }
+  if (cat === KB_UP && kbUp.st !== 'ann' && !$('kb-up-date').value) { kbErr('Bitte das Datum der Installation eintragen.'); return; }
   if (!title && cat !== KB_UP) { kbErr('Bitte einen Titel eingeben.'); return; }
   const links = []; for (const r of document.querySelectorAll('#kb-links .kb-lrow')) {
     let u = r.querySelector('.kb-lu').value.trim(); const l = r.querySelector('.kb-ll').value.trim().slice(0, 60); if (!u) continue;
@@ -195,7 +239,10 @@ $('kb-save').addEventListener('click', async () => {
   const kb = getKb(), old = kb.items.find(y => String(y.id) === String(kbCur)), item = { id: old ? old.id : Date.now(), title: title || ('Software ' + upVer), cat, at: new Date().toISOString() };
   const text = $('kb-text').value.trim().slice(0, 4000); if (text) item.text = text; if (links.length) item.links = links; if ($('kb-pin').checked) item.pin = true;
   if (cat === KB_UP) { const km = $('kb-up-km').value.trim() ? Number($('kb-up-km').value.replace(/\D/g, '')) : null; if (km != null && !(km >= 0 && km < 2e6)) { kbErr('Bitte einen gültigen km-Stand eingeben oder das Feld leer lassen.'); return; }
-    item.ver = upVer; item.how = kbUp.how; item.inst = $('kb-up-date').value; if (km) item.km = km; if ($('kb-up-base').checked) item.base = true; if (old && old.done && old.inst === item.inst) item.done = true; }
+    item.ver = upVer; item.how = kbUp.how;
+    if (kbUp.st === 'ann') { item.pend = true; item.ann = old && old.ann ? old.ann : wxIso(new Date()); }
+    else { item.inst = $('kb-up-date').value; if (km) item.km = km; if ($('kb-up-base').checked) item.base = true; if (old && old.done && old.inst === item.inst) item.done = true; if (old && old.ann) item.ann = old.ann; }
+    const seen = new Set((old && old.chg || []).filter(c => c.seen).map(c => c.t)), chg = chgParse($('kb-up-chg').value).map(t => seen.has(t) ? { t, seen: true } : { t }); if (chg.length) item.chg = chg; }
   if (cat === KB_MG) { const km = $('kb-mg-km').value.trim() ? Number($('kb-mg-km').value.replace(/\D/g, '')) : null; if (km != null && !(km >= 0 && km < 2e6)) { kbErr('Bitte einen gültigen km-Stand eingeben oder das Feld leer lassen.'); return; }
     item.st = kbMg.st; if (kbMg.art) item.art = kbMg.art; if ($('kb-mg-date').value) item.seen = $('kb-mg-date').value; if (km) item.km = km; if (old && old.occ && old.occ.length) item.occ = old.occ; if (old && old.stAt && old.st === kbMg.st) item.stAt = old.stAt; else if (kbMg.st !== 'offen') item.stAt = new Date().toISOString(); }
   const kept = kbFiles.filter(f => !f.pending).map(f => ({ id: f.id, name: f.name, mime: f.mime })); if (kept.length) item.files = kept;
@@ -209,19 +256,24 @@ $('kb-save').addEventListener('click', async () => {
 });
 /* Mängel: Felder im Bearbeiten-Dialog */
 let kbMg = { st: 'offen', art: '' };
-let kbUp = { how: 'ota' }, kbUpBaseNext = false;
+let kbUp = { how: 'ota', st: 'ann' }, kbUpBaseNext = false;
 function kbMgPaint() {
   $('kb-mg').classList.toggle('hidden', $('kb-cat').value !== KB_MG);
   $('kb-up').classList.toggle('hidden', $('kb-cat').value !== KB_UP);
+  $('kb-up-st').innerHTML = [['ann', '📩 Angekündigt'], ['inst', '📡 Installiert']].map(([k, l]) => `<button type="button" data-upst="${k}" class="whitespace-nowrap rounded-xl text-[13px] ${kbUp.st === k ? 'bg-sky-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300'}">${l}</button>`).join('');
+  $('kb-up-inst').classList.toggle('hidden', kbUp.st === 'ann'); $('kb-up-basew').classList.toggle('hidden', kbUp.st === 'ann');
+  $('kb-text-l').textContent = $('kb-cat').value === KB_UP ? 'Mein Eindruck (optional, auch später)' : 'Notiz';
   $('kb-up-how').innerHTML = [['ota', 'OTA'], ['werkstatt', 'Werkstatt']].map(([k, l]) => `<button type="button" data-uphow="${k}" class="whitespace-nowrap rounded-xl text-[13px] ${kbUp.how === k ? 'bg-sky-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300'}">${l}</button>`).join('');
   $('kb-title').placeholder = $('kb-cat').value === KB_UP ? 'leer = „Software ‹Version›“' : 'z. B. Bedienungsanleitung';
   $('kb-mg-st').innerHTML = Object.keys(MG_ST).map(k => `<button type="button" data-mgst="${k}" class="rounded-xl py-2 ${kbMg.st === k ? MG_ST[k][1] + ' ring-2 ring-current/30' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300'}">${MG_ST[k][0]}</button>`).join('');
   $('kb-mg-art').innerHTML = MG_ART.map(([k, i, l]) => `<button type="button" data-mgart="${k}" class="rounded-lg px-2 py-1.5 ${kbMg.art === k ? 'bg-emerald-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300'}">${i} ${l}</button>`).join('');
-  $('kb-text').placeholder = $('kb-cat').value === KB_MG ? 'Wann tritt es auf? Temperatur, Straße, Geschwindigkeit … – hilft der Werkstatt beim Nachstellen' : 'Text, Werte, Schritte …';
+  $('kb-text').placeholder = $('kb-cat').value === KB_UP ? 'Was ist dir nach dem Update aufgefallen?' : $('kb-cat').value === KB_MG ? 'Wann tritt es auf? Temperatur, Straße, Geschwindigkeit … – hilft der Werkstatt beim Nachstellen' : 'Text, Werte, Schritte …';
 }
 $('kb-cat').addEventListener('change', kbMgPaint);
 $('kb-up').addEventListener('click', async (e) => {
   const h = e.target.closest('[data-uphow]'); if (h) { kbUp.how = h.dataset.uphow; kbMgPaint(); return; }
+  const st = e.target.closest('[data-upst]'); if (st) { kbUp.st = st.dataset.upst; kbMgPaint(); return; }
+  if (e.target.id === 'kb-up-paste') { e.preventDefault(); try { const t = await navigator.clipboard.readText(); if (t) { const ta = $('kb-up-chg'); ta.value = (ta.value.trim() ? ta.value.trim() + '\n' : '') + chgParse(t).map(l => '• ' + l).join('\n'); } } catch (er) { kbErr('Einfügen nicht erlaubt – bitte lange in das Feld tippen und „Einfügen“ wählen.'); } return; }
   if (e.target.id === 'kb-up-kmf') { e.preventDefault(); const b = e.target; b.textContent = '…'; try { $('kb-up-km').value = String((await fetchCarKm()).km); } catch (er) { kbErr('km-Stand vom Auto nicht verfügbar.'); } b.textContent = '↻'; }
 });
 $('kb-up-start').addEventListener('click', () => { kbUpBaseNext = true; editKb(null); setTimeout(() => $('kb-up-ver').focus(), 60); });
@@ -246,11 +298,13 @@ $('kb-dialog').addEventListener('click', async (e) => {
   const b = e.target.closest('[data-kbact]'); if (!b) return; const act = b.dataset.kbact, kb = getKb(), x = kb.items.find(y => String(y.id) === String(kbCur));
   if (act === 'close' || !x) { $('kb-dialog').classList.add('hidden'); return; }
   if (act === 'edit') editKb(x.id);
+  else if (act === 'inst') upInstall(x.id, b);
+  else if (act.startsWith('chg-')) { const i = +act.slice(4); setKb({ cats: kb.cats, items: kb.items.map(y => y === x ? { ...y, chg: (y.chg || []).map((c, j) => j === i ? (c.seen ? { t: c.t } : { t: c.t, seen: true }) : c) } : y) }); openKb(x.id); }
   else if (act === 'again') { setKb({ cats: kb.cats, items: kb.items.map(y => y === x ? { ...y, occ: (y.occ || []).concat(new Date().toISOString()), at: new Date().toISOString() } : y) }); openKb(x.id); }
   else if (act.startsWith('st-')) { const st = act.slice(3); setKb({ cats: kb.cats, items: kb.items.map(y => y === x ? { ...y, st, stAt: new Date().toISOString(), at: new Date().toISOString() } : y) }); openKb(x.id); }
   else if (act === 'del') { const prevKb = JSON.parse(JSON.stringify(kb)); setKb({ cats: kb.cats, items: kb.items.filter(y => y !== x) }); $('kb-dialog').classList.add('hidden'); undoDel('„' + x.title + '“ gelöscht', () => setKb(prevKb)); }
   else if (act === 'share') {
-    const t = [x.title, x.text || ''].concat((x.links || []).map(l => (l.label ? l.label + ': ' : '') + l.url)).filter(Boolean).join('\n');
+    const t = [x.title, isUp(x) && chgN(x) ? 'Was ist neu:\n' + x.chg.map(c => '• ' + c.t).join('\n') : '', x.text || ''].concat((x.links || []).map(l => (l.label ? l.label + ': ' : '') + l.url)).filter(Boolean).join('\n');
     try { if (navigator.share) await navigator.share({ title: x.title, text: t }); else { await navigator.clipboard.writeText(t); b.textContent = 'Kopiert ✓'; } } catch (err) { }
   }
 });

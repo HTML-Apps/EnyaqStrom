@@ -225,7 +225,7 @@
   @media (prefers-reduced-motion: reduce) { #bd-conf i, #bdg-conf i { animation: none; top: var(--y, 10%); } #bd-card, #bdg-card { animation: none; } }
 </style>
 <!-- Tailwind fertig gebaut (npm run css) – am Ende des Kopfs wie früher das CDN, damit die Reihenfolge der Regeln gleich bleibt -->
-<link rel="stylesheet" href="/app.css?v=290">
+<link rel="stylesheet" href="/app.css?v=291">
 </head>
 <body class="bg-slate-100 text-slate-900 dark:bg-black dark:text-slate-100 min-h-screen">
 
@@ -284,6 +284,10 @@
     <div id="trips-banner" class="hidden w-full rounded-2xl p-3 text-sm bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-200 flex items-center justify-between gap-2">
       <button id="trips-banner-go" type="button" class="min-w-0 flex-1 text-left active:opacity-70"><span id="trips-banner-text" class="block"></span><span class="block text-xs opacity-75">MyŠkoda-App → Fahrtenbuch → Export → Teilen → diese App</span></button>
       <button id="trips-banner-x" type="button" aria-label="Für diesen Monat ausblenden" class="w-9 h-9 shrink-0 rounded-xl text-lg active:scale-95 transition hover:bg-black/5 dark:hover:bg-white/10">×</button>
+    </div>
+    <div id="up-banner" class="hidden w-full rounded-2xl p-3 text-sm bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-200 flex items-center justify-between gap-2">
+      <button id="up-banner-go" type="button" class="flex min-w-0 flex-1 items-center gap-2.5 text-left active:opacity-70"><span class="text-xl leading-none" aria-hidden="true">📩</span><span class="min-w-0"><span id="up-banner-h" class="block font-semibold"></span><span id="up-banner-s" class="block truncate text-xs opacity-80"></span></span></button>
+      <span class="shrink-0 text-[13px] font-semibold text-sky-700 dark:text-sky-300">Ansehen ›</span>
     </div>
 
     <div id="dash-swipe" class="relative">
@@ -761,7 +765,8 @@
     <div id="kb-cats" class="-mx-3 flex gap-1.5 overflow-x-auto px-3 pb-0.5 text-xs font-medium whitespace-nowrap [scrollbar-width:none]"></div>
     <div id="kb-mg-bar" class="hidden flex items-center justify-between gap-2 px-1 text-xs"><span id="kb-mg-sum" class="text-slate-500 dark:text-slate-400"></span><button id="kb-mg-share" type="button" class="shrink-0 font-semibold text-sky-600 dark:text-sky-300">📋 Werkstatt-Liste</button></div>
     <div id="kb-pin-wrap" class="hidden"><p class="mb-1.5 px-1 text-[11px] uppercase tracking-wider text-slate-500">Angeheftet</p><div id="kb-pins" class="grid grid-cols-2 gap-2"></div></div>
-    <div id="kb-list-wrap"><p class="mb-1.5 px-1 text-[11px] uppercase tracking-wider text-slate-500">Alle Einträge</p><ul id="kb-list" class="rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm divide-y divide-slate-200 dark:divide-slate-800 overflow-hidden"></ul></div>
+    <div id="kb-up-pend" class="hidden space-y-2"></div>
+    <div id="kb-list-wrap"><p id="kb-list-h" class="mb-1.5 px-1 text-[11px] uppercase tracking-wider text-slate-500">Alle Einträge</p><ul id="kb-list" class="rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm divide-y divide-slate-200 dark:divide-slate-800 overflow-hidden"></ul></div>
     <button id="kb-up-start" type="button" class="hidden w-full rounded-2xl bg-sky-600 py-3 text-sm font-semibold text-white active:scale-95 transition">🏁 Aktuelle Version eintragen</button>
     <p id="kb-empty" class="hidden px-1 py-6 text-center text-sm text-slate-500 dark:text-slate-400">Noch nichts gespeichert. Lege mit „+ Neu“ zum Beispiel den Link zum Handbuch, Reifendruck-Werte oder die Nummer deiner Werkstatt an.</p>
   </section>
@@ -1745,11 +1750,14 @@
       <div><label for="kb-title" class="text-xs text-slate-500 dark:text-slate-400">Titel</label><input id="kb-title" type="text" maxlength="80" autocomplete="off" placeholder="z. B. Bedienungsanleitung" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
       <div><label for="kb-cat" class="text-xs text-slate-500 dark:text-slate-400">Kategorie</label><select id="kb-cat" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></select></div>
       <div id="kb-up" class="hidden space-y-2.5 rounded-2xl bg-sky-50 dark:bg-sky-950/30 p-3">
+        <div><p class="flex h-5 items-center text-xs text-slate-500 dark:text-slate-400">Stand</p><div id="kb-up-st" class="mt-1 grid h-[42px] grid-cols-2 gap-1.5 text-sm font-medium"></div></div>
         <div class="grid grid-cols-2 gap-2"><div class="min-w-0"><label for="kb-up-ver" class="flex h-5 items-center text-xs text-slate-500 dark:text-slate-400">Version</label><input id="kb-up-ver" type="text" maxlength="24" autocomplete="off" placeholder="z. B. 3.7" class="h-[46px] mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
           <div class="min-w-0"><p class="flex h-5 items-center text-xs text-slate-500 dark:text-slate-400">Wie</p><div id="kb-up-how" class="mt-1 grid h-[46px] grid-cols-2 gap-1.5 text-sm font-medium"></div></div></div>
-        <div class="grid grid-cols-2 gap-2"><div class="min-w-0"><label for="kb-up-date" class="flex h-5 items-center text-xs text-slate-500 dark:text-slate-400">Installiert am</label><input id="kb-up-date" type="date" class="h-[46px] mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
+        <div id="kb-up-inst" class="grid grid-cols-2 gap-2"><div class="min-w-0"><label for="kb-up-date" class="flex h-5 items-center text-xs text-slate-500 dark:text-slate-400">Installiert am</label><input id="kb-up-date" type="date" class="h-[46px] mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
           <div class="min-w-0"><label for="kb-up-km" class="flex h-5 items-center gap-1 text-xs text-slate-500 dark:text-slate-400">km-Stand <button id="kb-up-kmf" type="button" title="km-Stand vom Auto holen" aria-label="km-Stand vom Auto holen" class="leading-none text-emerald-600 dark:text-emerald-400">↻</button></label><input id="kb-up-km" type="text" inputmode="numeric" autocomplete="off" placeholder="–" class="h-[46px] mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div></div>
-        <label class="flex items-start gap-2 text-sm"><input id="kb-up-base" type="checkbox" class="mt-0.5 h-4 w-4 accent-sky-600"><span>Ausgangsstand <span class="block text-xs text-slate-500 dark:text-slate-400">Version, die schon drauf war, als du mit der Aufzeichnung begonnen hast – kein Vergleich</span></span></label>
+        <div><div class="flex items-center justify-between"><label for="kb-up-chg" class="text-xs text-slate-500 dark:text-slate-400">Was ist neu? <span class="text-slate-400">– jede Zeile ein Punkt</span></label><button id="kb-up-paste" type="button" class="px-1.5 py-1 text-xs font-semibold text-sky-700 dark:text-sky-300">📋 Einfügen</button></div>
+          <textarea id="kb-up-chg" rows="5" maxlength="3000" placeholder="Text aus MyŠkoda einfügen, z. B.&#10;• Schnelleres DC-Laden bei Kälte&#10;• Fehlerbehebungen im Infotainment" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 resize-y"></textarea></div>
+        <label id="kb-up-basew" class="flex items-start gap-2 text-sm"><input id="kb-up-base" type="checkbox" class="mt-0.5 h-4 w-4 accent-sky-600"><span>Ausgangsstand <span class="block text-xs text-slate-500 dark:text-slate-400">Version, die schon drauf war, als du mit der Aufzeichnung begonnen hast – kein Vergleich</span></span></label>
       </div>
       <div id="kb-mg" class="hidden space-y-2.5 rounded-2xl bg-rose-50 dark:bg-rose-950/30 p-3">
         <div><p class="text-xs text-slate-500 dark:text-slate-400">Status</p><div id="kb-mg-st" class="mt-1 grid grid-cols-3 gap-1.5 text-sm font-medium"></div></div>
@@ -1757,7 +1765,7 @@
         <div class="grid grid-cols-2 gap-2"><div class="min-w-0"><label for="kb-mg-date" class="flex h-5 items-center text-xs text-slate-500 dark:text-slate-400">Bemerkt am</label><input id="kb-mg-date" type="date" class="h-[46px] mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
           <div class="min-w-0"><label for="kb-mg-km" class="flex h-5 items-center gap-1 text-xs text-slate-500 dark:text-slate-400">km-Stand <button id="kb-mg-kmf" type="button" title="km-Stand vom Auto holen" aria-label="km-Stand vom Auto holen" class="leading-none text-emerald-600 dark:text-emerald-400">↻</button></label><input id="kb-mg-km" type="text" inputmode="numeric" autocomplete="off" placeholder="–" class="h-[46px] mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div></div>
       </div>
-      <div><label for="kb-text" class="text-xs text-slate-500 dark:text-slate-400">Notiz</label><textarea id="kb-text" rows="5" maxlength="4000" placeholder="Text, Werte, Schritte …" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-y"></textarea></div>
+      <div><label id="kb-text-l" for="kb-text" class="text-xs text-slate-500 dark:text-slate-400">Notiz</label><textarea id="kb-text" rows="5" maxlength="4000" placeholder="Text, Werte, Schritte …" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-y"></textarea></div>
       <div><div class="flex items-center justify-between"><p class="text-xs text-slate-500 dark:text-slate-400">Links</p><button id="kb-link-add" type="button" class="text-xs font-semibold text-emerald-600 dark:text-emerald-400 px-1.5 py-1">+ Link</button></div><div id="kb-links" class="mt-1 space-y-2"></div></div>
       <div><p class="text-xs text-slate-500 dark:text-slate-400">Belege (Google Drive)</p><div id="kb-files" class="mt-1 flex flex-wrap gap-1.5"></div><input id="kb-file-in" type="file" accept="image/*,application/pdf" multiple class="hidden"></div>
       <label class="flex items-center justify-between rounded-2xl bg-slate-100 dark:bg-slate-800/60 px-3.5 py-2.5"><span class="text-sm">Auf Start anheften</span><input id="kb-pin" type="checkbox" class="h-5 w-5 accent-emerald-600"></label>
@@ -1895,7 +1903,7 @@
   </div>
 </nav>
 
-<script src="/app.js?v=290"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
+<script src="/app.js?v=291"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
 <script type="module">
 /* Firebase (modular SDK). Die Konfiguration ist kein Geheimnis – geschützt wird über Auth + Firestore-Regeln. */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
