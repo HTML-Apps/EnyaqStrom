@@ -407,7 +407,7 @@ function renderTrends() {
           <div class="mt-1.5 flex gap-1 text-[10px] text-slate-500 dark:text-slate-400">${vals.map(x => `<span class="flex-1 text-center">${MONTHS[x.m]}</span>`).join('')}</div>
         </div>
       </div>
-      <p class="mt-3 text-left text-[11px] text-slate-500 dark:text-slate-400">Letzte 8 Monate · heller Balken = ${MONTHS_LONG[n.getMonth()]} (Zwischenstand) · gestrichelt = Ø${d.base && lo > 0 ? ' · Achse ab ' + lo : ''}${d.note ? ' · ' + d.note : ''}</p>`}
+      <p class="mt-3 text-left text-[11px] text-slate-500 dark:text-slate-400">Letzte 8 Monate · heller Balken = ${MONTHS_LONG[n.getMonth()]} (Zwischenstand) · gestrichelt = Ø${d.base && lo > 0 ? ' · Achse ab ' + lo : ''}${d.note ? ' · ' + d.note : ''}${d.key === 'km' && avg > 0 ? ' | Hochrechnung auf 12 Monate = ' + fmt(Math.round(avg) * 12, 0) + ' km' : ''}</p>`}
     </article>`; }).join('');
   $('trends-dots').innerHTML = defs.map((_, i) => `<span data-tdot="${i}" class="block h-2 rounded-full transition-all ${i === trendIdx ? 'w-5 bg-emerald-500' : 'w-2 bg-slate-500/60'}"></span>`).join('');
   if (trendIdx) box.scrollLeft = trendIdx * (box.firstElementChild.offsetWidth + 16);
