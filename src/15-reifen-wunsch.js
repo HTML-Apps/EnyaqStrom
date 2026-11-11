@@ -294,17 +294,31 @@ function openRecSheet(id, pre) {
     ${r ? '' : '<button type="button" data-rs="trip" class="text-sm font-semibold text-sky-600 dark:text-sky-300">Aus dem Fahrtenbuch übernehmen ›</button><div id="rec-trips" class="hidden space-y-1"></div>'}
     <p id="rec-msg" class="text-sm text-red-600 dark:text-red-400 text-left empty:hidden"></p>
     <div class="grid grid-cols-2 gap-2.5"><button type="button" data-rs="${r ? 'del' : 'close'}" class="h-12 rounded-2xl border border-slate-300 dark:border-slate-700 text-sm font-semibold ${r ? 'text-red-600 dark:text-red-400' : ''}">${r ? 'Löschen' : 'Abbrechen'}</button><button type="button" data-rs="save" class="h-12 rounded-2xl bg-emerald-600 text-white text-sm font-semibold">Speichern</button></div>`;
+  recDrafts = {}; recCur = recDirVal() + '|' + recSeaVal(); recLoaded = recFormGet();
   $('rec-sheet').classList.remove('hidden'); hpBox(); recHint();
 }
 /* Richtung im Formular wechseln: Werte des Rekords dieser Richtung laden (oder leeren), statt den offenen Rekord umzuhängen */
+/* Ungespeicherte Eingaben je Richtung/Jahreszeit (Schlüssel 'ab|so' …) bleiben beim Tab-Wechsel erhalten und werden mit „Speichern“ zusammen gesichert */
+let recDrafts = {}, recCur = 'ab|so', recLoaded = null;
+const REC_FIELDS = ['rec-date', 'rec-km', 'rec-k', 'rec-to', 'rec-tb', 'rec-v', 'rec-note'];
+const recFormGet = () => { const f = { id: recEdit, cond: [...document.querySelectorAll('#rec-cond [data-cond]')].filter(x => x.getAttribute('aria-pressed') === 'true').map(x => x.dataset.cond) }; REC_FIELDS.forEach(id => { f[id] = $(id) ? $(id).value : ''; }); return f; };
+const recFormSame = (a, b) => !!a && !!b && REC_FIELDS.every(id => (a[id] || '').trim() === (b[id] || '').trim()) && a.cond.join('|') === b.cond.join('|');
 function recSwitchDir() {
-  const rt = ($('rec-route')?.value || '').trim(), key = recKey(rt) + '|' + recDirVal() + '|' + recSeaVal(), r = getLab().recs.find(x => recDirKey(x) === key) || null;
-  recEdit = r ? r.id : null; const v = (x) => x == null ? '' : String(x).replace('.', ',');
+  const now = recFormGet(); if (!recFormSame(now, recLoaded)) recDrafts[recCur] = now; else delete recDrafts[recCur];   // nur geänderte Richtung merken
+  recCur = recDirVal() + '|' + recSeaVal();
+  const rt = ($('rec-route')?.value || '').trim(), key = recKey(rt) + '|' + recCur, r = getLab().recs.find(x => recDirKey(x) === key) || null, dr = recDrafts[recCur];
+  recEdit = dr ? dr.id : r ? r.id : null; const v = (x) => x == null ? '' : String(x).replace('.', ',');
+  const kmKeep = $('rec-km').value;
   $('rec-date').value = r ? r.date : wxIso(new Date()); if (r && r.km) $('rec-km').value = v(r.km);
   [['rec-k', 'k100'], ['rec-to', 'tOut'], ['rec-tb', 'tBat'], ['rec-v', 'v']].forEach(([id, k]) => { $(id).value = r ? v(r[k]) : ''; }); $('rec-note').value = r ? (r.note || '') : '';
-  document.querySelectorAll('#rec-cond [data-cond]').forEach(c => { const on = !!(r && (r.cond || []).includes(c.dataset.cond)); c.setAttribute('aria-pressed', on); ['border-emerald-600', 'bg-emerald-600/15', 'text-emerald-700', 'dark:text-emerald-300'].forEach(x => c.classList.toggle(x, on)); ['border-slate-300', 'dark:border-slate-700', 'text-slate-600', 'dark:text-slate-300'].forEach(x => c.classList.toggle(x, !on)); });
-  const t = $('rec-sheet-box').querySelector('p.text-lg'); if (t) t.textContent = r ? 'Rekord bearbeiten' : 'Rekord eintragen';
-  const lb = $('rec-sheet-box').querySelector('[data-rs="del"],[data-rs="close"]'); if (lb) { lb.dataset.rs = r ? 'del' : 'close'; lb.textContent = r ? 'Löschen' : 'Abbrechen'; lb.classList.toggle('text-red-600', !!r); lb.classList.toggle('dark:text-red-400', !!r); }
+  if (!r) $('rec-km').value = kmKeep;
+  const fromRec = recFormGet(); fromRec.cond = r ? (r.cond || []).slice() : [];
+  recLoaded = { ...fromRec, cond: REC_COND.filter(c => fromRec.cond.includes(c)) };
+  if (dr) REC_FIELDS.forEach(id => { $(id).value = dr[id]; });
+  const condNow = dr ? dr.cond : recLoaded.cond;
+  document.querySelectorAll('#rec-cond [data-cond]').forEach(c => { const on = condNow.includes(c.dataset.cond); c.setAttribute('aria-pressed', on); ['border-emerald-600', 'bg-emerald-600/15', 'text-emerald-700', 'dark:text-emerald-300'].forEach(x => c.classList.toggle(x, on)); ['border-slate-300', 'dark:border-slate-700', 'text-slate-600', 'dark:text-slate-300'].forEach(x => c.classList.toggle(x, !on)); });
+  const t = $('rec-sheet-box').querySelector('p.text-lg'); if (t) t.textContent = recEdit ? 'Rekord bearbeiten' : 'Rekord eintragen';
+  const lb = $('rec-sheet-box').querySelector('[data-rs="del"],[data-rs="close"]'); if (lb) { const ex = !!recEdit; lb.dataset.rs = ex ? 'del' : 'close'; lb.textContent = ex ? 'Löschen' : 'Abbrechen'; lb.classList.toggle('text-red-600', ex); lb.classList.toggle('dark:text-red-400', ex); }
   $('rec-msg').textContent = '';
 }
 const recSeaVal = () => document.querySelector('#rec-sea .bg-white')?.dataset.seav === 'wi' ? 'wi' : 'so';
@@ -338,18 +352,24 @@ $('rec-sheet').addEventListener('click', (e) => {
     box.innerHTML = ts.length ? ts.map(t => `<button type="button" data-trip="${esc(String(t.id))}" class="flex w-full items-center justify-between gap-2 rounded-xl bg-slate-100 dark:bg-slate-800 px-3 py-2 text-left text-sm"><span class="min-w-0 truncate">${new Date(t.s).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })} · ${fmt(t.km, 0)} km${t.v ? ' · Ø ' + fmt(t.v, 0) + ' km/h' : ''}${recTown(t.a0) && recTown(t.a1) ? ' · ' + esc(recTown(t.a0)) + ' → ' + esc(recTown(t.a1)) : ''}</span><b class="shrink-0 tabular-nums">${fmt(t.k100, 1)}</b></button>`).join('') : '<p class="text-xs text-slate-500">Keine Fahrten im Fahrtenbuch.</p>'; box.classList.toggle('hidden'); }
   else if (act === 'del') { const snap = labSnap(); lab.recs = lab.recs.filter(x => x.id !== recEdit); setLab(lab); $('rec-sheet').classList.add('hidden'); labUndo('Rekord gelöscht', snap); }
   else if (act === 'save') {
-    const m = $('rec-msg'), route = $('rec-route').value.trim().slice(0, 40), k = deDec($('rec-k').value), opt = (id) => { const v = deDec($(id).value); return Number.isFinite(v) ? v : undefined; };
-    if (!route) { m.textContent = 'Bitte eine Strecke angeben.'; return; } if (!(k > 3 && k < 60)) { m.textContent = 'Bitte den Verbrauch in kWh/100 km eintragen (z. B. 10,8).'; return; }
-    const cond = [...document.querySelectorAll('#rec-cond [data-cond]')].filter(x => x.getAttribute('aria-pressed') === 'true').map(x => x.dataset.cond);
-    const r = { id: recEdit || labId(), route, date: $('rec-date').value || wxIso(new Date()), km: opt('rec-km'), k100: Math.round(k * 10) / 10, tOut: opt('rec-to'), tBat: opt('rec-tb'), v: opt('rec-v'), cond: cond.length ? cond : undefined, note: $('rec-note').value.trim() || undefined, dir: recDirVal() === 'ba' ? 'ba' : undefined, season: recSeaVal() };
-    Object.keys(r).forEach(x => r[x] === undefined && delete r[x]);
+    const m = $('rec-msg'), route = $('rec-route').value.trim().slice(0, 40), DL = { ab: 'A → B', ba: 'B → A' };
+    if (!route) { m.textContent = 'Bitte eine Strecke angeben.'; return; }
+    const curKey = recDirVal() + '|' + recSeaVal(), cur = recFormGet(), all = { ...recDrafts, [curKey]: cur };
+    if (!$('rec-both').checked) Object.keys(all).forEach(x => { if (x.startsWith('ba|')) delete all[x]; });   // Rückweg abgewählt → dessen Entwürfe verwerfen
+    const recs = [];
+    for (const [ds, f] of Object.entries(all)) {
+      const [dir, sea] = ds.split('|'), k = deDec(f['rec-k']), opt = (id) => { const v = deDec(f[id]); return Number.isFinite(v) ? v : undefined; }, nm = DL[dir] + ' · ' + SEA_L[sea];
+      if (!(k > 3 && k < 60)) { if (ds === curKey || (f['rec-k'] || '').trim()) { m.textContent = 'Bitte den Verbrauch in kWh/100 km eintragen (z. B. 10,8)' + (ds === curKey ? '.' : ' – fehlt bei ' + nm + '.'); return; } continue; }
+      const r = { id: f.id || labId(), route, date: f['rec-date'] || wxIso(new Date()), km: opt('rec-km'), k100: Math.round(k * 10) / 10, tOut: opt('rec-to'), tBat: opt('rec-tb'), v: opt('rec-v'), cond: f.cond.length ? f.cond : undefined, note: (f['rec-note'] || '').trim() || undefined, dir: dir === 'ba' ? 'ba' : undefined, season: sea };
+      Object.keys(r).forEach(x => r[x] === undefined && delete r[x]); recs.push(r);
+    }
     if (recGeo.busy) { m.textContent = 'Höhenprofil lädt noch – bitte kurz warten.'; return; }
-    const rk = recKey(route), old = lab.routes[rk] || {};
+    const rk = recKey(route), old = lab.routes[rk] || {}, ids = recs.map(r => r.id), dks = recs.map(r => recDirKey(r));
     if (recGeo.a && recGeo.b) lab.routes = { ...lab.routes, [rk]: { a: recGeo.a, b: recGeo.b, via: recGeo.via || undefined, prof: hpStore(recGeo.prof || old.prof), both: !!recGeo.both || undefined } };
-    else if (!recGeo.a && !recGeo.b && old.a) { const o2 = { ...lab.routes }; if (lab.recs.every(x => recKey(x.route) !== rk || x.id === r.id)) delete o2[rk]; lab.routes = o2; }
+    else if (!recGeo.a && !recGeo.b && old.a) { const o2 = { ...lab.routes }; if (lab.recs.every(x => recKey(x.route) !== rk || ids.includes(x.id))) delete o2[rk]; lab.routes = o2; }
     else if (old.a) lab.routes = { ...lab.routes, [rk]: { ...old, both: !!recGeo.both || undefined } };
     Object.values(lab.routes).forEach(o => Object.keys(o).forEach(x => o[x] === undefined && delete o[x]));
-    lab.recs = lab.recs.filter(x => x.id !== r.id && recDirKey(x) !== recDirKey(r)).concat(r); recRoute = 'all'; setLab(lab); $('rec-sheet').classList.add('hidden');   // je Strecke genau ein Eintrag
+    lab.recs = lab.recs.filter(x => !ids.includes(x.id) && !dks.includes(recDirKey(x))).concat(recs); recRoute = 'all'; setLab(lab); recDrafts = {}; $('rec-sheet').classList.add('hidden');   // je Strecke/Richtung/Jahreszeit genau ein Eintrag
   }
 });
 function openSpdSheet(id) {
