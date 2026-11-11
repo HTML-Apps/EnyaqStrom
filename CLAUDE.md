@@ -29,3 +29,4 @@
 - Heller Modus: Seitenhintergrund `bg-slate-100` (dunkel `bg-black`); Seitenüberschriften `text-slate-900 dark:text-white`; der Start-Kopf (`#hero-bg`) bleibt dunkel und läuft unten per Maske aus.
 - Hell/Dunkel per Klasse (`darkMode: 'class'`): Früh-Skript im `<head>` setzt `html.dark` aus `enyaq.theme` (auto/light/dark, nur dieses Gerät), Umschalter `#theme-seg` unter Fahrzeug & Kauf. Eigenes CSS mit `html.dark …` / `html:not(.dark) …` statt `@media (prefers-color-scheme)`, in JS `isDark()`; Wechsel löst `themechange` aus.
 - Start-Hintergrundfarbe (`KEY_HERO`) und Darstellung (`enyaq.theme`) gelten nur je Gerät, nicht in `SYNC_SET_KEYS` aufnehmen.
+- Wochencheck Akku-Pflege (`src/21-wochencheck.js`): einmal pro Woche ab Montag beim Öffnen von Start, Score Ende letzter Woche vs. Vorwoche (`batCare(now)` zählt nur Ladungen bis `now`), Gesehen-Markierung `nCare` (synchronisiert). Vorschau: `careWeekShow(true)`.

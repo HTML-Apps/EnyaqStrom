@@ -43,7 +43,7 @@ function batTrend(rows, now) {
 let careMode = '90';                                                     // '90' = letzte 90 Tage, 'kauf' = seit Kauf
 function batCare(now = Date.now(), mode = '90') {
   const from = mode === 'kauf' ? Date.parse(purchaseDay() + 'T00:00:00') : now - 90 * 864e5;
-  const rs = getReadings().filter(r => Number.isFinite(r.socStart) && Number.isFinite(r.socEnd) && r.socEnd > r.socStart && Date.parse(r.date) >= from);
+  const rs = getReadings().filter(r => Number.isFinite(r.socStart) && Number.isFinite(r.socEnd) && r.socEnd > r.socStart && Date.parse(r.date) >= from && Date.parse(r.date) <= now);   // bis „now“: auch für Rückblicke (Wochencheck)
   const n = rs.length; if (n < 5) return { n };
   const hi = rs.filter(r => r.socEnd > 80).length, lo = rs.filter(r => r.socStart < 10).length, full = rs.filter(r => r.socEnd >= 98).length;
   const score = Math.max(0, Math.min(100, Math.round(100 - 50 * hi / n - 40 * Math.min(1, 3 * lo / n) - 10 * full / n)));
