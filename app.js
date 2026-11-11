@@ -4,6 +4,15 @@
 /* =====================================================================
    Konfiguration & Speicher
    ===================================================================== */
+/* Diagramm-Bibliothek (Chart.js vom CDN) nicht geladen – offline beim ersten Start, blockiert, CDN gestört: Platzhalter, damit der übrige
+   App-Start nicht abbricht (sonst fehlt alles, was danach kommt). Diagramme bleiben dann leer; beim nächsten Laden mit Netz ist alles wieder da. */
+if (typeof window.Chart === 'undefined') {
+  window.chartMissing = true;
+  window.Chart = class { constructor(el, cfg) { this.canvas = el; this.config = cfg || {}; this.data = (cfg && cfg.data) || { labels: [], datasets: [] }; this.options = (cfg && cfg.options) || {}; }
+    update() { } destroy() { } resize() { } reset() { } stop() { return this; } render() { } getDatasetMeta() { return { data: [] }; } toBase64Image() { return ''; }
+    static getChart() { return null; } static register() { } };
+  window.Chart.defaults = { font: {}, color: '', plugins: { legend: {}, tooltip: {} }, scale: { grid: {}, ticks: {} }, elements: { point: {}, line: {}, bar: {} } };
+}
 /* KI-Zählererkennung (Kamera + OpenAI): false = Karte unsichtbar, Kamera startet nicht. Zum Aktivieren auf true setzen. */
 const ENABLE_AI_SCAN = false;
 const KEY_READINGS = 'enyaq.readings';
