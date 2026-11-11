@@ -225,7 +225,7 @@
   @media (prefers-reduced-motion: reduce) { #bd-conf i, #bdg-conf i { animation: none; top: var(--y, 10%); } #bd-card, #bdg-card { animation: none; } }
 </style>
 <!-- Tailwind fertig gebaut (npm run css) – am Ende des Kopfs wie früher das CDN, damit die Reihenfolge der Regeln gleich bleibt -->
-<link rel="stylesheet" href="/app.css?v=297">
+<link rel="stylesheet" href="/app.css?v=298">
 </head>
 <body class="bg-slate-100 text-slate-900 dark:bg-black dark:text-slate-100 min-h-screen">
 
@@ -285,8 +285,8 @@
       <button id="trips-banner-go" type="button" class="min-w-0 flex-1 text-left active:opacity-70"><span id="trips-banner-text" class="block"></span><span class="block text-xs opacity-75">MyŠkoda-App → Fahrtenbuch → Export → Teilen → diese App</span></button>
       <button id="trips-banner-x" type="button" aria-label="Für diesen Monat ausblenden" class="w-9 h-9 shrink-0 rounded-xl text-lg active:scale-95 transition hover:bg-black/5 dark:hover:bg-white/10">×</button>
     </div>
-    <div id="up-banner" class="hidden w-full rounded-2xl p-3 text-sm bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-200 flex items-center justify-between gap-2">
-      <button id="up-banner-go" type="button" class="flex min-w-0 flex-1 items-center gap-2.5 text-left active:opacity-70"><span class="text-xl leading-none" aria-hidden="true">📩</span><span class="min-w-0"><span id="up-banner-h" class="block font-semibold"></span><span id="up-banner-s" class="block truncate text-xs opacity-80"></span></span></button>
+    <div id="up-banner" class="hidden w-full rounded-2xl px-3 py-2.5 text-sm bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-200 flex items-center justify-between gap-2">
+      <button id="up-banner-go" type="button" class="flex min-w-0 flex-1 items-center gap-2.5 text-left active:opacity-70"><span class="text-lg leading-none" aria-hidden="true">📩</span><span class="flex min-w-0 flex-1 items-baseline gap-2"><span id="up-banner-h" class="shrink-0 whitespace-nowrap font-semibold"></span><span id="up-banner-s" class="min-w-0 flex-1 truncate text-xs opacity-80"></span></span></button>
       <span class="shrink-0 text-[13px] font-semibold text-sky-700 dark:text-sky-300">Ansehen ›</span>
     </div>
 
@@ -1908,7 +1908,7 @@
   </div>
 </nav>
 
-<script src="/app.js?v=297"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
+<script src="/app.js?v=298"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
 <script type="module">
 /* Firebase (modular SDK). Die Konfiguration ist kein Geheimnis – geschützt wird über Auth + Firestore-Regeln. */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
