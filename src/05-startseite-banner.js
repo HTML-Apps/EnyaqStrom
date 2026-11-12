@@ -17,6 +17,17 @@ function rangeKm(s0, e0) {
   const before = pts.filter(q => q[0] < s0), b = before[before.length - 1];
   const km = inR[inR.length - 1][1] - (b ? b[1] : inR[0][1]); return km > 0 ? km : null;
 }
+/** km-Stand zu einem Zeitpunkt: aus Ladungen, Kosten, „km-Stand bei Kauf“ (am Kauftag) und dem aktuellen Stand vom Auto; dazwischen linear, davor/danach der nächste bekannte Stand. */
+function odoAt(t) {
+  const pts = getReadings().filter(r => r.odometerKm > 0).map(r => [Date.parse(r.date), r.odometerKm])
+    .concat(getCosts().filter(c => c.odometerKm > 0).map(c => [Date.parse(c.date), c.odometerKm])).filter(q => Number.isFinite(q[0]));
+  const pk = Number(getSettings().purchaseKm), bought = Date.parse(purchaseDay() + 'T00:00:00'); if (pk > 0 && Number.isFinite(bought)) pts.push([bought, pk]);
+  let vk = 0; try { const c = load(KEY_WXO + 'S', null); vk = c && c.d && c.d.odometerKm > 0 ? Math.round(c.d.odometerKm) : 0; } catch (e) { }
+  vk = Math.max(vk, (carKmCache && carKmCache.km) || 0); if (vk > 0) pts.push([Date.now(), vk]);
+  if (!pts.length) return null; pts.sort((a, b) => a[0] - b[0]);
+  if (t <= pts[0][0]) return pts[0][1]; const L = pts[pts.length - 1]; if (t >= L[0]) return L[1];
+  const i = pts.findIndex(q => q[0] > t), a = pts[i - 1], b = pts[i]; return a[1] + (b[1] - a[1]) * (t - a[0]) / ((b[0] - a[0]) || 1);
+}
 /** Kilometer oben auf Start ab `from` bis heute: aktueller Stand (neuester aus Ladungen/Kosten oder vom Auto, der größere) minus Startstand.
     Startstand: „km-Stand bei Kauf“ aus den Einstellungen, wenn der Kauf im Zeitraum liegt (seit Kauf / Kaufjahr), sonst der letzte Stand vor dem Zeitraum, sonst der erste darin. */
 function heroKm(from) {

@@ -2682,6 +2682,17 @@ function rangeKm(s0, e0) {
   const before = pts.filter(q => q[0] < s0), b = before[before.length - 1];
   const km = inR[inR.length - 1][1] - (b ? b[1] : inR[0][1]); return km > 0 ? km : null;
 }
+/** km-Stand zu einem Zeitpunkt: aus Ladungen, Kosten, „km-Stand bei Kauf“ (am Kauftag) und dem aktuellen Stand vom Auto; dazwischen linear, davor/danach der nächste bekannte Stand. */
+function odoAt(t) {
+  const pts = getReadings().filter(r => r.odometerKm > 0).map(r => [Date.parse(r.date), r.odometerKm])
+    .concat(getCosts().filter(c => c.odometerKm > 0).map(c => [Date.parse(c.date), c.odometerKm])).filter(q => Number.isFinite(q[0]));
+  const pk = Number(getSettings().purchaseKm), bought = Date.parse(purchaseDay() + 'T00:00:00'); if (pk > 0 && Number.isFinite(bought)) pts.push([bought, pk]);
+  let vk = 0; try { const c = load(KEY_WXO + 'S', null); vk = c && c.d && c.d.odometerKm > 0 ? Math.round(c.d.odometerKm) : 0; } catch (e) { }
+  vk = Math.max(vk, (carKmCache && carKmCache.km) || 0); if (vk > 0) pts.push([Date.now(), vk]);
+  if (!pts.length) return null; pts.sort((a, b) => a[0] - b[0]);
+  if (t <= pts[0][0]) return pts[0][1]; const L = pts[pts.length - 1]; if (t >= L[0]) return L[1];
+  const i = pts.findIndex(q => q[0] > t), a = pts[i - 1], b = pts[i]; return a[1] + (b[1] - a[1]) * (t - a[0]) / ((b[0] - a[0]) || 1);
+}
 /** Kilometer oben auf Start ab `from` bis heute: aktueller Stand (neuester aus Ladungen/Kosten oder vom Auto, der größere) minus Startstand.
     Startstand: „km-Stand bei Kauf“ aus den Einstellungen, wenn der Kauf im Zeitraum liegt (seit Kauf / Kaufjahr), sonst der letzte Stand vor dem Zeitraum, sonst der erste darin. */
 function heroKm(from) {
@@ -5557,11 +5568,12 @@ const fmtCo2 = (kg) => Math.abs(kg) >= 1000 ? fmt(kg / 1000, 1) + ' t' : fmt(kg,
 const wrSeen = () => { const l = load(KEY_WRAP, []); return Array.isArray(l) ? l : []; };
 
 /** Kennzahlen einer Periode: km (aus den km-Ständen), geladene kWh, Kosten (Laden + Kosten − Einnahmen), Ø Verbrauch inkl. Ladeverluste, Zahl der Ladungen. */
+/** km = km-Stand am Ende minus am Anfang (odoAt: Kauf-km und aktueller Stand vom Auto eingeschlossen) */
 function wrStats(p) {
   const rs = getReadings(), idx = []; let kwh = 0, laden = 0;
   rs.forEach((r, i) => { const t = Date.parse(r.date); if (!(t >= p.t0 && t <= p.t1) || isStartRow(rs, i)) return; idx.push(i); kwh += r.consumedSinceLast || 0; laden += r.cost || 0; });
   const other = getCosts().reduce((a, c) => { const t = Date.parse(c.date); return t >= p.t0 && t <= p.t1 ? a + costAmt(c) : a; }, 0), tot = idx.length ? consumptionTotals(rs, idx) : null;
-  return { n: idx.length, km: rangeKm(p.t0, p.t1 + 1), kwh, laden, cost: laden + other, kwh100: tot && tot.km ? tot.kwh100 : null, days: Math.max(1, Math.round((Math.min(p.t1, Date.now()) - p.t0) / 864e5) + 1) };
+  return { n: idx.length, km: (() => { const a = odoAt(p.t0), b = odoAt(Math.min(p.t1, Date.now())); return a != null && b > a ? Math.round(b - a) : null; })(), kwh, laden, cost: laden + other, kwh100: tot && tot.km ? tot.kwh100 : null, days: Math.max(1, Math.round((Math.min(p.t1, Date.now()) - p.t0) / 864e5) + 1) };
 }
 /** Alle abgeschlossenen Perioden (neueste zuerst) + Beginn der laufenden Zeit-Periode. */
 function wrPeriods() {
@@ -5569,7 +5581,8 @@ function wrPeriods() {
   const bs = [...new Set([].concat(...Array.from({ length: Math.max(0, ty - py) }, (_, i) => [new Date(py + 1 + i, 0, 1).getTime(), new Date(py + 1 + i, pm - 1, pd).getTime()])))].filter(x => x > P && x <= now).sort((a, b) => a - b);
   let s = P; bs.forEach(x => { time.push({ kind: 't', id: 't' + wxIso(new Date(x)), t0: s, t1: x - 1, avail: x, label: wrDY(s) + ' – ' + wrDY(x - 1) }); s = x; });
   const od = rs.filter(r => r.odometerKm > 0);
-  if (od.length > 1) { const base = od[0].odometerKm; let prev = od[0], k = 1;
+  const pk0 = Number(getSettings().purchaseKm);
+  if (od.length > 1) { const first = pk0 > 0 && pk0 <= od[0].odometerKm ? { odometerKm: pk0, date: new Date(P).toISOString() } : od[0], base = first.odometerKm; let prev = first, k = 1;   // „Die ersten 5.000 km“ ab km-Stand bei Kauf
     od.forEach(r => { const m = Math.floor((r.odometerKm - base) / WR_KM); if (m >= k) { const t1 = Date.parse(r.date);
       km.push({ kind: 'k', id: 'k' + m, t0: km.length ? Date.parse(prev.date) + 1 : Date.parse(prev.date), t1, avail: t1, label: k === 1 ? 'Die ersten ' + fmt(m * WR_KM, 0) + ' km' : fmt((k - 1) * WR_KM, 0) + ' – ' + fmt(m * WR_KM, 0) + ' km' }); prev = r; k = m + 1; } }); }
   [time, km].forEach(a => a.forEach((p, i) => { p.prev = a[i - 1] || null; }));
