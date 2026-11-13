@@ -128,7 +128,7 @@ async function upInstall(id, btn) {
 }
 /* Hinweis auf Start je angekündigtem Update ein/aus (x.noStart, synchronisiert mit den Wissen-Einträgen) */
 $('kb-up-pend').addEventListener('change', (e) => {
-  const cb = e.target.closest('[data-upstart]'); if (!cb) return; const kb = getKb(), x = kb.items.find(y => y.id === cb.dataset.upstart); if (!x) return;
+  const cb = e.target.closest('[data-upstart]'); if (!cb) return; const kb = getKb(), x = kb.items.find(y => String(y.id) === cb.dataset.upstart); if (!x) return;   // IDs sind Zahlen, dataset Text
   if (cb.checked) delete x.noStart; else x.noStart = true; setKb(kb); renderUpBanner();
 });
 $('kb-up-pend').addEventListener('click', (e) => { const i = e.target.closest('[data-upinst]'); if (i) { upInstall(i.dataset.upinst, i); return; } const o = e.target.closest('[data-kb]'); if (o) openKb(o.dataset.kb); });
