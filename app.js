@@ -3754,7 +3754,8 @@ function renderKb() {
   $('kb-up-pend').innerHTML = pend.map(x => `<div class="rounded-3xl border border-sky-400/60 bg-gradient-to-br from-sky-600 to-sky-800 p-4 text-left text-white shadow-sm">
       <div class="flex items-center text-xs font-bold tracking-[0.08em] text-sky-100"><span class="flex-1">📩 ANGEKÜNDIGT</span><span class="font-medium tracking-normal">${x.ann ? 'seit ' + esc(mgDate(x.ann).slice(0, 6)) : ''}</span></div>
       <p class="mt-1 text-xl font-bold">${esc(x.title)}</p><p class="truncate text-[13px] text-sky-50/90">${chgN(x) ? chgN(x) + (chgN(x) === 1 ? ' Neuerung' : ' Neuerungen') + ' · u. a. ' + esc(x.chg[0].t) : 'Noch kein Changelog eingetragen'}</p>
-      <div class="mt-3 grid grid-cols-[1fr_1.3fr] gap-2"><button type="button" data-kb="${esc(x.id)}" class="h-11 rounded-xl bg-white/15 text-sm font-semibold active:bg-white/25">${chgN(x) ? 'Changelog' : 'Öffnen'}</button><button type="button" data-upinst="${esc(x.id)}" class="h-11 rounded-xl bg-white text-sm font-extrabold text-sky-800 active:scale-95 transition">✓ Ist installiert</button></div></div>`).join('');
+      <div class="mt-3 grid grid-cols-[1fr_1.3fr] gap-2"><button type="button" data-kb="${esc(x.id)}" class="h-11 rounded-xl bg-white/15 text-sm font-semibold active:bg-white/25">${chgN(x) ? 'Changelog' : 'Öffnen'}</button><button type="button" data-upinst="${esc(x.id)}" class="h-11 rounded-xl bg-white text-sm font-extrabold text-sky-800 active:scale-95 transition">✓ Ist installiert</button></div>
+      <label class="mt-3 flex cursor-pointer items-center gap-2.5 text-[13px] font-medium text-sky-50"><input type="checkbox" data-upstart="${esc(x.id)}" class="h-[18px] w-[18px] shrink-0 accent-white"${x.noStart ? '' : ' checked'}><span>Hinweis auf Start zeigen</span></label></div>`).join('');
   $('kb-list-h').textContent = pend.length ? 'Installiert' : 'Alle Einträge';
   $('kb-mg-bar').classList.toggle('hidden', kbCat !== KB_MG && !(kbCat === KB_UP && uc));
   $('kb-mg-sum').innerHTML = kbCat === KB_UP ? (uc ? 'Aktuell: <b class="text-slate-800 dark:text-slate-100">' + esc(uc.ver || '?') + '</b> seit ' + mgDate(uc.inst) : '') : esc(mgs.length ? cnt('offen') + ' offen · ' + cnt('gemeldet') + ' gemeldet · ' + cnt('erledigt') + ' erledigt' : 'Noch keine Mängel notiert');
@@ -3831,10 +3832,15 @@ async function upInstall(id, btn) {
   appNote(it.title + ' installiert – der Vergleich vorher/nachher läuft jetzt ' + UP_DAYS + ' Tage.', 'ok');
   if (!$('kb-dialog').classList.contains('hidden') && String(kbCur) === String(id)) openKb(id);
 }
+/* Hinweis auf Start je angekündigtem Update ein/aus (x.noStart, synchronisiert mit den Wissen-Einträgen) */
+$('kb-up-pend').addEventListener('change', (e) => {
+  const cb = e.target.closest('[data-upstart]'); if (!cb) return; const kb = getKb(), x = kb.items.find(y => y.id === cb.dataset.upstart); if (!x) return;
+  if (cb.checked) delete x.noStart; else x.noStart = true; setKb(kb); renderUpBanner();
+});
 $('kb-up-pend').addEventListener('click', (e) => { const i = e.target.closest('[data-upinst]'); if (i) { upInstall(i.dataset.upinst, i); return; } const o = e.target.closest('[data-kb]'); if (o) openKb(o.dataset.kb); });
 /* Start: Hinweis, solange ein Update angekündigt ist (nicht in der einfachen Ansicht) */
 function renderUpBanner() {
-  const el = $('up-banner'); if (!el) return; const x = upPend()[0];
+  const el = $('up-banner'); if (!el) return; const x = upPend().filter(y => !y.noStart)[0];   // „Hinweis auf Start zeigen“ abgewählt → nicht auf Start
   el.classList.toggle('hidden', !x || isSimple() || upBannerGone); if (!x) return;
   $('up-banner-h').textContent = 'Update ' + (x.ver || '') + ' angekündigt';
   $('up-banner-s').textContent = chgN(x) ? x.chg[0].t + (chgN(x) > 1 ? ' · +' + (chgN(x) - 1) + ' weitere' : '') : 'Changelog eintragen, „Ist installiert“ tippen, sobald es drauf ist';
@@ -3861,7 +3867,7 @@ var upBannerGone = false;
   el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
   el.addEventListener('click', (e) => { if (lock === 'x') { e.stopPropagation(); e.preventDefault(); } }, true);   // nach dem Wischen kein „Ansehen“ auslösen
 })();
-$('up-banner-go').addEventListener('click', () => { const x = upPend()[0]; showView('kb'); kbCat = KB_UP; renderKb(); if (x) openKb(x.id); });
+$('up-banner-go').addEventListener('click', () => { const x = upPend().filter(y => !y.noStart)[0]; showView('kb'); kbCat = KB_UP; renderKb(); if (x) openKb(x.id); });
 /* Vorher/Nachher-Vergleich eines Updates → HTML. Verbrauch ab Akku je Strecke zwischen zwei Ladungen; temperaturbereinigt über die Abweichung vom eigenen Wettermodell. */
 async function upCompare(x) {
   const t0 = Date.parse(x.inst + 'T00:00:00'), prev = upList().filter(y => y.inst < x.inst).pop(), D = 864e5;
