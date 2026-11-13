@@ -104,7 +104,7 @@
   /* Fahrzeugakte: nur beim Drucken sichtbar, dann verschwindet die restliche App */
   #akte-print { display: none; }
   /* Schnellmenü und Einstellungs-Seitenleiste: oben aus dem Schwarz der Statusleiste in das Blau der Seitenleiste blenden (wie im Rückblick) */
-  html.dark #nav-drawer-panel, html.dark #set-drawer-panel { background: linear-gradient(180deg,#000 0,#000 env(safe-area-inset-top,0px),rgba(0,0,0,.55) calc(env(safe-area-inset-top,0px) + 80px),rgba(0,0,0,0) calc(env(safe-area-inset-top,0px) + 230px)),#0f172a; background-repeat: no-repeat; } }
+  html.dark #nav-drawer-panel, html.dark #set-drawer-panel { background: linear-gradient(180deg,#000 0,#000 env(safe-area-inset-top,0px),rgba(0,0,0,.55) calc(env(safe-area-inset-top,0px) + 80px),rgba(0,0,0,0) calc(env(safe-area-inset-top,0px) + 230px)),#0f172a; background-repeat: no-repeat; }
   /* Prognose 7 Tage am Handy (ganze Seite): oben ebenso weich aus dem Schwarz der Statusleiste blenden – am PC unverändert */
   @media (max-width: 639.98px) { html.dark #wxo-sheet-box { background: linear-gradient(180deg,#000 0,#000 env(safe-area-inset-top,0px),rgba(0,0,0,.55) calc(env(safe-area-inset-top,0px) + 80px),rgba(0,0,0,0) calc(env(safe-area-inset-top,0px) + 230px)),#0f172a; background-repeat: no-repeat; } }
   .no-sb { scrollbar-width: none; } .no-sb::-webkit-scrollbar { display: none; }
@@ -225,7 +225,7 @@
   @media (prefers-reduced-motion: reduce) { #bd-conf i, #bdg-conf i { animation: none; top: var(--y, 10%); } #bd-card, #bdg-card { animation: none; } }
 </style>
 <!-- Tailwind fertig gebaut (npm run css) – am Ende des Kopfs wie früher das CDN, damit die Reihenfolge der Regeln gleich bleibt -->
-<link rel="stylesheet" href="/app.css?v=300">
+<link rel="stylesheet" href="/app.css?v=301">
 </head>
 <body class="bg-slate-100 text-slate-900 dark:bg-black dark:text-slate-100 min-h-screen">
 
@@ -1908,7 +1908,7 @@
   </div>
 </nav>
 
-<script src="/app.js?v=300"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
+<script src="/app.js?v=301"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
 <script type="module">
 /* Firebase (modular SDK). Die Konfiguration ist kein Geheimnis – geschützt wird über Auth + Firestore-Regeln. */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
@@ -1979,6 +1979,8 @@ window.cloud = {
     }
     if (!user) throw new Error('Bitte zuerst bei Google anmelden.');
     if (!force && driveTok && Date.now() < driveExp) return driveTok;
+    /* Ohne frischen Tipp (Hintergrund-Abgleich, Server-Token gerade nicht erreichbar) kein Google-Fenster öffnen – der Browser würde es nur als „Pop-up blockiert“ melden */
+    if (navigator.userActivation && !navigator.userActivation.isActive) throw new Error('Google-Freigabe nötig – bitte noch einmal tippen.');
     const pr = new GoogleAuthProvider(); pr.addScope('https://www.googleapis.com/auth/drive.file'); pr.addScope('https://www.googleapis.com/auth/tasks'); if (user.email) pr.setCustomParameters({ login_hint: user.email });
     const res = await reauthenticateWithPopup(user, pr), cred = GoogleAuthProvider.credentialFromResult(res);
     if (!cred || !cred.accessToken) throw new Error('Google hat kein Drive-Token geliefert.');

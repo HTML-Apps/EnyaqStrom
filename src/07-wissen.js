@@ -129,10 +129,32 @@ $('kb-up-pend').addEventListener('click', (e) => { const i = e.target.closest('[
 /* Start: Hinweis, solange ein Update angekündigt ist (nicht in der einfachen Ansicht) */
 function renderUpBanner() {
   const el = $('up-banner'); if (!el) return; const x = upPend()[0];
-  el.classList.toggle('hidden', !x || isSimple()); if (!x) return;
+  el.classList.toggle('hidden', !x || isSimple() || upBannerGone); if (!x) return;
   $('up-banner-h').textContent = 'Update ' + (x.ver || '') + ' angekündigt';
   $('up-banner-s').textContent = chgN(x) ? x.chg[0].t + (chgN(x) > 1 ? ' · +' + (chgN(x) - 1) + ' weitere' : '') : 'Changelog eintragen, „Ist installiert“ tippen, sobald es drauf ist';
 }
+/* Hinweis zur Seite wischen → weg bis zum nächsten Start der App (nur im Speicher, nicht gemerkt) */
+var upBannerGone = false;
+(() => {
+  const el = $('up-banner'); let x0 = null, y0 = 0, dx = 0, lock = null;
+  el.style.touchAction = 'pan-y';
+  el.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse' && e.button) return; x0 = e.clientX; y0 = e.clientY; dx = 0; lock = null; });
+  el.addEventListener('pointermove', (e) => {
+    if (x0 == null) return; const ddx = e.clientX - x0, ddy = e.clientY - y0;
+    if (lock == null && (Math.abs(ddx) > 8 || Math.abs(ddy) > 8)) { lock = Math.abs(ddx) > Math.abs(ddy) ? 'x' : 'y'; if (lock === 'x') try { el.setPointerCapture(e.pointerId); } catch (er) { } }
+    if (lock !== 'x') return; dx = ddx; el.style.transition = 'none'; el.style.transform = 'translateX(' + dx + 'px)'; el.style.opacity = String(Math.max(0, 1 - Math.abs(dx) / el.offsetWidth));
+  });
+  const end = () => {
+    if (x0 == null) return; x0 = null; if (lock !== 'x') return;
+    el.style.transition = 'transform .2s ease, opacity .2s ease';
+    if (Math.abs(dx) > el.offsetWidth * 0.3) {
+      el.style.transform = 'translateX(' + (dx > 0 ? '' : '-') + '110%)'; el.style.opacity = '0';
+      setTimeout(() => { upBannerGone = true; el.classList.add('hidden'); el.style.transition = el.style.transform = el.style.opacity = ''; }, 200);
+    } else { el.style.transform = ''; el.style.opacity = ''; }
+  };
+  el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
+  el.addEventListener('click', (e) => { if (lock === 'x') { e.stopPropagation(); e.preventDefault(); } }, true);   // nach dem Wischen kein „Ansehen“ auslösen
+})();
 $('up-banner-go').addEventListener('click', () => { const x = upPend()[0]; showView('kb'); kbCat = KB_UP; renderKb(); if (x) openKb(x.id); });
 /* Vorher/Nachher-Vergleich eines Updates → HTML. Verbrauch ab Akku je Strecke zwischen zwei Ladungen; temperaturbereinigt über die Abweichung vom eigenen Wettermodell. */
 async function upCompare(x) {

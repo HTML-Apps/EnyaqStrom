@@ -28,6 +28,10 @@ async function fbShareImport() {
   const res = await importTrips(file);
   if (!res || !res.ok) { fbToast('Fahrtenbuch nicht importiert', ((res && res.err) || name) + (blob.type ? ' (' + blob.type + ')' : ''), false); return; }
   const span = (() => { const ts = (res.parsed || []).map(t => Date.parse(t.s)).filter(Number.isFinite); if (!ts.length) return ''; const d = (x) => new Date(x).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }); return d(Math.min(...ts)) + ' – ' + d(Math.max(...ts)); })();
+  /* Nichts Neues: nur melden, wenn diese Datei nicht schon einmal kam. Samsung Internet schickt das Teilen beim erneuten Öffnen der App teils noch einmal ab. */
+  const sig = await (async () => { try { const h = await crypto.subtle.digest('SHA-256', await blob.arrayBuffer()); return [...new Uint8Array(h)].slice(0, 12).map(b => b.toString(16).padStart(2, '0')).join(''); } catch (e) { return String(blob.size); } })();
+  const seen = load('enyaq.shareSig', ''); save('enyaq.shareSig', sig);
+  if (!res.fresh && !res.changed && seen === sig) return;
   if (!res.fresh && !res.changed) fbToast('Schon alles da', 'Alle ' + res.n + ' Fahrten aus ' + name + ' sind bereits importiert.', true, true);
   else fbToast(res.fresh + (res.fresh === 1 ? ' Fahrt' : ' Fahrten') + ' importiert', [span, res.changed ? res.changed + ' aktualisiert' : '', res.n - res.fresh - res.changed > 0 ? (res.n - res.fresh - res.changed) + ' doppelte übersprungen' : ''].filter(Boolean).join(' · '), true, true);
 }

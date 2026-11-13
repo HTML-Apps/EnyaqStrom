@@ -3831,10 +3831,32 @@ $('kb-up-pend').addEventListener('click', (e) => { const i = e.target.closest('[
 /* Start: Hinweis, solange ein Update angekündigt ist (nicht in der einfachen Ansicht) */
 function renderUpBanner() {
   const el = $('up-banner'); if (!el) return; const x = upPend()[0];
-  el.classList.toggle('hidden', !x || isSimple()); if (!x) return;
+  el.classList.toggle('hidden', !x || isSimple() || upBannerGone); if (!x) return;
   $('up-banner-h').textContent = 'Update ' + (x.ver || '') + ' angekündigt';
   $('up-banner-s').textContent = chgN(x) ? x.chg[0].t + (chgN(x) > 1 ? ' · +' + (chgN(x) - 1) + ' weitere' : '') : 'Changelog eintragen, „Ist installiert“ tippen, sobald es drauf ist';
 }
+/* Hinweis zur Seite wischen → weg bis zum nächsten Start der App (nur im Speicher, nicht gemerkt) */
+var upBannerGone = false;
+(() => {
+  const el = $('up-banner'); let x0 = null, y0 = 0, dx = 0, lock = null;
+  el.style.touchAction = 'pan-y';
+  el.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse' && e.button) return; x0 = e.clientX; y0 = e.clientY; dx = 0; lock = null; });
+  el.addEventListener('pointermove', (e) => {
+    if (x0 == null) return; const ddx = e.clientX - x0, ddy = e.clientY - y0;
+    if (lock == null && (Math.abs(ddx) > 8 || Math.abs(ddy) > 8)) { lock = Math.abs(ddx) > Math.abs(ddy) ? 'x' : 'y'; if (lock === 'x') try { el.setPointerCapture(e.pointerId); } catch (er) { } }
+    if (lock !== 'x') return; dx = ddx; el.style.transition = 'none'; el.style.transform = 'translateX(' + dx + 'px)'; el.style.opacity = String(Math.max(0, 1 - Math.abs(dx) / el.offsetWidth));
+  });
+  const end = () => {
+    if (x0 == null) return; x0 = null; if (lock !== 'x') return;
+    el.style.transition = 'transform .2s ease, opacity .2s ease';
+    if (Math.abs(dx) > el.offsetWidth * 0.3) {
+      el.style.transform = 'translateX(' + (dx > 0 ? '' : '-') + '110%)'; el.style.opacity = '0';
+      setTimeout(() => { upBannerGone = true; el.classList.add('hidden'); el.style.transition = el.style.transform = el.style.opacity = ''; }, 200);
+    } else { el.style.transform = ''; el.style.opacity = ''; }
+  };
+  el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
+  el.addEventListener('click', (e) => { if (lock === 'x') { e.stopPropagation(); e.preventDefault(); } }, true);   // nach dem Wischen kein „Ansehen“ auslösen
+})();
 $('up-banner-go').addEventListener('click', () => { const x = upPend()[0]; showView('kb'); kbCat = KB_UP; renderKb(); if (x) openKb(x.id); });
 /* Vorher/Nachher-Vergleich eines Updates → HTML. Verbrauch ab Akku je Strecke zwischen zwei Ladungen; temperaturbereinigt über die Abweichung vom eigenen Wettermodell. */
 async function upCompare(x) {
@@ -8704,6 +8726,10 @@ async function fbShareImport() {
   const res = await importTrips(file);
   if (!res || !res.ok) { fbToast('Fahrtenbuch nicht importiert', ((res && res.err) || name) + (blob.type ? ' (' + blob.type + ')' : ''), false); return; }
   const span = (() => { const ts = (res.parsed || []).map(t => Date.parse(t.s)).filter(Number.isFinite); if (!ts.length) return ''; const d = (x) => new Date(x).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }); return d(Math.min(...ts)) + ' – ' + d(Math.max(...ts)); })();
+  /* Nichts Neues: nur melden, wenn diese Datei nicht schon einmal kam. Samsung Internet schickt das Teilen beim erneuten Öffnen der App teils noch einmal ab. */
+  const sig = await (async () => { try { const h = await crypto.subtle.digest('SHA-256', await blob.arrayBuffer()); return [...new Uint8Array(h)].slice(0, 12).map(b => b.toString(16).padStart(2, '0')).join(''); } catch (e) { return String(blob.size); } })();
+  const seen = load('enyaq.shareSig', ''); save('enyaq.shareSig', sig);
+  if (!res.fresh && !res.changed && seen === sig) return;
   if (!res.fresh && !res.changed) fbToast('Schon alles da', 'Alle ' + res.n + ' Fahrten aus ' + name + ' sind bereits importiert.', true, true);
   else fbToast(res.fresh + (res.fresh === 1 ? ' Fahrt' : ' Fahrten') + ' importiert', [span, res.changed ? res.changed + ' aktualisiert' : '', res.n - res.fresh - res.changed > 0 ? (res.n - res.fresh - res.changed) + ' doppelte übersprungen' : ''].filter(Boolean).join(' · '), true, true);
 }
