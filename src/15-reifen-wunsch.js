@@ -7,13 +7,18 @@ const TIRE_NAME = { VL: 'vorne links', VR: 'vorne rechts', HL: 'hinten links', H
 const TIRE_PT = ['außen', 'mitte', 'innen'];
 let tireSet = null, tireSel = null, tireEdit = null;
 const tAvg = (a) => { const v = (a || []).filter(Number.isFinite); return v.length ? v.reduce((s, x) => s + x, 0) / v.length : null; };
+/** Änderung von a nach b (je 3 Messpunkte) nur über Punkte, die in beiden gemessen wurden – z. B. erst nur Mitte, später außen/mitte/innen */
+const tDiff = (a, b) => { const d = [0, 1, 2].filter(i => Number.isFinite((a || [])[i]) && Number.isFinite((b || [])[i])).map(i => b[i] - a[i]); return d.length ? d.reduce((s, x) => s + x, 0) / d.length : null; };
+/** Vergleichbarer Verlauf je Reifen: ausgehend vom heutigen Ø rückwärts nur mit gleichen Messpunkten verkettet (kein Sprung, wenn früher weniger Punkte gemessen wurden) */
+function tSeries(ms, p) { const out = ms.map(() => null); let i = ms.length - 1; while (i >= 0 && tAvg(ms[i].v[p]) == null) i--; if (i < 0) return out; out[i] = tAvg(ms[i].v[p]);
+  for (let k = i - 1, n = i; k >= 0; k--) { const d = tDiff(ms[k].v[p], ms[n].v[p]); if (d == null) continue; out[k] = out[n] - d; n = k; } return out; }
 const tCol = (v) => v == null ? '#64748b' : v >= 5 ? '#10b981' : v >= 4 ? '#eab308' : v >= 3 ? '#f97316' : '#ef4444';
 const tFmt = (v) => v == null ? '–' : fmt(v, 1);
 function tireList(set) { return (getLab().tires || []).filter(m => m.set === set && m.date).sort((a, b) => a.date.localeCompare(b.date) || (a.km || 0) - (b.km || 0)); }
 function tirePrognosis(ms) {                                                     // linearer Verschleiß je Reifen (erste → letzte Messung), wann 3 mm erreicht
   if (ms.length < 2) return null; const f = ms[0], l = ms[ms.length - 1], dd = (Date.parse(l.date) - Date.parse(f.date)) / 864e5, dk = f.km > 0 && l.km > 0 ? l.km - f.km : null; if (!(dd > 20)) return null;
   let worst = null;
-  TIRE_POS.forEach(p => { const a = tAvg(f.v[p]), b = tAvg(l.v[p]); if (a == null || b == null || !(a - b > 0.05)) return; const rate = (a - b) / dd, rest = b - 3; if (rest <= 0) { worst = { p, days: 0, km: 0 }; return; }
+  TIRE_POS.forEach(p => { const sr = tSeries(ms, p), a = sr[0], b = sr[sr.length - 1]; if (a == null || b == null || !(a - b > 0.05)) return; const rate = (a - b) / dd, rest = b - 3; if (rest <= 0) { worst = { p, days: 0, km: 0 }; return; }
     const days = rest / rate, km = dk > 0 ? rest / ((a - b) / dk) : null; if (!worst || days < worst.days) worst = { p, days, km, perK: dk > 0 ? (a - b) / dk * 10000 : null }; });
   if (!worst) return null; worst.date = new Date(Date.parse(l.date) + worst.days * 864e5); worst.atKm = worst.km != null && l.km ? l.km + worst.km : null; return worst;
 }
@@ -23,7 +28,7 @@ function tireChart(ms) {
   let g = [2, 4, 6, 8].map(v => `<line x1="${L}" x2="${W - R}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="currentColor" class="text-slate-200 dark:text-slate-800"/><text x="${L - 4}" y="${(Y(v) + 3.5).toFixed(1)}" text-anchor="end" font-size="9" fill="#94a3b8">${v}</text>`).join('');
   g += `<line x1="${L}" x2="${W - R}" y1="${Y(3).toFixed(1)}" y2="${Y(3).toFixed(1)}" stroke="#f97316" stroke-dasharray="3 3"/><text x="${W - R + 4}" y="${(Y(3) + 3).toFixed(1)}" font-size="8.5" fill="#f97316">3 empf.</text>`
     + `<line x1="${L}" x2="${W - R}" y1="${Y(1.6).toFixed(1)}" y2="${Y(1.6).toFixed(1)}" stroke="#ef4444" stroke-dasharray="3 3"/><text x="${W - R + 4}" y="${(Y(1.6) + 3).toFixed(1)}" font-size="8.5" fill="#ef4444">1,6 Pflicht</text>`;
-  TIRE_POS.forEach(p => { const pts = ms.map(m => [X(m.date), tAvg(m.v[p])]).filter(x => x[1] != null), op = tireSel && tireSel !== p ? 0.18 : 1;
+  TIRE_POS.forEach(p => { const sr = tSeries(ms, p), pts = ms.map((m, k) => [X(m.date), sr[k]]).filter(x => x[1] != null), op = tireSel && tireSel !== p ? 0.18 : 1;
     if (pts.length > 1) g += `<polyline points="${pts.map(([x, v]) => x.toFixed(1) + ',' + Y(v).toFixed(1)).join(' ')}" fill="none" stroke="${TIRE_COL[p]}" stroke-width="${tireSel === p ? 2.8 : 2}" opacity="${op}" stroke-linejoin="round"/>`;
     g += pts.map(([x, v]) => `<circle cx="${x.toFixed(1)}" cy="${Y(v).toFixed(1)}" r="2.6" fill="${TIRE_COL[p]}" opacity="${op}"/>`).join(''); });
   const lab = (d) => new Date(d + 'T12:00:00').toLocaleDateString('de-DE', { month: '2-digit', year: '2-digit' });
@@ -38,7 +43,7 @@ function renderTires() {
   const ms = tireList(tireSet), last = ms[ms.length - 1];
   if (!last) { el.innerHTML = `<p class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 text-sm text-slate-600 dark:text-slate-300 text-left">Für den ${TIRE_SETS.find(s => s[0] === tireSet)[1].split(' ')[1]}satz gibt es noch keine Messung. Über „+ Messung“ die Profiltiefe aller vier Reifen eintragen – je Reifen außen, mitte und innen, immer an denselben Stellen (z. B. Hauptrille an der Ventil-Position). Werte vom Kauf mit dem damaligen Datum nachtragen.</p>`; return; }
   const next = new Date(Date.parse(last.date + 'T12:00:00')); next.setMonth(next.getMonth() + 6); const due = next < new Date();
-  const tile = (p) => { const v = last.v[p] || [], a = tAvg(v), prev = ms.length > 1 ? tAvg(ms[ms.length - 2].v[p]) : null;
+  const tile = (p) => { const v = last.v[p] || [], a = tAvg(v), dl = ms.length > 1 ? tDiff(ms[ms.length - 2].v[p], v) : null, prev = dl == null ? null : a - dl;   // nur gleiche Messpunkte
     return `<button type="button" data-tire="${p}" class="flex h-[96px] w-full flex-col items-center justify-center rounded-2xl border-[1.5px] bg-slate-100 dark:bg-slate-800 px-1 ${tireSel === p ? 'ring-2 ring-offset-0' : ''}" style="border-color:${tCol(a)};${tireSel === p ? '--tw-ring-color:' + TIRE_COL[p] : ''}">
       <span class="text-[10.5px] text-slate-500 dark:text-slate-400">${TIRE_NAME[p]}</span>
       <span class="font-barlow text-[26px] font-bold leading-none" style="color:${tCol(a)}">${tFmt(a)}<span class="text-[13px]"> mm</span></span>
@@ -51,7 +56,7 @@ function renderTires() {
     <div class="flex items-baseline justify-between gap-2 text-xs text-slate-500 dark:text-slate-400"><span class="text-left">${labD(last.date)}${last.km ? ' · ' + fmt(last.km, 0) + ' km' : ''}</span><span class="shrink-0 font-semibold ${due ? 'text-red-600 dark:text-red-400' : 'text-amber-600 dark:text-amber-400'}">${due ? 'Messung fällig' : 'nächste: ' + next.toLocaleDateString('de-DE', { month: 'short', year: 'numeric' })}</span></div>
     <div class="grid grid-cols-[1fr_102px_1fr] items-center gap-x-1.5"><div class="space-y-3">${tile('VL')}${tile('HL')}</div><div class="flex justify-center">${car}</div><div class="space-y-3">${tile('VR')}${tile('HR')}</div></div>
     <p class="text-[11px] text-slate-500 dark:text-slate-400 text-center">je Reifen außen · mitte · innen · Antippen hebt den Reifen im Verlauf hervor</p></div>`;
-  h += `<div class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 space-y-1.5"><div class="flex items-baseline justify-between"><p class="text-sm font-bold">Verlauf${pg ? ' &amp; Prognose' : ''}</p><span class="text-[11px] text-slate-500 dark:text-slate-400">Ø je Reifen in mm</span></div>
+  h += `<div class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 space-y-1.5"><div class="flex items-baseline justify-between"><p class="text-sm font-bold">Verlauf${pg ? ' &amp; Prognose' : ''}</p><span class="text-[11px] text-slate-500 dark:text-slate-400">Ø mm · gleiche Messpunkte</span></div>
     ${tireChart(ms)}<div class="flex gap-3 text-[11px] text-slate-500 dark:text-slate-400">${TIRE_POS.map(p => `<span><span class="inline-block h-[3px] w-2.5 align-middle" style="background:${TIRE_COL[p]}"></span> ${p}</span>`).join('')}</div>
     ${pg ? `<p class="rounded-xl bg-slate-100 dark:bg-slate-800/70 px-3 py-2 text-xs text-slate-600 dark:text-slate-300 text-left">${pg.days === 0 ? `<b>${TIRE_NAME[pg.p]}</b> ist bereits bei 3 mm oder darunter.` : `Am schnellsten nutzt sich <b>${TIRE_NAME[pg.p]}</b> ab${pg.perK ? ' (' + fmt(pg.perK, 1) + ' mm je 10.000 km)' : ''}. 3 mm voraussichtlich ${pg.atKm ? 'bei <b>~' + fmt(Math.round(pg.atKm / 1000) * 1000, 0) + ' km</b> (' : '<b>'}${pg.date.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })}${pg.atKm ? ')' : '</b>'}.`}</p>` : `<p class="text-[11px] text-slate-500 dark:text-slate-400 text-left">Ab der zweiten Messung zeigt die App, welcher Reifen sich am schnellsten abnutzt und wann 3 mm erreicht sind.</p>`}</div>`;
   if (tireSel) h += `<div class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm px-4 py-3"><p class="text-sm font-bold text-left">${TIRE_NAME[tireSel][0].toUpperCase() + TIRE_NAME[tireSel].slice(1)}</p><div class="mt-1 grid grid-cols-[1.3fr_1fr_1fr_1fr_1fr] gap-1 text-[11px] text-slate-500 dark:text-slate-400"><span>Datum</span><span class="text-right">außen</span><span class="text-right">mitte</span><span class="text-right">innen</span><span class="text-right">Ø</span></div>${ms.slice().reverse().map(m => `<div class="grid grid-cols-[1.3fr_1fr_1fr_1fr_1fr] gap-1 border-t border-slate-100 dark:border-slate-800 py-1.5 text-[13px] tabular-nums"><span>${labD(m.date)}</span>${[0, 1, 2].map(i => `<span class="text-right">${tFmt((m.v[tireSel] || [])[i])}</span>`).join('')}<b class="text-right" style="color:${tCol(tAvg(m.v[tireSel]))}">${tFmt(tAvg(m.v[tireSel]))}</b></div>`).join('')}</div>`;
