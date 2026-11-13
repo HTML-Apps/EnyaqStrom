@@ -177,16 +177,8 @@ $('trips-banner-go').addEventListener('click', () => { openSettings('fahrten'); 
 $('trips-banner-x').addEventListener('click', () => { const n = new Date(), k = ymKey(n.getFullYear(), n.getMonth()); save(KEY_TRIPS_NAG, k); nagSet({ nTrips: k }); renderTripsBanner(); });
 $('report-banner').addEventListener('click', () => { const p = prevMonthOf(); reportYM = { y: p.getFullYear(), m: p.getMonth() }; showView('report'); });
 
-/** km, die im Monat gefahren wurden: aus den km-Ständen von Ladungen und Kosten (letzter Stand im Monat minus letzter Stand davor). */
-function kmDrivenIn(y, m) {
-  const pts = getReadings().filter(r => r.odometerKm > 0).map(r => [Date.parse(r.date), r.odometerKm])
-    .concat(getCosts().filter(c => c.odometerKm > 0).map(c => [Date.parse(c.date), c.odometerKm])).sort((a, b) => a[0] - b[0]);
-  const s0 = new Date(y, m, 1).getTime(), e0 = new Date(y, m + 1, 1).getTime();
-  const inM = pts.filter(q => q[0] >= s0 && q[0] < e0); if (!inM.length) return null;
-  const before = pts.filter(q => q[0] < s0), b = before[before.length - 1];
-  const base = b && s0 - b[0] < 45 * 86400000 ? b[1] : inM[0][1];                       // Stand vor dem Monat nur, wenn er nicht zu alt ist
-  const km = inM[inM.length - 1][1] - base; return km > 0 ? km : null;
-}
+/** km, die im Monat gefahren wurden: km-Stand am Monatsende (höchstens heute) minus am Monatsanfang aus dem gemeinsamen km-Verlauf (src/05 odoAt). */
+function kmDrivenIn(y, m) { return rangeKm(new Date(y, m, 1).getTime(), new Date(y, m + 1, 1).getTime()); }
 /** Gesamtkosten eines Monats: Laden (alle Orte) + Kosten − Einnahmen. */
 function costTotals(y, m) {
   const laden = monthReport(y, m, 'all').cost, cs = costsIn(y, m);

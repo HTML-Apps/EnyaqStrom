@@ -205,9 +205,8 @@ async function wxoForecast(l) {
 }
 /** Ø km pro Tag aus den letzten ~90 Tagen der km-Stände; typisches Ladeziel (Median der letzten 10 Akku-Ende-Werte) */
 function wxoHabits() {
-  const rs = getReadings().filter(r => r.odometerKm > 0 && Number.isFinite(Date.parse(r.date))).sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
-  let kmDay = null;
-  if (rs.length >= 2) { const last = rs[rs.length - 1], lim = Date.parse(last.date) - 90 * 864e5, first = rs.find(r => Date.parse(r.date) >= lim) || rs[0], d = (Date.parse(last.date) - Date.parse(first.date)) / 864e5; if (d >= 7 && last.odometerKm > first.odometerKm) kmDay = (last.odometerKm - first.odometerKm) / d; }
+  const pts = odoPts(); let kmDay = null;                                          // gemeinsamer km-Verlauf (auch Fahrtenbuch und Auto)
+  if (pts.length >= 2) { const L = pts[pts.length - 1], lim = L[0] - 90 * 864e5, F = pts.find(q => q[0] >= lim) || pts[0], d = (L[0] - F[0]) / 864e5; if (d >= 7 && L[1] > F[1]) kmDay = (L[1] - F[1]) / d; }
   const ends = getReadings().filter(r => r.socEnd > 30).slice(-10).map(r => r.socEnd);
   return { kmDay, target: ends.length ? Math.round(median(ends)) : 80 };
 }

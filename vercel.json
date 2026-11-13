@@ -1,5 +1,8 @@
 {
   "crons": [
     { "path": "/api/ice-push", "schedule": "0 17 * * *" }
-  ]
+  ],
+  "functions": {
+    "api/ice-push.js": { "maxDuration": 60 }
+  }
 }

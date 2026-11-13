@@ -9,6 +9,10 @@
 //      { low: 'reg' } Konto für die Akku-Nachricht freischalten (merkt die E-Mail verschlüsselt, damit der Zeitplan die Škoda-Zugangsdaten findet).
 // Benötigte Vercel-Variablen: VAPID_PRIVATE_KEY (Web-Push), FIREBASE_SERVICE_ACCOUNT (JSON des Firebase-Dienstkontos, nur Lesen),
 // optional CRON_SECRET (schützt den Zeitplan-Aufruf; ohne Variable nur Aufrufe von Vercels Zeitplan).
+//      · Auto nicht abgeschlossen (devices[id].veh): Schloss/Türen/Fenster/Licht, nur wenn der Stand ≥ 30 Min. alt ist.
+//      · Monatsanfang (devices[id].mon): Monatsbericht des Vormonats + Fahrtenbuch-Hinweis, einmal je Monat (bis zum 7. nachgeholt).
+//      · Škoda-Schlüssel (devices[id].key, fehlt = an): 7 Tage vorher, am Vortag, am Ablauftag.
+//      Zustand je Konto in settings/pushState (remKm, remDay, monSent, keySent) – ausgefallene Abende werden nachgeholt (Erinnerungen bis 7 Tage).
 import webpush from 'web-push';
 import { SignJWT, importPKCS8 } from 'jose';
 import { verifyUser, accountForUser, usable } from '../lib/auth.js';
@@ -81,7 +85,7 @@ async function riskFor(uid, prefs0) {
   const w = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}&hourly=temperature_2m,dew_point_2m,cloud_cover,wind_speed_10m,precipitation&wind_speed_unit=ms&timezone=Europe%2FBerlin&forecast_days=3`);
   if (!w.ok) throw new Error('Wetter ' + w.status); return { st, r: iceEval((await w.json()).hourly, day, st) };
 }
-async function devices(uid) { const d = await fsGet(`enyaqStrom/${uid}/settings/push`); return Object.entries((d && d.devices) || {}).filter(([, v]) => v && v.sub).map(([id, v]) => ({ id, sub: JSON.parse(v.sub), ice: v.ice !== false, low: Number(v.low) > 0 ? Number(v.low) : 0, rem: v.rem === true })); }
+async function devices(uid) { const d = await fsGet(`enyaqStrom/${uid}/settings/push`); return Object.entries((d && d.devices) || {}).filter(([, v]) => v && v.sub).map(([id, v]) => ({ id, sub: JSON.parse(v.sub), ice: v.ice !== false, low: Number(v.low) > 0 ? Number(v.low) : 0, rem: v.rem === true, veh: v.veh === true, mon: v.mon === true, key: v.key !== false })); }
 
 /* ---- Fällige Erinnerungen ---- */
 async function fsList(path) {                                                   // alle Dokumente einer Sammlung → [Felder]
@@ -96,24 +100,30 @@ async function fsLatest(uid, coll, n) {                                         
     body: JSON.stringify({ structuredQuery: { from: [{ collectionId: coll }], orderBy: [{ field: { fieldPath: 'date' }, direction: 'DESCENDING' }], limit: n } }) });
   if (!r.ok) return []; return (await r.json()).filter(x => x.document).map(x => Object.fromEntries(Object.entries(x.document.fields || {}).map(([k, v]) => [k, val(v)])));
 }
-/** Aktueller km-Stand: größter Wert aus den letzten Ladungen, Kosten und Langzeit-Ablesungen (wie „lastKnownKm“ in der App) */
-async function kmNow(uid, prefs) {
-  const [rs, cs] = await Promise.all([fsLatest(uid, 'readings', 8), fsLatest(uid, 'costs', 8)]);
-  const lt = prefs && prefs.lab && Array.isArray(prefs.lab.lt) ? prefs.lab.lt : [];
-  const v = rs.concat(cs).map(x => Number(x.odometerKm)).concat(lt.map(x => Number(x && x.km))).filter(k => k > 0);
+/** Aktueller km-Stand wie in der App (gemeinsamer km-Verlauf): größter Wert aus den letzten Ladungen und Kosten, Langzeit-Ablesungen,
+    Tagesständen vom Auto (lab.odo), Fahrtenbuch (dieser und letzter Monat) und – falls abgefragt – dem Stand vom Auto. */
+async function kmNow(uid, prefs, carKm) {
+  const now = new Date(), ym = (d) => d.toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' }).slice(0, 7), prev = new Date(now.getFullYear(), now.getMonth() - 1, 15);
+  const [rs, cs, t1, t0] = await Promise.all([fsLatest(uid, 'readings', 8), fsLatest(uid, 'costs', 8), fsGet(`enyaqStrom/${uid}/tripMonths/${ym(now)}`).catch(() => null), fsGet(`enyaqStrom/${uid}/tripMonths/${ym(prev)}`).catch(() => null)]);
+  const lab = (prefs && prefs.lab) || {}, lt = Array.isArray(lab.lt) ? lab.lt : [], od = Array.isArray(lab.odo) ? lab.odo : [];
+  const trips = [t0, t1].flatMap(d => d && Array.isArray(d.list) ? d.list : []);
+  const v = rs.concat(cs).map(x => Number(x.odometerKm)).concat(lt.map(x => Number(x && x.km)), od.map(x => Number(x && x.km1)), trips.map(x => Number(x && x.o1)), [Number(carKm)]).filter(k => k > 0);
   return v.length ? Math.max(...v) : null;
 }
 const kmF = (k) => Math.round(k).toLocaleString('de-DE');
-/** Heute fällige Erinnerungen: Datum = heute, oder km-Fälligkeit seit gestern Abend überschritten (prevKm < dueKm ≤ km). Laufzeiten und erledigte nicht. */
-function remDue(rems, today, km, prevKm) {
+/** Fällige Erinnerungen: Datum seit dem letzten Lauf (lastDay < dueDate ≤ heute; holt ausgefallene Abende bis 7 Tage nach),
+    oder km-Fälligkeit seit dem letzten Lauf überschritten (prevKm < dueKm ≤ km). Laufzeiten und erledigte nicht. */
+function remDue(rems, today, km, prevKm, lastDay) {
+  if (!lastDay || lastDay >= today) lastDay = iso(new Date(Date.parse(today + 'T12:00:00Z') - 864e5));
   return rems.filter(r => r && r.title && r.kind !== 'run' && !r.doneAt).map(r => {
-    const byDate = r.dueDate === today, byKm = Number(r.dueKm) > 0 && km != null && prevKm != null && prevKm < r.dueKm && km >= r.dueKm;
-    return byDate || byKm ? { r, byKm: byKm && !byDate } : null; }).filter(Boolean);
+    const byDate = !!r.dueDate && r.dueDate > lastDay && r.dueDate <= today, byKm = Number(r.dueKm) > 0 && km != null && prevKm != null && prevKm < r.dueKm && km >= r.dueKm;
+    return byDate || byKm ? { r, byKm: byKm && !byDate, late: byDate && r.dueDate < today } : null; }).filter(Boolean);
 }
+const dmy = (d) => d.slice(8, 10) + '.' + d.slice(5, 7) + '.';
 function remMessage(due, km) {
-  const sub = (o) => o.byKm ? 'Fällig bei ' + kmF(o.r.dueKm) + ' km · aktuell ' + kmF(km) + ' km' : 'Heute fällig';
+  const sub = (o) => o.byKm ? 'Fällig bei ' + kmF(o.r.dueKm) + ' km · aktuell ' + kmF(km) + ' km' : o.late ? 'Fällig seit ' + dmy(o.r.dueDate) : 'Heute fällig';
   if (due.length === 1) { const o = due[0]; return { title: o.r.title, body: sub(o) + (o.r.note ? '\n' + String(o.r.note).slice(0, 120) : '') }; }
-  return { title: due.length + ' Erinnerungen heute fällig', body: due.map(o => o.r.title).join(' · ').slice(0, 180) };
+  return { title: due.length + ' Erinnerungen fällig', body: due.map(o => o.r.title).join(' · ').slice(0, 180) };
 }
 const remPayload = (m, today) => ({ ...m, kind: 'rem', tag: 'rem-' + today, url: '/?go=reminders' });
 /* ---- Akku niedrig ---- */
@@ -122,13 +132,54 @@ async function lowAccount(uid, email) {                                         
     let x = ''; try { x = unseal(d.mail); } catch (e) { return null; } const [u, m] = x.split('|'); if (u !== uid || !m) return null; email = m; }
   const acc = await accountForUser({ uid, email }); return usable(acc) ? acc : null;
 }
-async function carNow(acc) {                                                     // Akku-% und Ladezustand (1 Abfrage; Limit der Škoda-API: 20/Stunde)
-  if (acc.demo) return { soc: 64, rangeKm: 262, plug: 'DISCONNECTED', state: 'READY_FOR_CHARGING', at: new Date().toISOString() };
-  const r = await fetch('https://public.api.connect.skoda-auto.cz/api/v1/vehicles/' + encodeURIComponent(acc.vin) + '?include=charging', { headers: { 'X-API-Key': acc.key, Accept: 'application/json' } });
-  if (!r.ok) throw new Error('Škoda ' + r.status); const v = (await r.json()).vehicle || {}, st = (v.charging || {}).status || {};
+async function carNow(acc, withStatus) {                                         // Akku-%, Ladezustand, km-Stand (+ Schloss/Fenster/Licht) – 1 Abfrage; Limit der Škoda-API: 20/Stunde
+  if (acc.demo) return { soc: 64, rangeKm: 262, plug: 'DISCONNECTED', state: 'READY_FOR_CHARGING', at: new Date().toISOString(), km: 1214, st: { doorsLocked: 'YES', locked: 'YES', doors: 'CLOSED', windows: 'CLOSED', lights: 'OFF' }, stAt: new Date(Date.now() - 3600e3).toISOString() };
+  const base = 'https://public.api.connect.skoda-auto.cz/api/v1/vehicles/' + encodeURIComponent(acc.vin) + '?include=', H = { headers: { 'X-API-Key': acc.key, Accept: 'application/json' } };
+  let r = await fetch(base + (withStatus ? 'charging,odometer,status' : 'charging,odometer'), H);
+  if (r.status === 400 && withStatus) r = await fetch(base + 'charging,odometer', H);   // Auto ohne Fahrzeugstatus
+  if (!r.ok) throw new Error('Škoda ' + r.status); const v = (await r.json()).vehicle || {}, st = (v.charging || {}).status || {}, o = (v.status || {}).overall || null;
   return { soc: st.battery?.stateOfChargeInPercent ?? null, rangeKm: st.battery?.remainingCruisingRangeInMeters != null ? Math.round(st.battery.remainingCruisingRangeInMeters / 1000) : null,
-    plug: st.plugConnectionState ?? null, state: st.state ?? null, at: v.charging?.carCapturedTimestamp ?? null };
+    plug: st.plugConnectionState ?? null, state: st.state ?? null, at: v.charging?.carCapturedTimestamp ?? null, km: v.odometer?.mileageInKm ?? null,
+    st: o, stAt: v.status?.carCapturedTimestamp ?? v.odometer?.carCapturedTimestamp ?? v.charging?.carCapturedTimestamp ?? null };
 }
+/* ---- Auto nicht abgeschlossen (wie vehHealth in der App) ---- */
+function vehIssues(o) {
+  if (!o) return null; const v = (x) => (x == null || /UNSUPPORTED|UNKNOWN|INVALID/i.test(String(x)) ? null : String(x));
+  const lk = v(o.doorsLocked) || v(o.locked), doors = v(o.doors), win = v(o.windows), li = v(o.lights);
+  return [lk === 'NO' && 'nicht verriegelt', doors && /OPEN/.test(doors) && 'Tür offen', win && /OPEN/.test(win) && 'Fenster offen', li && /^ON$/.test(li) && 'Licht an'].filter(Boolean);
+}
+const hm = (t) => new Date(t).toLocaleTimeString('de-DE', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit' });
+function vehMessage(issues, stAt, today) {
+  const cap = (t) => t.charAt(0).toUpperCase() + t.slice(1), locked = !issues.includes('nicht verriegelt');
+  return { title: locked ? cap(issues.join(' · ')) : 'Auto nicht abgeschlossen', body: (locked ? '' : cap(issues.join(' · ')) + ' · ') + 'Stand ' + (stAt ? hm(stAt) + ' Uhr' : 'unbekannt'),
+    kind: 'veh', tag: 'veh-' + today, url: '/' };
+}
+/* ---- Monatsanfang: Monatsbericht + Fahrtenbuch-Hinweis (einmal je Monat, bis zum 7. nachholbar) ---- */
+const MON = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+async function monthMessage(uid, ym) {
+  const [y, m] = ym.split('-').map(Number), next = m === 12 ? (y + 1) + '-01' : y + '-' + String(m + 1).padStart(2, '0');
+  const r = await fetch(FS + '/enyaqStrom/' + uid + ':runQuery', { method: 'POST', headers: { Authorization: 'Bearer ' + await gToken(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ structuredQuery: { from: [{ collectionId: 'readings' }], where: { compositeFilter: { op: 'AND', filters: [
+      { fieldFilter: { field: { fieldPath: 'date' }, op: 'GREATER_THAN_OR_EQUAL', value: { stringValue: ym + '-01' } } },
+      { fieldFilter: { field: { fieldPath: 'date' }, op: 'LESS_THAN', value: { stringValue: next + '-01' } } }] } } } }) });
+  const rs = r.ok ? (await r.json()).filter(x => x.document).map(x => Object.fromEntries(Object.entries(x.document.fields || {}).map(([k, v]) => [k, val(v)]))) : [];
+  const ch = rs.filter(x => Number(x.consumedSinceLast) > 0 || (x.place && x.place !== 'home')), kwh = ch.reduce((a, x) => a + (Number(x.consumedSinceLast) || 0), 0), eur = ch.reduce((a, x) => a + (Number(x.cost) || 0), 0);
+  /* Fahrtenbuch: nur wer es nutzt (Monat davor vorhanden). Fehlt der Monat oder endet die letzte Fahrt vor den letzten 3 Tagen → Hinweis */
+  const pm = m === 1 ? (y - 1) + '-12' : y + '-' + String(m - 1).padStart(2, '0'), [tm, tp] = await Promise.all([fsGet(`enyaqStrom/${uid}/tripMonths/${ym}`).catch(() => null), fsGet(`enyaqStrom/${uid}/tripMonths/${pm}`).catch(() => null)]);
+  const lastE = tm && Array.isArray(tm.list) ? tm.list.map(x => String(x && x.e || '')).sort().pop() || '' : '', end = new Date(Date.UTC(y, m, 1) - 3 * 864e5).toISOString().slice(0, 10);
+  const tripHint = (tm || tp) && (!lastE || lastE.slice(0, 10) < end);
+  if (!ch.length && !tripHint) return null;
+  const f = (v, d) => v.toLocaleString('de-DE', { minimumFractionDigits: d, maximumFractionDigits: d });
+  return { title: MON[m - 1] + ' ist fertig', body: (ch.length ? ch.length + (ch.length === 1 ? ' Ladung · ' : ' Ladungen · ') + f(kwh, 0) + ' kWh · ' + f(eur, 2) + ' € – Monatsbericht ansehen' : 'Monatsbericht ansehen')
+    + (tripHint ? '\nFahrtenbuch für ' + MON[m - 1] + ' noch aus MyŠkoda importieren' : ''), kind: 'mon', tag: 'mon-' + ym, url: '/?go=berichte' };
+}
+/* ---- Škoda-Schlüssel läuft ab: 7 Tage vorher, am Vortag und am Ablauftag (je Stufe einmal, auch nachgeholt) ---- */
+function keyStage(expires, today) {
+  if (!expires || isNaN(Date.parse(expires))) return null; const ex = String(expires).slice(0, 10), d = Math.round((Date.parse(ex + 'T12:00:00Z') - Date.parse(today + 'T12:00:00Z')) / 864e5);
+  return d <= 0 ? { stage: 0, d, ex } : d <= 1 ? { stage: 1, d, ex } : d <= 7 ? { stage: 7, d, ex } : null;
+}
+const keyMessage = (k) => ({ title: k.d < 0 ? 'Škoda-Schlüssel abgelaufen' : 'Škoda-Schlüssel läuft ' + (k.d === 0 ? 'heute' : k.d === 1 ? 'morgen' : 'am ' + dmy(k.ex)) + ' ab',
+  body: 'Ohne neuen Schlüssel kommen keine Fahrzeugdaten mehr. In der App unter Konto & Cloud „Škoda-Schlüssel ersetzen“.', kind: 'key', tag: 'key-' + k.ex, url: '/?go=einstellungen' });
 const plugged = (c) => /^CONNECTED/i.test(String(c.plug || '')) || /CHARGING/i.test(String(c.state || '')) && !/READY|NOT|ERROR/i.test(String(c.state || ''));
 function lowMessage(c, frost) {
   const old = c.at && Date.now() - Date.parse(c.at) > 6 * 3600e3 ? ' (Stand ' + new Date(c.at).toLocaleString('de-DE', { timeZone: 'Europe/Berlin', weekday: 'short', hour: '2-digit', minute: '2-digit' }) + ')' : '';
@@ -141,6 +192,55 @@ async function send(list, payload) {
   return { ok, gone };
 }
 
+/** Ein Konto im Abendlauf: alle Arten getrennt, Fehler einer Art stoppen die anderen nicht. Zustand (pushState) wird am Ende in einem Schritt geschrieben. */
+async function runAccount(uid) {
+  const o = { uid: uid.slice(0, 6) }, all = await devices(uid); if (!all.length) return null;
+  const today = iso(new Date()), L = (f) => all.filter(f), iceL = L(d => d.ice), remL = L(d => d.rem), lowL = L(d => d.low > 0), vehL = L(d => d.veh), monL = L(d => d.mon), keyL = L(d => d.key);
+  const [prefs, st0] = await Promise.all([fsGet(`enyaqStrom/${uid}/settings/prefs`), fsGetStrings(`enyaqStrom/${uid}/settings/pushState`).catch(() => null)]);
+  const st = { ...(st0 || {}) }; let risk = null, acc = null, car = null;
+  if (iceL.length) { try { const { st: is, r, why } = risk = await riskFor(uid, prefs);
+      if (!r || r.lvl < is.min) Object.assign(o, { lvl: r ? r.lvl : null, why: why || 'kein Eis' });
+      else Object.assign(o, { lvl: r.lvl, ice: await send(iceL, { ...message(r, is), tag: 'ice-' + r.day, url: '/', icon: '/Bilder/ice-icon.png?v=3' }) });
+    } catch (e) { o.iceErr = String(e.message || e).slice(0, 120); } }
+  /* Auto einmal abfragen (für Akku, Schloss, km-Stand der Erinnerungen und den Schlüssel-Ablauf) */
+  try { acc = await lowAccount(uid); if (acc && (lowL.length || vehL.length || remL.length)) car = await carNow(acc, vehL.length > 0); } catch (e) { o.carErr = String(e.message || e).slice(0, 80); }
+  if (remL.length) { try { const prevKm = Number(st.remKm) > 0 ? Number(st.remKm) : null, lastDay = /^\d{4}-\d{2}-\d{2}$/.test(st.remDay || '') && st.remDay >= iso(new Date(Date.now() - 7 * 864e5)) ? st.remDay : null;
+      const km = await kmNow(uid, prefs, car && car.km), due = remDue(await fsList(`enyaqStrom/${uid}/reminders`), today, km, prevKm, lastDay);
+      if (km != null) st.remKm = String(km); st.remDay = today;
+      o.rem = due.length ? await send(remL, remPayload(remMessage(due, km), today)) : 0;
+    } catch (e) { o.remErr = String(e.message || e).slice(0, 120); } }
+  if (lowL.length) { try {
+      if (!acc) o.low = 'kein Fahrzeug'; else if (!car || car.soc == null) o.low = 'kein Akku-Stand'; else if (plugged(car)) o.low = 'angesteckt';
+      else { if (!risk) risk = await riskFor(uid, prefs).catch(() => null); const frost = !!(risk && risk.r && risk.r.lvl >= 1);
+        const to = lowL.filter(d => car.soc < d.low + (frost ? 10 : 0)); o.low = to.length ? await send(to, lowMessage(car, frost)) : 'ok ' + Math.round(car.soc) + ' %'; }
+    } catch (e) { o.lowErr = String(e.message || e).slice(0, 120); } }
+  if (vehL.length) { try {     /* nur wenn der Stand mindestens 30 Minuten alt ist (Auto steht, niemand steigt gerade aus) */
+      const is = car ? vehIssues(car.st) : null, age = car && car.stAt ? Date.now() - Date.parse(car.stAt) : Infinity;
+      if (!acc) o.veh = 'kein Fahrzeug'; else if (!is) o.veh = 'kein Status'; else if (!is.length) o.veh = 'ok'; else if (age < 30 * 60e3) o.veh = 'zu frisch';
+      else o.veh = await send(vehL, vehMessage(is, car.stAt, today));
+    } catch (e) { o.vehErr = String(e.message || e).slice(0, 120); } }
+  if (monL.length) { try { const d = new Date(), pm = new Date(d.getFullYear(), d.getMonth() - 1, 15), ym = iso(pm).slice(0, 7);
+      if (Number(today.slice(8, 10)) <= 7 && st.monSent !== ym) { const m = await monthMessage(uid, ym); o.mon = m ? await send(monL, m) : 'nichts'; st.monSent = ym; }
+    } catch (e) { o.monErr = String(e.message || e).slice(0, 120); } }
+  if (keyL.length && acc && !acc.demo) { try { const k = keyStage(acc.expires, today), tag = k ? k.ex + '|' + k.stage : '';
+      if (k && st.keySent !== tag) { o.key = await send(keyL, keyMessage(k)); st.keySent = tag; }
+    } catch (e) { o.keyErr = String(e.message || e).slice(0, 120); } }
+  if (JSON.stringify(st) !== JSON.stringify(st0 || {})) await fsSetStrings(`enyaqStrom/${uid}/settings/pushState`, { ...st, at: new Date().toISOString() }).catch(() => { });
+  return o;
+}
+/** Beispiele für die Testnachrichten (echte Werte, wenn vorhanden) */
+async function testPayload(kind, user) {
+  const today = iso(new Date());
+  if (kind === 'veh') { let c = null; try { const acc = await lowAccount(user.uid, user.email); if (acc) c = await carNow(acc, true); } catch (e) { }
+    const is = c ? vehIssues(c.st) : null; return { p: { ...vehMessage(is && is.length ? is : ['nicht verriegelt', 'Fenster offen'], c && c.stAt, today), tag: 'veh-test' }, real: !!(is && is.length), state: is ? (is.length ? is.join(', ') : 'alles zu') : null }; }
+  if (kind === 'mon') { const d = new Date(), ym = iso(new Date(d.getFullYear(), d.getMonth() - 1, 15)).slice(0, 7); let m = null; try { m = await monthMessage(user.uid, ym); } catch (e) { }
+    return { p: { ...(m || { title: MON[Number(ym.slice(5)) - 1] + ' ist fertig', body: '12 Ladungen · 310 kWh · 96,40 € – Monatsbericht ansehen', kind: 'mon', url: '/?go=berichte' }), tag: 'mon-test' }, real: !!m }; }
+  if (kind === 'key') { let acc = null; try { acc = await lowAccount(user.uid, user.email); } catch (e) { }
+    const ex = acc && acc.expires && !isNaN(Date.parse(acc.expires)) ? String(acc.expires).slice(0, 10) : null, k = keyStage(ex, today);
+    return { p: { ...keyMessage(k || { d: 7, ex: ex || iso(new Date(Date.now() + 7 * 864e5)) }), tag: 'key-test' }, real: !!k, expires: ex }; }
+  return null;
+}
+
 export default async function handler(req, res) {
   if (!process.env.VAPID_PRIVATE_KEY || !process.env.FIREBASE_SERVICE_ACCOUNT) return res.status(503).json({ error: 'not_configured', need: ['VAPID_PRIVATE_KEY', 'FIREBASE_SERVICE_ACCOUNT'].filter(k => !process.env[k]) });
   webpush.setVapidDetails('mailto:enyaqstrom@users.noreply.github.com', VAPID_PUBLIC, process.env.VAPID_PRIVATE_KEY);
@@ -148,7 +248,7 @@ export default async function handler(req, res) {
     if (req.method === 'POST') {                                               // Testnachricht an die eigenen Geräte
       const user = await verifyUser(req); if (!user) return res.status(401).json({ error: 'unauthorized' });
       const all = await devices(user.uid), body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
-      if (body.low === 'reg') {                                                // Akku-Nachricht: Konto merken (E-Mail verschlüsselt, an die uid gebunden)
+      if (body.low === 'reg') {                                                // Konto merken (E-Mail verschlüsselt, an die uid gebunden), damit der Abendlauf das Auto abfragen darf
         const acc = await accountForUser(user); if (!usable(acc)) return res.status(403).json({ error: 'no_vehicle' });
         await fsSetStrings(`enyaqStrom/${user.uid}/settings/lowPush`, { mail: seal(user.uid + '|' + user.email), at: new Date().toISOString() });
         return res.status(200).json({ ok: true });
@@ -159,9 +259,13 @@ export default async function handler(req, res) {
         if (!real) c = { soc: 17, rangeKm: 62, at: new Date().toISOString() };
         return res.status(200).json({ ...(await send(list, { ...lowMessage(c, false), tag: 'low-test' })), devices: list.length, real, soc: real ? c.soc : null, plugged: real ? plugged(c) : null });
       }
+      if (['veh', 'mon', 'key'].includes(body.test)) {
+        const list = all.filter(d => d[body.test]); if (!list.length) return res.status(404).json({ error: 'no_device' });
+        const t = await testPayload(body.test, user); return res.status(200).json({ ...(await send(list, t.p)), devices: list.length, real: t.real, state: t.state ?? null, expires: t.expires ?? null });
+      }
       if (body.test === 'rem') {                                               // Erinnerungs-Test: echte heute fällige, sonst ein typisches Beispiel
         const list = all.filter(d => d.rem); if (!list.length) return res.status(404).json({ error: 'no_device' });
-        const today = iso(new Date()); let due = []; try { due = remDue(await fsList(`enyaqStrom/${user.uid}/reminders`), today, null, null); } catch (e) { }
+        const today = iso(new Date()); let due = []; try { due = remDue(await fsList(`enyaqStrom/${user.uid}/reminders`), today, null, null, null); } catch (e) { }
         const m = due.length ? remMessage(due, null) : { title: 'Inspektion', body: 'Heute fällig' };
         return res.status(200).json({ ...(await send(list, { ...remPayload(m, today), tag: 'rem-test' })), devices: list.length, real: due.length });
       }
@@ -174,30 +278,11 @@ export default async function handler(req, res) {
     }
     const secret = process.env.CRON_SECRET, auth = req.headers.authorization || '', ua = String(req.headers['user-agent'] || '');
     if (secret ? auth !== 'Bearer ' + secret && req.query.key !== secret : !ua.startsWith('vercel-cron')) return res.status(401).json({ error: 'unauthorized' });
-    const out = [];
-    for (const uid of await fsUids()) {
-      const o = { uid: uid.slice(0, 6) };
-      try { const all = await devices(uid); if (!all.length) continue; const prefs = await fsGet(`enyaqStrom/${uid}/settings/prefs`), iceL = all.filter(d => d.ice), remL = all.filter(d => d.rem);
-        const lowL = all.filter(d => d.low > 0); let risk = null;
-        if (iceL.length) { try { const { st, r, why } = risk = await riskFor(uid, prefs);
-            if (!r || r.lvl < st.min) Object.assign(o, { lvl: r ? r.lvl : null, why: why || 'kein Eis' });
-            else Object.assign(o, { lvl: r.lvl, ice: await send(iceL, { ...message(r, st), tag: 'ice-' + r.day, url: '/', icon: '/Bilder/ice-icon.png?v=3' }) });
-          } catch (e) { o.iceErr = String(e.message || e).slice(0, 120); } }
-        if (remL.length) { try { const today = iso(new Date()), st = await fsGet(`enyaqStrom/${uid}/settings/pushState`), prevKm = st && Number(st.remKm) > 0 ? Number(st.remKm) : null;
-            const km = await kmNow(uid, prefs), due = remDue(await fsList(`enyaqStrom/${uid}/reminders`), today, km, prevKm);
-            if (km != null && km !== prevKm) await fsSetStrings(`enyaqStrom/${uid}/settings/pushState`, { remKm: String(km), at: new Date().toISOString() }).catch(() => { });
-            o.rem = due.length ? await send(remL, remPayload(remMessage(due, km), today)) : 0;
-          } catch (e) { o.remErr = String(e.message || e).slice(0, 120); } }
-        if (lowL.length) { try { const acc = await lowAccount(uid);
-            if (!acc) o.low = 'kein Fahrzeug';
-            else { const c = await carNow(acc);
-              if (c.soc == null) o.low = 'kein Akku-Stand'; else if (plugged(c)) o.low = 'angesteckt';
-              else { if (!risk) risk = await riskFor(uid, prefs).catch(() => null); const frost = !!(risk && risk.r && risk.r.lvl >= 1);
-                const to = lowL.filter(d => c.soc < d.low + (frost ? 10 : 0)); o.low = to.length ? await send(to, lowMessage(c, frost)) : 'ok ' + Math.round(c.soc) + ' %'; } }
-          } catch (e) { o.lowErr = String(e.message || e).slice(0, 120); } }
-        out.push(o);
-      } catch (e) { out.push({ ...o, error: String(e.message || e).slice(0, 120) }); }
-    }
+    /* Konten zu viert gleichzeitig (Zeitlimit in vercel.json); ein Fehler bei einem Konto stoppt die anderen nicht */
+    const uids = await fsUids(), out = []; let next = 0;
+    await Promise.all(Array.from({ length: Math.min(4, uids.length) }, async () => {
+      while (next < uids.length) { const uid = uids[next++]; try { const o = await runAccount(uid); if (o) out.push(o); } catch (e) { out.push({ uid: uid.slice(0, 6), error: String(e.message || e).slice(0, 120) }); } }
+    }));
     return res.status(200).json({ at: new Date().toISOString(), users: out });
   } catch (e) { return res.status(500).json({ error: String(e.message || e).slice(0, 200) }); }
 }

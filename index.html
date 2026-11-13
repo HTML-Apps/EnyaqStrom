@@ -241,7 +241,7 @@
   @media (prefers-reduced-motion: reduce) { #bd-conf i, #bdg-conf i { animation: none; top: var(--y, 10%); } #bd-card, #bdg-card { animation: none; } }
 </style>
 <!-- Tailwind fertig gebaut (npm run css) – am Ende des Kopfs wie früher das CDN, damit die Reihenfolge der Regeln gleich bleibt -->
-<link rel="stylesheet" href="/app.css?v=303">
+<link rel="stylesheet" href="/app.css?v=304">
 </head>
 <body class="bg-slate-100 text-slate-900 dark:bg-black dark:text-slate-100 min-h-screen">
 
@@ -1316,6 +1316,16 @@
           <div class="mt-2 flex items-center justify-between gap-3"><label for="set-low-thr" class="text-sm text-slate-700 dark:text-slate-300">Schwelle</label><select id="set-low-thr" class="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"><option value="15">unter 15 %</option><option value="20">unter 20 %</option><option value="25">unter 25 %</option><option value="30">unter 30 %</option><option value="40">unter 40 %</option></select></div>
           <div class="mt-2 flex items-center gap-2"><button id="low-test" type="button" class="shrink-0 rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm font-semibold active:scale-95 transition">Testnachricht senden</button><span id="low-push-msg" class="min-w-0 text-xs text-left text-slate-500 dark:text-slate-400"></span></div>
         </div>
+        <div id="veh-push-box" class="hidden py-4 first:pt-4 last:pb-0">
+          <p class="block text-sm font-medium text-slate-700 dark:text-slate-300">Auto nicht abgeschlossen</p>
+          <label class="mt-2 flex items-center justify-between gap-3"><span><span class="block text-sm font-medium text-slate-700 dark:text-slate-300">Abends warnen</span><span class="block text-xs text-left text-slate-500 dark:text-slate-400">Push-Nachricht gegen 18 Uhr, wenn das Auto nicht verriegelt ist oder eine Tür, ein Fenster oder das Licht offen bzw. an ist. Nur wenn der Stand mindestens 30 Minuten alt ist – kommst du gerade erst heim, meldet es nichts.</span></span><input id="set-veh-push" type="checkbox" class="h-5 w-5 shrink-0 accent-emerald-600"></label>
+          <div class="mt-2 flex items-center gap-2"><button id="veh-test" type="button" class="shrink-0 rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm font-semibold active:scale-95 transition">Testnachricht senden</button><span id="veh-push-msg" class="min-w-0 text-xs text-left text-slate-500 dark:text-slate-400"></span></div>
+        </div>
+        <div id="key-push-box" class="hidden py-4 first:pt-4 last:pb-0">
+          <p class="block text-sm font-medium text-slate-700 dark:text-slate-300">Škoda-Schlüssel läuft ab</p>
+          <label class="mt-2 flex items-center justify-between gap-3"><span><span class="block text-sm font-medium text-slate-700 dark:text-slate-300">Rechtzeitig erinnern</span><span class="block text-xs text-left text-slate-500 dark:text-slate-400">Push-Nachricht 7 Tage vor Ablauf, am Vortag und am Ablauftag. Ist automatisch an, sobald dieses Gerät eine andere Benachrichtigung bekommt.</span></span><input id="set-key-push" type="checkbox" class="h-5 w-5 shrink-0 accent-emerald-600"></label>
+          <div class="mt-2 flex items-center gap-2"><button id="key-test" type="button" class="shrink-0 rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm font-semibold active:scale-95 transition">Testnachricht senden</button><span id="key-push-msg" class="min-w-0 text-xs text-left text-slate-500 dark:text-slate-400"></span></div>
+        </div>
       </div>
     </div>
     <div class="rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
@@ -1359,6 +1369,11 @@
           <p class="block text-sm font-medium text-slate-700 dark:text-slate-300">Fällige Erinnerungen</p>
           <label class="mt-2 flex items-center justify-between gap-3"><span><span class="block text-sm font-medium text-slate-700 dark:text-slate-300">Am Fälligkeitstag benachrichtigen</span><span class="block text-xs text-left text-slate-500 dark:text-slate-400">Push-Nachricht auf dieses Gerät gegen 18 Uhr, einmal am Tag der Fälligkeit – bei km-Erinnerungen am Abend, an dem der km-Stand sie erreicht. Überfällige zeigt nur die App.</span></span><input id="set-rem-push" type="checkbox" class="h-5 w-5 shrink-0 accent-emerald-600"></label>
           <div class="mt-2 flex items-center gap-2"><button id="rem-test" type="button" class="shrink-0 rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm font-semibold active:scale-95 transition">Testnachricht senden</button><span id="rem-push-msg" class="min-w-0 text-xs text-left text-slate-500 dark:text-slate-400"></span></div>
+        </div>
+        <div id="mon-push-box" class="py-4 first:pt-4 last:pb-0">
+          <p class="block text-sm font-medium text-slate-700 dark:text-slate-300">Monatsanfang</p>
+          <label class="mt-2 flex items-center justify-between gap-3"><span><span class="block text-sm font-medium text-slate-700 dark:text-slate-300">Monatsbericht melden</span><span class="block text-xs text-left text-slate-500 dark:text-slate-400">Push-Nachricht am 1. des Monats gegen 18 Uhr: Ladungen, kWh und Kosten des Vormonats – und ob das Fahrtenbuch noch fehlt. Wird bis zum 7. nachgeholt, falls der Abend ausfällt.</span></span><input id="set-mon-push" type="checkbox" class="h-5 w-5 shrink-0 accent-emerald-600"></label>
+          <div class="mt-2 flex items-center gap-2"><button id="mon-test" type="button" class="shrink-0 rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm font-semibold active:scale-95 transition">Testnachricht senden</button><span id="mon-push-msg" class="min-w-0 text-xs text-left text-slate-500 dark:text-slate-400"></span></div>
         </div>
         <div class="py-4 first:pt-4 last:pb-0">
           <p class="block text-sm font-medium text-slate-700 dark:text-slate-300">Nächste Fälligkeiten (Checkheft)</p>
@@ -1937,7 +1952,7 @@
   </div>
 </nav>
 
-<script src="/app.js?v=303"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
+<script src="/app.js?v=304"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
 <script type="module">
 /* Firebase (modular SDK). Die Konfiguration ist kein Geheimnis – geschützt wird über Auth + Firestore-Regeln. */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
@@ -1973,7 +1988,7 @@ async function pushTripMonths(prev, next) {
   for (let i = 0; i < ops.length; i += 400) { const bt = writeBatch(db); ops.slice(i, i + 400).forEach(([t, k]) => t === 'set' ? bt.set(doc(tripCol(), k), { list: b[k], updatedAt: new Date().toISOString() }) : bt.delete(doc(tripCol(), k))); await bt.commit(); }
   return ops.length;
 }
-const sig = (r) => [r.id, r.date, r.totalReading, r.consumedSinceLast, r.cost, r.odometerKm, r.socStart, r.socEnd, r.capacityKwh, r.chargeStart, r.chargeEnd, r.avgPowerKw, r.meterReset, r.place, r.pricePerKwh, r.provider, r.fee, r.battTemp].join('|');
+const sig = (r) => [r.id, r.date, r.totalReading, r.consumedSinceLast, r.cost, r.odometerKm, r.socStart, r.socEnd, r.capacityKwh, r.chargeStart, r.chargeEnd, r.avgPowerKw, r.meterReset, r.place, r.pricePerKwh, r.provider, r.fee, r.battTemp, r.comfort].join('|');
 
 const remSig = (r) => [r.gtId, r.gtSig, r.id, r.title, r.category, r.note, r.dueDate, r.dueKm, r.startDate, r.startKm, r.repeatMonths, r.repeatDays, r.repeatUnit, r.repeatKm, r.doneAt, r.lastDoneAt, r.lastDoneKm, r.guid, r.kind, r.lifeN, r.lifeUnit, Array.isArray(r.log) ? r.log.length : 0].join('|');
 const recSig = (t) => [t.id, t.title, t.amount, t.category, t.note, t.intervalMonths, t.startDate, t.nextIdx].join('|');

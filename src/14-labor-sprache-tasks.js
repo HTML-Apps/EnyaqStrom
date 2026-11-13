@@ -564,9 +564,8 @@ function tripKmAt(iso) {
 async function gtKmAt(iso) {
   const tk = tripKmAt(iso); if (tk > 0) return { km: tk, est: false };
   if (wxIso(new Date(iso)) === wxIso(new Date()) && apiEnabled()) { try { return { km: (await fetchCarKm()).km, est: false }; } catch (e) { } }
-  const rs = getReadings().filter(r => r.odometerKm > 0).map(r => ({ t: Date.parse(r.date), km: r.odometerKm })).filter(x => Number.isFinite(x.t)).sort((a, b) => a.t - b.t), t = Date.parse(iso);
-  const i = rs.findIndex(x => x.t >= t); if (i <= 0) return { km: null, est: true }; const a = rs[i - 1], b = rs[i];
-  return { km: Math.round(a.km + (b.km - a.km) * (t - a.t) / Math.max(1, b.t - a.t)), est: true };
+  const t = Date.parse(iso), pts = odoPts(); if (!pts.length || !(t > pts[0][0]) || !(t < pts[pts.length - 1][0])) return { km: null, est: true };   // nur zwischen zwei bekannten Ständen
+  return { km: Math.round(odoAt(t)), est: true };
 }
 /** Fahrt zu einem Zeitpunkt aus dem Fahrtenbuch: während einer Fahrt oder bis 45 min danach → { ctx: 'fahrt', min, km };
     letzte Fahrt länger als 2 h her → { ctx: 'geparkt' }. Nur wenn das Fahrtenbuch über den Zeitpunkt hinaus reicht (sonst null = noch unbekannt). */

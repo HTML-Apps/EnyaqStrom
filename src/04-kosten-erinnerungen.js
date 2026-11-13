@@ -50,13 +50,8 @@ window.onCloudCategories = (list, first, uid) => {
   if (!customized || JSON.stringify(next) !== JSON.stringify(local)) { save(KEY_CATEGORIES, next); renderCategories(); if (!$('view-costs').classList.contains('hidden')) renderCostsView(); }
 };
 
-/** Letzter bekannter km-Stand aus Ladungen und Kosten (nur als Platzhalter-Hinweis). */
-function lastKnownKm() {
-  const pts = getReadings().filter(r => r.odometerKm != null).map(r => [r.date, r.odometerKm])
-    .concat(getCosts().filter(c => c.odometerKm > 0).map(c => [c.date, c.odometerKm]));
-  if (!pts.length) return null;
-  pts.sort((a, b) => new Date(a[0]) - new Date(b[0])); return pts[pts.length - 1][1];
-}
+/** Letzter bekannter km-Stand: gemeinsamer km-Verlauf (Ladungen, Kosten, Fahrtenbuch, Tagesstände und aktueller Stand vom Auto) – odoNow in src/05 */
+function lastKnownKm() { return odoNow(); }
 let costCat = '';
 function renderCostsView() {
   const cats = getCategories();
@@ -156,7 +151,7 @@ function parseCsv(text) {                                // RFC-4180: Anführung
               repeatMonths?, repeatDays? (täglich/wöchentlich, Wochen = 7 Tage), repeatUnit? ('d'|'w', nur Anzeige), repeatKm?, doneAt? (ISO, nur bei einmaligen), lastDoneAt?, lastDoneKm?, log? ([{ at, km?, cost? }] alle Erledigungen), guid? (aus früherem Import) }
    Fortschritt: Anteil der Strecke von startDate/startKm bis dueDate/dueKm; gilt der größere der beiden Anteile (es zählt, was zuerst erreicht wird).
    Wiederkehrende Erinnerungen werden mit „Erledigt“ ab dem Erledigt-Datum (und -km) neu angesetzt, einmalige wandern in die Liste „Erledigt“.
-   Den aktuellen km-Stand liefert lastKnownKm() (jüngster Wert aus Ladungen und Kosten).
+   Den aktuellen km-Stand liefert lastKnownKm() (gemeinsamer km-Verlauf, auch Fahrtenbuch und Auto).
    ===================================================================== */
 const getReminders = () => { const l = load(KEY_REMINDERS, []); return Array.isArray(l) ? l : []; };
 const remWarn = () => {

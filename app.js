@@ -2053,13 +2053,8 @@ window.onCloudCategories = (list, first, uid) => {
   if (!customized || JSON.stringify(next) !== JSON.stringify(local)) { save(KEY_CATEGORIES, next); renderCategories(); if (!$('view-costs').classList.contains('hidden')) renderCostsView(); }
 };
 
-/** Letzter bekannter km-Stand aus Ladungen und Kosten (nur als Platzhalter-Hinweis). */
-function lastKnownKm() {
-  const pts = getReadings().filter(r => r.odometerKm != null).map(r => [r.date, r.odometerKm])
-    .concat(getCosts().filter(c => c.odometerKm > 0).map(c => [c.date, c.odometerKm]));
-  if (!pts.length) return null;
-  pts.sort((a, b) => new Date(a[0]) - new Date(b[0])); return pts[pts.length - 1][1];
-}
+/** Letzter bekannter km-Stand: gemeinsamer km-Verlauf (Ladungen, Kosten, Fahrtenbuch, Tagesstände und aktueller Stand vom Auto) – odoNow in src/05 */
+function lastKnownKm() { return odoNow(); }
 let costCat = '';
 function renderCostsView() {
   const cats = getCategories();
@@ -2159,7 +2154,7 @@ function parseCsv(text) {                                // RFC-4180: Anführung
               repeatMonths?, repeatDays? (täglich/wöchentlich, Wochen = 7 Tage), repeatUnit? ('d'|'w', nur Anzeige), repeatKm?, doneAt? (ISO, nur bei einmaligen), lastDoneAt?, lastDoneKm?, log? ([{ at, km?, cost? }] alle Erledigungen), guid? (aus früherem Import) }
    Fortschritt: Anteil der Strecke von startDate/startKm bis dueDate/dueKm; gilt der größere der beiden Anteile (es zählt, was zuerst erreicht wird).
    Wiederkehrende Erinnerungen werden mit „Erledigt“ ab dem Erledigt-Datum (und -km) neu angesetzt, einmalige wandern in die Liste „Erledigt“.
-   Den aktuellen km-Stand liefert lastKnownKm() (jüngster Wert aus Ladungen und Kosten).
+   Den aktuellen km-Stand liefert lastKnownKm() (gemeinsamer km-Verlauf, auch Fahrtenbuch und Auto).
    ===================================================================== */
 const getReminders = () => { const l = load(KEY_REMINDERS, []); return Array.isArray(l) ? l : []; };
 const remWarn = () => {
@@ -2674,37 +2669,46 @@ let statMode = load(KEY_STATMODE, 'year') === 'since' ? 'since' : 'year', flippi
 const purchaseLabel = () => new Date(purchaseMonth() + '-01T12:00:00').toLocaleDateString('de-DE', { month: 'short', year: 'numeric' });   // „Juni 2026“, „Sept. 2026“
 const purchaseDay = () => { const p = getSettings().purchase; if (/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(p)) return p; return /^\d{4}-(0[1-9]|1[0-2])$/.test(p) ? p + '-01' : '2026-06-08'; };   // Kauftag (JJJJ-MM-TT); ältere Einstellungen mit nur Monat gelten ab dem 1.
 const purchaseMonth = () => purchaseDay().slice(0, 7);   // die Rechnungen starten weiterhin im Monat des Kauftags
-/** Gefahrene km im Zeitraum [s0, e0): Stand vor dem Zeitraum, sonst der erste Stand darin, bis zum letzten Stand darin. */
-function rangeKm(s0, e0) {
-  const pts = getReadings().filter(r => r.odometerKm > 0).map(r => [Date.parse(r.date), r.odometerKm])
-    .concat(getCosts().filter(c => c.odometerKm > 0).map(c => [Date.parse(c.date), c.odometerKm])).sort((a, b) => a[0] - b[0]);
-  const inR = pts.filter(q => q[0] >= s0 && q[0] < e0); if (!inR.length) return null;
-  const before = pts.filter(q => q[0] < s0), b = before[before.length - 1];
-  const km = inR[inR.length - 1][1] - (b ? b[1] : inR[0][1]); return km > 0 ? km : null;
+/* ---- Ein km-Verlauf für die ganze App: alle bekannten km-Stände als Zeitreihe [ms, km] ----
+   Quellen: Ladungen, Kosten, „km-Stand bei Kauf“ (am Kauftag), Fahrtenbuch (Start-/Ziel-km je Fahrt), Tagesstände vom Auto (lab.odo)
+   und der letzte Stand vom Auto (Fahrzeugstatus bzw. ↻-Abfrage, mit seinem Zeitstempel). Sortiert und nie fallend (ein Ausreißer nach unten zählt nicht).
+   Zwischen zwei Ständen linear, davor/danach der nächste bekannte. Zwischengespeichert, solange sich keine Quelle ändert.
+   Schlüssel als Text (nicht KEY_TRIPS/KEY_LAB): die Konstanten stehen in späteren Dateien und sind beim ersten Aufruf während des Starts noch nicht da. */
+let odoMemo = null;
+function odoPts() {
+  const raw = (k) => { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } };
+  let vk = 0, vt = Date.now();
+  try { const c = load(KEY_WXO + 'S', null); if (c && c.d && c.d.odometerKm > 0) { vk = Math.round(c.d.odometerKm); const ct = Date.parse(c.d.capturedAt); vt = Number.isFinite(ct) ? ct : (c.t || vt); } } catch (e) { }
+  if (carKmCache && carKmCache.km > vk) { vk = carKmCache.km; const ct = Date.parse(carKmCache.at); vt = Number.isFinite(ct) ? ct : carKmCache.t; }
+  const S = getSettings(), sig = [raw(KEY_READINGS).length, raw(KEY_COSTS).length, raw('enyaq.trips').length, raw('enyaq.lab').length, vk, vt, S.purchaseKm, S.purchase].join('|');
+  if (odoMemo && odoMemo.sig === sig) return odoMemo.pts;
+  const pts = [], add = (t, km) => { t = typeof t === 'number' ? t : Date.parse(t); km = Number(km); if (Number.isFinite(t) && km > 0) pts.push([t, km]); };
+  getReadings().forEach(r => add(r.date, r.odometerKm)); getCosts().forEach(c => add(c.date, c.odometerKm));
+  const pk = Number(S.purchaseKm); if (pk > 0) add(Date.parse(purchaseDay() + 'T00:00:00'), pk);
+  try { const tr = load('enyaq.trips', []); (Array.isArray(tr) ? tr : []).forEach(x => { if (x && Number.isFinite(x.o1)) { if (Number.isFinite(x.o0)) add(x.s, x.o0); add(x.e, x.o1); } }); } catch (e) { }
+  try { const lab = load('enyaq.lab', null), od = lab && Array.isArray(lab.odo) ? lab.odo : []; od.forEach(x => { if (x) { add(x.t0, x.km0); add(x.t1, x.km1); } }); } catch (e) { }
+  if (vk > 0) add(vt, vk);
+  pts.sort((a, b) => a[0] - b[0]); for (let i = 1; i < pts.length; i++) if (pts[i][1] < pts[i - 1][1]) pts[i] = [pts[i][0], pts[i - 1][1]];
+  odoMemo = { sig, pts }; return pts;
 }
-/** km-Stand zu einem Zeitpunkt: aus Ladungen, Kosten, „km-Stand bei Kauf“ (am Kauftag) und dem aktuellen Stand vom Auto; dazwischen linear, davor/danach der nächste bekannte Stand. */
+/** km-Stand zu einem Zeitpunkt (ms) aus dem gemeinsamen km-Verlauf; null ohne Daten */
 function odoAt(t) {
-  const pts = getReadings().filter(r => r.odometerKm > 0).map(r => [Date.parse(r.date), r.odometerKm])
-    .concat(getCosts().filter(c => c.odometerKm > 0).map(c => [Date.parse(c.date), c.odometerKm])).filter(q => Number.isFinite(q[0]));
-  const pk = Number(getSettings().purchaseKm), bought = Date.parse(purchaseDay() + 'T00:00:00'); if (pk > 0 && Number.isFinite(bought)) pts.push([bought, pk]);
-  let vk = 0; try { const c = load(KEY_WXO + 'S', null); vk = c && c.d && c.d.odometerKm > 0 ? Math.round(c.d.odometerKm) : 0; } catch (e) { }
-  vk = Math.max(vk, (carKmCache && carKmCache.km) || 0); if (vk > 0) pts.push([Date.now(), vk]);
-  if (!pts.length) return null; pts.sort((a, b) => a[0] - b[0]);
+  const pts = odoPts(); if (!pts.length) return null;
   if (t <= pts[0][0]) return pts[0][1]; const L = pts[pts.length - 1]; if (t >= L[0]) return L[1];
-  const i = pts.findIndex(q => q[0] > t), a = pts[i - 1], b = pts[i]; return a[1] + (b[1] - a[1]) * (t - a[0]) / ((b[0] - a[0]) || 1);
+  let lo = 0, hi = pts.length - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (pts[m][0] <= t) lo = m; else hi = m; }
+  const a = pts[lo], b = pts[hi]; return a[1] + (b[1] - a[1]) * (t - a[0]) / ((b[0] - a[0]) || 1);
 }
-/** Kilometer oben auf Start ab `from` bis heute: aktueller Stand (neuester aus Ladungen/Kosten oder vom Auto, der größere) minus Startstand.
-    Startstand: „km-Stand bei Kauf“ aus den Einstellungen, wenn der Kauf im Zeitraum liegt (seit Kauf / Kaufjahr), sonst der letzte Stand vor dem Zeitraum, sonst der erste darin. */
+/** Neuester bekannter km-Stand (aus allen Quellen) */
+function odoNow() { const pts = odoPts(); return pts.length ? Math.round(pts[pts.length - 1][1]) : null; }
+/** Gefahrene km im Zeitraum [s0, e0) (ms): Stand am Ende (höchstens heute) minus Stand am Anfang; null, wenn nichts gefahren bzw. keine Daten */
+function rangeKm(s0, e0) {
+  const a = odoAt(s0), b = odoAt(Math.min(e0, Date.now())); if (a == null || b == null) return null;
+  const km = Math.round(b - a); return km > 0 ? km : null;
+}
+/** Kilometer oben auf Start ab `from` bis heute. Liegt der Kauf im Zeitraum, zählt ab dem Kauftag (km-Stand bei Kauf). */
 function heroKm(from) {
-  const pts = getReadings().filter(r => r.odometerKm > 0).map(r => [Date.parse(r.date), r.odometerKm])
-    .concat(getCosts().filter(c => c.odometerKm > 0).map(c => [Date.parse(c.date), c.odometerKm])).sort((a, b) => a[0] - b[0]);
-  let vk = 0; try { const c = load(KEY_WXO + 'S', null); vk = c && c.d && c.d.odometerKm > 0 ? Math.round(c.d.odometerKm) : 0; } catch (e) { }   // km-Stand aus dem letzten Fahrzeugstatus (auch wenn er nur aus dem Zwischenspeicher kommt)
-  const cur = Math.max(pts.length ? pts[pts.length - 1][1] : 0, (carKmCache && carKmCache.km) || 0, vk); if (!cur) return null;
-  const t0 = from.getTime(), pk = Number(getSettings().purchaseKm), bought = Date.parse(purchaseDay() + 'T00:00:00');
-  let start;
-  if (pk > 0 && bought >= t0) start = pk;
-  else { const before = pts.filter(q => q[0] < t0), first = pts.find(q => q[0] >= t0); start = before.length ? before[before.length - 1][1] : first ? first[1] : null; }
-  const km = start != null ? cur - start : null; return km > 0 ? km : null;
+  const bought = Date.parse(purchaseDay() + 'T00:00:00'), t0 = Number.isFinite(bought) && Number(getSettings().purchaseKm) > 0 && bought >= from.getTime() ? bought : from.getTime();
+  return rangeKm(t0, Date.now() + 1);
 }
 /** Die drei Werte für 'year' (laufendes Jahr) oder 'since' (ab Kaufmonat bis heute): Kilometer, Kosten (Laden + Kosten – Einnahmen), Geladen (alle Orte). */
 function heroVals(mode) {
@@ -3487,11 +3491,11 @@ setTimeout(() => checkBadges(false), 2500);
 function renderStat() {
   try { renderBadges(); } catch (e) { console.error(e); }
   const rs = getReadings(), now = new Date(), cy = now.getFullYear(), cm = now.getMonth(), D = 864e5, MON = 30.4375;
-  const kmT = (v) => v != null ? fmt(v, 0) + ' km' : '–', pts = rs.filter(r => r.odometerKm > 0).map(r => [Date.parse(r.date), r.odometerKm])
-    .concat(getCosts().filter(c => c.odometerKm > 0).map(c => [Date.parse(c.date), c.odometerKm])).filter(q => Number.isFinite(q[0])).sort((a, b) => a[0] - b[0]);
-  const km = Math.max(lastKnownKm() || 0, (carKmCache && carKmCache.km) || 0) || null, t = (y, m) => new Date(y, m, 1).getTime();   // neuester Stand, auch vom Auto
+  const kmT = (v) => v != null ? fmt(v, 0) + ' km' : '–', pts = odoPts();
+  const km = odoNow(), t = (y, m) => new Date(y, m, 1).getTime();   // neuester Stand aus allen Quellen
   $('st-odo').textContent = km != null ? fmt(km, 0) + ' km' : '–';
-  $('st-km-year').textContent = kmT(heroKm(new Date(cy, 0, 1)));   // wie oben auf Start (mit km-Stand bei Kauf) $('st-km-month').textContent = kmT(rangeKm(t(cy, cm), t(cy, cm + 1)));
+  $('st-km-year').textContent = kmT(heroKm(new Date(cy, 0, 1)));   // wie oben auf Start (mit km-Stand bei Kauf)
+  $('st-km-month').textContent = kmT(rangeKm(t(cy, cm), t(cy, cm + 1)));
   $('st-km-lastyear').textContent = kmT(rangeKm(t(cy - 1, 0), t(cy, 0))); $('st-km-lastmonth').textContent = kmT(rangeKm(t(cy, cm - 1), t(cy, cm)));
   let perDay = null;
   if (pts.length > 1) { const days = (pts[pts.length - 1][0] - pts[0][0]) / D, dk = pts[pts.length - 1][1] - pts[0][1]; if (days >= 1 && dk > 0) perDay = dk / days; }
@@ -4231,16 +4235,8 @@ $('trips-banner-go').addEventListener('click', () => { openSettings('fahrten'); 
 $('trips-banner-x').addEventListener('click', () => { const n = new Date(), k = ymKey(n.getFullYear(), n.getMonth()); save(KEY_TRIPS_NAG, k); nagSet({ nTrips: k }); renderTripsBanner(); });
 $('report-banner').addEventListener('click', () => { const p = prevMonthOf(); reportYM = { y: p.getFullYear(), m: p.getMonth() }; showView('report'); });
 
-/** km, die im Monat gefahren wurden: aus den km-Ständen von Ladungen und Kosten (letzter Stand im Monat minus letzter Stand davor). */
-function kmDrivenIn(y, m) {
-  const pts = getReadings().filter(r => r.odometerKm > 0).map(r => [Date.parse(r.date), r.odometerKm])
-    .concat(getCosts().filter(c => c.odometerKm > 0).map(c => [Date.parse(c.date), c.odometerKm])).sort((a, b) => a[0] - b[0]);
-  const s0 = new Date(y, m, 1).getTime(), e0 = new Date(y, m + 1, 1).getTime();
-  const inM = pts.filter(q => q[0] >= s0 && q[0] < e0); if (!inM.length) return null;
-  const before = pts.filter(q => q[0] < s0), b = before[before.length - 1];
-  const base = b && s0 - b[0] < 45 * 86400000 ? b[1] : inM[0][1];                       // Stand vor dem Monat nur, wenn er nicht zu alt ist
-  const km = inM[inM.length - 1][1] - base; return km > 0 ? km : null;
-}
+/** km, die im Monat gefahren wurden: km-Stand am Monatsende (höchstens heute) minus am Monatsanfang aus dem gemeinsamen km-Verlauf (src/05 odoAt). */
+function kmDrivenIn(y, m) { return rangeKm(new Date(y, m, 1).getTime(), new Date(y, m + 1, 1).getTime()); }
 /** Gesamtkosten eines Monats: Laden (alle Orte) + Kosten − Einnahmen. */
 function costTotals(y, m) {
   const laden = monthReport(y, m, 'all').cost, cs = costsIn(y, m);
@@ -4714,9 +4710,8 @@ async function wxoForecast(l) {
 }
 /** Ø km pro Tag aus den letzten ~90 Tagen der km-Stände; typisches Ladeziel (Median der letzten 10 Akku-Ende-Werte) */
 function wxoHabits() {
-  const rs = getReadings().filter(r => r.odometerKm > 0 && Number.isFinite(Date.parse(r.date))).sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
-  let kmDay = null;
-  if (rs.length >= 2) { const last = rs[rs.length - 1], lim = Date.parse(last.date) - 90 * 864e5, first = rs.find(r => Date.parse(r.date) >= lim) || rs[0], d = (Date.parse(last.date) - Date.parse(first.date)) / 864e5; if (d >= 7 && last.odometerKm > first.odometerKm) kmDay = (last.odometerKm - first.odometerKm) / d; }
+  const pts = odoPts(); let kmDay = null;                                          // gemeinsamer km-Verlauf (auch Fahrtenbuch und Auto)
+  if (pts.length >= 2) { const L = pts[pts.length - 1], lim = L[0] - 90 * 864e5, F = pts.find(q => q[0] >= lim) || pts[0], d = (L[0] - F[0]) / 864e5; if (d >= 7 && L[1] > F[1]) kmDay = (L[1] - F[1]) / d; }
   const ends = getReadings().filter(r => r.socEnd > 30).slice(-10).map(r => r.socEnd);
   return { kmDay, target: ends.length ? Math.round(median(ends)) : 80 };
 }
@@ -7365,9 +7360,8 @@ function tripKmAt(iso) {
 async function gtKmAt(iso) {
   const tk = tripKmAt(iso); if (tk > 0) return { km: tk, est: false };
   if (wxIso(new Date(iso)) === wxIso(new Date()) && apiEnabled()) { try { return { km: (await fetchCarKm()).km, est: false }; } catch (e) { } }
-  const rs = getReadings().filter(r => r.odometerKm > 0).map(r => ({ t: Date.parse(r.date), km: r.odometerKm })).filter(x => Number.isFinite(x.t)).sort((a, b) => a.t - b.t), t = Date.parse(iso);
-  const i = rs.findIndex(x => x.t >= t); if (i <= 0) return { km: null, est: true }; const a = rs[i - 1], b = rs[i];
-  return { km: Math.round(a.km + (b.km - a.km) * (t - a.t) / Math.max(1, b.t - a.t)), est: true };
+  const t = Date.parse(iso), pts = odoPts(); if (!pts.length || !(t > pts[0][0]) || !(t < pts[pts.length - 1][0])) return { km: null, est: true };   // nur zwischen zwei bekannten Ständen
+  return { km: Math.round(odoAt(t)), est: true };
 }
 /** Fahrt zu einem Zeitpunkt aus dem Fahrtenbuch: während einer Fahrt oder bis 45 min danach → { ctx: 'fahrt', min, km };
     letzte Fahrt länger als 2 h her → { ctx: 'geparkt' }. Nur wenn das Fahrtenbuch über den Zeitpunkt hinaus reicht (sonst null = noch unbekannt). */
@@ -8421,21 +8415,23 @@ const pushMsg = (t, bad) => { const el = $('ice-push-msg'); if (el) { el.textCon
 const b64u = (s) => { const p = '='.repeat((4 - s.length % 4) % 4), b = atob((s + p).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(b, c => c.charCodeAt(0)); };
 async function pushState() { if (!pushOk()) return null; try { const reg = await navigator.serviceWorker.ready; return await reg.pushManager.getSubscription(); } catch (e) { return null; } }
 async function fillIcePush() {
-  try { lowFill(false); $('set-low-push').disabled = !pushOk(); } catch (e) { }
+  try { lowFill(false); pxFill(false); ['set-low-push', 'set-veh-push', 'set-key-push', 'set-mon-push'].forEach(id => { $(id).disabled = !pushOk(); }); } catch (e) { }
   const cb = $('set-ice-push'), cr = $('set-rem-push'); if (!cb) return; if (!pushOk()) { cb.checked = false; cb.disabled = true; if (cr) { cr.checked = false; cr.disabled = true; } pushMsg('Dieser Browser unterstützt keine Push-Nachrichten.'); return; }
   const sub = await pushState(), ok = !!sub && Notification.permission === 'granted'; cb.checked = ok && load('enyaq.icePush', false); if (cr) cr.checked = ok && load('enyaq.remPush', false);
-  try { lowFill(ok); } catch (e) { }
+  try { lowFill(ok); pxFill(ok); } catch (e) { }
   if (!$('ice-push-msg').textContent) pushMsg(Notification.permission === 'denied' ? 'Benachrichtigungen sind für diese App blockiert – in den Android-Einstellungen erlauben.' : '');
 }
 /* Ein Gerät, zwei Arten: Eis-Warnung (ice) und fällige Erinnerungen (rem). Angemeldet, solange eins davon an ist; der Server schickt je Art nur an Geräte mit Häkchen. */
 async function pushSave() {
-  const f = { ice: !!load('enyaq.icePush', false), rem: !!load('enyaq.remPush', false), low: Number(load('enyaq.lowPush', 0)) || 0 };
-  if (!f.ice && !f.rem && !f.low) { try { await window.cloud.setPush(devId(), null); } catch (e) { } try { const s = await pushState(); if (s) await s.unsubscribe(); } catch (e) { } return; }
+  const f = { ice: !!load('enyaq.icePush', false), rem: !!load('enyaq.remPush', false), low: Number(load('enyaq.lowPush', 0)) || 0,
+    veh: !!load('enyaq.vehPush', false), mon: !!load('enyaq.monPush', false), key: load('enyaq.keyPush', null) !== false };   // Schlüssel: fehlt = an
+  if (!f.ice && !f.rem && !f.low && !f.veh && !f.mon && load('enyaq.keyPush', null) !== true) { try { await window.cloud.setPush(devId(), null); } catch (e) { } try { const s = await pushState(); if (s) await s.unsubscribe(); } catch (e) { } return; }
   if (!window.cloud?.isSignedIn()) throw new Error('Bitte zuerst bei Google anmelden.');
   const perm = await Notification.requestPermission(); if (perm !== 'granted') throw new Error('Benachrichtigungen nicht erlaubt.');
   const reg = await navigator.serviceWorker.ready; let sub = await reg.pushManager.getSubscription();
   if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64u(VAPID_PUBLIC) });
-  await window.cloud.setPush(devId(), { sub: JSON.stringify(sub.toJSON()), at: new Date().toISOString(), ua: (navigator.userAgentData && navigator.userAgentData.platform) || (/(Android|iPhone|Windows|Mac)/.exec(navigator.userAgent) || [''])[0], ice: f.ice, rem: f.rem, low: f.low });
+  await window.cloud.setPush(devId(), { sub: JSON.stringify(sub.toJSON()), at: new Date().toISOString(), ua: (navigator.userAgentData && navigator.userAgentData.platform) || (/(Android|iPhone|Windows|Mac)/.exec(navigator.userAgent) || [''])[0], ice: f.ice, rem: f.rem, low: f.low, veh: f.veh, mon: f.mon, key: f.key });
+  if (vehicle && vehicle.ok) authHeaders().then(h => fetch('/api/ice-push', { method: 'POST', headers: { ...h, 'Content-Type': 'application/json' }, body: JSON.stringify({ low: 'reg' }) })).catch(() => { });   // Konto für den Abendlauf (Auto-Abfrage) freischalten
 }
 async function pushKind(key, on) { const was = load(key, false); save(key, on); try { await pushSave(); } catch (e) { save(key, was); throw e; } }
 const icePushOn = () => pushKind('enyaq.icePush', true), icePushOff = () => pushKind('enyaq.icePush', false).catch(() => { });
@@ -8497,6 +8493,42 @@ $('low-test').addEventListener('click', async (ev) => {
     else lowMsg(j.ok ? '✓ Gesendet' + (j.real ? ' mit dem echten Stand (' + Math.round(j.soc) + ' %' + (j.plugged ? ', angesteckt – abends käme dann nichts' : '') + ')' : ' (Beispiel – Auto gerade nicht erreichbar)') + ' – kommt gleich an.' : 'Nicht zugestellt – Gerät bitte neu anmelden (Schalter aus und an).', !j.ok);
   } catch (er) { lowMsg((er && er.message) || 'Senden fehlgeschlagen.', true); }
   b.disabled = false;
+});
+/* Weitere Abend-Nachrichten: Auto nicht abgeschlossen (veh), Monatsanfang (mon), Škoda-Schlüssel (key, fehlt = an). Gleiches Muster wie oben. */
+const PX = {
+  veh: { key: 'enyaq.vehPush', on: '✓ Dieses Gerät warnt abends, wenn das Auto offen ist.', car: true },
+  mon: { key: 'enyaq.monPush', on: '✓ Dieses Gerät meldet am Monatsanfang den Monatsbericht.' },
+  key: { key: 'enyaq.keyPush', on: '✓ Dieses Gerät erinnert rechtzeitig an den Škoda-Schlüssel.', car: true, def: true }
+};
+const pxOn = (k) => { const v = load(PX[k].key, null); return PX[k].def ? v !== false : !!v; };
+const pxMsg = (k, t, bad) => { const el = $(k + '-push-msg'); if (el) { el.textContent = t || ''; el.classList.toggle('text-red-600', !!bad); el.classList.toggle('dark:text-red-400', !!bad); } };
+function pxFill(ok) {
+  ['veh', 'key'].forEach(k => $(k + '-push-box').classList.toggle('hidden', !(vehicle && vehicle.ok)));
+  Object.keys(PX).forEach(k => { $('set-' + k + '-push').checked = !!ok && pxOn(k); });
+}
+Object.keys(PX).forEach(k => {
+  $('set-' + k + '-push').addEventListener('change', async (e) => {
+    const cb = e.target; cb.disabled = true;
+    try { pxMsg(k, cb.checked ? 'Wird eingerichtet …' : ''); await pushKind(PX[k].key, cb.checked); pxMsg(k, cb.checked ? PX[k].on : 'Aus für dieses Gerät.'); }
+    catch (er) { cb.checked = false; save(PX[k].key, false); pxMsg(k, (er && er.message) || 'Einrichten fehlgeschlagen.', true); }
+    cb.disabled = false;
+  });
+  $(k + '-test').addEventListener('click', async (ev) => {
+    const b = ev.currentTarget; b.disabled = true; pxMsg(k, 'Sende …');
+    try {
+      if (!(load(PX[k].key, null) === true) || !(await pushState())) { await pushKind(PX[k].key, true); $('set-' + k + '-push').checked = true; }
+      if (PX[k].car) await lowReg().catch(() => { });
+      const r = await fetch('/api/ice-push', { method: 'POST', headers: { ...(await authHeaders()), 'Content-Type': 'application/json' }, body: JSON.stringify({ test: k }) }), j = await r.json().catch(() => ({}));
+      const dd = (x) => x ? x.slice(8, 10) + '.' + x.slice(5, 7) + '.' + x.slice(0, 4) : '';
+      if (r.status === 503 && j.error === 'not_configured') pxMsg(k, 'Server noch nicht eingerichtet – in Vercel fehlen: ' + (j.need || []).join(', ') + '.', true);
+      else if (r.status === 404) pxMsg(k, 'Kein Gerät angemeldet – Schalter oben einschalten.', true);
+      else if (!r.ok) pxMsg(k, 'Fehler: ' + (j.error || r.status), true);
+      else if (!j.ok) pxMsg(k, 'Nicht zugestellt – Gerät bitte neu anmelden (Schalter aus und an).', true);
+      else pxMsg(k, '✓ Gesendet' + (k === 'veh' ? (j.real ? ' mit dem echten Stand' : j.state ? ' (Beispiel – dein Auto ist gerade ' + j.state + ')' : ' (Beispiel – Auto gerade nicht erreichbar)')
+        : k === 'mon' ? (j.real ? ' mit deinem letzten Monat' : ' (Beispiel)') : (j.expires ? ' – dein Schlüssel gilt bis ' + dd(j.expires) : ' (Beispiel – Ablaufdatum unbekannt)')) + ' – kommt gleich an.');
+    } catch (er) { pxMsg(k, (er && er.message) || 'Senden fehlgeschlagen.', true); }
+    b.disabled = false;
+  });
 });
 $('set-ice-push').addEventListener('change', async (e) => {
   const cb = e.target; cb.disabled = true;
@@ -9130,7 +9162,7 @@ async function errUpload() {
   errUpBusy = true;
   try {
     const r = await fetch('/api/errlog', { method: 'POST', headers: { ...(await authHeaders()), 'Content-Type': 'application/json' }, body: JSON.stringify({ items: todo.map(({ k, up, ...x }) => x) }) });
-    if (r.ok) { const ks = new Set(todo.map(x => x.k + x.t)); const b = errsGet(); b.forEach(x => { if (ks.has(x.k + x.t)) x.up = true; }); errsSet(b); }
+    if (r.ok || r.status === 429) { const ks = new Set(todo.map(x => x.k + x.t)); const b = errsGet(); b.forEach(x => { if (ks.has(x.k + x.t)) x.up = true; }); errsSet(b); }
   } catch (e) { } finally { errUpBusy = false; }
 }
 window.addEventListener('enyaqerr', () => { if ($('err-list') && currentView === 'settings' && !errAllShown) renderErrs(); clearTimeout(errUpT); errUpT = setTimeout(errUpload, 8000); });

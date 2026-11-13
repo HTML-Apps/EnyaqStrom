@@ -454,21 +454,23 @@ const pushMsg = (t, bad) => { const el = $('ice-push-msg'); if (el) { el.textCon
 const b64u = (s) => { const p = '='.repeat((4 - s.length % 4) % 4), b = atob((s + p).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(b, c => c.charCodeAt(0)); };
 async function pushState() { if (!pushOk()) return null; try { const reg = await navigator.serviceWorker.ready; return await reg.pushManager.getSubscription(); } catch (e) { return null; } }
 async function fillIcePush() {
-  try { lowFill(false); $('set-low-push').disabled = !pushOk(); } catch (e) { }
+  try { lowFill(false); pxFill(false); ['set-low-push', 'set-veh-push', 'set-key-push', 'set-mon-push'].forEach(id => { $(id).disabled = !pushOk(); }); } catch (e) { }
   const cb = $('set-ice-push'), cr = $('set-rem-push'); if (!cb) return; if (!pushOk()) { cb.checked = false; cb.disabled = true; if (cr) { cr.checked = false; cr.disabled = true; } pushMsg('Dieser Browser unterstützt keine Push-Nachrichten.'); return; }
   const sub = await pushState(), ok = !!sub && Notification.permission === 'granted'; cb.checked = ok && load('enyaq.icePush', false); if (cr) cr.checked = ok && load('enyaq.remPush', false);
-  try { lowFill(ok); } catch (e) { }
+  try { lowFill(ok); pxFill(ok); } catch (e) { }
   if (!$('ice-push-msg').textContent) pushMsg(Notification.permission === 'denied' ? 'Benachrichtigungen sind für diese App blockiert – in den Android-Einstellungen erlauben.' : '');
 }
 /* Ein Gerät, zwei Arten: Eis-Warnung (ice) und fällige Erinnerungen (rem). Angemeldet, solange eins davon an ist; der Server schickt je Art nur an Geräte mit Häkchen. */
 async function pushSave() {
-  const f = { ice: !!load('enyaq.icePush', false), rem: !!load('enyaq.remPush', false), low: Number(load('enyaq.lowPush', 0)) || 0 };
-  if (!f.ice && !f.rem && !f.low) { try { await window.cloud.setPush(devId(), null); } catch (e) { } try { const s = await pushState(); if (s) await s.unsubscribe(); } catch (e) { } return; }
+  const f = { ice: !!load('enyaq.icePush', false), rem: !!load('enyaq.remPush', false), low: Number(load('enyaq.lowPush', 0)) || 0,
+    veh: !!load('enyaq.vehPush', false), mon: !!load('enyaq.monPush', false), key: load('enyaq.keyPush', null) !== false };   // Schlüssel: fehlt = an
+  if (!f.ice && !f.rem && !f.low && !f.veh && !f.mon && load('enyaq.keyPush', null) !== true) { try { await window.cloud.setPush(devId(), null); } catch (e) { } try { const s = await pushState(); if (s) await s.unsubscribe(); } catch (e) { } return; }
   if (!window.cloud?.isSignedIn()) throw new Error('Bitte zuerst bei Google anmelden.');
   const perm = await Notification.requestPermission(); if (perm !== 'granted') throw new Error('Benachrichtigungen nicht erlaubt.');
   const reg = await navigator.serviceWorker.ready; let sub = await reg.pushManager.getSubscription();
   if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64u(VAPID_PUBLIC) });
-  await window.cloud.setPush(devId(), { sub: JSON.stringify(sub.toJSON()), at: new Date().toISOString(), ua: (navigator.userAgentData && navigator.userAgentData.platform) || (/(Android|iPhone|Windows|Mac)/.exec(navigator.userAgent) || [''])[0], ice: f.ice, rem: f.rem, low: f.low });
+  await window.cloud.setPush(devId(), { sub: JSON.stringify(sub.toJSON()), at: new Date().toISOString(), ua: (navigator.userAgentData && navigator.userAgentData.platform) || (/(Android|iPhone|Windows|Mac)/.exec(navigator.userAgent) || [''])[0], ice: f.ice, rem: f.rem, low: f.low, veh: f.veh, mon: f.mon, key: f.key });
+  if (vehicle && vehicle.ok) authHeaders().then(h => fetch('/api/ice-push', { method: 'POST', headers: { ...h, 'Content-Type': 'application/json' }, body: JSON.stringify({ low: 'reg' }) })).catch(() => { });   // Konto für den Abendlauf (Auto-Abfrage) freischalten
 }
 async function pushKind(key, on) { const was = load(key, false); save(key, on); try { await pushSave(); } catch (e) { save(key, was); throw e; } }
 const icePushOn = () => pushKind('enyaq.icePush', true), icePushOff = () => pushKind('enyaq.icePush', false).catch(() => { });
@@ -530,6 +532,42 @@ $('low-test').addEventListener('click', async (ev) => {
     else lowMsg(j.ok ? '✓ Gesendet' + (j.real ? ' mit dem echten Stand (' + Math.round(j.soc) + ' %' + (j.plugged ? ', angesteckt – abends käme dann nichts' : '') + ')' : ' (Beispiel – Auto gerade nicht erreichbar)') + ' – kommt gleich an.' : 'Nicht zugestellt – Gerät bitte neu anmelden (Schalter aus und an).', !j.ok);
   } catch (er) { lowMsg((er && er.message) || 'Senden fehlgeschlagen.', true); }
   b.disabled = false;
+});
+/* Weitere Abend-Nachrichten: Auto nicht abgeschlossen (veh), Monatsanfang (mon), Škoda-Schlüssel (key, fehlt = an). Gleiches Muster wie oben. */
+const PX = {
+  veh: { key: 'enyaq.vehPush', on: '✓ Dieses Gerät warnt abends, wenn das Auto offen ist.', car: true },
+  mon: { key: 'enyaq.monPush', on: '✓ Dieses Gerät meldet am Monatsanfang den Monatsbericht.' },
+  key: { key: 'enyaq.keyPush', on: '✓ Dieses Gerät erinnert rechtzeitig an den Škoda-Schlüssel.', car: true, def: true }
+};
+const pxOn = (k) => { const v = load(PX[k].key, null); return PX[k].def ? v !== false : !!v; };
+const pxMsg = (k, t, bad) => { const el = $(k + '-push-msg'); if (el) { el.textContent = t || ''; el.classList.toggle('text-red-600', !!bad); el.classList.toggle('dark:text-red-400', !!bad); } };
+function pxFill(ok) {
+  ['veh', 'key'].forEach(k => $(k + '-push-box').classList.toggle('hidden', !(vehicle && vehicle.ok)));
+  Object.keys(PX).forEach(k => { $('set-' + k + '-push').checked = !!ok && pxOn(k); });
+}
+Object.keys(PX).forEach(k => {
+  $('set-' + k + '-push').addEventListener('change', async (e) => {
+    const cb = e.target; cb.disabled = true;
+    try { pxMsg(k, cb.checked ? 'Wird eingerichtet …' : ''); await pushKind(PX[k].key, cb.checked); pxMsg(k, cb.checked ? PX[k].on : 'Aus für dieses Gerät.'); }
+    catch (er) { cb.checked = false; save(PX[k].key, false); pxMsg(k, (er && er.message) || 'Einrichten fehlgeschlagen.', true); }
+    cb.disabled = false;
+  });
+  $(k + '-test').addEventListener('click', async (ev) => {
+    const b = ev.currentTarget; b.disabled = true; pxMsg(k, 'Sende …');
+    try {
+      if (!(load(PX[k].key, null) === true) || !(await pushState())) { await pushKind(PX[k].key, true); $('set-' + k + '-push').checked = true; }
+      if (PX[k].car) await lowReg().catch(() => { });
+      const r = await fetch('/api/ice-push', { method: 'POST', headers: { ...(await authHeaders()), 'Content-Type': 'application/json' }, body: JSON.stringify({ test: k }) }), j = await r.json().catch(() => ({}));
+      const dd = (x) => x ? x.slice(8, 10) + '.' + x.slice(5, 7) + '.' + x.slice(0, 4) : '';
+      if (r.status === 503 && j.error === 'not_configured') pxMsg(k, 'Server noch nicht eingerichtet – in Vercel fehlen: ' + (j.need || []).join(', ') + '.', true);
+      else if (r.status === 404) pxMsg(k, 'Kein Gerät angemeldet – Schalter oben einschalten.', true);
+      else if (!r.ok) pxMsg(k, 'Fehler: ' + (j.error || r.status), true);
+      else if (!j.ok) pxMsg(k, 'Nicht zugestellt – Gerät bitte neu anmelden (Schalter aus und an).', true);
+      else pxMsg(k, '✓ Gesendet' + (k === 'veh' ? (j.real ? ' mit dem echten Stand' : j.state ? ' (Beispiel – dein Auto ist gerade ' + j.state + ')' : ' (Beispiel – Auto gerade nicht erreichbar)')
+        : k === 'mon' ? (j.real ? ' mit deinem letzten Monat' : ' (Beispiel)') : (j.expires ? ' – dein Schlüssel gilt bis ' + dd(j.expires) : ' (Beispiel – Ablaufdatum unbekannt)')) + ' – kommt gleich an.');
+    } catch (er) { pxMsg(k, (er && er.message) || 'Senden fehlgeschlagen.', true); }
+    b.disabled = false;
+  });
 });
 $('set-ice-push').addEventListener('change', async (e) => {
   const cb = e.target; cb.disabled = true;

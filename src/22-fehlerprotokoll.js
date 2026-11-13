@@ -53,7 +53,7 @@ async function errUpload() {
   errUpBusy = true;
   try {
     const r = await fetch('/api/errlog', { method: 'POST', headers: { ...(await authHeaders()), 'Content-Type': 'application/json' }, body: JSON.stringify({ items: todo.map(({ k, up, ...x }) => x) }) });
-    if (r.ok) { const ks = new Set(todo.map(x => x.k + x.t)); const b = errsGet(); b.forEach(x => { if (ks.has(x.k + x.t)) x.up = true; }); errsSet(b); }
+    if (r.ok || r.status === 429) { const ks = new Set(todo.map(x => x.k + x.t)); const b = errsGet(); b.forEach(x => { if (ks.has(x.k + x.t)) x.up = true; }); errsSet(b); }
   } catch (e) { } finally { errUpBusy = false; }
 }
 window.addEventListener('enyaqerr', () => { if ($('err-list') && currentView === 'settings' && !errAllShown) renderErrs(); clearTimeout(errUpT); errUpT = setTimeout(errUpload, 8000); });

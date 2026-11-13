@@ -9,37 +9,46 @@ let statMode = load(KEY_STATMODE, 'year') === 'since' ? 'since' : 'year', flippi
 const purchaseLabel = () => new Date(purchaseMonth() + '-01T12:00:00').toLocaleDateString('de-DE', { month: 'short', year: 'numeric' });   // „Juni 2026“, „Sept. 2026“
 const purchaseDay = () => { const p = getSettings().purchase; if (/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(p)) return p; return /^\d{4}-(0[1-9]|1[0-2])$/.test(p) ? p + '-01' : '2026-06-08'; };   // Kauftag (JJJJ-MM-TT); ältere Einstellungen mit nur Monat gelten ab dem 1.
 const purchaseMonth = () => purchaseDay().slice(0, 7);   // die Rechnungen starten weiterhin im Monat des Kauftags
-/** Gefahrene km im Zeitraum [s0, e0): Stand vor dem Zeitraum, sonst der erste Stand darin, bis zum letzten Stand darin. */
-function rangeKm(s0, e0) {
-  const pts = getReadings().filter(r => r.odometerKm > 0).map(r => [Date.parse(r.date), r.odometerKm])
-    .concat(getCosts().filter(c => c.odometerKm > 0).map(c => [Date.parse(c.date), c.odometerKm])).sort((a, b) => a[0] - b[0]);
-  const inR = pts.filter(q => q[0] >= s0 && q[0] < e0); if (!inR.length) return null;
-  const before = pts.filter(q => q[0] < s0), b = before[before.length - 1];
-  const km = inR[inR.length - 1][1] - (b ? b[1] : inR[0][1]); return km > 0 ? km : null;
+/* ---- Ein km-Verlauf für die ganze App: alle bekannten km-Stände als Zeitreihe [ms, km] ----
+   Quellen: Ladungen, Kosten, „km-Stand bei Kauf“ (am Kauftag), Fahrtenbuch (Start-/Ziel-km je Fahrt), Tagesstände vom Auto (lab.odo)
+   und der letzte Stand vom Auto (Fahrzeugstatus bzw. ↻-Abfrage, mit seinem Zeitstempel). Sortiert und nie fallend (ein Ausreißer nach unten zählt nicht).
+   Zwischen zwei Ständen linear, davor/danach der nächste bekannte. Zwischengespeichert, solange sich keine Quelle ändert.
+   Schlüssel als Text (nicht KEY_TRIPS/KEY_LAB): die Konstanten stehen in späteren Dateien und sind beim ersten Aufruf während des Starts noch nicht da. */
+let odoMemo = null;
+function odoPts() {
+  const raw = (k) => { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } };
+  let vk = 0, vt = Date.now();
+  try { const c = load(KEY_WXO + 'S', null); if (c && c.d && c.d.odometerKm > 0) { vk = Math.round(c.d.odometerKm); const ct = Date.parse(c.d.capturedAt); vt = Number.isFinite(ct) ? ct : (c.t || vt); } } catch (e) { }
+  if (carKmCache && carKmCache.km > vk) { vk = carKmCache.km; const ct = Date.parse(carKmCache.at); vt = Number.isFinite(ct) ? ct : carKmCache.t; }
+  const S = getSettings(), sig = [raw(KEY_READINGS).length, raw(KEY_COSTS).length, raw('enyaq.trips').length, raw('enyaq.lab').length, vk, vt, S.purchaseKm, S.purchase].join('|');
+  if (odoMemo && odoMemo.sig === sig) return odoMemo.pts;
+  const pts = [], add = (t, km) => { t = typeof t === 'number' ? t : Date.parse(t); km = Number(km); if (Number.isFinite(t) && km > 0) pts.push([t, km]); };
+  getReadings().forEach(r => add(r.date, r.odometerKm)); getCosts().forEach(c => add(c.date, c.odometerKm));
+  const pk = Number(S.purchaseKm); if (pk > 0) add(Date.parse(purchaseDay() + 'T00:00:00'), pk);
+  try { const tr = load('enyaq.trips', []); (Array.isArray(tr) ? tr : []).forEach(x => { if (x && Number.isFinite(x.o1)) { if (Number.isFinite(x.o0)) add(x.s, x.o0); add(x.e, x.o1); } }); } catch (e) { }
+  try { const lab = load('enyaq.lab', null), od = lab && Array.isArray(lab.odo) ? lab.odo : []; od.forEach(x => { if (x) { add(x.t0, x.km0); add(x.t1, x.km1); } }); } catch (e) { }
+  if (vk > 0) add(vt, vk);
+  pts.sort((a, b) => a[0] - b[0]); for (let i = 1; i < pts.length; i++) if (pts[i][1] < pts[i - 1][1]) pts[i] = [pts[i][0], pts[i - 1][1]];
+  odoMemo = { sig, pts }; return pts;
 }
-/** km-Stand zu einem Zeitpunkt: aus Ladungen, Kosten, „km-Stand bei Kauf“ (am Kauftag) und dem aktuellen Stand vom Auto; dazwischen linear, davor/danach der nächste bekannte Stand. */
+/** km-Stand zu einem Zeitpunkt (ms) aus dem gemeinsamen km-Verlauf; null ohne Daten */
 function odoAt(t) {
-  const pts = getReadings().filter(r => r.odometerKm > 0).map(r => [Date.parse(r.date), r.odometerKm])
-    .concat(getCosts().filter(c => c.odometerKm > 0).map(c => [Date.parse(c.date), c.odometerKm])).filter(q => Number.isFinite(q[0]));
-  const pk = Number(getSettings().purchaseKm), bought = Date.parse(purchaseDay() + 'T00:00:00'); if (pk > 0 && Number.isFinite(bought)) pts.push([bought, pk]);
-  let vk = 0; try { const c = load(KEY_WXO + 'S', null); vk = c && c.d && c.d.odometerKm > 0 ? Math.round(c.d.odometerKm) : 0; } catch (e) { }
-  vk = Math.max(vk, (carKmCache && carKmCache.km) || 0); if (vk > 0) pts.push([Date.now(), vk]);
-  if (!pts.length) return null; pts.sort((a, b) => a[0] - b[0]);
+  const pts = odoPts(); if (!pts.length) return null;
   if (t <= pts[0][0]) return pts[0][1]; const L = pts[pts.length - 1]; if (t >= L[0]) return L[1];
-  const i = pts.findIndex(q => q[0] > t), a = pts[i - 1], b = pts[i]; return a[1] + (b[1] - a[1]) * (t - a[0]) / ((b[0] - a[0]) || 1);
+  let lo = 0, hi = pts.length - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (pts[m][0] <= t) lo = m; else hi = m; }
+  const a = pts[lo], b = pts[hi]; return a[1] + (b[1] - a[1]) * (t - a[0]) / ((b[0] - a[0]) || 1);
 }
-/** Kilometer oben auf Start ab `from` bis heute: aktueller Stand (neuester aus Ladungen/Kosten oder vom Auto, der größere) minus Startstand.
-    Startstand: „km-Stand bei Kauf“ aus den Einstellungen, wenn der Kauf im Zeitraum liegt (seit Kauf / Kaufjahr), sonst der letzte Stand vor dem Zeitraum, sonst der erste darin. */
+/** Neuester bekannter km-Stand (aus allen Quellen) */
+function odoNow() { const pts = odoPts(); return pts.length ? Math.round(pts[pts.length - 1][1]) : null; }
+/** Gefahrene km im Zeitraum [s0, e0) (ms): Stand am Ende (höchstens heute) minus Stand am Anfang; null, wenn nichts gefahren bzw. keine Daten */
+function rangeKm(s0, e0) {
+  const a = odoAt(s0), b = odoAt(Math.min(e0, Date.now())); if (a == null || b == null) return null;
+  const km = Math.round(b - a); return km > 0 ? km : null;
+}
+/** Kilometer oben auf Start ab `from` bis heute. Liegt der Kauf im Zeitraum, zählt ab dem Kauftag (km-Stand bei Kauf). */
 function heroKm(from) {
-  const pts = getReadings().filter(r => r.odometerKm > 0).map(r => [Date.parse(r.date), r.odometerKm])
-    .concat(getCosts().filter(c => c.odometerKm > 0).map(c => [Date.parse(c.date), c.odometerKm])).sort((a, b) => a[0] - b[0]);
-  let vk = 0; try { const c = load(KEY_WXO + 'S', null); vk = c && c.d && c.d.odometerKm > 0 ? Math.round(c.d.odometerKm) : 0; } catch (e) { }   // km-Stand aus dem letzten Fahrzeugstatus (auch wenn er nur aus dem Zwischenspeicher kommt)
-  const cur = Math.max(pts.length ? pts[pts.length - 1][1] : 0, (carKmCache && carKmCache.km) || 0, vk); if (!cur) return null;
-  const t0 = from.getTime(), pk = Number(getSettings().purchaseKm), bought = Date.parse(purchaseDay() + 'T00:00:00');
-  let start;
-  if (pk > 0 && bought >= t0) start = pk;
-  else { const before = pts.filter(q => q[0] < t0), first = pts.find(q => q[0] >= t0); start = before.length ? before[before.length - 1][1] : first ? first[1] : null; }
-  const km = start != null ? cur - start : null; return km > 0 ? km : null;
+  const bought = Date.parse(purchaseDay() + 'T00:00:00'), t0 = Number.isFinite(bought) && Number(getSettings().purchaseKm) > 0 && bought >= from.getTime() ? bought : from.getTime();
+  return rangeKm(t0, Date.now() + 1);
 }
 /** Die drei Werte für 'year' (laufendes Jahr) oder 'since' (ab Kaufmonat bis heute): Kilometer, Kosten (Laden + Kosten – Einnahmen), Geladen (alle Orte). */
 function heroVals(mode) {

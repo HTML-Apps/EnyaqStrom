@@ -1,16 +1,18 @@
 // Fehlerprotokoll: die App meldet unerwartete Fehler (src/22-fehlerprotokoll.js), damit sie auch von anderen Geräten/Konten sichtbar werden.
-//   POST {items:[{m,s,st,t,n,v,p}]}  (angemeldet) -> speichert je Eintrag ein Dokument in enyaqErrLog/ (nur der Server darf dort lesen/schreiben)
+//   POST {items:[{m,s,st,t,n,v,p}]}  (angemeldet) -> speichert je Eintrag ein Dokument in enyaqErrLog/ (nur der Server darf dort lesen/schreiben),
+//                                    höchstens DAY_MAX Einträge je Konto und Tag (Zähler in enyaqErrQuota/<uid>), darüber 429
 //   GET  ?check=1                    -> { admin }   (Entwickler-Konto: SHA-256 der E-Mail, keine Adresse im Klartext – Repo ist öffentlich)
 //   GET                              -> neueste 80 Einträge aller Konten (nur Entwickler)
 //   DELETE                           -> alle Einträge löschen (nur Entwickler)
 import { createHash, randomBytes } from 'node:crypto';
 import { verifyUser } from '../lib/auth.js';
-import { gToken, fsSetStrings } from '../lib/fs.js';
+import { gToken, fsSetStrings, fsGetStrings } from '../lib/fs.js';
 
 const PROJECT_ID = 'daily-companion-24975';
 const FS = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents`;
 const ADMINS = ['dd13cdb504b32c7cfbe816c1bc457f887c9ff69309a5fe47e3036c488e28315a'];
 const isAdmin = (email) => ADMINS.includes(createHash('sha256').update(String(email)).digest('hex'));
+const DAY_MAX = 50;
 const str = (v, n) => String(v == null ? '' : v).slice(0, n);
 function uaShort(ua) {
   ua = String(ua || ''); const os = /Android [\d.]+/.exec(ua)?.[0] || (/iPhone|iPad/.test(ua) ? 'iOS' : /Windows/.test(ua) ? 'Windows' : /Mac OS/.test(ua) ? 'Mac' : /Linux/.test(ua) ? 'Linux' : '?');
@@ -32,7 +34,10 @@ export default async function handler(req, res) {
   try {
     if (req.method === 'POST') {
       const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
-      const items = Array.isArray(body.items) ? body.items.slice(0, 10) : [], ua = uaShort(req.headers['user-agent']), who = user.email.split('@')[0].slice(0, 3) + '…';
+      const day = new Date().toISOString().slice(0, 10), q = await fsGetStrings('enyaqErrQuota/' + user.uid).catch(() => null), used = q && q.day === day ? Number(q.n) || 0 : 0;
+      if (used >= DAY_MAX) return res.status(429).json({ error: 'limit', max: DAY_MAX });
+      const items = (Array.isArray(body.items) ? body.items.slice(0, 10) : []).filter(x => x && x.m).slice(0, DAY_MAX - used), ua = uaShort(req.headers['user-agent']), who = user.email.split('@')[0].slice(0, 3) + '…';
+      await fsSetStrings('enyaqErrQuota/' + user.uid, { day, n: String(used + items.length) });
       for (const x of items) {
         if (!x || !x.m) continue;
         await fsSetStrings('enyaqErrLog/' + Date.now() + '-' + randomBytes(4).toString('hex'), { at: new Date().toISOString(), t: str(x.t, 30), m: str(x.m, 300), s: str(x.s, 160), st: str(x.st, 600),
