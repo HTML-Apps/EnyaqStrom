@@ -8416,7 +8416,7 @@ function rtShow() {
 /* ---- Push-Benachrichtigung der Eis-Warnung: Gerät anmelden (Push-Adresse in enyaqStrom/<uid>/settings/push), Testnachricht über /api/ice-push ---- */
 const VAPID_PUBLIC = 'BHJg47_9-WGwpnQQkZCKyGtmbned4D9fOyJ-EsYRKqD6dizXoA60UIYNjR1_vL-y0yxFN8PAuYsjQhKLEHcC128';
 const devId = () => { let id = load('enyaq.devId', null); if (!id) { id = 'd' + labId(); save('enyaq.devId', id); } return id; };
-const pushOk = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+function pushOk() { return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window; }   // Funktion (nicht const): wird schon beim Start aus renderReminders aufgerufen
 const pushMsg = (t, bad) => { const el = $('ice-push-msg'); if (el) { el.textContent = t || ''; el.classList.toggle('text-red-600', !!bad); el.classList.toggle('dark:text-red-400', !!bad); } };
 const b64u = (s) => { const p = '='.repeat((4 - s.length % 4) % 4), b = atob((s + p).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(b, c => c.charCodeAt(0)); };
 async function pushState() { if (!pushOk()) return null; try { const reg = await navigator.serviceWorker.ready; return await reg.pushManager.getSubscription(); } catch (e) { return null; } }
