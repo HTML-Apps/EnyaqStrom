@@ -7578,18 +7578,60 @@ function tSeries(ms, p) { const out = ms.map(() => null); let i = ms.length - 1;
 const tCol = (v) => v == null ? '#64748b' : v >= 5 ? '#10b981' : v >= 4 ? '#eab308' : v >= 3 ? '#f97316' : '#ef4444';
 const tFmt = (v) => v == null ? '–' : fmt(v, 1);
 function tireList(set) { return (getLab().tires || []).filter(m => m.set === set && m.date).sort((a, b) => a.date.localeCompare(b.date) || (a.km || 0) - (b.km || 0)); }
-function tirePrognosis(ms) {                                                     // linearer Verschleiß je Reifen (erste → letzte Messung), wann 3 mm erreicht
-  if (ms.length < 2) return null; const f = ms[0], l = ms[ms.length - 1], dd = (Date.parse(l.date) - Date.parse(f.date)) / 864e5, dk = f.km > 0 && l.km > 0 ? l.km - f.km : null; if (!(dd > 20)) return null;
-  let worst = null;
-  TIRE_POS.forEach(p => { const sr = tSeries(ms, p), a = sr[0], b = sr[sr.length - 1]; if (a == null || b == null || !(a - b > 0.05)) return; const rate = (a - b) / dd, rest = b - 3; if (rest <= 0) { worst = { p, days: 0, km: 0 }; return; }
-    const days = rest / rate, km = dk > 0 ? rest / ((a - b) / dk) : null; if (!worst || days < worst.days) worst = { p, days, km, perK: dk > 0 ? (a - b) / dk * 10000 : null }; });
-  if (!worst) return null; worst.date = new Date(Date.parse(l.date) + worst.days * 864e5); worst.atKm = worst.km != null && l.km ? l.km + worst.km : null; return worst;
+/* ---- Prognose: wann ist die Grenze erreicht (Sommer 3 mm, Allwetter/Winter 4 mm) – nach km aus dem gemeinsamen km-Verlauf ----
+   Verschleiß je km aus dem vergleichbaren Verlauf (tSeries, Ausgleichsgerade über alle Messungen mit km-Stand), Spanne aus der Messgenauigkeit (±0,1 mm je Messung),
+   Datum über die eigene Fahrleistung (km/Jahr). */
+const tireLim = (set) => set === 'so' ? 3 : 4;
+function tireKmYear() {
+  const pts = odoPts(); if (pts.length < 2) return null; const L = pts[pts.length - 1], F = pts.find(q => q[0] >= L[0] - 365 * 864e5) || pts[0], d = (L[0] - F[0]) / 864e5;
+  return d >= 30 && L[1] > F[1] ? (L[1] - F[1]) / d * 365 : null;
 }
-function tireChart(ms) {
+function tireForecast(ms, set) {
+  const mk = ms.filter(m => m.km > 0); if (mk.length < 2) return null;
+  const lim = tireLim(set), kmY = tireKmYear(), kmNow = odoNow() || mk[mk.length - 1].km, span = mk[mk.length - 1].km - mk[0].km; if (!(span >= 500)) return null;
+  const rows = TIRE_POS.map(p => {
+    const sr = tSeries(ms, p), xs = [], ys = []; ms.forEach((m, k) => { if (m.km > 0 && sr[k] != null) { xs.push(m.km); ys.push(sr[k]); } });
+    const cur = sr[sr.length - 1]; if (cur == null || xs.length < 2) return null;
+    const mx = xs.reduce((a, b) => a + b, 0) / xs.length, my = ys.reduce((a, b) => a + b, 0) / ys.length, sxx = xs.reduce((a, x) => a + (x - mx) ** 2, 0);
+    const rate = sxx > 0 ? -xs.reduce((a, x, k) => a + (x - mx) * (ys[k] - my), 0) / sxx : 0;   // mm je km (positiv = Abnutzung)
+    const err = 0.2 / Math.max(500, xs[xs.length - 1] - xs[0]), lastKm = xs[xs.length - 1], rest = cur - lim;
+    const at = (r) => r > 1e-6 ? lastKm + Math.max(0, rest) / r : null;           // km-Stand, bei dem die Grenze erreicht ist
+    return { p, cur, rate, per10k: rate * 1e4, atKm: rest <= 0 ? lastKm : at(rate), early: rest <= 0 ? lastKm : at(rate + err), late: rest <= 0 ? lastKm : at(rate - err), done: rest <= 0 };
+  }).filter(Boolean);
+  if (!rows.length) return null;
+  const dateAt = (km) => km == null || !kmY ? null : new Date(Date.now() + Math.max(0, km - kmNow) / kmY * 365 * 864e5);
+  rows.forEach(r => { r.date = dateAt(r.atKm); });
+  const live = rows.filter(r => r.atKm != null).sort((a, b) => a.atKm - b.atKm), w = live[0] || null;
+  const n = mk.length, acc = n >= 4 && span >= 15000 ? 3 : n >= 3 && span >= 5000 ? 2 : 1;
+  return { lim, kmY, kmNow, rows, w, acc, n, span, early: w ? dateAt(w.early) : null, late: w ? dateAt(w.late) : null };
+}
+const tSeason = (d) => { const m = d.getMonth(); return (m <= 1 ? 'Winter ' + (d.getFullYear() - 1) + '/' + String(d.getFullYear()).slice(2) : m <= 4 ? 'Frühjahr ' + d.getFullYear() : m <= 7 ? 'Sommer ' + d.getFullYear() : m <= 10 ? 'Herbst ' + d.getFullYear() : 'Winter ' + d.getFullYear() + '/' + String(d.getFullYear() + 1).slice(2)); };
+const tSeasonShort = (d) => d ? (['Winter', 'Winter', 'Frühjahr', 'Frühjahr', 'Frühjahr', 'Sommer', 'Sommer', 'Sommer', 'Herbst', 'Herbst', 'Herbst', 'Winter'][d.getMonth()] + ' ' + d.getFullYear()) : '';
+function tireForecastHtml(fc, set) {
+  const nm = { so: 'Sommerreifen', aw: 'Allwetterreifen', wi: 'Winterreifen' }[set], w = fc.w, km = (v) => fmt(Math.round(v / 100) * 100, 0);
+  const dots = [1, 2, 3].map(i => `<span class="h-2 w-2 rounded-full ${i <= fc.acc ? 'bg-emerald-400' : 'bg-white/20'}"></span>`).join('');
+  const accT = ['gering', 'mittel', 'gut'][fc.acc - 1] + ' · ' + fc.n + ' Messungen, ' + km(fc.span) + ' km';
+  let hero;
+  if (w && w.done) hero = `<p class="text-xs font-bold tracking-[0.06em] text-red-200">NEUE ${nm.toUpperCase()}</p><p class="font-barlow text-[34px] font-bold uppercase leading-tight">Jetzt fällig</p><p class="text-[13px] text-red-100">${TIRE_NAME[w.p]} liegt bei ${tFmt(w.cur)} mm – empfohlen sind mindestens ${fc.lim} mm.</p>`;
+  else if (w) hero = `<p class="text-xs font-bold tracking-[0.06em] text-emerald-300">NEUE ${nm.toUpperCase()}</p><p class="font-barlow text-[34px] font-bold uppercase leading-tight">${w.date ? tSeason(w.date) : 'bei ~' + km(w.atKm) + ' km'}</p>
+      <p class="text-[13px] text-emerald-50">bei ca. <b>${km(w.atKm)} km</b>${fc.kmNow ? ' · noch ~' + km(Math.max(0, w.atKm - fc.kmNow)) + ' km' : ''}${fc.early && fc.late && tSeasonShort(fc.early) !== tSeasonShort(fc.late) ? ' · Spanne ' + tSeasonShort(fc.early) + ' – ' + (fc.late.getFullYear() - new Date().getFullYear() > 8 ? 'offen' : tSeasonShort(fc.late)) : ''}</p>`;
+  else hero = `<p class="text-xs font-bold tracking-[0.06em] text-emerald-300">NEUE ${nm.toUpperCase()}</p><p class="font-barlow text-[30px] font-bold uppercase leading-tight">Noch nicht absehbar</p><p class="text-[13px] text-emerald-50">Seit der ersten Messung kaum messbarer Verschleiß.</p>`;
+  const max = Math.max(...fc.rows.map(r => r.atKm != null ? r.atKm - fc.kmNow : 0), 20000);
+  const lane = (r) => { const left = r.atKm != null ? Math.max(0, r.atKm - fc.kmNow) : null, wd = left == null ? 100 : Math.max(4, Math.min(100, left / max * 100)), worst = w && r.p === w.p;
+    return `<div class="mt-2.5"><div class="flex justify-between gap-2 text-[12.5px]"><span class="font-semibold ${worst ? 'text-orange-600 dark:text-orange-300' : ''}">${TIRE_NAME[r.p]} · ${tFmt(r.cur)} mm</span><span class="text-slate-500 dark:text-slate-400">${r.per10k > 0.05 ? fmt(r.per10k, 1) + ' mm / 10.000 km' : 'kaum messbar'}</span></div>
+      <div class="relative mt-1 h-3 rounded-md bg-slate-200 dark:bg-slate-800"><div class="absolute inset-y-0 left-0 rounded-md bg-gradient-to-r from-emerald-500 ${worst ? 'to-orange-500' : 'to-yellow-400'}" style="width:${wd.toFixed(0)}%"></div></div>
+      <p class="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">${r.done ? '<b class="text-red-600 dark:text-red-400">Grenze erreicht</b>' : r.atKm != null ? fc.lim + ' mm bei ca. <b class="text-slate-800 dark:text-slate-200">' + km(r.atKm) + ' km' + (r.date ? ' · ' + r.date.toLocaleDateString('de-DE', { month: 'short', year: 'numeric' }) : '') + '</b>' : fc.lim + ' mm: –'}</p></div>`; };
+  return `<div class="rounded-3xl p-4 text-left text-white ${w && w.done ? 'bg-gradient-to-br from-red-700 to-red-900' : 'bg-gradient-to-br from-emerald-800 to-slate-900'}">${hero}
+      <div class="mt-2 flex items-center gap-2 text-[11.5px] ${w && w.done ? 'text-red-100' : 'text-emerald-200'}"><span class="flex gap-1">${dots}</span>Genauigkeit ${accT}</div></div>
+    <div class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 text-left"><div class="flex items-baseline justify-between gap-2"><p class="text-sm font-bold">Rest bis ${fc.lim} mm je Reifen</p><span class="text-[11px] text-slate-500 dark:text-slate-400">${fc.kmY ? 'Ø ' + km(fc.kmY) + ' km/Jahr' : ''}</span></div>
+      ${fc.rows.slice().sort((a, b) => (a.atKm ?? 1e9) - (b.atKm ?? 1e9)).map(lane).join('')}
+      <div class="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500 dark:text-slate-400"><span><b class="text-yellow-500">4 mm</b> Allwetter/Winter empf.</span><span><b class="text-orange-500">3 mm</b> Sommer empf.</span><span><b class="text-red-500">1,6 mm</b> Pflicht</span></div></div>`;
+}
+function tireChart(ms, lim = 3) {
   const W = 296, H = 118, L = 24, R = 52, T = 8, B = 18, t0 = Date.parse(ms[0].date), t1 = Math.max(Date.parse(ms[ms.length - 1].date), t0 + 864e5);
   const X = (d) => ms.length < 2 ? (L + W - R) / 2 : L + (Date.parse(d) - t0) / (t1 - t0) * (W - L - R), Y = (v) => T + (1 - (v - 1) / 8) * (H - T - B);
   let g = [2, 4, 6, 8].map(v => `<line x1="${L}" x2="${W - R}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="currentColor" class="text-slate-200 dark:text-slate-800"/><text x="${L - 4}" y="${(Y(v) + 3.5).toFixed(1)}" text-anchor="end" font-size="9" fill="#94a3b8">${v}</text>`).join('');
-  g += `<line x1="${L}" x2="${W - R}" y1="${Y(3).toFixed(1)}" y2="${Y(3).toFixed(1)}" stroke="#f97316" stroke-dasharray="3 3"/><text x="${W - R + 4}" y="${(Y(3) + 3).toFixed(1)}" font-size="8.5" fill="#f97316">3 empf.</text>`
+  g += `<line x1="${L}" x2="${W - R}" y1="${Y(lim).toFixed(1)}" y2="${Y(lim).toFixed(1)}" stroke="#f97316" stroke-dasharray="3 3"/><text x="${W - R + 4}" y="${(Y(lim) + 3).toFixed(1)}" font-size="8.5" fill="#f97316">${lim} empf.</text>`
     + `<line x1="${L}" x2="${W - R}" y1="${Y(1.6).toFixed(1)}" y2="${Y(1.6).toFixed(1)}" stroke="#ef4444" stroke-dasharray="3 3"/><text x="${W - R + 4}" y="${(Y(1.6) + 3).toFixed(1)}" font-size="8.5" fill="#ef4444">1,6 Pflicht</text>`;
   TIRE_POS.forEach(p => { const sr = tSeries(ms, p), pts = ms.map((m, k) => [X(m.date), sr[k]]).filter(x => x[1] != null), op = tireSel && tireSel !== p ? 0.18 : 1;
     if (pts.length > 1) g += `<polyline points="${pts.map(([x, v]) => x.toFixed(1) + ',' + Y(v).toFixed(1)).join(' ')}" fill="none" stroke="${TIRE_COL[p]}" stroke-width="${tireSel === p ? 2.8 : 2}" opacity="${op}" stroke-linejoin="round"/>`;
@@ -7614,14 +7656,15 @@ function renderTires() {
       ${prev != null && a != null ? `<span class="mt-0.5 text-[9.5px] text-slate-500 dark:text-slate-400">${a - prev > 0.04 ? '+' : a - prev < -0.04 ? '−' : '±'}${fmt(Math.abs(a - prev), 1)} seit letzter</span>` : ''}</button>`; };
   const car = `<div class="relative h-[204px] w-[102px]"><img src="/Bilder/Enyaq/enyaq-top.webp" alt="Enyaq von oben" width="474" height="944" draggable="false" class="h-full w-full select-none object-contain">`
     + [['left', 23.5, 'VL'], ['right', 23.5, 'VR'], ['left', 76.5, 'HL'], ['right', 76.5, 'HR']].map(([sd, y, p]) => `<span class="absolute h-[34px] w-[7px] -translate-y-1/2 rounded-[3px] shadow" style="${sd}:3px;top:${y}%;background:${tCol(tAvg(last.v[p]))}"></span>`).join('') + '</div>';
-  const pg = tirePrognosis(ms);
+  const fc = tireForecast(ms, tireSet);
   let h = `<div class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 space-y-2">
     <div class="flex items-baseline justify-between gap-2 text-xs text-slate-500 dark:text-slate-400"><span class="text-left">${labD(last.date)}${last.km ? ' · ' + fmt(last.km, 0) + ' km' : ''}</span><span class="shrink-0 font-semibold ${due ? 'text-red-600 dark:text-red-400' : 'text-amber-600 dark:text-amber-400'}">${due ? 'Messung fällig' : 'nächste: ' + next.toLocaleDateString('de-DE', { month: 'short', year: 'numeric' })}</span></div>
     <div class="grid grid-cols-[1fr_102px_1fr] items-center gap-x-1.5"><div class="space-y-3">${tile('VL')}${tile('HL')}</div><div class="flex justify-center">${car}</div><div class="space-y-3">${tile('VR')}${tile('HR')}</div></div>
     <p class="text-[11px] text-slate-500 dark:text-slate-400 text-center">je Reifen außen · mitte · innen · Antippen hebt den Reifen im Verlauf hervor</p></div>`;
-  h += `<div class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 space-y-1.5"><div class="flex items-baseline justify-between"><p class="text-sm font-bold">Verlauf${pg ? ' &amp; Prognose' : ''}</p><span class="text-[11px] text-slate-500 dark:text-slate-400">Ø mm · gleiche Messpunkte</span></div>
-    ${tireChart(ms)}<div class="flex gap-3 text-[11px] text-slate-500 dark:text-slate-400">${TIRE_POS.map(p => `<span><span class="inline-block h-[3px] w-2.5 align-middle" style="background:${TIRE_COL[p]}"></span> ${p}</span>`).join('')}</div>
-    ${pg ? `<p class="rounded-xl bg-slate-100 dark:bg-slate-800/70 px-3 py-2 text-xs text-slate-600 dark:text-slate-300 text-left">${pg.days === 0 ? `<b>${TIRE_NAME[pg.p]}</b> ist bereits bei 3 mm oder darunter.` : `Am schnellsten nutzt sich <b>${TIRE_NAME[pg.p]}</b> ab${pg.perK ? ' (' + fmt(pg.perK, 1) + ' mm je 10.000 km)' : ''}. 3 mm voraussichtlich ${pg.atKm ? 'bei <b>~' + fmt(Math.round(pg.atKm / 1000) * 1000, 0) + ' km</b> (' : '<b>'}${pg.date.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })}${pg.atKm ? ')' : '</b>'}.`}</p>` : `<p class="text-[11px] text-slate-500 dark:text-slate-400 text-left">Ab der zweiten Messung zeigt die App, welcher Reifen sich am schnellsten abnutzt und wann 3 mm erreicht sind.</p>`}</div>`;
+  if (fc) h += tireForecastHtml(fc, tireSet);
+  h += `<div class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 space-y-1.5"><div class="flex items-baseline justify-between"><p class="text-sm font-bold">Verlauf</p><span class="text-[11px] text-slate-500 dark:text-slate-400">Ø mm · gleiche Messpunkte</span></div>
+    ${tireChart(ms, tireLim(tireSet))}<div class="flex gap-3 text-[11px] text-slate-500 dark:text-slate-400">${TIRE_POS.map(p => `<span><span class="inline-block h-[3px] w-2.5 align-middle" style="background:${TIRE_COL[p]}"></span> ${p}</span>`).join('')}</div>
+    ${fc ? '' : `<p class="text-[11px] text-slate-500 dark:text-slate-400 text-left">Ab der zweiten Messung mit km-Stand zeigt die App, wann neue Reifen fällig sind (${tireLim(tireSet)} mm).</p>`}</div>`;
   if (tireSel) h += `<div class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm px-4 py-3"><p class="text-sm font-bold text-left">${TIRE_NAME[tireSel][0].toUpperCase() + TIRE_NAME[tireSel].slice(1)}</p><div class="mt-1 grid grid-cols-[1.3fr_1fr_1fr_1fr_1fr] gap-1 text-[11px] text-slate-500 dark:text-slate-400"><span>Datum</span><span class="text-right">außen</span><span class="text-right">mitte</span><span class="text-right">innen</span><span class="text-right">Ø</span></div>${ms.slice().reverse().map(m => `<div class="grid grid-cols-[1.3fr_1fr_1fr_1fr_1fr] gap-1 border-t border-slate-100 dark:border-slate-800 py-1.5 text-[13px] tabular-nums"><span>${labD(m.date)}</span>${[0, 1, 2].map(i => `<span class="text-right">${tFmt((m.v[tireSel] || [])[i])}</span>`).join('')}<b class="text-right" style="color:${tCol(tAvg(m.v[tireSel]))}">${tFmt(tAvg(m.v[tireSel]))}</b></div>`).join('')}</div>`;
   h += `<details class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm px-4 py-3"><summary class="cursor-pointer text-sm font-semibold">Alle Messungen (${ms.length})</summary><div class="mt-2">${ms.slice().reverse().map(m => `<button type="button" data-tm="${esc(m.id)}" class="flex w-full items-center gap-2 border-t border-slate-100 dark:border-slate-800 py-2 text-left text-[13px]"><span class="w-[84px] shrink-0">${labD(m.date)}</span><span class="min-w-0 flex-1 truncate text-xs text-slate-500 dark:text-slate-400">${m.km ? fmt(m.km, 0) + ' km · ' : ''}${TIRE_POS.map(p => p + ' ' + tFmt(tAvg(m.v[p]))).join(' · ')}</span><span class="shrink-0 text-slate-400">›</span></button>`).join('')}</div></details>`;
   el.innerHTML = h;
