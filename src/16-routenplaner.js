@@ -454,19 +454,21 @@ const pushMsg = (t, bad) => { const el = $('ice-push-msg'); if (el) { el.textCon
 const b64u = (s) => { const p = '='.repeat((4 - s.length % 4) % 4), b = atob((s + p).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(b, c => c.charCodeAt(0)); };
 async function pushState() { if (!pushOk()) return null; try { const reg = await navigator.serviceWorker.ready; return await reg.pushManager.getSubscription(); } catch (e) { return null; } }
 async function fillIcePush() {
+  try { lowFill(false); $('set-low-push').disabled = !pushOk(); } catch (e) { }
   const cb = $('set-ice-push'), cr = $('set-rem-push'); if (!cb) return; if (!pushOk()) { cb.checked = false; cb.disabled = true; if (cr) { cr.checked = false; cr.disabled = true; } pushMsg('Dieser Browser unterstützt keine Push-Nachrichten.'); return; }
   const sub = await pushState(), ok = !!sub && Notification.permission === 'granted'; cb.checked = ok && load('enyaq.icePush', false); if (cr) cr.checked = ok && load('enyaq.remPush', false);
+  try { lowFill(ok); } catch (e) { }
   if (!$('ice-push-msg').textContent) pushMsg(Notification.permission === 'denied' ? 'Benachrichtigungen sind für diese App blockiert – in den Android-Einstellungen erlauben.' : '');
 }
 /* Ein Gerät, zwei Arten: Eis-Warnung (ice) und fällige Erinnerungen (rem). Angemeldet, solange eins davon an ist; der Server schickt je Art nur an Geräte mit Häkchen. */
 async function pushSave() {
-  const f = { ice: !!load('enyaq.icePush', false), rem: !!load('enyaq.remPush', false) };
-  if (!f.ice && !f.rem) { try { await window.cloud.setPush(devId(), null); } catch (e) { } try { const s = await pushState(); if (s) await s.unsubscribe(); } catch (e) { } return; }
+  const f = { ice: !!load('enyaq.icePush', false), rem: !!load('enyaq.remPush', false), low: Number(load('enyaq.lowPush', 0)) || 0 };
+  if (!f.ice && !f.rem && !f.low) { try { await window.cloud.setPush(devId(), null); } catch (e) { } try { const s = await pushState(); if (s) await s.unsubscribe(); } catch (e) { } return; }
   if (!window.cloud?.isSignedIn()) throw new Error('Bitte zuerst bei Google anmelden.');
   const perm = await Notification.requestPermission(); if (perm !== 'granted') throw new Error('Benachrichtigungen nicht erlaubt.');
   const reg = await navigator.serviceWorker.ready; let sub = await reg.pushManager.getSubscription();
   if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64u(VAPID_PUBLIC) });
-  await window.cloud.setPush(devId(), { sub: JSON.stringify(sub.toJSON()), at: new Date().toISOString(), ua: (navigator.userAgentData && navigator.userAgentData.platform) || (/(Android|iPhone|Windows|Mac)/.exec(navigator.userAgent) || [''])[0], ice: f.ice, rem: f.rem });
+  await window.cloud.setPush(devId(), { sub: JSON.stringify(sub.toJSON()), at: new Date().toISOString(), ua: (navigator.userAgentData && navigator.userAgentData.platform) || (/(Android|iPhone|Windows|Mac)/.exec(navigator.userAgent) || [''])[0], ice: f.ice, rem: f.rem, low: f.low });
 }
 async function pushKind(key, on) { const was = load(key, false); save(key, on); try { await pushSave(); } catch (e) { save(key, was); throw e; } }
 const icePushOn = () => pushKind('enyaq.icePush', true), icePushOff = () => pushKind('enyaq.icePush', false).catch(() => { });
@@ -493,6 +495,42 @@ const remTest = async (ev) => {
   b.disabled = false;
 };
 $('rem-test').addEventListener('click', remTest);
+/* Akku niedrig am Abend (Einstellungen › Fahrzeug und Laden): enyaq.lowPush = Schwelle in % (0 = aus), nur mit verbundenem Fahrzeug */
+const lowMsg = (t, bad) => { const el = $('low-push-msg'); if (el) { el.textContent = t || ''; el.classList.toggle('text-red-600', !!bad); el.classList.toggle('dark:text-red-400', !!bad); } };
+const lowThr = () => Number($('set-low-thr').value) || 20;
+function lowFill(ok) {
+  const box = $('low-push-box'); box.classList.toggle('hidden', !(vehicle && vehicle.ok));
+  const v = Number(load('enyaq.lowPush', 0)) || 0; $('set-low-push').checked = !!ok && v > 0; $('set-low-thr').value = String(v || load('enyaq.lowThr', 20));
+}
+async function lowReg() {                                                        // Server merkt sich das Konto, damit der Abend-Lauf den Akku-Stand abfragen darf
+  const r = await fetch('/api/ice-push', { method: 'POST', headers: { ...(await authHeaders()), 'Content-Type': 'application/json' }, body: JSON.stringify({ low: 'reg' }) }), j = await r.json().catch(() => ({}));
+  if (r.status === 403) throw new Error('Fahrzeug nicht verbunden – erst unter Konto & Sync verbinden.');
+  if (r.status === 503 && j.error === 'not_configured') throw new Error('Server noch nicht eingerichtet – in Vercel fehlen: ' + (j.need || []).join(', ') + '.');
+  if (!r.ok) throw new Error('Fehler: ' + (j.error || r.status));
+}
+$('set-low-push').addEventListener('change', async (e) => {
+  const cb = e.target; cb.disabled = true;
+  try {
+    if (cb.checked) { lowMsg('Wird eingerichtet …'); await lowReg(); await pushKind('enyaq.lowPush', lowThr()); lowMsg('✓ Dieses Gerät erinnert abends, wenn der Akku unter ' + lowThr() + ' % liegt.'); }
+    else { await pushKind('enyaq.lowPush', 0).catch(() => { }); lowMsg('Aus für dieses Gerät.'); }
+  } catch (er) { cb.checked = false; save('enyaq.lowPush', 0); lowMsg((er && er.message) || 'Einrichten fehlgeschlagen.', true); }
+  cb.disabled = false;
+});
+$('set-low-thr').addEventListener('change', async () => {
+  save('enyaq.lowThr', lowThr()); if (!(Number(load('enyaq.lowPush', 0)) > 0)) return;
+  try { await pushKind('enyaq.lowPush', lowThr()); lowMsg('✓ Schwelle jetzt ' + lowThr() + ' %.'); } catch (er) { lowMsg((er && er.message) || 'Speichern fehlgeschlagen.', true); }
+});
+$('low-test').addEventListener('click', async (ev) => {
+  const b = ev.currentTarget; b.disabled = true; lowMsg('Sende …');
+  try {
+    if (!(Number(load('enyaq.lowPush', 0)) > 0) || !(await pushState())) { await lowReg(); await pushKind('enyaq.lowPush', lowThr()); $('set-low-push').checked = true; }
+    const r = await fetch('/api/ice-push', { method: 'POST', headers: { ...(await authHeaders()), 'Content-Type': 'application/json' }, body: JSON.stringify({ test: 'low' }) }), j = await r.json().catch(() => ({}));
+    if (r.status === 404) lowMsg('Kein Gerät angemeldet – Schalter oben einschalten.', true);
+    else if (!r.ok) lowMsg('Fehler: ' + (j.error || r.status), true);
+    else lowMsg(j.ok ? '✓ Gesendet' + (j.real ? ' mit dem echten Stand (' + Math.round(j.soc) + ' %' + (j.plugged ? ', angesteckt – abends käme dann nichts' : '') + ')' : ' (Beispiel – Auto gerade nicht erreichbar)') + ' – kommt gleich an.' : 'Nicht zugestellt – Gerät bitte neu anmelden (Schalter aus und an).', !j.ok);
+  } catch (er) { lowMsg((er && er.message) || 'Senden fehlgeschlagen.', true); }
+  b.disabled = false;
+});
 $('set-ice-push').addEventListener('change', async (e) => {
   const cb = e.target; cb.disabled = true;
   try { if (cb.checked) { pushMsg('Wird eingerichtet …'); await icePushOn(); pushMsg('✓ Dieses Gerät bekommt die Eis-Warnung abends.'); } else { await icePushOff(); pushMsg('Aus für dieses Gerät.'); } }

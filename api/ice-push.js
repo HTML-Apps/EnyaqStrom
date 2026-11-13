@@ -3,13 +3,16 @@
 //      · Eis: Risiko für morgen früh (gleiche Formel wie in der App), bei „möglich“/„wahrscheinlich“ an Geräte mit Eis-Warnung (devices[id].ice, fehlt = an).
 //      · Erinnerungen: nur am Fälligkeitstag (dueDate = heute) bzw. an dem Abend, an dem der km-Stand die Fälligkeit überschreitet
 //        (Stand vom Vorabend in settings/pushState.remKm) – überfällige nicht erneut. An Geräte mit devices[id].rem = true.
-// POST (aus der App, mit Anmelde-Token): { test: true } Eis-Testnachricht, { test: 'rem' } Erinnerungs-Testnachricht an die eigenen Geräte.
+//      · Akku niedrig: Akku-% vom Škoda-Server (eine Abfrage je Konto), unter der Schwelle des Geräts (devices[id].low in %, + 10 bei Frost)
+//        und Auto nicht angesteckt → „Akku 17 % – heute Abend anstecken?“. E-Mail des Kontos dafür verschlüsselt in settings/lowPush (beim Einschalten gesetzt).
+// POST (aus der App, mit Anmelde-Token): { test: true } Eis-Testnachricht, { test: 'rem' } Erinnerungs-Testnachricht, { test: 'low' } Akku-Testnachricht,
+//      { low: 'reg' } Konto für die Akku-Nachricht freischalten (merkt die E-Mail verschlüsselt, damit der Zeitplan die Škoda-Zugangsdaten findet).
 // Benötigte Vercel-Variablen: VAPID_PRIVATE_KEY (Web-Push), FIREBASE_SERVICE_ACCOUNT (JSON des Firebase-Dienstkontos, nur Lesen),
 // optional CRON_SECRET (schützt den Zeitplan-Aufruf; ohne Variable nur Aufrufe von Vercels Zeitplan).
 import webpush from 'web-push';
 import { SignJWT, importPKCS8 } from 'jose';
-import { verifyUser } from '../lib/auth.js';
-import { fsSetStrings } from '../lib/fs.js';
+import { verifyUser, accountForUser, usable } from '../lib/auth.js';
+import { fsSetStrings, fsGetStrings, seal, unseal } from '../lib/fs.js';
 
 const PROJECT_ID = 'daily-companion-24975';
 const VAPID_PUBLIC = 'BHJg47_9-WGwpnQQkZCKyGtmbned4D9fOyJ-EsYRKqD6dizXoA60UIYNjR1_vL-y0yxFN8PAuYsjQhKLEHcC128';
@@ -78,7 +81,7 @@ async function riskFor(uid, prefs0) {
   const w = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}&hourly=temperature_2m,dew_point_2m,cloud_cover,wind_speed_10m,precipitation&wind_speed_unit=ms&timezone=Europe%2FBerlin&forecast_days=3`);
   if (!w.ok) throw new Error('Wetter ' + w.status); return { st, r: iceEval((await w.json()).hourly, day, st) };
 }
-async function devices(uid) { const d = await fsGet(`enyaqStrom/${uid}/settings/push`); return Object.entries((d && d.devices) || {}).filter(([, v]) => v && v.sub).map(([id, v]) => ({ id, sub: JSON.parse(v.sub), ice: v.ice !== false, rem: v.rem === true })); }
+async function devices(uid) { const d = await fsGet(`enyaqStrom/${uid}/settings/push`); return Object.entries((d && d.devices) || {}).filter(([, v]) => v && v.sub).map(([id, v]) => ({ id, sub: JSON.parse(v.sub), ice: v.ice !== false, low: Number(v.low) > 0 ? Number(v.low) : 0, rem: v.rem === true })); }
 
 /* ---- Fällige Erinnerungen ---- */
 async function fsList(path) {                                                   // alle Dokumente einer Sammlung → [Felder]
@@ -113,6 +116,25 @@ function remMessage(due, km) {
   return { title: due.length + ' Erinnerungen heute fällig', body: due.map(o => o.r.title).join(' · ').slice(0, 180) };
 }
 const remPayload = (m, today) => ({ ...m, kind: 'rem', tag: 'rem-' + today, url: '/?go=reminders' });
+/* ---- Akku niedrig ---- */
+async function lowAccount(uid, email) {                                         // Škoda-Zugang des Kontos; ohne E-Mail aus settings/lowPush (beim Einschalten verschlüsselt gemerkt)
+  if (!email) { const d = await fsGetStrings(`enyaqStrom/${uid}/settings/lowPush`).catch(() => null); if (!d || !d.mail) return null;
+    let x = ''; try { x = unseal(d.mail); } catch (e) { return null; } const [u, m] = x.split('|'); if (u !== uid || !m) return null; email = m; }
+  const acc = await accountForUser({ uid, email }); return usable(acc) ? acc : null;
+}
+async function carNow(acc) {                                                     // Akku-% und Ladezustand (1 Abfrage; Limit der Škoda-API: 20/Stunde)
+  if (acc.demo) return { soc: 64, rangeKm: 262, plug: 'DISCONNECTED', state: 'READY_FOR_CHARGING', at: new Date().toISOString() };
+  const r = await fetch('https://public.api.connect.skoda-auto.cz/api/v1/vehicles/' + encodeURIComponent(acc.vin) + '?include=charging', { headers: { 'X-API-Key': acc.key, Accept: 'application/json' } });
+  if (!r.ok) throw new Error('Škoda ' + r.status); const v = (await r.json()).vehicle || {}, st = (v.charging || {}).status || {};
+  return { soc: st.battery?.stateOfChargeInPercent ?? null, rangeKm: st.battery?.remainingCruisingRangeInMeters != null ? Math.round(st.battery.remainingCruisingRangeInMeters / 1000) : null,
+    plug: st.plugConnectionState ?? null, state: st.state ?? null, at: v.charging?.carCapturedTimestamp ?? null };
+}
+const plugged = (c) => /^CONNECTED/i.test(String(c.plug || '')) || /CHARGING/i.test(String(c.state || '')) && !/READY|NOT|ERROR/i.test(String(c.state || ''));
+function lowMessage(c, frost) {
+  const old = c.at && Date.now() - Date.parse(c.at) > 6 * 3600e3 ? ' (Stand ' + new Date(c.at).toLocaleString('de-DE', { timeZone: 'Europe/Berlin', weekday: 'short', hour: '2-digit', minute: '2-digit' }) + ')' : '';
+  return { title: 'Akku ' + Math.round(c.soc) + ' %' + old, body: 'Heute Abend anstecken?' + (c.rangeKm != null ? ' · noch ca. ' + c.rangeKm + ' km' : '') + (frost ? '\nNachts Frost – Vorheizen braucht zusätzlich Strom.' : ''),
+    kind: 'low', tag: 'low-' + iso(new Date()), url: '/' };
+}
 async function send(list, payload) {
   let ok = 0, gone = 0;
   for (const d of list) { try { await webpush.sendNotification(d.sub, JSON.stringify(payload), { TTL: 6 * 3600, urgency: 'normal' }); ok++; } catch (e) { if (e.statusCode === 404 || e.statusCode === 410) gone++; } }
@@ -126,6 +148,17 @@ export default async function handler(req, res) {
     if (req.method === 'POST') {                                               // Testnachricht an die eigenen Geräte
       const user = await verifyUser(req); if (!user) return res.status(401).json({ error: 'unauthorized' });
       const all = await devices(user.uid), body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
+      if (body.low === 'reg') {                                                // Akku-Nachricht: Konto merken (E-Mail verschlüsselt, an die uid gebunden)
+        const acc = await accountForUser(user); if (!usable(acc)) return res.status(403).json({ error: 'no_vehicle' });
+        await fsSetStrings(`enyaqStrom/${user.uid}/settings/lowPush`, { mail: seal(user.uid + '|' + user.email), at: new Date().toISOString() });
+        return res.status(200).json({ ok: true });
+      }
+      if (body.test === 'low') {                                               // Akku-Test: echter Stand vom Auto, wenn erreichbar
+        const list = all.filter(d => d.low > 0); if (!list.length) return res.status(404).json({ error: 'no_device' });
+        let c = null, real = false; try { const acc = await lowAccount(user.uid, user.email); if (acc) { c = await carNow(acc); real = c.soc != null; } } catch (e) { }
+        if (!real) c = { soc: 17, rangeKm: 62, at: new Date().toISOString() };
+        return res.status(200).json({ ...(await send(list, { ...lowMessage(c, false), tag: 'low-test' })), devices: list.length, real, soc: real ? c.soc : null, plugged: real ? plugged(c) : null });
+      }
       if (body.test === 'rem') {                                               // Erinnerungs-Test: echte heute fällige, sonst ein typisches Beispiel
         const list = all.filter(d => d.rem); if (!list.length) return res.status(404).json({ error: 'no_device' });
         const today = iso(new Date()); let due = []; try { due = remDue(await fsList(`enyaqStrom/${user.uid}/reminders`), today, null, null); } catch (e) { }
@@ -145,7 +178,8 @@ export default async function handler(req, res) {
     for (const uid of await fsUids()) {
       const o = { uid: uid.slice(0, 6) };
       try { const all = await devices(uid); if (!all.length) continue; const prefs = await fsGet(`enyaqStrom/${uid}/settings/prefs`), iceL = all.filter(d => d.ice), remL = all.filter(d => d.rem);
-        if (iceL.length) { try { const { st, r, why } = await riskFor(uid, prefs);
+        const lowL = all.filter(d => d.low > 0); let risk = null;
+        if (iceL.length) { try { const { st, r, why } = risk = await riskFor(uid, prefs);
             if (!r || r.lvl < st.min) Object.assign(o, { lvl: r ? r.lvl : null, why: why || 'kein Eis' });
             else Object.assign(o, { lvl: r.lvl, ice: await send(iceL, { ...message(r, st), tag: 'ice-' + r.day, url: '/', icon: '/Bilder/ice-icon.png?v=3' }) });
           } catch (e) { o.iceErr = String(e.message || e).slice(0, 120); } }
@@ -154,6 +188,13 @@ export default async function handler(req, res) {
             if (km != null && km !== prevKm) await fsSetStrings(`enyaqStrom/${uid}/settings/pushState`, { remKm: String(km), at: new Date().toISOString() }).catch(() => { });
             o.rem = due.length ? await send(remL, remPayload(remMessage(due, km), today)) : 0;
           } catch (e) { o.remErr = String(e.message || e).slice(0, 120); } }
+        if (lowL.length) { try { const acc = await lowAccount(uid);
+            if (!acc) o.low = 'kein Fahrzeug';
+            else { const c = await carNow(acc);
+              if (c.soc == null) o.low = 'kein Akku-Stand'; else if (plugged(c)) o.low = 'angesteckt';
+              else { if (!risk) risk = await riskFor(uid, prefs).catch(() => null); const frost = !!(risk && risk.r && risk.r.lvl >= 1);
+                const to = lowL.filter(d => c.soc < d.low + (frost ? 10 : 0)); o.low = to.length ? await send(to, lowMessage(c, frost)) : 'ok ' + Math.round(c.soc) + ' %'; } }
+          } catch (e) { o.lowErr = String(e.message || e).slice(0, 120); } }
         out.push(o);
       } catch (e) { out.push({ ...o, error: String(e.message || e).slice(0, 120) }); }
     }

@@ -5,6 +5,22 @@
 <meta name="theme-color" content="#000000">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
+<script>/* Fehlerprotokoll: unerwartete Fehler sammeln (enyaq.errs, höchstens 40, gleiche zusammengefasst). Hochladen und Anzeige: src/22-fehlerprotokoll.js */
+(function () {
+  function add(m, src, st) {
+    try {
+      m = String(m || 'Unbekannter Fehler').slice(0, 300); if (/^Script error\.?$/.test(m) || /ResizeObserver loop/.test(m)) return;
+      var a = JSON.parse(localStorage.getItem('enyaq.errs') || '[]'), v = (document.querySelector('script[src^="/app.js"]') || {}).src || '', k = m + '|' + (src || '');
+      var hit = a.find(function (x) { return x.k === k; }), now = new Date().toISOString();
+      if (hit) { hit.n = (hit.n || 1) + 1; hit.t = now; hit.up = false; } else a.push({ k: k, m: m, s: String(src || '').slice(0, 160), st: String(st || '').split('\n').slice(0, 4).join('\n').slice(0, 600), t: now, n: 1, v: (v.split('v=')[1] || ''), p: location.pathname + location.search.slice(0, 40), up: false });
+      a.sort(function (x, y) { return x.t < y.t ? -1 : 1; }); localStorage.setItem('enyaq.errs', JSON.stringify(a.slice(-40)));
+      window.dispatchEvent(new Event('enyaqerr'));
+    } catch (e) { }
+  }
+  window.addEventListener('error', function (e) { if (e.target && e.target !== window && !e.message) return; add(e.message, (e.filename || '').replace(location.origin, '') + ':' + e.lineno + ':' + e.colno, e.error && e.error.stack); });
+  window.addEventListener('unhandledrejection', function (e) { var r = e.reason; if (r && /AbortError|NotAllowedError|Failed to fetch|NetworkError|Load failed/i.test((r.name || '') + ' ' + (r.message || r))) return; add('Promise: ' + ((r && r.message) || r), '', r && r.stack); });
+  window.errLogAdd = add;
+})();</script>
 <script>/* Darstellung (Einstellungen → Fahrzeug & Kauf): 'auto' folgt dem Gerät, sonst 'light'/'dark'; nur auf diesem Gerät (enyaq.theme). Setzt html.dark sofort, damit nichts aufblitzt. */
 (function () { var m = null, q = matchMedia('(prefers-color-scheme: dark)'); try { m = localStorage.getItem('enyaq.theme'); } catch (e) { }
   function ap() { var d = m === 'dark' || (m !== 'light' && q.matches), h = document.documentElement; h.classList.toggle('dark', d); h.style.colorScheme = d ? 'dark' : 'light';
@@ -225,7 +241,7 @@
   @media (prefers-reduced-motion: reduce) { #bd-conf i, #bdg-conf i { animation: none; top: var(--y, 10%); } #bd-card, #bdg-card { animation: none; } }
 </style>
 <!-- Tailwind fertig gebaut (npm run css) – am Ende des Kopfs wie früher das CDN, damit die Reihenfolge der Regeln gleich bleibt -->
-<link rel="stylesheet" href="/app.css?v=301">
+<link rel="stylesheet" href="/app.css?v=302">
 </head>
 <body class="bg-slate-100 text-slate-900 dark:bg-black dark:text-slate-100 min-h-screen">
 
@@ -1294,6 +1310,12 @@
           <p id="set-cert-ratio" class="mt-1.5 text-sm font-medium text-slate-700 dark:text-slate-300 empty:hidden"></p>
           <p class="mt-1.5 text-xs text-slate-500 dark:text-slate-400 text-left">Geladene Energie laut Zertifikat, getrennt nach AC und DC. Daraus ergibt sich das Ladeverhältnis vor dem Kauf. km-Stand leer = km bei Kauf. Fließt in Berichte → Akku (AC/DC-Laden, „Seit Zulassung“) ein.</p>
         </div>
+        <div id="low-push-box" class="hidden py-4 first:pt-4 last:pb-0">
+          <p class="block text-sm font-medium text-slate-700 dark:text-slate-300">Akku niedrig am Abend</p>
+          <label class="mt-2 flex items-center justify-between gap-3"><span><span class="block text-sm font-medium text-slate-700 dark:text-slate-300">Ans Laden erinnern</span><span class="block text-xs text-left text-slate-500 dark:text-slate-400">Push-Nachricht auf dieses Gerät gegen 18 Uhr, wenn der Akku unter der Schwelle liegt und das Auto nicht angesteckt ist. Ist nachts Frost angesagt, gilt die Schwelle + 10 %.</span></span><input id="set-low-push" type="checkbox" class="h-5 w-5 shrink-0 accent-emerald-600"></label>
+          <div class="mt-2 flex items-center justify-between gap-3"><label for="set-low-thr" class="text-sm text-slate-700 dark:text-slate-300">Schwelle</label><select id="set-low-thr" class="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"><option value="15">unter 15 %</option><option value="20">unter 20 %</option><option value="25">unter 25 %</option><option value="30">unter 30 %</option><option value="40">unter 40 %</option></select></div>
+          <div class="mt-2 flex items-center gap-2"><button id="low-test" type="button" class="shrink-0 rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm font-semibold active:scale-95 transition">Testnachricht senden</button><span id="low-push-msg" class="min-w-0 text-xs text-left text-slate-500 dark:text-slate-400"></span></div>
+        </div>
       </div>
     </div>
     <div class="rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
@@ -1551,6 +1573,13 @@
       <div class="grid grid-cols-2 gap-2">
         <button id="btn-cloud" class="w-full px-2 py-3 rounded-2xl bg-slate-900 dark:bg-slate-700 text-white text-sm font-medium active:scale-95 transition">Mit Google anmelden</button>
         <button id="btn-help" class="w-full px-2 py-3 rounded-2xl bg-slate-200 dark:bg-slate-800 text-sm font-medium active:scale-95 transition">Einladungslink</button>
+      </div>
+      <div id="err-box" class="border-t border-slate-200 pt-3 dark:border-slate-800">
+        <div class="flex items-center justify-between gap-2"><p class="text-sm font-medium text-slate-700 dark:text-slate-300">Fehlerprotokoll</p><span id="err-count" class="text-xs text-slate-500 dark:text-slate-400"></span></div>
+        <p class="mt-0.5 text-xs text-left text-slate-500 dark:text-slate-400">Unerwartete Fehler der App auf diesem Gerät (mit Anmeldung auch an den Entwickler gemeldet). Zum Melden „Kopieren“ und in den Chat einfügen.</p>
+        <div id="err-list" class="mt-2 space-y-1.5"></div>
+        <div class="mt-2 flex flex-wrap gap-2"><button id="err-copy" type="button" class="rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm font-semibold active:scale-95 transition">Kopieren</button><button id="err-clear" type="button" class="rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm font-semibold active:scale-95 transition">Leeren</button><button id="err-all" type="button" class="hidden rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm font-semibold active:scale-95 transition">Alle Geräte</button></div>
+        <p id="err-msg" class="mt-1 min-h-[1rem] text-xs text-left text-slate-500 dark:text-slate-400"></p>
       </div>
           </div>
         </div>
@@ -1908,7 +1937,7 @@
   </div>
 </nav>
 
-<script src="/app.js?v=301"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
+<script src="/app.js?v=302"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
 <script type="module">
 /* Firebase (modular SDK). Die Konfiguration ist kein Geheimnis – geschützt wird über Auth + Firestore-Regeln. */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
