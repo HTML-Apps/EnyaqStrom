@@ -4580,15 +4580,20 @@ async function renderFrost() {
   const el = $('frost-banner'); if (!el) return;
   const now = new Date(), h = now.getHours(), fc = load(KEY_FROST, {}) || {}, ask = fc.ask, st = iceSet();
   if (liveHero) { el.classList.add('hidden'); return; }
-  /* Morgens: kurz nachfragen, ob die Prognose von gestern gestimmt hat (lernt, wie stark die Scheibe am Stellplatz auskühlt) */
+  /* Morgens: kurz nachfragen, ob die Prognose von gestern gestimmt hat (lernt, wie stark die Scheibe am Stellplatz auskühlt) – auch am Wochenende.
+     Wurde die App gestern Abend nicht geöffnet, wird die Nacht jetzt aus den Wetterdaten bewertet (Open-Meteo liefert die vergangenen Stunden mit). */
+  if (h >= 5 && h < 12 && (!ask || ask.day !== todayYMD()) && st.park !== 'garage' && fc.askChk !== todayYMD()) {
+    try { const l = iceLoc(); if (l) { const r = iceEval(await iceHourly(l, st), todayYMD(), st), c = load(KEY_FROST, {}) || {}; c.askChk = todayYMD();
+      if (r && (r.lvl >= 1 || r.minTg <= 2)) c.ask = { day: r.day, lvl: r.lvl, tg: Math.round(r.minTg * 10) / 10, now: true }; save(KEY_FROST, c); if (c.ask && c.ask.day === todayYMD()) return renderFrost(); } } catch (e) { }
+  }
   if (h >= 5 && h < 12 && ask && ask.day === todayYMD() && !ask.done) {
     $('frost-h').textContent = 'War die Scheibe heute früh vereist?';
-    $('frost-t').innerHTML = `<span class="block">Prognose gestern: ${ICE_LVL[ask.lvl]}${Number.isFinite(ask.tg) ? ' (Scheibe ≈ ' + fmt(Math.round(ask.tg) || 0, 0).replace('-', '−') + ' °C)' : ''}. Deine Antwort macht die Warnung genauer.</span><span class="mt-1.5 flex gap-2"><button type="button" data-ice="1" class="rounded-lg bg-sky-600 px-3 py-1 text-xs font-semibold text-white">Ja, vereist</button><button type="button" data-ice="0" class="rounded-lg bg-black/10 dark:bg-white/10 px-3 py-1 text-xs font-semibold">Nein, frei</button></span>`;
+    $('frost-t').innerHTML = `<span class="block">${ask.now ? 'Laut Wetterdaten der Nacht' : 'Prognose gestern'}: ${ICE_LVL[ask.lvl]}${Number.isFinite(ask.tg) ? ' (Scheibe ≈ ' + fmt(Math.round(ask.tg) || 0, 0).replace('-', '−') + ' °C)' : ''}. Deine Antwort macht die Warnung genauer.</span><span class="mt-1.5 flex gap-2"><button type="button" data-ice="1" class="rounded-lg bg-sky-600 px-3 py-1 text-xs font-semibold text-white">Ja, vereist</button><button type="button" data-ice="0" class="rounded-lg bg-black/10 dark:bg-white/10 px-3 py-1 text-xs font-semibold">Nein, frei</button></span>`;
     el.classList.remove('hidden'); return;
   }
   /* Abends kein eigener Hinweis mehr (die Eis-Badges an der Verbrauchs-Prognose zeigen es dezent) – nur die Prognose für die Rückfrage am Morgen merken */
   el.classList.add('hidden'); if (h < 16) return;
-  let ice = null; try { ice = await iceRisk(); } catch (e) { }
+  let ice = null; try { ice = await iceRisk(true); } catch (e) { }   // auch vor Sa/So merken – die Rückfrage hilft der Kalibrierung, egal ob eine Benachrichtigung kam
   if (ice) { const c = load(KEY_FROST, {}) || {}; if (!c.ask || c.ask.day !== ice.day || !c.ask.done) { c.ask = ice.lvl >= 1 || ice.minTg <= 2 ? { day: ice.day, lvl: ice.lvl, tg: Math.round(ice.minTg * 10) / 10 } : null; save(KEY_FROST, c); } }
 }
 $('frost-x').addEventListener('click', () => { const c = load(KEY_FROST, {}) || {}; if (c.ask && c.ask.day === todayYMD() && new Date().getHours() < 12) c.ask.done = true; else c.snooze = todayYMD(); save(KEY_FROST, c); $('frost-banner').classList.add('hidden'); });
@@ -4632,9 +4637,9 @@ async function iceHourly(l, st) {
   if (!r.ok) { if (c && c.H) return c.H; throw new Error('Wetter ' + r.status); } const H = (await r.json()).hourly; if (!H || !H.time) throw new Error('Wetter leer');
   save(KEY_ICE + 'H', { sig, t: Date.now(), H }); return H;
 }
-async function iceRisk() {
+async function iceRisk(anyDay) {                                                   // anyDay: auch Sa/So (für die Rückfrage am Morgen, unabhängig von der Benachrichtigung)
   const st = iceSet(); if (st.park === 'garage') return null; const l = iceLoc(); if (!l) return null;
-  const tm = new Date(Date.now() + 864e5), day = wxIso(tm), wd = tm.getDay(); if (!st.we && (wd === 0 || wd === 6)) return null;
+  const tm = new Date(Date.now() + 864e5), day = wxIso(tm), wd = tm.getDay(); if (!anyDay && !st.we && (wd === 0 || wd === 6)) return null;
   return iceEval(await iceHourly(l, st), day, st);
 }
 /** Eis-Risiko je Morgen für die nächsten Tage (7-Tage-Prognose) – unabhängig von der Wochenend-Einstellung */
