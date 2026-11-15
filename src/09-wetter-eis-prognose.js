@@ -228,21 +228,20 @@ async function wxoSoc(force) {
     save(KEY_WXO + 'S', { t: Date.now(), soc: d.soc, d }); try { renderVehCard(); } catch (e) { } try { if (!ltmSaved) renderLtm(); } catch (e) { } return d.soc;
   } catch (e) { if (force) throw e; return old; }
 }
-/* ↻ im Fahrzeugstatus: Stand von Hand neu holen (Škoda-API: 20 Abfragen/Stunde → höchstens einmal pro Minute; der Server puffert ebenfalls 60 s) */
-var vehRefBusy = false, vehRefAt = 0;   // var/function: Aufruf vor dieser Stelle (frühere Dateien) ohne TDZ-Fehler
-function vehRefBtn(onDark) { return `<button type="button" data-vehref title="Fahrzeugstatus jetzt neu abfragen" aria-label="Fahrzeugstatus jetzt neu abfragen" class="relative inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[16px] font-bold leading-none ${onDark ? 'text-emerald-400' : 'text-emerald-600 dark:text-emerald-400'} active:scale-90 transition after:absolute after:-inset-2"><span data-vehref-i class="inline-block${vehRefBusy ? ' animate-spin' : ''}">↻</span></button>`; }
+/* Fahrzeugstatus: Antippen des Abzeichens („Alles OK“ …) bzw. der Uhrzeit (einfache Ansicht) holt den Stand von Hand neu (Škoda-API: 20 Abfragen/Stunde → höchstens einmal pro Minute; der Server puffert ebenfalls 60 s) */
+var vehRefBusy = false, vehRefAt = 0;   // var: Aufruf vor dieser Stelle (frühere Dateien) ohne TDZ-Fehler
 document.addEventListener('click', async (e) => {
   const b = e.target.closest('[data-vehref]'); if (!b) return; e.preventDefault(); e.stopPropagation();
   if (vehRefBusy) return;
   if (Date.now() - vehRefAt < 60e3) { appNote('Gerade erst abgefragt – in einer Minute wieder.'); return; }
-  vehRefBusy = true; vehRefAt = Date.now(); document.querySelectorAll('[data-vehref-i]').forEach(x => x.classList.add('animate-spin'));
+  vehRefBusy = true; vehRefAt = Date.now(); document.querySelectorAll('[data-vehref]').forEach(x => x.classList.add('animate-pulse'));
   const c0 = load(KEY_WXO + 'S', null), at0 = c0 && c0.d && c0.d.capturedAt;
   try {
     await wxoSoc(true);
     const c1 = load(KEY_WXO + 'S', null), at1 = c1 && c1.d && c1.d.capturedAt;
     appNote(at1 && at1 === at0 ? 'Abgefragt – das Auto hat seitdem nichts Neues gemeldet.' : '✓ Fahrzeugstatus aktualisiert');
   } catch (er) { appNote('Abfrage beim Auto ging gerade nicht' + (er && er.message ? ' (' + er.message + ')' : '') + '.'); }
-  finally { vehRefBusy = false; try { renderVehCard(); } catch (er) { } document.querySelectorAll('[data-vehref-i]').forEach(x => x.classList.remove('animate-spin')); }
+  finally { vehRefBusy = false; try { renderVehCard(); } catch (er) { } document.querySelectorAll('[data-vehref]').forEach(x => x.classList.remove('animate-pulse')); }
 }, true);
 /* PC: Fahrzeugstatus rechts neben dem Auto (Glas-Karte) – aus der stündlichen Abfrage beim Auto (gleicher Zwischenspeicher wie der Restakku) */
 /* Handy: Fahrzeugstatus als eigene Karte im Wisch-Bereich (zwischen Prognose und Zählerstand); am PC steht er neben dem Auto */
@@ -257,7 +256,7 @@ function renderVehSlide() {
   const at = d.capturedAt ? new Date(d.capturedAt) : new Date(c.t);
   if (isSimple()) { el.innerHTML = vehSlideEasy(d, soc, tgt, charging, plugged, locked, at); return; }
   const tile = (a, b, col) => `<div class="min-w-0 rounded-xl bg-slate-100 dark:bg-slate-800/70 px-2.5 py-1.5"><p class="text-[10.5px] text-left text-slate-500 dark:text-slate-400">${a}</p><p class="truncate text-[13px] font-semibold ${col || ''}">${b}</p></div>`;
-  el.innerHTML = `<div class="flex items-center justify-between gap-2"><p class="shrink-0 font-barlow text-xl font-bold uppercase tracking-[0.08em] leading-6">Fahrzeugstatus</p><div class="flex min-w-0 items-center gap-1.5">${vehBadge(vehHealth(d))}${vehRefBtn()}</div></div>
+  el.innerHTML = `<div class="flex items-center justify-between gap-2"><p class="shrink-0 font-barlow text-xl font-bold uppercase tracking-[0.08em] leading-6">Fahrzeugstatus</p>${vehBadge(vehHealth(d))}</div>
     <div class="mt-1.5 flex items-baseline gap-2"><span class="font-barlow text-[36px] font-bold leading-none">${soc} %</span>${d.rangeKm != null ? `<span class="text-[15px] font-semibold">${fmt(d.rangeKm, 0)} km</span>` : ''}<span class="ml-auto text-[10.5px] text-slate-500 dark:text-slate-400">${at.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })} · ${hhmm(at.getTime())}</span></div>
     <div class="relative mt-2 h-3 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800"><div class="h-full rounded-full bg-gradient-to-r ${socBarCls(soc)} ${charging ? 'animate-pulse' : ''}" style="width:${Math.max(2, Math.min(100, soc))}%"></div>${tgt ? `<div class="absolute inset-y-0 border-l-2 border-slate-900/70 dark:border-white/80" style="left:${tgt}%"></div>` : ''}</div>
     ${vehReason(vehHealth(d))}<div class="min-h-2 flex-1"></div>
@@ -297,7 +296,7 @@ function vehBadge(h, onDark) {
   const col = h.s === 'ok' ? (onDark ? 'text-emerald-400' : 'text-emerald-600 dark:text-emerald-400') : h.s === 'warn' ? (onDark ? 'text-amber-400' : 'text-amber-600 dark:text-amber-400') : (onDark ? 'text-slate-400' : 'text-slate-500 dark:text-slate-400');
   const tip = h.s === 'unknown' ? 'Status unbekannt: Das Auto meldet gerade nicht, ob es verriegelt ist' : h.s === 'ok' ? 'Verriegelt, Türen und Fenster zu, Licht aus' : h.full;
   const txt = onDark && h.s !== 'ok' ? '' : ' ' + esc(h.t);   // PC-Karte: wenig Platz neben dem Titel, der Grund steht dort in eigener Zeile
-  return `<span class="min-w-0 truncate whitespace-nowrap text-[11px] font-semibold ${col}" title="${esc(tip)}">●${txt}</span>`;
+  return `<button type="button" data-vehref class="relative min-w-0 truncate whitespace-nowrap text-[11px] font-semibold ${col} active:scale-95 transition after:absolute after:-inset-2" title="${esc(tip)} – antippen zum Aktualisieren">●${txt}</button>`;
 }
 function vehSlideEasy(d, soc, tgt, charging, plugged, locked, at) {
   const h = vehHealth(d), warn = h.s === 'warn';
@@ -309,7 +308,7 @@ function vehSlideEasy(d, soc, tgt, charging, plugged, locked, at) {
     : warn ? `<b class="font-semibold text-amber-600 dark:text-amber-400">${esc(h.issues.length === 1 && h.issues[0] === 'nicht verriegelt' ? 'Auto ist nicht verriegelt' : h.full)}</b>`
     : plugged ? `<b class="font-semibold text-sky-600 dark:text-sky-400">Kabel steckt${tgtTxt ? ' · ' + tgtTxt : ''}</b>` : tgtTxt;
   const fill = charging ? 'from-sky-600 to-sky-400' : socBarCls(soc), stripes = charging ? '<div class="absolute inset-0 veh-stripes"></div>' : '';
-  return `<div class="flex items-center gap-1.5"><p class="min-w-0 flex-1 truncate font-barlow text-[19px] font-bold uppercase tracking-[0.06em] leading-6">Fahrzeugstatus</p>${lockI}${plugI}<span class="ml-0.5 shrink-0 whitespace-nowrap text-[11px] text-slate-500 dark:text-slate-400">${atTxt}</span>${vehRefBtn()}</div>
+  return `<div class="flex items-center gap-1.5"><p class="min-w-0 flex-1 truncate font-barlow text-[19px] font-bold uppercase tracking-[0.06em] leading-6">Fahrzeugstatus</p>${lockI}${plugI}<button type="button" data-vehref title="Fahrzeugstatus jetzt neu abfragen" class="relative ml-0.5 shrink-0 whitespace-nowrap text-[11px] text-slate-500 dark:text-slate-400 active:scale-95 transition after:absolute after:-inset-2">${atTxt}</button></div>
     <div class="mt-1.5 flex items-baseline gap-2.5"><span class="font-barlow text-[44px] font-bold leading-none">${soc} %</span>${d.rangeKm != null ? `<span class="font-barlow text-[22px] font-bold ${wxoLowR(d.rangeKm) ? 'text-red-500' : ''}">${fmt(d.rangeKm, 0)} km</span>` : ''}${d.odometerKm != null ? `<span class="ml-auto text-xs text-slate-500 dark:text-slate-400">km ${fmt(Math.round(d.odometerKm), 0)}</span>` : ''}</div>
     <div class="relative mt-2 h-3 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800"><div class="relative h-full overflow-hidden rounded-full bg-gradient-to-r ${fill}" style="width:${Math.max(2, Math.min(100, soc))}%">${stripes}</div>${tgt ? `<div class="absolute inset-y-0 w-0.5 bg-slate-900/60 dark:bg-white/75" style="left:${tgt}%"></div>` : ''}</div>
     <div class="mt-1.5 flex justify-between gap-2 text-[11.5px] text-slate-500 dark:text-slate-400"><span class="min-w-0 truncate">${foot}</span><span class="shrink-0">vom Auto · Škoda-App</span></div>`;
@@ -339,7 +338,7 @@ function renderVehCard() {
     <div class="flex items-center justify-between gap-2"><span class="shrink-0 font-barlow text-[15px] font-bold uppercase tracking-[0.08em]">Fahrzeugstatus</span>${vehBadge(vehHealth(d), true)}</div>
     <div class="mt-2 flex items-baseline gap-2"><span class="font-barlow text-[40px] font-bold leading-none">${soc} %</span>${d.rangeKm != null ? `<span class="text-[15px] font-semibold">${fmt(d.rangeKm, 0)} km</span>` : ''}</div>
     <div class="relative mb-2.5 mt-2 h-3.5 overflow-hidden rounded-full bg-slate-800"><div class="h-full rounded-full bg-gradient-to-r ${socBarCls(soc)} ${charging ? 'animate-pulse' : ''}" style="width:${Math.max(2, Math.min(100, soc))}%"></div>${tgt ? `<div class="absolute -inset-y-0.5 border-l-2 border-white/80" style="left:${tgt}%"></div>` : ''}</div>
-    ${vehReason(vehHealth(d), true)}${rows}<div class="mt-1 flex items-center justify-between gap-2"><p class="text-[10.5px] text-slate-400">Stand vom Auto: ${atTxt}</p>${vehRefBtn(true)}</div></div>`;
+    ${vehReason(vehHealth(d), true)}${rows}<p class="mt-1.5 text-[10.5px] text-slate-400">Stand vom Auto: ${atTxt}</p></div>`;
 }
 const WXO_H1 = 7, WXO_H2 = 16;                                                        // Anzeige: Temperatur zur Hin- und Rückfahrt (nur Anzeige, gerechnet wird mit dem Tagesmittel)
 const wxoTT = (v) => fmt(Math.round(v), 0).replace('-', '−') + '°';
