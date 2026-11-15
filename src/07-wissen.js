@@ -33,7 +33,27 @@ const KB_ICON = (c) => c === KB_MG ? '🛠️' : c === KB_UP ? '🔄' : /hand|an
 const KB_TINT = (c) => c === KB_MG ? 'bg-rose-100 dark:bg-rose-600/25' : c === KB_UP ? 'bg-sky-100 dark:bg-sky-600/25' : ({ '📘': 'bg-sky-100 dark:bg-sky-600/25', '💡': 'bg-amber-100 dark:bg-amber-600/25', '🔧': 'bg-violet-100 dark:bg-violet-600/25', '📄': 'bg-emerald-100 dark:bg-emerald-600/25', '⚡': 'bg-lime-100 dark:bg-lime-600/25', '📞': 'bg-rose-100 dark:bg-rose-600/25' }[KB_ICON(c)] || 'bg-slate-100 dark:bg-slate-700/60');
 function getKb() { const o = load(KEY_KB, null), cats = o && Array.isArray(o.cats) && o.cats.length ? o.cats.slice() : KB_DEF_CATS.slice(); if (!cats.includes(KB_UP)) cats.unshift(KB_UP); if (!cats.includes(KB_MG)) cats.unshift(KB_MG);   // „Mängel“ und „Updates“ sind fest dabei
   return { cats, items: o && Array.isArray(o.items) ? o.items : [] }; }
-function setKb(o) { save(KEY_KB, JSON.parse(JSON.stringify(o))); pushPrefs(); renderKbStart(); if (currentView === 'kb') renderKb(); }
+function setKb(o) { save(KEY_KB, kbStamp(JSON.parse(JSON.stringify(o)))); pushPrefs(); renderKbStart(); if (currentView === 'kb') renderKb(); }
+/* Abgleich je Eintrag (wie Labor): geänderte/neue Einträge bekommen u = jetzt, gelöschte landen in del (400 Tage), Kategorien mit catsU.
+   kbMerge: Vereinigung beider Stände, je Eintrag der neuere; Gelöschtes nur, wenn die Löschung neuer ist als der Eintrag. */
+const kbOrd = (x, y) => String(x.id) < String(y.id) ? -1 : String(x.id) > String(y.id) ? 1 : 0;   // feste Reihenfolge, damit Geräte nicht hin- und herschreiben
+function kbStamp(o) {
+  const prev = load(KEY_KB, null) || {}, now = Date.now(), del = { ...(prev.del || {}) }, pm = new Map((prev.items || []).map(x => [String(x.id), x])), ids = new Set();
+  const items = (o.items || []).map(x => { ids.add(String(x.id)); const old = pm.get(String(x.id)), a = { ...x }; delete a.u; const b = old ? { ...old } : null; if (b) delete b.u;
+    return !old || JSON.stringify(a) !== JSON.stringify(b) ? { ...a, u: now } : { ...a, u: old.u || 0 }; });
+  pm.forEach((x, id) => { if (!ids.has(id)) del[id] = now; }); ids.forEach(id => { if (del[id] && del[id] <= now) delete del[id]; });
+  const cut = now - 400 * 864e5; Object.keys(del).forEach(k => { if (del[k] < cut) delete del[k]; });
+  const catsU = JSON.stringify(o.cats || null) !== JSON.stringify(prev.cats || null) ? now : (prev.catsU || 0);
+  return { cats: o.cats, catsU, items: items.sort(kbOrd), del };
+}
+function kbMerge(a, b) {
+  if (!a) return b; if (!b) return a;
+  const del = { ...(a.del || {}) }; Object.entries(b.del || {}).forEach(([k, t]) => { if (!(del[k] >= t)) del[k] = t; });
+  const m = new Map(); [a.items || [], b.items || []].forEach(l => l.forEach(x => { const id = String(x.id), c = m.get(id); if (!c || (x.u || 0) > (c.u || 0)) m.set(id, x); }));
+  const items = [...m.values()].filter(x => !(del[String(x.id)] >= (x.u || 0))).sort(kbOrd);
+  const ua = a.catsU || 0, ub = b.catsU || 0, cats = ub > ua ? b.cats : ua > ub ? a.cats : [...new Set([...(a.cats || []), ...(b.cats || [])])];
+  const out = { cats, catsU: Math.max(ua, ub), items, del }; if (!out.cats) delete out.cats; return out;
+}
 let kbCat = '', kbCur = null, kbPend = [];
 const kbSub = (x) => [x.links && x.links.length ? (x.links.length === 1 ? 'Link' : x.links.length + ' Links') : '', x.files && x.files.length ? (x.files.length === 1 ? '1 Beleg' : x.files.length + ' Belege') : '', x.text ? x.text.split('\n')[0].slice(0, 60) : ''].filter(Boolean).join(' · ') || x.cat;
 function renderKb() {

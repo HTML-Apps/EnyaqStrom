@@ -241,7 +241,7 @@
   @media (prefers-reduced-motion: reduce) { #bd-conf i, #bdg-conf i { animation: none; top: var(--y, 10%); } #bd-card, #bdg-card { animation: none; } }
 </style>
 <!-- Tailwind fertig gebaut (npm run css) – am Ende des Kopfs wie früher das CDN, damit die Reihenfolge der Regeln gleich bleibt -->
-<link rel="stylesheet" href="/app.css?v=313">
+<link rel="stylesheet" href="/app.css?v=314">
 </head>
 <body class="bg-slate-100 text-slate-900 dark:bg-black dark:text-slate-100 min-h-screen">
 
@@ -1952,7 +1952,7 @@
   </div>
 </nav>
 
-<script src="/app.js?v=313"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
+<script src="/app.js?v=314"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
 <script type="module">
 /* Firebase (modular SDK). Die Konfiguration ist kein Geheimnis – geschützt wird über Auth + Firestore-Regeln. */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
@@ -2035,12 +2035,13 @@ window.cloud = {
   setPrefs: (o) => user ? setDoc(prefDoc(), { ...o, updatedAt: new Date().toISOString() }) : Promise.resolve(),
   /* Wie patchPrefs, aber die Labor-Daten werden in einer Transaktion mit dem aktuellen Cloud-Stand zusammengeführt (mergeLab(cloudLab) → lab),
      damit ein Gerät mit altem Stand keine neueren Messwerte anderer Geräte überschreibt. Offline schlägt die Transaktion fehl → Aufrufer nimmt patchPrefs. */
-  mergePrefs: (o, set, del, mergeLab) => {
+  mergePrefs: (o, set, del, mergeLab, mergeKb) => {
     if (!user) return Promise.resolve();
     const st = { ...set }; (del || []).forEach(k => { st[k] = deleteField(); });
-    const fields = Object.keys(o).concat(['lab', 'updatedAt'], Object.keys(st).map(k => 'settings.' + k));
-    return runTransaction(db, async (tx) => { const snap = await tx.get(prefDoc()), cur = snap.exists() ? snap.data() : {};
-      tx.set(prefDoc(), { ...o, lab: mergeLab(cur.lab || null), settings: st, updatedAt: new Date().toISOString() }, { mergeFields: fields }); });
+    const fields = Object.keys(o).concat(['lab', 'updatedAt'], mergeKb ? ['kb'] : [], Object.keys(st).map(k => 'settings.' + k));
+    return runTransaction(db, async (tx) => { const snap = await tx.get(prefDoc()), cur = snap.exists() ? snap.data() : {}, x = { ...o, lab: mergeLab(cur.lab || null), settings: st, updatedAt: new Date().toISOString() };
+      if (mergeKb) x.kb = mergeKb(cur.kb || null);                                   // Wissen: je Eintrag zusammenführen statt ersetzen
+      tx.set(prefDoc(), x, { mergeFields: fields }); });
   },
   /* Nur Geändertes schreiben: übrige Felder (o) ganz, bei den Einstellungen nur die genannten Schlüssel – ein Gerät mit altem Stand überschreibt so keine neueren Werte anderer Geräte */
   patchPrefs: (o, set, del) => {

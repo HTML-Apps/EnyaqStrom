@@ -40,10 +40,11 @@ function pushPrefs() {
   if (!window.cloud.patchPrefs) { window.cloud.setPrefs({ ...o, settings: syncSet(load(KEY_SETTINGS, {})) }).catch(() => { }); return; }
   const set = {}, del = [];
   if (base) SYNC_SET_KEYS.forEach(k => { if (JSON.stringify(cur[k]) !== JSON.stringify(base[k])) { if (cur[k] === undefined) del.push(k); else set[k] = cur[k]; } });   // ohne Abgleichsstand (vor dem ersten Empfang) keine Einstellungen schreiben
-  if (window.cloud.mergePrefs && o.lab) {
-    const { lab, ...rest } = o;   // Messwerte: mit dem Cloud-Stand zusammenführen statt ersetzen
-    window.cloud.mergePrefs(rest, set, del, (cl) => labNoFc(labMerge(lab, cl && typeof cl === 'object' ? cl : null))).catch(() => window.cloud.patchPrefs(o, set, del).catch(() => { }));
-  } else window.cloud.patchPrefs(o, set, del).catch(() => { });
+  /* Messwerte (lab) und Wissen (kb) in einer Transaktion mit dem Cloud-Stand zusammenführen statt ersetzen – ein Gerät mit altem Stand löscht so nichts.
+     Klappt die Transaktion nicht (offline), ohne lab/kb schreiben; die folgen beim nächsten Abgleich. */
+  const { lab, kb, ...rest } = o;
+  if (window.cloud.mergePrefs) window.cloud.mergePrefs(rest, set, del, (cl) => lab ? labNoFc(labMerge(lab, cl && typeof cl === 'object' ? cl : null)) : cl, (ck) => kbMerge(kb, ck && typeof ck === 'object' ? ck : null)).catch(() => window.cloud.patchPrefs(rest, set, del).catch(() => { }));
+  else window.cloud.patchPrefs(rest, set, del).catch(() => { });
   if (base) save(KEY_SETBASE, { ...base, ...set, ...Object.fromEntries(del.map(k => [k, undefined])) });
 }
 window.onCloudPrefs = (d, first, uid) => {
@@ -70,10 +71,10 @@ window.onCloudPrefs = (d, first, uid) => {
     if (currentView === 'settings' && !$('view-settings').contains(document.activeElement)) fillSettings();   // nicht mitten in eine Eingabe schreiben
     if (currentView === 'dashboard') renderDashboard();
   }
-  /* Wissen (Einträge, Kategorien): wie die Ladeanbieter-Angaben */
-  const lk = load('enyaq.kb', null); let nk = d && d.kb && typeof d.kb === 'object' ? d.kb : null;
-  if (first && nk == null && lk) { nk = lk; up = true; }
-  if (JSON.stringify(nk) !== JSON.stringify(lk)) { if (nk) save('enyaq.kb', nk); else localStorage.removeItem('enyaq.kb'); try { renderKbStart(); if (currentView === 'kb') renderKb(); } catch (e) { } }
+  /* Wissen (Einträge, Kategorien): je Eintrag zusammenführen (neuester Stand gewinnt, Gelöschtes über del), nie durch einen älteren Cloud-Stand ersetzen */
+  const lk = load('enyaq.kb', null), ck = d && d.kb && typeof d.kb === 'object' ? d.kb : null, nk = kbMerge(lk, ck);
+  if (nk && labCanon(nk) !== labCanon(ck)) up = true;                                  // labCanon: Schlüssel sortiert (Firestore ändert die Reihenfolge)
+  if (labCanon(nk) !== labCanon(lk)) { if (nk) save('enyaq.kb', nk); try { renderKbStart(); if (currentView === 'kb') renderKb(); } catch (e) { } }
   /* Labor (Ladekurven, Rekorde, Tempomat-Messreihe): wie Wissen */
   /* Labor: zusammenführen (neuester Stand je Element), nie durch einen älteren oder fehlenden Cloud-Stand löschen */
   const lq = load(KEY_LAB, null), cq = d && d.lab && typeof d.lab === 'object' ? d.lab : null; let nq = labMerge(lq, cq);
