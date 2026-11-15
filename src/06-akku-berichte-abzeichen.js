@@ -426,11 +426,23 @@ const BADGES = [
 ];
 let bdgQueue = [], bdgSel = null;
 function bdgState() { const c = bdgCtx(); return BADGES.map(b => { const v = Math.max(0, Math.min(1, b.v(c) || 0)); return { b, v, done: v >= 1 }; }); }
+/* Erreichte Abzeichen { id: Datum } lokal (KEY_BADGES) und synchronisiert (settings.bdg): Vereinigung, je Abzeichen das früheste Datum.
+   Neues Gerät (noch nichts gemerkt): die ersten 2 Minuten ohne Pop-ups – in der Zeit kommen Daten und Abzeichen aus der Cloud. */
+const BDG_QUIET_MS = 120e3, KEY_BDG_INIT = 'enyaq.bdgInit';
+function bdgMerged() {
+  const a = load(KEY_BADGES, null), c = getSettings().bdg, ok = (o) => o && typeof o === 'object' && !Array.isArray(o);
+  if (!ok(a) && !ok(c)) return null; const out = { ...(ok(a) ? a : {}) };
+  if (ok(c)) Object.entries(c).forEach(([k, v]) => { if (typeof v === 'string' && (!out[k] || v < out[k])) out[k] = v; }); return out;
+}
 function checkBadges(silent) {
   let st; try { st = bdgState(); } catch (e) { console.error(e); return; }
-  const got = load(KEY_BADGES, null), first = !got || typeof got !== 'object', out = first ? {} : { ...got }, now = new Date().toISOString(), fresh = [];
-  st.forEach(x => { if (x.done && !out[x.b.id]) { out[x.b.id] = now; if (!first && !silent) fresh.push(x.b); } });
-  if (first || fresh.length || Object.keys(out).length !== Object.keys(got || {}).length) save(KEY_BADGES, out);
+  const got = bdgMerged(), first = !got; let init = Number(load(KEY_BDG_INIT, 0)) || 0;
+  if (first && !init) { init = Date.now(); save(KEY_BDG_INIT, init); }
+  const quiet = silent || first || (init > 0 && Date.now() - init < BDG_QUIET_MS), out = { ...(got || {}) }, now = new Date().toISOString(), fresh = [];
+  st.forEach(x => { if (x.done && !out[x.b.id]) { out[x.b.id] = now; if (!quiet) fresh.push(x.b); } });
+  const key = (o) => JSON.stringify(Object.keys(o || {}).sort().map(k => [k, o[k]]));
+  if (key(out) !== key(load(KEY_BADGES, null))) save(KEY_BADGES, out);
+  if (Object.keys(out).length && key(out) !== key(getSettings().bdg)) setQuickSetting('bdg', out);   // mit anderen Geräten teilen
   bdgQueue.push(...fresh); showNextBadge(); renderBadgesCount(st);
 }
 function renderBadgesCount(st = bdgState()) { const n = st.filter(x => x.done).length; $('go-badges-n').textContent = ' · ' + n + ' von ' + BADGES.length; }
@@ -447,7 +459,7 @@ function hideBadgeOv() { $('bdg-ov').classList.add('hidden'); $('bdg-conf').text
 $('bdg-ov-ok').addEventListener('click', hideBadgeOv);
 $('bdg-ov').addEventListener('click', (e) => { if (e.target === e.currentTarget || e.target.parentElement === e.currentTarget) hideBadgeOv(); });
 function renderBadges() {
-  const st = bdgState(), got = load(KEY_BADGES, {}) || {}, n = st.filter(x => x.done).length;
+  const st = bdgState(), got = bdgMerged() || {}, n = st.filter(x => x.done).length;
   $('bdg-count').textContent = n + ' von ' + BADGES.length;
   const order = st.slice().sort((a, b) => (b.done - a.done) || (a.done ? String(got[a.b.id] || '').localeCompare(String(got[b.b.id] || '')) : b.v - a.v));
   $('bdg-grid').innerHTML = order.map(x => x.done
@@ -460,7 +472,7 @@ function renderBadges() {
 function bdgFit() { requestAnimationFrame(() => document.querySelectorAll('#bdg-grid .bdg-l').forEach(l => { let f = 11; l.style.fontSize = ''; while (l.scrollWidth > l.clientWidth + 0.5 && f > 9) { f -= 0.5; l.style.fontSize = f + 'px'; } })); }
 window.addEventListener('resize', () => { if (!$('view-badges').classList.contains('hidden')) bdgFit(); });
 function bdgInfo(id) {
-  bdgSel = id; const x = bdgState().find(y => y.b.id === id), got = load(KEY_BADGES, {}) || {}; if (!x) return;
+  bdgSel = id; const x = bdgState().find(y => y.b.id === id), got = bdgMerged() || {}; if (!x) return;
   $('bdg-info').innerHTML = '<b class="text-slate-900 dark:text-white">' + esc(x.b.t) + '</b> · ' + esc(x.b.txt) + ' ' + (x.done ? (got[id] ? 'Erreicht am ' + fmtDate(got[id]) + '.' : 'Erreicht.') : 'Noch ' + (100 - Math.round(x.v * 100)) + ' % bis zum Ziel.');
 }
 $('bdg-grid').addEventListener('click', (e) => { const b = e.target.closest('[data-bdg]'); if (b) bdgInfo(b.dataset.bdg); });
