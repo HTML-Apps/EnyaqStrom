@@ -41,3 +41,4 @@
 - Akku °C Plausibilität: Sprung ≥ 6 °C → ⚠️ (`btJump`). Geprüft: `en.ok` = bestätigter Wert (Häkchen im Bearbeiten-Dialog oder „✓ Stimmt“ nach dem Speichern, `btConfirm`); ändert sich der Wert, kommt der Hinweis zurück.
 - Abzeichen: erreicht = `{id: Datum}` lokal (`enyaq.badges`) + synchronisiert (`settings.bdg`, in SYNC_SET_KEYS), `bdgMerged` vereinigt (frühestes Datum). Neues Gerät: erste 2 Min. (`enyaq.bdgInit`) ohne Pop-ups.
 - Wissen (kb) wird je Eintrag zusammengeführt wie lab: `kbStamp` (u je Eintrag, del, catsU) in setKb, `kbMerge` beim Empfang und in der Transaktion `cloud.mergePrefs(…, mergeKb)`. Nie wieder kb/lab per patchPrefs/setPrefs ungemergt schreiben. Vergleiche mit `labCanon` (Firestore sortiert Schlüssel um).
+- WLTP, Wetter-Standort, Ladeanbieter-Angaben (wltp, wxLoc, provInfo im prefs-Dokument): nur geänderte Felder schreiben – Vergleich mit dem letzten Cloud-Stand `enyaq.prefBase` (wie `enyaq.setBase`).

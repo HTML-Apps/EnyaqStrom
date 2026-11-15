@@ -4128,7 +4128,7 @@ function checkCacheUid(uid) {
   if (prev && prev !== uid) { save(KEY_READINGS, []); save(KEY_COSTS, []); save(KEY_REMINDERS, []); save(KEY_RECUR, []); localStorage.removeItem(KEY_PROVIDERS); localStorage.removeItem(KEY_PROVINFO); localStorage.removeItem(KEY_DVBAK); localStorage.removeItem('enyaq.kb'); localStorage.removeItem(KEY_CATEGORIES); localStorage.removeItem(KEY_WXLOC); localStorage.removeItem(KEY_WXCACHE); localStorage.removeItem(KEY_TEMPS); localStorage.removeItem(KEY_WRAP); save(KEY_TRIPS, []); localStorage.removeItem(KEY_TPLACES); localStorage.removeItem(KEY_TRIPS_IMP); localStorage.removeItem(KEY_TLABELS); localStorage.removeItem(KEY_TRULES); localStorage.removeItem(KEY_TDEF); stopLive(false);
     /* auch alles Konto-Bezogene, das sonst hängen bliebe: Einstellungen (kommen aus der Cloud des neuen Kontos), Fahrzeugstatus und km-Stand
        (sonst bis zu 1 h die Werte des vorherigen Autos), Prognose, Eis-/Frost-Hinweise, Abzeichen, letzte Route, „Fahrzeug verbinden – später“ */
-    [KEY_SETTINGS, KEY_WXO, KEY_WXO + 'S', KEY_ICE, KEY_FROST, KEY_BADGES, KEY_RT, KEY_VEH_LATER, 'enyaq.onbPreset', 'enyaq.setBase', 'enyaq.careSeen'].forEach(k => { try { localStorage.removeItem(k); } catch (e) { } });
+    [KEY_SETTINGS, KEY_WXO, KEY_WXO + 'S', KEY_ICE, KEY_FROST, KEY_BADGES, KEY_RT, KEY_VEH_LATER, 'enyaq.onbPreset', 'enyaq.setBase', 'enyaq.prefBase', 'enyaq.careSeen'].forEach(k => { try { localStorage.removeItem(k); } catch (e) { } });
     carKmCache = null; try { renderVehCard(); } catch (e) { } try { applyTitle(); } catch (e) { } }
   localStorage.setItem(KEY_CACHE_UID, uid);
 }
@@ -5814,6 +5814,7 @@ async function applyUserPreset() {
 /* Einstellungen: Stand des letzten Abgleichs mit der Cloud (KEY_SETBASE). Hochgeladen werden nur Schlüssel, die sich seitdem auf diesem Gerät geändert haben –
    sonst überschreibt ein Gerät mit altem Stand (z. B. lange offener PC-Tab, automatischer Tasks-Import) neuere Werte vom Handy (z. B. Vergleichs-Benziner). */
 const KEY_SETBASE = 'enyaq.setBase';
+const KEY_PREFBASE = 'enyaq.prefBase';                                             // letzter Cloud-Stand von wltp, wxLoc, provInfo (wie enyaq.setBase)
 function pushPrefs() {
   if (!window.cloud?.isSignedIn()) return;
   const w = Number(getSettings().wltp), o = { wltp: w > 0 ? w : null, wxLoc: wxLoc() || null, provInfo: load(KEY_PROVINFO, null), kb: load('enyaq.kb', null), lab: labNoFc(load(KEY_LAB, null)) };
@@ -5823,7 +5824,10 @@ function pushPrefs() {
   if (base) SYNC_SET_KEYS.forEach(k => { if (JSON.stringify(cur[k]) !== JSON.stringify(base[k])) { if (cur[k] === undefined) del.push(k); else set[k] = cur[k]; } });   // ohne Abgleichsstand (vor dem ersten Empfang) keine Einstellungen schreiben
   /* Messwerte (lab) und Wissen (kb) in einer Transaktion mit dem Cloud-Stand zusammenführen statt ersetzen – ein Gerät mit altem Stand löscht so nichts.
      Klappt die Transaktion nicht (offline), ohne lab/kb schreiben; die folgen beim nächsten Abgleich. */
-  const { lab, kb, ...rest } = o;
+  const { lab, kb, ...all } = o, pb = load(KEY_PREFBASE, null), rest = {};
+  /* WLTP, Wetter-Standort, Ladeanbieter-Angaben: nur schreiben, was sich hier seit dem letzten Cloud-Stand geändert hat – sonst überschreibt ein Gerät mit altem Stand neuere Werte */
+  if (pb) Object.keys(all).forEach(k => { if (labCanon(all[k] ?? null) !== labCanon(pb[k] ?? null)) rest[k] = all[k]; });
+  if (pb && Object.keys(rest).length) save(KEY_PREFBASE, { ...pb, ...rest });
   if (window.cloud.mergePrefs) window.cloud.mergePrefs(rest, set, del, (cl) => lab ? labNoFc(labMerge(lab, cl && typeof cl === 'object' ? cl : null)) : cl, (ck) => kbMerge(kb, ck && typeof ck === 'object' ? ck : null)).catch(() => window.cloud.patchPrefs(rest, set, del).catch(() => { }));
   else window.cloud.patchPrefs(rest, set, del).catch(() => { });
   if (base) save(KEY_SETBASE, { ...base, ...set, ...Object.fromEntries(del.map(k => [k, undefined])) });
@@ -5865,6 +5869,7 @@ window.onCloudPrefs = (d, first, uid) => {
     const lastBt = (o) => { const a = (o && o.bt) || []; return a.length ? a[a.length - 1].id : null; };
     if (lastBt(nq) !== lastBt(lq)) { try { btmVal = null; renderBtm(); renderLtm(); } catch (e) { } } }
   try { if (currentView === 'route') rtCloudPlan(); } catch (e) { }
+  if (d || up) save(KEY_PREFBASE, { wltp: nw, wxLoc: nl, provInfo: np });
   if (up) window.cloud.setPrefs({ wltp: nw, wxLoc: nl, provInfo: np, settings: ns, kb: nk, lab: labNoFc(nq) }).catch(() => { });
 };
 
