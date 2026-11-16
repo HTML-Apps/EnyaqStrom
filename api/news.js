@@ -8,17 +8,20 @@ const cache = new Map();                                                        
 
 /* Quellen: feste Liste (keine fremden Adressen von außen). find() liefert Feed-Adressen; mehrere Kandidaten, die erste mit Einträgen gewinnt. */
 const SOURCES = {
-  ge: {   // GoingElectric (phpBB): Enyaq-Unterforen auf der Skoda-Seite suchen, dann deren Feed
+  ge: {   // GoingElectric (phpBB): Enyaq-Unterforen auf der Skoda-Seite suchen, dann deren Feed; Forenseiten sind oft gesperrt (403) → Feeds direkt probieren
     name: 'GoingElectric',
     async find(log) {
       const base = 'https://www.goingelectric.de/forum/';
       let ids = await forumIds(base, log);
-      if (!ids.length) { const sk = await pageLinks(base, /skoda/i, log); for (const u of sk.slice(0, 2)) { ids = await forumIds(u, log); if (ids.length) break; } }
+      const sk = ids.length ? [] : await pageLinks(base, /skoda/i, log);
+      if (!ids.length) for (const u of sk.slice(0, 2)) { ids = await forumIds(u, log); if (ids.length) break; }
+      const skIds = sk.map(u => /[?&;]f=(\d+)/.exec(u)?.[1] || /-f(\d+)\/?(?:$|[?#])/.exec(u)?.[1]).filter(Boolean);
       const out = [];
-      for (const id of ids.slice(0, 4)) out.push([base + 'feed.php?f=' + id, base + 'app.php/feed/forum/' + id, base + 'feed/forum/' + id]);
+      for (const id of [...ids, ...skIds].filter((x, i, a) => a.indexOf(x) === i).slice(0, 5)) out.push([base + 'feed.php?f=' + id, base + 'app.php/feed/forum/' + id, base + 'feed/forum/' + id]);
+      out.push([base + 'feed.php?mode=topics', base + 'app.php/feed/topics', base + 'feed.php']);
       return out;
     },
-    keep: (it) => true
+    keep: (it) => /enyaq/i.test(it.t + ' ' + (it.f || ''))
   },
   ef: {   // enyaq-forum.de (WoltLab): Feed per Autodiscovery, sonst übliche Adressen
     name: 'enyaq-forum.de',
