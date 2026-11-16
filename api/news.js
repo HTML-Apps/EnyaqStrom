@@ -73,7 +73,8 @@ async function loadSource(s, diag) {
     for (const g of groups) {
       for (const f of g) { const x = await get(f, log); if (!x) continue; const it = parse(x); log.push('  → ' + it.length + ' Einträge'); if (it.length) { res.feeds.push(f); res.items.push(...it); break; } }
     }
-    res.items = topics(res.items.filter(src.keep), s).map(x => ({ s: s.replace(/^ef\d+$/, 'ef'), g: src.g, ...x }));
+    const b = /^ef(\d+)$/.exec(s)?.[1];
+    res.items = topics(res.items.filter(src.keep), s).map(x => ({ s: b ? 'ef' : s, g: src.g, ...(b ? { b: Number(b) } : {}), ...x }));
     if (!res.items.length) res.err = 'keine Einträge gefunden';
   } catch (e) { res.err = e.message; }
   if (!res.items.length && c && c.items.length) { cache.set(s, { ...c, at: Date.now() - TTL + 5 * 60e3 }); return { ...c, err: res.err, log }; }   // Fehler: alten Stand behalten, in 5 Min. neu versuchen
