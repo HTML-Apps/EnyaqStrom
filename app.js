@@ -5807,7 +5807,7 @@ try { renderWrapCard(); } catch (e) { }
    im Dokument enyaqStrom/<uid>/settings/prefs, gleiche Regel wie Anbieter und Kategorien. Die PIN bleibt nur auf dem Gerät.
    Erster Abgleich: Was die Cloud hat, gilt; fehlt dort etwas und ist lokal vorhanden, wird es hochgeladen. Danach gilt die Cloud (Änderung auf einem Gerät wirkt auf allen).
    ===================================================================== */
-const SYNC_SET_KEYS = ['presetV', 'bdg', 'title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAcKwh', 'certDcKwh', 'certKm', 'wltpNet', 'ccEnd', 'wxoCut', 'dashFirst', 'car', 'carT', 'ui', 'carN', 'carSec', 'wxIcons', 'nRep', 'nCare', 'nTrips', 'nBakYm', 'nBakAt', 'nBakSnz', 'gtMirror', 'gtList', 'iceDep', 'iceWe', 'icePark', 'iceMin', 'iceK', 'cmpCar', 'cmpL', 'cmpEur', 'cmpCo2', 'news'];
+const SYNC_SET_KEYS = ['presetV', 'bdg', 'title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAcKwh', 'certDcKwh', 'certKm', 'wltpNet', 'ccEnd', 'wxoCut', 'dashFirst', 'car', 'carT', 'ui', 'carN', 'carSec', 'wxIcons', 'nRep', 'nCare', 'nTrips', 'nBakYm', 'nBakAt', 'nBakSnz', 'gtMirror', 'gtList', 'iceDep', 'iceWe', 'icePark', 'iceMin', 'iceK', 'cmpCar', 'cmpL', 'cmpEur', 'cmpCo2', 'news', 'dash'];
 /** Einstellungen für die Cloud: feste Reihenfolge, ohne leere Werte (Firestore verbietet undefined). null = nichts vorhanden. */
 function syncSet(src) {
   const o = {}; if (src && typeof src === 'object') SYNC_SET_KEYS.forEach(k => { const v = src[k]; if (v != null && v !== '' && !(typeof v === 'number' && !isFinite(v))) o[k] = v; });
@@ -6543,6 +6543,7 @@ const SET_SECS = [
   { k: 'laden', e: '⚡', t: 'Laden & Akku', h: ['Fahrzeug und Laden'], save: true },
   { k: 'erinnerungen', e: '🔔', t: 'Erinnerungen', h: ['Erinnerungen'], save: true },
   { k: 'fahrten', e: '🧭', t: 'Fahrtenbuch', h: ['Fahrtenbuch'] },
+  { k: 'start', e: '🏠', t: 'Startseite', h: ['Startseite'] },
   { k: 'listen', e: '🏷️', t: 'Anbieter & Kategorien', h: ['Listen'] },
   { k: 'wetter', e: '⛅', t: 'Wetter', h: ['Wetter', 'Eis-Warnung'] },
   { k: 'daten', e: '☁️', t: 'Sicherung & Belege', h: ['Belege', 'Datensicherung'] },
@@ -6550,7 +6551,7 @@ const SET_SECS = [
   { k: 'konto', e: '👤', t: 'Konto & Cloud', h: ['Cloud-Sync'], hidden: true },
   { k: 'gefahr', e: '⚠️', t: 'Alle Daten löschen', h: ['Gefahrenzone'], hidden: true }
 ];
-const SET_ICON = {sprache: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M8 21h8"/>', fahrzeug: '<path d="M5 17h14M6 17v2M18 17v2M4 13l2-5h12l2 5v4H4z"/><circle cx="8" cy="14" r="1"/><circle cx="16" cy="14" r="1"/>', laden: '<path d="M13 2L4 14h7l-1 8 9-12h-7l1-8Z"/>', erinnerungen: '<path d="M6 17V11a6 6 0 0 1 12 0v6l1.5 2h-15zM10 21a2 2 0 0 0 4 0"/>', fahrten: '<circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M8 18h6a4 4 0 0 0 0-8h-4a4 4 0 0 1 0-8h6"/>', listen: '<path d="M20 12l-8 8-9-9V3h8z"/><circle cx="7.5" cy="7.5" r="1.5"/>', wetter: '<path d="M7 18a5 5 0 1 1 1-9.9A6 6 0 0 1 19 10a4 4 0 0 1-1 8z"/>', daten: '<path d="M7 18a5 5 0 1 1 1-9.9A6 6 0 0 1 19 10a4 4 0 0 1-1 8z"/><path d="M12 11v6M9.5 13.5L12 11l2.5 2.5"/>', konto: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/>', gefahr: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>'};
+const SET_ICON = {start: '<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9v11h14V9"/><rect x="8" y="12" width="8" height="5" rx="1"/>', sprache: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M8 21h8"/>', fahrzeug: '<path d="M5 17h14M6 17v2M18 17v2M4 13l2-5h12l2 5v4H4z"/><circle cx="8" cy="14" r="1"/><circle cx="16" cy="14" r="1"/>', laden: '<path d="M13 2L4 14h7l-1 8 9-12h-7l1-8Z"/>', erinnerungen: '<path d="M6 17V11a6 6 0 0 1 12 0v6l1.5 2h-15zM10 21a2 2 0 0 0 4 0"/>', fahrten: '<circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M8 18h6a4 4 0 0 0 0-8h-4a4 4 0 0 1 0-8h6"/>', listen: '<path d="M20 12l-8 8-9-9V3h8z"/><circle cx="7.5" cy="7.5" r="1.5"/>', wetter: '<path d="M7 18a5 5 0 1 1 1-9.9A6 6 0 0 1 19 10a4 4 0 0 1-1 8z"/>', daten: '<path d="M7 18a5 5 0 1 1 1-9.9A6 6 0 0 1 19 10a4 4 0 0 1-1 8z"/><path d="M12 11v6M9.5 13.5L12 11l2.5 2.5"/>', konto: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/>', gefahr: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>'};
 const KEY_SETSEC = 'enyaq.setSec';
 let setSec = (() => { try { return localStorage.getItem(KEY_SETSEC) || 'fahrzeug'; } catch (e) { return 'fahrzeug'; } })();
 (function tagSettingsCards() {
@@ -6648,7 +6649,7 @@ const NAV_GO = {
   'hist-kosten': () => { histFilter = 'kosten'; showView('history'); }, 'hist-laden': () => { histFilter = 'laden'; showView('history'); },
   'akte-pdf': () => { NAV_GO.akte(); setTimeout(() => $('btn-akte').click(), 300); }, 'ch-pdf': () => { NAV_GO.checkheft(); setTimeout(() => { const b = $('btn-ch-pdf'); if (b && !b.classList.contains('hidden')) b.scrollIntoView({ block: 'center' }); }, 300); },
   'bak-now': () => { openSettings('daten'); setTimeout(() => $('bak-now').scrollIntoView({ block: 'center' }), 200); },
-  'set-laden': () => openSettings('laden'), 'set-rem': () => openSettings('erinnerungen'), 'set-fahrten': () => openSettings('fahrten'), 'set-listen': () => openSettings('listen'), 'set-wetter': () => openSettings('wetter'), 'set-gefahr': () => openSettings('gefahr')
+  'set-laden': () => openSettings('laden'), 'set-rem': () => openSettings('erinnerungen'), 'set-fahrten': () => openSettings('fahrten'), 'set-listen': () => openSettings('listen'), 'set-start': () => openSettings('start'), 'set-wetter': () => openSettings('wetter'), 'set-gefahr': () => openSettings('gefahr')
 };
 /* Suche im Schnellmenü: Titel, Ort in der App und Stichwörter; alle Suchwörter müssen vorkommen (Groß/klein und Umlaute egal) */
 const NAV_IDX = [
@@ -6663,7 +6664,7 @@ const NAV_IDX = [
   ['wrap', 'Rückblick', 'Start', 'jahr wrapped'], ['reminders', 'Erinnerungen', 'Erinnerungen', 'wartung termine fällig'], ['kb', 'Wissen', 'Wissen', 'notizen links tipps'], ['wish', 'Wunschliste', 'Wunschliste', 'zubehör kaufen wunsch matten kofferraum links shop'], ['tires', 'Reifen', 'Reifen', 'profiltiefe profil reifenprofil mm sommer winter allwetter messen'], ['providers', 'Ladekarten', 'Ladeanbieter', 'anbieter tarife preise'],
   ['bak-now', 'Jetzt in Google Drive sichern', 'Einstellungen › Sicherung & Belege', 'backup drive'], ['backup', 'Sicherung & Belege', 'Einstellungen', 'export import drive'],
   ['car', 'Fahrzeug & Kauf', 'Einstellungen', 'kennzeichen fin kaufpreis kauftag'], ['set-laden', 'Laden & Akku', 'Einstellungen', 'strompreis kapazität wltp referenz temperatur'], ['set-rem', 'Nächste HU / Service', 'Einstellungen › Erinnerungen', 'vorwarnung fälligkeit tüv'],
-  ['set-wetter', 'Eis-Warnung (Scheibe vereist)', 'Einstellungen › Wetter', 'eis frost scheibe vereist kratzen raureif vorklimatisieren abfahrt stellplatz carport garage benachrichtigung push nachricht'], ['set-fahrten', 'Fahrtenbuch-Einstellungen', 'Einstellungen', 'orte etiketten regeln import benziner vergleich sprit spritpreis ersparnis gespart co2 co₂ ökostrom strommix klima'], ['set-listen', 'Anbieter & Kategorien', 'Einstellungen', 'etiketten liste'], ['set-wetter', 'Wetter', 'Einstellungen', 'standort frost'],
+  ['set-wetter', 'Eis-Warnung (Scheibe vereist)', 'Einstellungen › Wetter', 'eis frost scheibe vereist kratzen raureif vorklimatisieren abfahrt stellplatz carport garage benachrichtigung push nachricht'], ['set-fahrten', 'Fahrtenbuch-Einstellungen', 'Einstellungen', 'orte etiketten regeln import benziner vergleich sprit spritpreis ersparnis gespart co2 co₂ ökostrom strommix klima'], ['set-listen', 'Anbieter & Kategorien', 'Einstellungen', 'etiketten liste'], ['set-start', 'Startseite', 'Einstellungen', 'widgets karten reihenfolge anordnung ausblenden anzeigen'], ['set-wetter', 'Wetter', 'Einstellungen', 'standort frost'],
   ['account', 'Konto & Cloud', 'Einstellungen', 'anmelden google škoda api'], ['set-gefahr', 'Alle Daten löschen', 'Einstellungen', 'zurücksetzen reset']];
 const navNorm = (t) => String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 function navSearch() {
@@ -9542,3 +9543,88 @@ function renderHomeCard() {
 }
 { const rd = renderDashboard; renderDashboard = function () { const r = rd.apply(this, arguments); try { renderHomeCard(); } catch (e) { } try { renderNews(); } catch (e) { } return r; }; }
 try { renderHomeCard(); } catch (e) { } try { renderNews(); } catch (e) { }   // erster Aufbau (Start wurde schon vor diesem Skriptteil gezeichnet)
+
+// ───── src/25-startseite.js ─────
+/* =====================================================================
+   Startseite anpassen (Einstellungen › Startseite): Reihenfolge der Widgets im Wisch-Bereich per Ziehen am Griff,
+   rechts ein/aus. settings.dash = { order: [id…], off: [id…] } (nur wenn abweichend vom Standard, synchronisiert).
+   Umsetzung über CSS `order` + Klasse `dash-off` an den Karten; dashSlides() sortiert danach. Einfache Ansicht bleibt unberührt.
+   ===================================================================== */
+const DASH_W = [
+  ['home-card', 'Strom zuhause', 'Ladungen zuhause × Strompreis seit Kauf'],
+  ['ltm-card', 'Langzeitverbrauch', 'Verbrauch „Seit Kauf“ vom Bordcomputer eintragen'],
+  ['btm-card', 'Akku-Temperatur', 'Akku °C notieren'],
+  ['wxo-card', 'Verbrauchs-Prognose', 'braucht einen Wetter-Standort'],
+  ['veh-slide', 'Fahrzeugstatus', 'nur mit verbundenem Fahrzeug · am PC neben dem Auto'],
+  ['meter-card', 'Zählerstand', 'beim Live-Laden immer sichtbar'],
+  ['news-card', 'Neuigkeiten', 'Quellen unter Anbieter & Kategorien']];
+function dashCfg() {
+  const d = getSettings().dash || {}, ids = DASH_W.map(w => w[0]);
+  const order = (Array.isArray(d.order) ? d.order : []).filter(id => ids.includes(id));
+  ids.forEach((id, i) => { if (!order.includes(id)) order.splice(Math.min(i, order.length), 0, id); });   // neue Widgets an ihrer Standardstelle
+  return { order, off: (Array.isArray(d.off) ? d.off : []).filter(id => ids.includes(id)) };
+}
+function applyDash() {
+  const c = dashCfg(), simple = isSimple();
+  DASH_W.forEach(([id]) => { const el = $(id); if (!el) return;
+    el.style.order = simple ? '' : String(c.order.indexOf(id)); el.classList.toggle('dash-off', !simple && c.off.includes(id)); });
+  const dd = $('dash-dots'); if (dd) dd.innerHTML = '';   // Punkte neu beschriften (Reihenfolge kann sich geändert haben)
+  try { dashSwipeSync(); } catch (e) { }
+}
+/* Wisch-Reihenfolge = sichtbare Reihenfolge; ausgeblendete Widgets zählen nicht (Zählerstand beim Live-Laden schon) */
+{ const ds = dashSlides; dashSlides = function () {
+  const r = ds.apply(this, arguments); if (isSimple()) return r;
+  return r.filter(x => !x.classList.contains('dash-off') || (x.id === 'meter-card' && liveHero)).sort((a, b) => (Number(a.style.order) || 0) - (Number(b.style.order) || 0));
+}; }
+function dashSave(order, off) {
+  const def = DASH_W.map(w => w[0]).join(), same = order.join() === def && !off.length;
+  setQuickSetting('dash', same ? undefined : { order, off });
+  applyDash(); const m = $('dash-order-msg'); if (m) { m.textContent = '✓ Gespeichert'; clearTimeout(m._t); m._t = setTimeout(() => { m.textContent = ''; }, 1800); }
+}
+function renderDashSet() {
+  const ul = $('dash-order'); if (!ul) return; const c = dashCfg();
+  ul.innerHTML = c.order.map(id => { const w = DASH_W.find(x => x[0] === id), on = !c.off.includes(id);
+    return `<li data-w="${id}" class="flex items-center gap-2 border-b border-slate-200 bg-white py-2 last:border-b-0 dark:border-slate-800 dark:bg-slate-900">
+      <button type="button" data-drag class="flex h-11 w-9 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg text-slate-400 active:cursor-grabbing active:bg-slate-100 dark:active:bg-slate-800" aria-label="${esc(w[1])} verschieben (Pfeiltasten hoch/runter)"><svg class="h-5 w-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></button>
+      <span class="min-w-0 flex-1 ${on ? '' : 'opacity-50'}"><span class="block text-sm font-medium">${esc(w[1])}</span><span class="block truncate text-xs text-slate-500 dark:text-slate-400">${esc(w[2])}</span></span>
+      <label class="flex shrink-0 cursor-pointer items-center"><input type="checkbox" data-won="${id}" class="peer sr-only" aria-label="${esc(w[1])} anzeigen"${on ? ' checked' : ''}>
+      <span class="relative h-7 w-12 shrink-0 rounded-full bg-slate-300 dark:bg-slate-700 transition-colors peer-checked:bg-emerald-600 peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-500 after:absolute after:left-1 after:top-1 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow after:transition-transform after:content-[''] peer-checked:after:translate-x-5" aria-hidden="true"></span></label></li>`; }).join('');
+}
+const dashDomOrder = () => [...$('dash-order').children].map(li => li.dataset.w);
+$('dash-order').addEventListener('change', (e) => {
+  const id = e.target.dataset.won; if (!id) return; const c = dashCfg();
+  const off = e.target.checked ? c.off.filter(x => x !== id) : [...new Set([...c.off, id])];
+  dashSave(dashDomOrder(), off); renderDashSet();
+});
+/* Ziehen am Griff (Maus und Finger): Zeile folgt dem Zeiger, tauscht mit dem Nachbarn ab halber Zeilenhöhe */
+var dashDrag = null;
+$('dash-order').addEventListener('pointerdown', (e) => {
+  const h = e.target.closest('[data-drag]'); if (!h || dashDrag) return; e.preventDefault();
+  const li = h.closest('li'); try { h.setPointerCapture(e.pointerId); } catch (er) { }
+  dashDrag = { li, y0: e.clientY, pid: e.pointerId, moved: false }; li.classList.add('dragging');
+});
+$('dash-order').addEventListener('pointermove', (e) => {
+  const d = dashDrag; if (!d || e.pointerId !== d.pid) return;
+  let dy = e.clientY - d.y0; const prev = d.li.previousElementSibling, next = d.li.nextElementSibling;
+  if (next && dy > next.offsetHeight / 2) { next.after(d.li); d.y0 += next.offsetHeight; d.moved = true; }
+  else if (prev && dy < -prev.offsetHeight / 2) { prev.before(d.li); d.y0 -= prev.offsetHeight; d.moved = true; }
+  dy = e.clientY - d.y0; d.li.style.transform = `translateY(${dy}px)`;
+});
+function dashDragEnd(e) {
+  const d = dashDrag; if (!d || (e && e.pointerId !== d.pid)) return; dashDrag = null;
+  d.li.classList.remove('dragging'); d.li.style.transition = 'transform .15s'; d.li.style.transform = '';
+  setTimeout(() => { d.li.style.transition = ''; }, 160);
+  if (d.moved) dashSave(dashDomOrder(), dashCfg().off);
+}
+$('dash-order').addEventListener('pointerup', dashDragEnd);
+$('dash-order').addEventListener('pointercancel', dashDragEnd);
+/* Tastatur: Griff fokussieren, Pfeil hoch/runter verschiebt */
+$('dash-order').addEventListener('keydown', (e) => {
+  const h = e.target.closest('[data-drag]'); if (!h || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return; e.preventDefault();
+  const li = h.closest('li'), o = e.key === 'ArrowUp' ? li.previousElementSibling : li.nextElementSibling; if (!o) return;
+  if (e.key === 'ArrowUp') o.before(li); else o.after(li); h.focus(); dashSave(dashDomOrder(), dashCfg().off);
+});
+$('dash-order-reset').addEventListener('click', () => { setQuickSetting('dash', undefined); applyDash(); renderDashSet(); const m = $('dash-order-msg'); if (m) m.textContent = '✓ Standard wiederhergestellt'; });
+{ const sv = showView; showView = function (v) { const r = sv.apply(this, arguments); if (v === 'settings') try { renderDashSet(); } catch (e) { } return r; }; }
+{ const rd = renderDashboard; renderDashboard = function () { const r = rd.apply(this, arguments); try { applyDash(); } catch (e) { } return r; }; }
+try { applyDash(); renderDashSet(); } catch (e) { }
