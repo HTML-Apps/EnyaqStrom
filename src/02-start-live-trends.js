@@ -407,7 +407,7 @@ function renderTrends() {
           <div class="mt-1.5 flex gap-1 text-[10px] text-slate-500 dark:text-slate-400">${vals.map(x => `<span class="flex-1 text-center">${MONTHS[x.m]}</span>`).join('')}</div>
         </div>
       </div>
-      <p class="mt-3 text-left text-[11px] text-slate-500 dark:text-slate-400">Letzte 8 Monate · heller Balken = ${MONTHS_LONG[n.getMonth()]} (Zwischenstand) · gestrichelt = Ø${d.base && lo > 0 ? ' · Achse ab ' + lo : ''}${d.note ? ' · ' + d.note : ''}${d.key === 'km' && avg > 0 ? ' | Hochrechnung auf 12 Monate = ' + fmt(Math.round(avg) * 12, 0) + ' km' : ''}</p>`}
+      <p class="mt-3 text-left text-[11px] text-slate-500 dark:text-slate-400">Letzte 8 Monate · heller Balken = ${MONTHS_LONG[n.getMonth()]} (Zwischenstand) · gestrichelt = Ø${d.base && lo > 0 ? ' · Achse ab ' + lo : ''}${d.note ? ' · ' + d.note : ''}${d.key === 'km' && avg > 0 ? (() => { const pr = kmProj(done); return ' | Hochrechnung auf 12 Monate = ' + fmt(Math.round(pr.avg) * 12, 0) + ' km' + (pr.cut ? ' (ohne ' + MONTHS_LONG[pr.cut.m] + ' als Startmonat)' : ''); })() : ''}</p>`}
     </article>`; }).join('');
   $('trends-dots').innerHTML = defs.map((_, i) => `<span data-tdot="${i}" class="block h-2 rounded-full transition-all ${i === trendIdx ? 'w-5 bg-emerald-500' : 'w-2 bg-slate-500/60'}"></span>`).join('');
   if (trendIdx) box.scrollLeft = trendIdx * (box.firstElementChild.offsetWidth + 16);
@@ -455,3 +455,11 @@ function renderDashboard() {
 document.querySelectorAll('.dash-place-btn').forEach(b => b.addEventListener('click', () => { dashPlace = b.dataset.place; renderDashboard(); }));
 document.querySelectorAll('.range-btn').forEach(b => b.addEventListener('click', () => { range = b.dataset.range; renderChart(); }));
 
+
+/** Hochrechnung Laufleistung: Ø der abgeschlossenen Monate ohne den ersten Monat mit km-Ständen (angebrochen, zieht sonst den Schnitt runter) */
+function kmProj(done) {
+  let first = null; try { const p = odoPts(); if (p.length) { const t = new Date(p[0][0]); first = { y: t.getFullYear(), m: t.getMonth() }; } } catch (e) { }
+  const cut = first && done.find(x => x.y === first.y && x.m === first.m), rest = cut ? done.filter(x => x !== cut) : done;
+  if (!rest.length) return { avg: done.reduce((a, x) => a + x.v, 0) / (done.length || 1), cut: null };
+  return { avg: rest.reduce((a, x) => a + x.v, 0) / rest.length, cut: cut || null };
+}
