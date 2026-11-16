@@ -24,7 +24,15 @@ const SOURCES = {
       return [[...auto, 'https://www.motor-talk.de/forum/skoda-elektrofahrzeuge-b1114.rss', 'https://www.motor-talk.de/rss/forum/skoda-elektrofahrzeuge-b1114.html']];
     },
     keep: (it) => true                                                         // ganzer Bereich (Enyaq + Elroq)
-  }
+  },
+  /* Kandidaten (noch nicht in der App): erst per ?diag=1 prüfen */
+  ec: { name: 'ecomento (Enyaq)', async find(log) { return [[...await discover('https://ecomento.de/tag/skoda-enyaq-iv/', log), 'https://ecomento.de/tag/skoda-enyaq-iv/feed/']]; }, keep: () => true, cand: true },
+  el: { name: 'electrive (Enyaq)', async find(log) { return [[...await discover('https://www.electrive.net/tag/enyaq/', log), 'https://www.electrive.net/tag/enyaq/feed/']]; }, keep: () => true, cand: true },
+  eq: { name: 'elektroquatsch (Skoda)', async find(log) { return [[...await discover('https://www.elektroquatsch.de/kategorie/skoda', log)]]; }, keep: (it) => /enyaq/i.test(it.t), cand: true },
+  en: { name: 'elektroauto-news (Enyaq)', async find(log) { return [[...await discover('https://www.elektroauto-news.net/news/mehr-reichweite-funktionen-fuer-skoda-enyaq', log), 'https://www.elektroauto-news.net/feed']]; }, keep: (it) => /enyaq/i.test(it.t), cand: true },
+  sb: { name: 'Škoda Storyboard', async find(log) { return [[...await discover('https://www.skoda-storyboard.com/de/', log), 'https://www.skoda-storyboard.com/de/feed/']]; }, keep: (it) => /enyaq|elroq|software|myškoda|myskoda/i.test(it.t), cand: true },
+  bk: { name: 'BRISKODA Enyaq-Forum (englisch)', async find(log) { return [[...await discover('https://www.briskoda.net/forums/forum/399-skoda-enyaq/', log), 'https://www.briskoda.net/forums/forum/399-skoda-enyaq.xml/']]; }, keep: () => true, cand: true },
+  dt: { name: 'drives.today (Enyaq)', async find(log) { return [[...await discover('https://www.drives.today/tags/content-news/skoda+enyaq', log)]]; }, keep: (it) => /enyaq/i.test(it.t), cand: true }
 };
 
 async function get(url, log) {
@@ -89,10 +97,14 @@ async function loadSource(s, diag) {
 
 export default async function handler(req, res) {
   const q = req.query || {}, diag = q.diag === '1';
-  const want = String(q.src || 'ef,mt').split(',').map(x => x.trim()).filter(x => SOURCES[x]).slice(0, 4);
+  const want = String(q.src || 'ef,mt').split(',').map(x => x.trim()).filter(x => SOURCES[x] && !SOURCES[x].cand).slice(0, 4);
   if (diag) {
     res.setHeader('Cache-Control', 'no-store');
     const out = {}; await Promise.all(Object.keys(SOURCES).map(async s => { const r = await loadSource(s, true); out[s] = { name: SOURCES[s].name, feeds: r.feeds, n: r.items.length, err: r.err, sample: r.items.slice(0, 3).map(x => x.t), log: r.log }; }));
+    if (q.boards === '1') {   // Unterbereiche von enyaq-forum.de (für Feeds je Bereich: /forum/board-feed/<id>/)
+      const h = await get('https://www.enyaq-forum.de/forum/') || '', seen = new Set();
+      out.efBoards = [...h.matchAll(/href="https:\/\/www\.enyaq-forum\.de\/forum\/board\/(\d+)-[^"]*"[^>]*>([^<]{2,80})</g)].map(m => [m[1], m[2].trim()]).filter(([id]) => !seen.has(id) && seen.add(id));
+    }
     return res.status(200).json(out);
   }
   const rs = await Promise.all(want.map(s => loadSource(s)));
