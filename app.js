@@ -5005,14 +5005,14 @@ function openWxoSheet() {
 }
 /* Start: Verbrauchs-Prognose und Zählerstand seitlich wischen (Standard: Prognose). Höhe folgt der sichtbaren Karte. */
 const dSw = { tr: $('dash-swipe-track'), idx: 0 };
-function dashSlides() { if (isSimple()) return [$('ltm-card'), $('veh-slide'), $('care-slide')].filter(x => x && !x.classList.contains('hidden')); return [$('ltm-card'), $('btm-card'), $('wxo-card'), $('veh-slide'), $('meter-card')].filter(x => x && !x.classList.contains('hidden') && !((x.id === 'btm-card' || x.id === 'ltm-card') && liveHero)); }
+function dashSlides() { if (isSimple()) return [$('ltm-card'), $('veh-slide'), $('care-slide')].filter(x => x && !x.classList.contains('hidden')); return [$('home-card'), $('ltm-card'), $('btm-card'), $('wxo-card'), $('veh-slide'), $('meter-card'), $('news-card')].filter(x => x && !x.classList.contains('hidden') && !((x.id === 'btm-card' || x.id === 'ltm-card' || x.id === 'home-card' || x.id === 'news-card') && liveHero)); }
 const dashIdx = (id) => Math.max(0, dashSlides().indexOf($(id)));
 /** Karte beim Öffnen: Prognose oder Zählerstand (Akku-Temperatur liegt links davon und wird nur per Wischen erreicht) */
 const dashDefaultIdx = () => isSimple() ? dashIdx('veh-slide') : dashFirstSlide() === 'wx' && !$('wxo-card').classList.contains('hidden') ? dashIdx('wxo-card') : dashIdx('meter-card');
 function dashSwipeSync() {
   const sl = dashSlides(), w = dSw.tr.clientWidth + 12, i = Math.max(0, Math.min(sl.length - 1, Math.round(dSw.tr.scrollLeft / (w || 1)))); dSw.idx = i;
   const two = sl.length > 1, dd = $('dash-dots'); dd.classList.toggle('hidden', !two);
-  if (dd.children.length !== sl.length) dd.innerHTML = sl.map((x, k) => `<button type="button" data-dslide="${k}" aria-label="${x.id === 'ltm-card' ? 'Langzeitverbrauch' : x.id === 'care-slide' ? 'Akkupflege' : x.id === 'btm-card' ? 'Akku-Temperatur' : x.id === 'wxo-card' ? 'Verbrauchs-Prognose' : x.id === 'veh-slide' ? 'Fahrzeugstatus' : 'Zählerstand'}" class="pointer-events-auto h-1.5 w-1.5 rounded-full bg-slate-300 dark:bg-slate-700 transition-all"></button>`).join('');
+  if (dd.children.length !== sl.length) dd.innerHTML = sl.map((x, k) => `<button type="button" data-dslide="${k}" aria-label="${x.id === 'home-card' ? 'Strom zuhause' : x.id === 'news-card' ? 'Neuigkeiten' : x.id === 'ltm-card' ? 'Langzeitverbrauch' : x.id === 'care-slide' ? 'Akkupflege' : x.id === 'btm-card' ? 'Akku-Temperatur' : x.id === 'wxo-card' ? 'Verbrauchs-Prognose' : x.id === 'veh-slide' ? 'Fahrzeugstatus' : 'Zählerstand'}" class="pointer-events-auto h-1.5 w-1.5 rounded-full bg-slate-300 dark:bg-slate-700 transition-all"></button>`).join('');
   dd.querySelectorAll('[data-dslide]').forEach((b, k) => { const on = k === i; b.classList.toggle('w-4', on); b.classList.toggle('w-1.5', !on); ['bg-slate-400', 'dark:bg-slate-500'].forEach(c => b.classList.toggle(c, on)); ['bg-slate-300', 'dark:bg-slate-700'].forEach(c => b.classList.toggle(c, !on)); });
 }
 function dashSwipeTo(i, smooth = true) { const sl = dashSlides(); if (!sl[i]) return; dSw.tr.scrollTo({ left: sl[i].offsetLeft - dSw.tr.offsetLeft, behavior: smooth ? 'smooth' : 'auto' }); }
@@ -5022,7 +5022,7 @@ let dSwT = null; dSw.tr.addEventListener('scroll', () => { clearTimeout(dSwT); d
 $('dash-dots').addEventListener('click', (e) => { const b = e.target.closest('[data-dslide]'); if (b) dashSwipeTo(Number(b.dataset.dslide)); });
 try { new ResizeObserver(() => dashSwipeSync()).observe($('ltm-card')); new ResizeObserver(() => dashSwipeSync()).observe($('btm-card')); new ResizeObserver(() => dashSwipeSync()).observe($('wxo-card')); new ResizeObserver(() => dashSwipeSync()).observe($('meter-card')); } catch (e) { }
 let dSwVis = false; new MutationObserver(() => { const v = !$('wxo-card').classList.contains('hidden'); if (v !== dSwVis) { dSwVis = v; dashSwipeTo(dashDefaultIdx(), false); } dashSwipeSync(); }).observe($('wxo-card'), { attributes: true, attributeFilter: ['class'] });
-$('btn-live').addEventListener('click', () => setTimeout(() => dashSwipeTo(dashSlides().length - 1), 0));
+$('btn-live').addEventListener('click', () => setTimeout(() => dashSwipeTo(dashIdx('meter-card')), 0));
 mouseSwipe(dSw.tr, 12);
 dashSwipeSync();
 $('wxo-more').addEventListener('click', openWxoSheet);
@@ -5807,7 +5807,7 @@ try { renderWrapCard(); } catch (e) { }
    im Dokument enyaqStrom/<uid>/settings/prefs, gleiche Regel wie Anbieter und Kategorien. Die PIN bleibt nur auf dem Gerät.
    Erster Abgleich: Was die Cloud hat, gilt; fehlt dort etwas und ist lokal vorhanden, wird es hochgeladen. Danach gilt die Cloud (Änderung auf einem Gerät wirkt auf allen).
    ===================================================================== */
-const SYNC_SET_KEYS = ['presetV', 'bdg', 'title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAcKwh', 'certDcKwh', 'certKm', 'wltpNet', 'ccEnd', 'wxoCut', 'dashFirst', 'car', 'carT', 'ui', 'carN', 'carSec', 'wxIcons', 'nRep', 'nCare', 'nTrips', 'nBakYm', 'nBakAt', 'nBakSnz', 'gtMirror', 'gtList', 'iceDep', 'iceWe', 'icePark', 'iceMin', 'iceK', 'cmpCar', 'cmpL', 'cmpEur', 'cmpCo2'];
+const SYNC_SET_KEYS = ['presetV', 'bdg', 'title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAcKwh', 'certDcKwh', 'certKm', 'wltpNet', 'ccEnd', 'wxoCut', 'dashFirst', 'car', 'carT', 'ui', 'carN', 'carSec', 'wxIcons', 'nRep', 'nCare', 'nTrips', 'nBakYm', 'nBakAt', 'nBakSnz', 'gtMirror', 'gtList', 'iceDep', 'iceWe', 'icePark', 'iceMin', 'iceK', 'cmpCar', 'cmpL', 'cmpEur', 'cmpCo2', 'news'];
 /** Einstellungen für die Cloud: feste Reihenfolge, ohne leere Werte (Firestore verbietet undefined). null = nichts vorhanden. */
 function syncSet(src) {
   const o = {}; if (src && typeof src === 'object') SYNC_SET_KEYS.forEach(k => { const v = src[k]; if (v != null && v !== '' && !(typeof v === 'number' && !isFinite(v))) o[k] = v; });
@@ -9333,3 +9333,138 @@ setTimeout(async () => {
   errUpload();
   try { if (window.cloud?.isSignedIn?.()) { const r = await fetch('/api/errlog?check=1', { headers: await authHeaders() }); if (r.ok) { errAdmin = !!(await r.json()).admin; renderErrs(); } } } catch (e) { }
 }, 6000);
+
+// ───── src/23-neuigkeiten.js ─────
+/* =====================================================================
+   Neuigkeiten (Start, Karte ganz rechts nach dem Zählerstand): neue Beiträge aus Enyaq-Foren über /api/news.
+   Filter-Chips je Forum, Liste scrollt innerhalb der Karte (Höhe = übrige Karten). Quellen ein/aus unter
+   Einstellungen › Anbieter & Kategorien (settings.news, synchronisiert). „neu“ = neuer als beim letzten Ansehen (je Gerät).
+   ===================================================================== */
+const NEWS_SRC = [
+  { k: 'ge', n: 'GoingElectric', sub: 'Enyaq-Unterforen', c: '#f59e0b', on: true },
+  { k: 'ef', n: 'enyaq-forum.de', short: 'enyaq-forum', sub: 'alle Bereiche', c: '#22c55e', on: true },
+  { k: 'tff', n: 'TFF-Forum', short: 'TFF', sub: 'Schlagwort bzw. Thread „Škoda Enyaq“', c: '#a78bfa', on: true },
+  { k: 'mt', n: 'Motor-Talk', sub: 'Skoda Elektrofahrzeuge', c: '#38bdf8', on: false }];
+const KEY_NEWS = 'enyaq.news', KEY_NEWS_SEEN = 'enyaq.newsSeen', NEWS_TTL = 30 * 60e3;
+var newsFilter = 'all', newsBusy = false, newsErr = '';   // var: Aufruf über renderDashboard ohne TDZ
+function newsOn() { const st = getSettings().news || {}; return NEWS_SRC.filter(s => st[s.k] == null ? s.on : !!st[s.k]).map(s => s.k); }
+const newsDef = (k) => NEWS_SRC.find(s => s.k === k) || { n: k, c: '#64748b' };
+function newsAgo(t) {
+  const m = Math.round((Date.now() - t) / 60e3);
+  if (!Number.isFinite(m)) return '';
+  if (m < 2) return 'gerade'; if (m < 60) return m + ' Min.'; const h = Math.round(m / 60); if (h < 24) return h + ' Std.';
+  const d = Math.floor((dayStart().getTime() - new Date(new Date(t).toDateString()).getTime()) / 864e5);
+  return d <= 1 ? 'gestern' : d < 7 ? d + ' Tg.' : new Date(t).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
+}
+async function newsLoad(force) {
+  const src = newsOn().join(','), c = load(KEY_NEWS, null);
+  if (!src || newsBusy || !navigator.onLine) return;
+  if (!force && c && c.src === src && Date.now() - c.t < NEWS_TTL) return;
+  newsBusy = true;
+  try {
+    const r = await fetch('/api/news?src=' + encodeURIComponent(src)), j = await r.json();
+    if (!r.ok || !Array.isArray(j.items)) throw new Error('HTTP ' + r.status);
+    save(KEY_NEWS, { t: Date.now(), at: Date.parse(j.at) || Date.now(), src, items: j.items.slice(0, 30) }); newsErr = '';
+  } catch (e) { newsErr = 'Foren gerade nicht erreichbar.'; }
+  finally { newsBusy = false; }
+  try { renderNews(); } catch (e) { }
+}
+function renderNews() {
+  const el = $('news-card'); if (!el) return;
+  const on = newsOn(), show = on.length > 0 && !isSimple();
+  el.classList.toggle('hidden', !show); setTimeout(() => { try { dashSwipeSync(); } catch (e) { } }, 0);
+  if (!show) return;
+  const c = load(KEY_NEWS, null), fresh = c && c.src === on.join(','), all = fresh ? c.items.filter(x => on.includes(x.s)) : [];
+  if (!fresh || Date.now() - c.t >= NEWS_TTL) newsLoad();
+  if (newsFilter !== 'all' && !on.includes(newsFilter)) newsFilter = 'all';
+  const seen = Number(localStorage.getItem(KEY_NEWS_SEEN)) || 0, cnt = (k) => all.filter(x => x.s === k).length;
+  const items = newsFilter === 'all' ? all : all.filter(x => x.s === newsFilter);
+  const chip = (k, label, n) => `<button type="button" data-nf="${k}" class="shrink-0 whitespace-nowrap rounded-[9px] px-2.5 py-1 text-[11.5px] font-semibold active:scale-95 transition ${newsFilter === k ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400' : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200'}">${esc(label)} ${n}</button>`;
+  const chips = chip('all', 'Alle', all.length) + on.map(k => chip(k, newsDef(k).short || newsDef(k).n, cnt(k))).join('');
+  const row = (x) => { const d = Date.parse(x.d), nw = d > seen && seen > 0, s = newsDef(x.s);
+    return `<a href="${esc(x.u)}" target="_blank" rel="noopener" class="mb-1.5 block rounded-xl border-l-[3px] bg-slate-100 px-2.5 py-2 text-left active:scale-[.99] transition dark:bg-slate-800" style="border-left-color:${s.c}">
+      <span class="line-clamp-2 text-[12.5px] font-semibold leading-snug">${esc(x.t)}</span>
+      <span class="mt-0.5 flex justify-between gap-2 text-[10.5px] text-slate-500 dark:text-slate-400"><span class="min-w-0 truncate">${esc(s.n)}${x.f ? ' · ' + esc(x.f) : ''}</span><span class="shrink-0">${Number.isFinite(d) ? newsAgo(d) : ''}${nw ? ' · <b class="font-semibold text-emerald-600 dark:text-emerald-400">neu</b>' : ''}</span></span></a>`; };
+  const empty = !fresh ? (newsErr || 'Lade Neuigkeiten …') : !items.length ? (newsErr || 'Keine Beiträge gefunden.') : '';
+  el.innerHTML = `<div class="flex items-center justify-between gap-2"><p class="font-barlow text-xl font-bold uppercase tracking-[0.08em] leading-6">Neuigkeiten</p><button type="button" data-nref class="shrink-0 text-[11px] text-slate-500 dark:text-slate-400 active:opacity-60" title="Neu laden">${fresh ? 'vor ' + newsAgo(c.t).replace('gerade', 'wenigen Sek.') : ''}</button></div>
+    <div class="no-scrollbar -mx-4 mt-2 flex gap-1.5 overflow-x-auto px-4">${chips}</div>
+    <div class="relative mt-2 min-h-0 flex-1"><div id="news-list" class="no-scrollbar absolute inset-0 overflow-y-auto overscroll-contain pb-3">${empty ? `<p class="py-6 text-center text-sm text-slate-500 dark:text-slate-400">${esc(empty)}</p>` : items.map(row).join('')}</div>
+    <div class="pointer-events-none absolute inset-x-0 bottom-0 h-6 bg-gradient-to-t from-white dark:from-slate-900"></div></div>`;
+  newsWatch();
+}
+$('news-card').addEventListener('click', (e) => {
+  const f = e.target.closest('[data-nf]'); if (f) { newsFilter = f.dataset.nf; renderNews(); return; }
+  if (e.target.closest('[data-nref]')) { newsLoad(true); return; }
+});
+/* Gesehen: Karte mind. 2 s sichtbar → neuester Beitrag gilt als gesehen (Markierungen verschwinden beim nächsten Öffnen) */
+var newsObs = null, newsSeenT = null;
+function newsWatch() {
+  if (newsObs || !('IntersectionObserver' in window)) return;
+  newsObs = new IntersectionObserver((es) => { es.forEach(en => { clearTimeout(newsSeenT); if (en.isIntersecting && en.intersectionRatio > 0.6) newsSeenT = setTimeout(() => {
+    const c = load(KEY_NEWS, null), mx = c ? Math.max(0, ...c.items.map(x => Date.parse(x.d) || 0)) : 0; if (mx) try { localStorage.setItem(KEY_NEWS_SEEN, String(mx)); } catch (er) { } }, 2000); }); }, { threshold: [0, 0.6, 1] });
+  newsObs.observe($('news-card'));
+}
+/* Erstes Öffnen: alles bis jetzt gilt als gesehen, sonst wäre beim ersten Mal alles „neu“ */
+try { if (!localStorage.getItem(KEY_NEWS_SEEN)) localStorage.setItem(KEY_NEWS_SEEN, String(Date.now() - 864e5)); } catch (e) { }
+
+/* Einstellungen › Anbieter & Kategorien: Schalter je Quelle */
+function renderNewsSet() {
+  const box = $('news-src'); if (!box) return; const on = newsOn();
+  box.innerHTML = NEWS_SRC.map(s => `<label class="flex cursor-pointer items-center gap-3 py-2.5">
+    <span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background:${s.c}"></span>
+    <span class="min-w-0 flex-1"><span class="block text-sm font-medium">${esc(s.n)}</span><span class="block text-xs text-slate-500 dark:text-slate-400">${esc(s.sub)}</span></span>
+    <input type="checkbox" data-nsrc="${s.k}" class="peer sr-only"${on.includes(s.k) ? ' checked' : ''}>
+    <span class="relative h-7 w-12 shrink-0 rounded-full bg-slate-300 dark:bg-slate-700 transition-colors peer-checked:bg-emerald-600 peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-500 after:absolute after:left-1 after:top-1 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow after:transition-transform after:content-[''] peer-checked:after:translate-x-5" aria-hidden="true"></span></label>`).join('');
+}
+$('news-src').addEventListener('change', (e) => {
+  const k = e.target.dataset.nsrc; if (!k) return;
+  const st = { ...(getSettings().news || {}) }; st[k] = !!e.target.checked;
+  NEWS_SRC.forEach(s => { if (st[s.k] === s.on) delete st[s.k]; });   // nur Abweichungen vom Standard speichern
+  setQuickSetting('news', Object.keys(st).length ? st : undefined); newsFilter = 'all';
+  try { renderNews(); } catch (er) { }
+});
+{ const sv = showView; showView = function (v) { const r = sv.apply(this, arguments); if (v === 'settings') try { renderNewsSet(); } catch (e) { } return r; }; }
+
+// ───── src/24-strom-zuhause.js ─────
+/* =====================================================================
+   Strom zuhause (Start, erste Karte links vom Langzeitverbrauch): alle Ladungen „Zuhause“ seit dem Kauf × Preis aus den Einstellungen.
+   Monatsbalken (laufender Monat hell), Ø pro Monat (abgeschlossene Monate ohne angebrochenen Kaufmonat), Kosten je km.
+   Heißt der Anbieter zuhause (Ladeanbieter › Zuhause) „Vattenfall“, in Vattenfall-Farben (Gelb auf Dunkelblau, nur Name, kein Logo).
+   ===================================================================== */
+function homeStats() {
+  const rs = getReadings(), p0 = purchaseDay(), t0 = Date.parse(p0 + 'T00:00:00'), price = Number(getSettings().price) || 0, byM = {};
+  let kwh = 0, n = 0, lastT = 0;
+  rs.forEach((r, i) => {
+    if (!(isHome(r) && isCharge(rs, i))) return; const t = Date.parse(r.date); if (!(t >= t0)) return;
+    const k = Number(r.consumedSinceLast) || 0; if (k <= 0) return;
+    const d = new Date(t), mk = d.getFullYear() * 12 + d.getMonth(); byM[mk] = (byM[mk] || 0) + k; kwh += k; n++; lastT = Math.max(lastT, t);
+  });
+  const now = new Date(), cur = now.getFullYear() * 12 + now.getMonth(), d0 = new Date(t0), m0 = d0.getFullYear() * 12 + d0.getMonth();
+  const months = []; for (let m = Math.max(m0, cur - 5); m <= cur; m++) months.push({ m, eur: (byM[m] || 0) * price, cur: m === cur });
+  const done = []; for (let m = m0 + (d0.getDate() > 1 ? 1 : 0); m < cur; m++) done.push((byM[m] || 0) * price);   // ohne angebrochenen Kaufmonat
+  const doneAll = []; for (let m = m0; m < cur; m++) doneAll.push((byM[m] || 0) * price);
+  const avgL = done.length ? done : doneAll, avg = avgL.length ? avgL.reduce((a, b) => a + b, 0) / avgL.length : null;
+  let km = null; try { km = rangeKm(t0, Date.now()); } catch (e) { }
+  return { kwh, n, price, eur: kwh * price, months, avg, km: km > 0 ? km : null, p0 };
+}
+function renderHomeCard() {
+  const el = $('home-card'); if (!el) return;
+  const s = homeStats(), show = !isSimple() && s.n > 0 && s.price > 0;
+  el.classList.toggle('hidden', !show); setTimeout(() => { try { dashSwipeSync(); } catch (e) { } }, 0);
+  if (!show) return;
+  const name = pvHomeName(), vf = /vattenfall/i.test(name), mx = Math.max(1, ...s.months.map(x => x.eur));
+  el.classList.toggle('home-vf', vf);
+  const MS = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
+  const bars = s.months.map(x => `<div class="flex min-w-0 flex-1 flex-col items-center gap-0.5" title="${MS[x.m % 12]}: ${esc(eur(x.eur))}${x.cur ? ' (Zwischenstand)' : ''}">
+      <div class="home-bar w-full rounded-t${x.cur ? ' home-bar-cur' : ''}" style="height:${Math.max(3, Math.round(x.eur / mx * 46))}px"></div><span class="home-sub text-[9.5px]">${MS[x.m % 12]}</span></div>`).join('');
+  el.innerHTML = `<div class="flex items-center gap-2"><span class="home-dot flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full text-[12px]" aria-hidden="true">⚡</span>
+      <p class="min-w-0 flex-1 truncate font-barlow text-xl font-bold uppercase tracking-[0.08em] leading-6">Strom zuhause</p>${name ? `<span class="home-name shrink-0 text-[11px] font-bold">${esc(name)}</span>` : ''}</div>
+    <p class="mt-1.5 font-barlow text-[40px] font-bold leading-none tabular-nums">${esc(eur(s.eur))}</p>
+    <p class="home-calc mt-1 text-[12px]">${fmt(s.kwh, 0)} kWh × ${fmt(s.price * 100, 1)} ct</p>
+    <p class="home-sub text-[11px]">seit Kauf ${new Date(s.p0 + 'T12:00:00').toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })} · ${s.n} ${s.n === 1 ? 'Ladung' : 'Ladungen'}</p>
+    <div class="min-h-1 flex-1"></div>
+    <div class="mt-1.5 flex items-end gap-1.5">${bars}</div>
+    <div class="home-sub mt-1.5 flex justify-between text-[11px]"><span>${s.avg != null ? `Ø <b class="home-strong">${fmt(Math.round(s.avg), 0)} €</b>/Monat` : ''}</span><span>${s.km ? `<b class="home-strong">${fmt(s.eur / s.km * 100, 1)} ct</b>/km` : ''}</span></div>`;
+}
+{ const rd = renderDashboard; renderDashboard = function () { const r = rd.apply(this, arguments); try { renderHomeCard(); } catch (e) { } try { renderNews(); } catch (e) { } return r; }; }
+try { renderHomeCard(); } catch (e) { } try { renderNews(); } catch (e) { }   // erster Aufbau (Start wurde schon vor diesem Skriptteil gezeichnet)

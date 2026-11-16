@@ -454,14 +454,14 @@ function openWxoSheet() {
 }
 /* Start: Verbrauchs-Prognose und Zählerstand seitlich wischen (Standard: Prognose). Höhe folgt der sichtbaren Karte. */
 const dSw = { tr: $('dash-swipe-track'), idx: 0 };
-function dashSlides() { if (isSimple()) return [$('ltm-card'), $('veh-slide'), $('care-slide')].filter(x => x && !x.classList.contains('hidden')); return [$('ltm-card'), $('btm-card'), $('wxo-card'), $('veh-slide'), $('meter-card')].filter(x => x && !x.classList.contains('hidden') && !((x.id === 'btm-card' || x.id === 'ltm-card') && liveHero)); }
+function dashSlides() { if (isSimple()) return [$('ltm-card'), $('veh-slide'), $('care-slide')].filter(x => x && !x.classList.contains('hidden')); return [$('home-card'), $('ltm-card'), $('btm-card'), $('wxo-card'), $('veh-slide'), $('meter-card'), $('news-card')].filter(x => x && !x.classList.contains('hidden') && !((x.id === 'btm-card' || x.id === 'ltm-card' || x.id === 'home-card' || x.id === 'news-card') && liveHero)); }
 const dashIdx = (id) => Math.max(0, dashSlides().indexOf($(id)));
 /** Karte beim Öffnen: Prognose oder Zählerstand (Akku-Temperatur liegt links davon und wird nur per Wischen erreicht) */
 const dashDefaultIdx = () => isSimple() ? dashIdx('veh-slide') : dashFirstSlide() === 'wx' && !$('wxo-card').classList.contains('hidden') ? dashIdx('wxo-card') : dashIdx('meter-card');
 function dashSwipeSync() {
   const sl = dashSlides(), w = dSw.tr.clientWidth + 12, i = Math.max(0, Math.min(sl.length - 1, Math.round(dSw.tr.scrollLeft / (w || 1)))); dSw.idx = i;
   const two = sl.length > 1, dd = $('dash-dots'); dd.classList.toggle('hidden', !two);
-  if (dd.children.length !== sl.length) dd.innerHTML = sl.map((x, k) => `<button type="button" data-dslide="${k}" aria-label="${x.id === 'ltm-card' ? 'Langzeitverbrauch' : x.id === 'care-slide' ? 'Akkupflege' : x.id === 'btm-card' ? 'Akku-Temperatur' : x.id === 'wxo-card' ? 'Verbrauchs-Prognose' : x.id === 'veh-slide' ? 'Fahrzeugstatus' : 'Zählerstand'}" class="pointer-events-auto h-1.5 w-1.5 rounded-full bg-slate-300 dark:bg-slate-700 transition-all"></button>`).join('');
+  if (dd.children.length !== sl.length) dd.innerHTML = sl.map((x, k) => `<button type="button" data-dslide="${k}" aria-label="${x.id === 'home-card' ? 'Strom zuhause' : x.id === 'news-card' ? 'Neuigkeiten' : x.id === 'ltm-card' ? 'Langzeitverbrauch' : x.id === 'care-slide' ? 'Akkupflege' : x.id === 'btm-card' ? 'Akku-Temperatur' : x.id === 'wxo-card' ? 'Verbrauchs-Prognose' : x.id === 'veh-slide' ? 'Fahrzeugstatus' : 'Zählerstand'}" class="pointer-events-auto h-1.5 w-1.5 rounded-full bg-slate-300 dark:bg-slate-700 transition-all"></button>`).join('');
   dd.querySelectorAll('[data-dslide]').forEach((b, k) => { const on = k === i; b.classList.toggle('w-4', on); b.classList.toggle('w-1.5', !on); ['bg-slate-400', 'dark:bg-slate-500'].forEach(c => b.classList.toggle(c, on)); ['bg-slate-300', 'dark:bg-slate-700'].forEach(c => b.classList.toggle(c, !on)); });
 }
 function dashSwipeTo(i, smooth = true) { const sl = dashSlides(); if (!sl[i]) return; dSw.tr.scrollTo({ left: sl[i].offsetLeft - dSw.tr.offsetLeft, behavior: smooth ? 'smooth' : 'auto' }); }
@@ -471,7 +471,7 @@ let dSwT = null; dSw.tr.addEventListener('scroll', () => { clearTimeout(dSwT); d
 $('dash-dots').addEventListener('click', (e) => { const b = e.target.closest('[data-dslide]'); if (b) dashSwipeTo(Number(b.dataset.dslide)); });
 try { new ResizeObserver(() => dashSwipeSync()).observe($('ltm-card')); new ResizeObserver(() => dashSwipeSync()).observe($('btm-card')); new ResizeObserver(() => dashSwipeSync()).observe($('wxo-card')); new ResizeObserver(() => dashSwipeSync()).observe($('meter-card')); } catch (e) { }
 let dSwVis = false; new MutationObserver(() => { const v = !$('wxo-card').classList.contains('hidden'); if (v !== dSwVis) { dSwVis = v; dashSwipeTo(dashDefaultIdx(), false); } dashSwipeSync(); }).observe($('wxo-card'), { attributes: true, attributeFilter: ['class'] });
-$('btn-live').addEventListener('click', () => setTimeout(() => dashSwipeTo(dashSlides().length - 1), 0));
+$('btn-live').addEventListener('click', () => setTimeout(() => dashSwipeTo(dashIdx('meter-card')), 0));
 mouseSwipe(dSw.tr, 12);
 dashSwipeSync();
 $('wxo-more').addEventListener('click', openWxoSheet);

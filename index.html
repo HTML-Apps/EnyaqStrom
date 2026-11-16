@@ -175,7 +175,17 @@
   #view-dashboard:not(.live-mode) #meter-card > .grid.grid-cols-2 > div { padding-top: .5rem; padding-bottom: .5rem; }
   /* ===== PC / Querformat ab 1280 px: Schnellmenü fest links, App mittig wie am Handy, Erinnerungen fest rechts (am Handy unverändert) ===== */
   #desk-rem { display: none; }
-  #view-dashboard.live-mode #btm-card, #view-dashboard.live-mode #ltm-card { display: none; }
+  #view-dashboard.live-mode #btm-card, #view-dashboard.live-mode #ltm-card, #view-dashboard.live-mode #home-card, #view-dashboard.live-mode #news-card { display: none; }
+  /* Strom zuhause (src/24): neutrale Farben, bei Anbieter „Vattenfall“ Gelb auf Dunkelblau */
+  #home-card .home-sub { color: #64748b; } html.dark #home-card .home-sub { color: #94a3b8; }
+  #home-card .home-calc { color: #0369a1; } html.dark #home-card .home-calc { color: #7dd3fc; }
+  #home-card .home-strong { color: #0f172a; } html.dark #home-card .home-strong { color: #e2e8f0; }
+  #home-card .home-bar { background: #10b981; } #home-card .home-bar-cur { background: rgba(16,185,129,.4); }
+  #home-card .home-dot { background: rgba(16,185,129,.18); } #home-card .home-name { color: #059669; } html.dark #home-card .home-name { color: #34d399; }
+  html #home-card.home-vf { background: linear-gradient(160deg, #0b2a4a, #0f172a 70%); color: #fff; }
+  html #home-card.home-vf .home-sub { color: #94a3b8; } html #home-card.home-vf .home-calc { color: #93c5fd; } html #home-card.home-vf .home-strong { color: #e2e8f0; }
+  html #home-card.home-vf .home-bar { background: #ffda00; } html #home-card.home-vf .home-bar-cur { background: rgba(255,218,0,.45); }
+  html #home-card.home-vf .home-dot { background: #ffda00; } html #home-card.home-vf .home-name { color: #ffda00; }
   @media (min-width: 1280px) {
     #hero-rem-sub { display: none; }
     body { padding-left: var(--dl); padding-right: var(--dr); }
@@ -216,7 +226,7 @@
   /* Einfache Ansicht (Einstellungen → Fahrzeug & Kauf → Ansicht): weniger Funktionen, Start mit Kacheln, unten Start · Erfassen · Auswerten. Daten bleiben unberührt. */
   .simple-only { display: none !important; }
   html.simple .simple-only { display: block !important; }
-  html.simple #hero-stats, html.simple #hero-rem-wrap, html.simple #frost-banner, html.simple #trips-banner, html.simple #wxo-card, html.simple #btm-card, html.simple #meter-card,
+  html.simple #hero-stats, html.simple #hero-rem-wrap, html.simple #frost-banner, html.simple #trips-banner, html.simple #wxo-card, html.simple #btm-card, html.simple #meter-card, html.simple #home-card, html.simple #news-card,
   html.simple #go-stat, html.simple #btn-wrap-preview, html.simple #go-akku, html.simple #go-trips, html.simple #go-prov, html.simple #go-badges, html.simple #kb-card,
   html.simple #bottom-nav, html.simple [data-place="bosch"], html.simple #rec-chips, html.simple #rep-mode [data-mode="fahrten"], html.simple [data-bt="kurve"], html.simple [data-bt="mehr"], html.simple #sec-eff, html.simple #sec-trends,
   html.simple [data-dp="akte"], html.simple [data-dp="ausst"], html.simple [data-dp="checkheft"], html.simple [data-filter="fahrten"], html.simple div:has(> #bt-minus),
@@ -241,7 +251,7 @@
   @media (prefers-reduced-motion: reduce) { #bd-conf i, #bdg-conf i { animation: none; top: var(--y, 10%); } #bd-card, #bdg-card { animation: none; } }
 </style>
 <!-- Tailwind fertig gebaut (npm run css) – am Ende des Kopfs wie früher das CDN, damit die Reihenfolge der Regeln gleich bleibt -->
-<link rel="stylesheet" href="/app.css?v=318">
+<link rel="stylesheet" href="/app.css?v=319">
 </head>
 <body class="bg-slate-100 text-slate-900 dark:bg-black dark:text-slate-100 min-h-screen">
 
@@ -308,6 +318,7 @@
 
     <div id="dash-swipe" class="relative">
     <div id="dash-swipe-track" class="no-scrollbar flex gap-3 overflow-x-auto snap-x snap-mandatory overscroll-x-contain">
+    <div id="home-card" class="hidden flex flex-col w-full shrink-0 snap-center snap-always rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4"></div>
     <div id="ltm-card" class="flex flex-col w-full shrink-0 snap-center snap-always rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4"></div>
     <div id="care-slide" role="button" tabindex="0" aria-label="Akkupflege – Details öffnen" class="hidden flex flex-col w-full shrink-0 snap-center snap-always rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4 cursor-pointer"></div>
     <div id="btm-card" class="flex flex-col w-full shrink-0 snap-center snap-always rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4"></div>
@@ -370,6 +381,7 @@
         </div>
       </div>
     </div>
+    <div id="news-card" class="hidden flex flex-col w-full shrink-0 snap-center snap-always rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4"></div>
     </div>
     <div id="dash-dots" class="hidden pointer-events-none absolute inset-x-0 bottom-1.5 flex justify-center gap-1.5"><button type="button" data-dslide="0" aria-label="Verbrauchs-Prognose" class="pointer-events-auto h-1.5 w-4 rounded-full bg-slate-400 dark:bg-slate-500 transition-all"></button><button type="button" data-dslide="1" aria-label="Zählerstand" class="pointer-events-auto h-1.5 w-1.5 rounded-full bg-slate-300 dark:bg-slate-700 transition-all"></button></div>
     </div>
@@ -1473,6 +1485,11 @@
         </div>
         <p id="cat-msg" class="text-xs text-slate-500 dark:text-slate-400 mt-1 min-h-[1rem]"></p>
         </div>
+        <div class="py-4 first:pt-4 last:pb-0">
+          <div class="flex items-baseline justify-between gap-2"><p class="text-sm font-semibold text-slate-800 dark:text-slate-200">Neuigkeiten-Quellen</p><span class="text-xs text-slate-500 dark:text-slate-400">für das Widget auf Start</span></div>
+          <div id="news-src" class="mt-1 divide-y divide-slate-200 dark:divide-slate-800"></div>
+          <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">Alle aus → Widget verschwindet. Abruf über unseren Server, höchstens etwa zweimal pro Stunde.</p>
+        </div>
       </div>
     </div>
     <div class="rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
@@ -1952,7 +1969,7 @@
   </div>
 </nav>
 
-<script src="/app.js?v=318"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
+<script src="/app.js?v=319"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
 <script type="module">
 /* Firebase (modular SDK). Die Konfiguration ist kein Geheimnis – geschützt wird über Auth + Firestore-Regeln. */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
