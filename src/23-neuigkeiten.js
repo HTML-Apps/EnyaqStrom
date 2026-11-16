@@ -4,10 +4,8 @@
    Einstellungen › Anbieter & Kategorien (settings.news, synchronisiert). „neu“ = neuer als beim letzten Ansehen (je Gerät).
    ===================================================================== */
 const NEWS_SRC = [
-  { k: 'ge', n: 'GoingElectric', sub: 'Enyaq-Unterforen', c: '#f59e0b', on: true },
   { k: 'ef', n: 'enyaq-forum.de', short: 'enyaq-forum', sub: 'alle Bereiche', c: '#22c55e', on: true },
-  { k: 'tff', n: 'TFF-Forum', short: 'TFF', sub: 'Schlagwort bzw. Thread „Škoda Enyaq“', c: '#a78bfa', on: true },
-  { k: 'mt', n: 'Motor-Talk', sub: 'Skoda Elektrofahrzeuge', c: '#38bdf8', on: false }];
+  { k: 'mt', n: 'Motor-Talk', sub: 'Skoda Elektrofahrzeuge (Enyaq + Elroq)', c: '#38bdf8', on: true }];   // GoingElectric und TFF sperren Server-Abrufe (403)
 const KEY_NEWS = 'enyaq.news', KEY_NEWS_SEEN = 'enyaq.newsSeen', NEWS_TTL = 30 * 60e3;
 var newsFilter = 'all', newsBusy = false, newsErr = '';   // var: Aufruf über renderDashboard ohne TDZ
 function newsOn() { const st = getSettings().news || {}; return NEWS_SRC.filter(s => st[s.k] == null ? s.on : !!st[s.k]).map(s => s.k); }

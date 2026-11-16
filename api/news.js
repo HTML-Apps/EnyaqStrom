@@ -1,39 +1,19 @@
 // Neuigkeiten aus Enyaq-Foren (Widget „Neuigkeiten“ auf Start, src/23-neuigkeiten.js).
-//   GET ?src=ge,ef,tff,mt  -> { items:[{s, t, u, d, f}], at, err:{src:msg} }   (öffentliche Forenbeiträge, keine Anmeldung nötig)
+//   GET ?src=ef,mt  -> { items:[{s, t, u, d, f}], at, err:{src:msg} }   (öffentliche Forenbeiträge, keine Anmeldung nötig)
 //   GET ?diag=1            -> je Quelle: gefundene Feed-Adressen, Status, Anzahl (zum Prüfen, welche Feeds wirklich gehen)
 // Feeds werden je Quelle 30 Min. im Speicher gehalten, die Antwort zusätzlich im Vercel-CDN (s-maxage) – die Foren sehen höchstens ~2 Abrufe pro Stunde.
 const UA = 'Mozilla/5.0 (compatible; EnyaqStrom/1.0; +https://enyaqstromapp.vercel.app)';
 const TTL = 30 * 60e3, MAX = 30;
 const cache = new Map();                                                         // src -> { at, items, feeds, err }
 
-/* Quellen: feste Liste (keine fremden Adressen von außen). find() liefert Feed-Adressen; mehrere Kandidaten, die erste mit Einträgen gewinnt. */
+/* Quellen: feste Liste (keine fremden Adressen von außen). GoingElectric und TFF-Forum sperren Server-Abrufe (403, geprüft 11/2026) – daher nicht dabei. find() liefert Feed-Adressen; mehrere Kandidaten, die erste mit Einträgen gewinnt. */
 const SOURCES = {
-  ge: {   // GoingElectric (phpBB): Enyaq-Unterforen auf der Skoda-Seite suchen, dann deren Feed; Forenseiten sind oft gesperrt (403) → Feeds direkt probieren
-    name: 'GoingElectric',
-    async find(log) {
-      const base = 'https://www.goingelectric.de/forum/';
-      let ids = await forumIds(base, log);
-      const sk = ids.length ? [] : await pageLinks(base, /skoda/i, log);
-      if (!ids.length) for (const u of sk.slice(0, 2)) { ids = await forumIds(u, log); if (ids.length) break; }
-      const skIds = sk.map(u => /[?&;]f=(\d+)/.exec(u)?.[1] || /-f(\d+)\/?(?:$|[?#])/.exec(u)?.[1]).filter(Boolean);
-      const out = [];
-      for (const id of [...ids, ...skIds].filter((x, i, a) => a.indexOf(x) === i).slice(0, 5)) out.push([base + 'feed.php?f=' + id, base + 'app.php/feed/forum/' + id, base + 'feed/forum/' + id]);
-      out.push([base + 'feed.php?mode=topics', base + 'app.php/feed/topics', base + 'feed.php']);
-      return out;
-    },
-    keep: (it) => /enyaq/i.test(it.t + ' ' + (it.f || ''))
-  },
   ef: {   // enyaq-forum.de (WoltLab): Feed per Autodiscovery, sonst übliche Adressen
     name: 'enyaq-forum.de',
     async find(log) {
       const auto = await discover('https://www.enyaq-forum.de/forum/', log);
       return [[...auto, 'https://www.enyaq-forum.de/forum/board-feed/', 'https://www.enyaq-forum.de/forum/index.php?board-feed/', 'https://www.enyaq-forum.de/index.php?article-feed/']];
     },
-    keep: (it) => true
-  },
-  tff: {  // TFF-Forum (Discourse): Schlagwort „enyaq“, sonst der große Enyaq-Thread
-    name: 'TFF-Forum',
-    async find() { return [['https://tff-forum.de/tag/enyaq.rss', 'https://tff-forum.de/t/skoda-enyaq-ehemals-vision-iv/27418.rss']]; },
     keep: (it) => true
   },
   mt: {   // Motor-Talk: Bereich „Skoda Elektrofahrzeuge“ (nur wenn ein Feed angeboten wird)
@@ -62,21 +42,6 @@ async function discover(page, log) {
   const out = []; for (const m of h.matchAll(/<link\b[^>]*>/gi)) { const tag = m[0]; if (!/rel=["']?alternate/i.test(tag) || !/(rss|atom)\+xml/i.test(tag)) continue; const hr = /href=["']([^"']+)/i.exec(tag); const u = hr && abs(hr[1], page); if (u && !out.includes(u)) out.push(u); }
   return out;
 }
-/** Links einer Seite, deren Text oder Adresse zum Muster passt */
-async function pageLinks(page, re, log) {
-  const h = await get(page, log); if (!h) return [];
-  const out = []; for (const m of h.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)) { const txt = m[2].replace(/<[^>]+>/g, ''); if (!re.test(txt) && !re.test(m[1])) continue; const u = abs(m[1], page); if (u && u.startsWith('https://www.goingelectric.de/forum/') && !out.includes(u)) out.push(u); }
-  return out;
-}
-/** phpBB-Forum-IDs aller Unterforen mit „Enyaq“ im Namen (viewforum.php?f=N oder SEO-Adresse …-fN/) */
-async function forumIds(page, log) {
-  const h = await get(page, log); if (!h) return [];
-  const ids = []; for (const m of h.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
-    const txt = m[2].replace(/<[^>]+>/g, ''); if (!/enyaq/i.test(txt)) continue;
-    const id = /[?&;]f=(\d+)/.exec(m[1])?.[1] || /-f(\d+)\/?(?:$|[?#])/.exec(m[1])?.[1]; if (id && !ids.includes(id)) ids.push(id);
-  }
-  return ids;
-}
 const ENT = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', bull: '•', ndash: '–', mdash: '—', hellip: '…', auml: 'ä', ouml: 'ö', uuml: 'ü', Auml: 'Ä', Ouml: 'Ö', Uuml: 'Ü', szlig: 'ß', euro: '€', deg: '°' };
 const dec = (s) => String(s || '').replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').replace(/&(#x?[0-9a-f]+|\w+);/gi, (m, e) => e[0] === '#' ? String.fromCodePoint(e[1].toLowerCase() === 'x' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10)) : ENT[e] ?? m);
 const tagv = (x, t) => { const m = new RegExp('<' + t + '\\b[^>]*>([\\s\\S]*?)</' + t + '>', 'i').exec(x); return m ? dec(m[1]).trim() : ''; };
@@ -102,9 +67,8 @@ function topics(items, s) {
   const by = new Map();
   for (const it of items) {
     let t = it.t.replace(/^(?:AW|Re|Antwort)\s*:\s*/i, '');
-    if (s === 'ge' && t.includes(' • ')) { const p = t.split(' • '); t = p.slice(1).join(' • ').replace(/^(?:AW|Re)\s*:\s*/i, ''); it.f = it.f || p[0]; }
     const k = t.toLowerCase(), o = by.get(k);
-    if (!o) by.set(k + (s === 'tff' && it.f ? '|' + it.u : ''), { ...it, t, n: 1 }); else { o.n++; if ((it.d || '') > (o.d || '')) { o.d = it.d; o.u = it.u; } }
+    if (!o) by.set(k, { ...it, t, n: 1 }); else { o.n++; if ((it.d || '') > (o.d || '')) { o.d = it.d; o.u = it.u; } }
   }
   return [...by.values()];
 }
@@ -114,8 +78,7 @@ async function loadSource(s, diag) {
   try {
     const groups = (c && c.feeds && c.feeds.length && !diag) ? c.feeds.map(f => [f]) : await src.find(log);   // gefundene Feeds merken (Suche nur beim ersten Mal)
     for (const g of groups) {
-      for (const f of g) { const x = await get(f, log); if (!x) continue; let it = parse(x); if (/\/t\/[^/]+\/\d+\.rss$/.test(f)) it = it.filter(e => e.x).map(e => ({ ...e, t: e.x.length > 120 ? e.x.slice(0, 118).replace(/\s\S*$/, '') + ' …' : e.x, f: e.t })).slice(0, 8);   // Discourse-Thread: Beiträge statt Themen → Textanfang als Titel
-        log.push('  → ' + it.length + ' Einträge'); if (it.length) { res.feeds.push(f); res.items.push(...it); break; } }
+      for (const f of g) { const x = await get(f, log); if (!x) continue; const it = parse(x); log.push('  → ' + it.length + ' Einträge'); if (it.length) { res.feeds.push(f); res.items.push(...it); break; } }
     }
     res.items = topics(res.items.filter(src.keep), s).map(x => ({ s, ...x }));
     if (!res.items.length) res.err = 'keine Einträge gefunden';
@@ -126,7 +89,7 @@ async function loadSource(s, diag) {
 
 export default async function handler(req, res) {
   const q = req.query || {}, diag = q.diag === '1';
-  const want = String(q.src || 'ge,ef,tff').split(',').map(x => x.trim()).filter(x => SOURCES[x]).slice(0, 4);
+  const want = String(q.src || 'ef,mt').split(',').map(x => x.trim()).filter(x => SOURCES[x]).slice(0, 4);
   if (diag) {
     res.setHeader('Cache-Control', 'no-store');
     const out = {}; await Promise.all(Object.keys(SOURCES).map(async s => { const r = await loadSource(s, true); out[s] = { name: SOURCES[s].name, feeds: r.feeds, n: r.items.length, err: r.err, sample: r.items.slice(0, 3).map(x => x.t), log: r.log }; }));
