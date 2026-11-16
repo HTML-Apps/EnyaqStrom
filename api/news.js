@@ -35,6 +35,8 @@ async function discover(page, log) {
   const out = []; for (const m of h.matchAll(/<link\b[^>]*>/gi)) { const tag = m[0]; if (!/rel=["']?alternate/i.test(tag) || !/(rss|atom)\+xml/i.test(tag)) continue; const hr = /href=["']([^"']+)/i.exec(tag); const u = hr && abs(hr[1], page); if (u && !out.includes(u)) out.push(u); }
   return out;
 }
+/** enyaq-forum.de (WoltLab): Thread-Link auf den neuesten Beitrag (?action=lastPost springt auf die letzte Seite + Anker) */
+const efLast = (u) => /^https:\/\/www\.enyaq-forum\.de\/forum\/thread\/\d+[^?#]*$/.test(u) ? u + '?action=lastPost' : u;
 const ENT = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', bull: '•', ndash: '–', mdash: '—', hellip: '…', auml: 'ä', ouml: 'ö', uuml: 'ü', Auml: 'Ä', Ouml: 'Ö', Uuml: 'Ü', szlig: 'ß', euro: '€', deg: '°' };
 const dec = (s) => String(s || '').replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').replace(/&(#x?[0-9a-f]+|\w+);/gi, (m, e) => e[0] === '#' ? String.fromCodePoint(e[1].toLowerCase() === 'x' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10)) : ENT[e] ?? m);
 const tagv = (x, t) => { const m = new RegExp('<' + t + '\\b[^>]*>([\\s\\S]*?)</' + t + '>', 'i').exec(x); return m ? dec(m[1]).trim() : ''; };
@@ -75,6 +77,7 @@ async function loadSource(s, diag) {
     }
     const b = /^ef(\d+)$/.exec(s)?.[1];
     res.items = topics(res.items.filter(src.keep), s).map(x => ({ s: b ? 'ef' : s, g: src.g, ...(b ? { b: Number(b) } : {}), ...x }));
+    if (src.g === 'forum' && s.startsWith('ef')) res.items.forEach(x => { x.u = efLast(x.u); });   // WoltLab: direkt zum neuesten Beitrag statt Seite 1
     if (!res.items.length) res.err = 'keine Einträge gefunden';
   } catch (e) { res.err = e.message; }
   if (!res.items.length && c && c.items.length) { cache.set(s, { ...c, at: Date.now() - TTL + 5 * 60e3 }); return { ...c, err: res.err, log }; }   // Fehler: alten Stand behalten, in 5 Min. neu versuchen
