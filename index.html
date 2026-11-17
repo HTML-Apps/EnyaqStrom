@@ -255,7 +255,7 @@
   @media (prefers-reduced-motion: reduce) { #bd-conf i, #bdg-conf i { animation: none; top: var(--y, 10%); } #bd-card, #bdg-card { animation: none; } }
 </style>
 <!-- Tailwind fertig gebaut (npm run css) – am Ende des Kopfs wie früher das CDN, damit die Reihenfolge der Regeln gleich bleibt -->
-<link rel="stylesheet" href="/app.css?v=331">
+<link rel="stylesheet" href="/app.css?v=332">
 </head>
 <body class="bg-slate-100 text-slate-900 dark:bg-black dark:text-slate-100 min-h-screen">
 
@@ -1290,6 +1290,11 @@
           <input id="set-price" type="text" inputmode="decimal" placeholder="0,307" autocomplete="off" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500">
         </div>
         <div class="py-4 first:pt-4 last:pb-0">
+          <label for="set-home-prov" class="block text-sm font-medium text-slate-700 dark:text-slate-300">Stromanbieter</label>
+          <input id="set-home-prov" type="text" maxlength="30" placeholder="z. B. Vattenfall" autocomplete="off" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+          <p class="mt-1.5 text-xs text-slate-500 dark:text-slate-400">Erscheint auf Start im Widget „Strom zuhause“ und auf der Ladekarte „Zuhause“ unter Ladeanbieter.</p>
+        </div>
+        <div class="py-4 first:pt-4 last:pb-0">
           <label for="set-battery" class="block text-sm font-medium text-slate-700 dark:text-slate-300">Nettokapazität der Batterie [kWh]</label>
           <input id="set-battery" type="text" inputmode="decimal" placeholder="52" autocomplete="off" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500">
           <p class="mt-1.5 text-xs text-slate-500 dark:text-slate-400">Jede Ladung speichert die Kapazität, die zu ihrem Zeitpunkt galt. Ältere Einträge ändern sich nicht.</p>
@@ -1987,7 +1992,7 @@
   </div>
 </nav>
 
-<script src="/app.js?v=331"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
+<script src="/app.js?v=332"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
 <script type="module">
 /* Firebase (modular SDK). Die Konfiguration ist kein Geheimnis – geschützt wird über Auth + Firestore-Regeln. */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
