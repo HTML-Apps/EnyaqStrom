@@ -253,7 +253,7 @@
   @media (prefers-reduced-motion: reduce) { #bd-conf i, #bdg-conf i { animation: none; top: var(--y, 10%); } #bd-card, #bdg-card { animation: none; } }
 </style>
 <!-- Tailwind fertig gebaut (npm run css) – am Ende des Kopfs wie früher das CDN, damit die Reihenfolge der Regeln gleich bleibt -->
-<link rel="stylesheet" href="/app.css?v=327">
+<link rel="stylesheet" href="/app.css?v=328">
 </head>
 <body class="bg-slate-100 text-slate-900 dark:bg-black dark:text-slate-100 min-h-screen">
 
@@ -1497,7 +1497,7 @@
     <div class="rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
       <div class="flex items-start gap-3 pb-3 border-b-2 border-emerald-500/70">
         <svg class="w-6 h-6 mt-0.5 shrink-0 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9v11h14V9"/><rect x="8" y="12" width="8" height="5" rx="1"/></svg>
-        <div class="min-w-0"><h2 class="text-lg font-bold leading-6">Startseite</h2><p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Widgets im Wisch-Bereich: am Griff ziehen zum Sortieren, rechts ein- und ausblenden. Der Stern ☆ wählt die Karte, die beim Öffnen vorne liegt.</p></div>
+        <div class="min-w-0"><h2 class="text-lg font-bold leading-6">Startseite</h2></div>
       </div>
       <ul id="dash-order" class="mt-2 select-none"></ul>
       <label class="mt-1 flex cursor-pointer items-center gap-2 border-t-2 border-slate-200 pt-3 dark:border-slate-800"><span class="flex h-10 w-9 shrink-0 items-center justify-center text-lg" aria-hidden="true">⚡</span><span class="min-w-0 flex-1"><span class="block text-sm font-medium">Dynamisch</span><span class="block text-xs text-slate-500 dark:text-slate-400">Unter 30 % Akku (Stand vom Auto) startet der Zählerstand statt der Stern-Karte.</span></span>
@@ -1980,7 +1980,7 @@
   </div>
 </nav>
 
-<script src="/app.js?v=327"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
+<script src="/app.js?v=328"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
 <script type="module">
 /* Firebase (modular SDK). Die Konfiguration ist kein Geheimnis – geschützt wird über Auth + Firestore-Regeln. */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
