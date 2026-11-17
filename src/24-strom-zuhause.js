@@ -1,6 +1,6 @@
 /* =====================================================================
    Strom zuhause (Start, erste Karte links vom Langzeitverbrauch): alle Ladungen „Zuhause“ seit dem Kauf × Preis aus den Einstellungen.
-   Monatsbalken (laufender Monat hell), Ø pro Monat (abgeschlossene Monate ohne angebrochenen Kaufmonat), Kosten je km.
+   Monatsbalken (laufender Monat hell), Ø pro Monat ab regelmäßigem Laden zuhause, ct/km = Strompreis × eigener Verbrauch.
    Heißt der Anbieter zuhause (Ladeanbieter › Zuhause) „Vattenfall“, in Vattenfall-Farben (Gelb auf Dunkelblau, nur Name, kein Logo).
    ===================================================================== */
 function homeStats() {
@@ -13,11 +13,16 @@ function homeStats() {
   });
   const now = new Date(), cur = now.getFullYear() * 12 + now.getMonth(), d0 = new Date(t0), m0 = d0.getFullYear() * 12 + d0.getMonth();
   const months = []; for (let m = Math.max(m0, cur - 5); m <= cur; m++) months.push({ m, eur: (byM[m] || 0) * price, cur: m === cur });
-  const done = []; for (let m = m0 + (d0.getDate() > 1 ? 1 : 0); m < cur; m++) done.push((byM[m] || 0) * price);   // ohne angebrochenen Kaufmonat
-  const doneAll = []; for (let m = m0; m < cur; m++) doneAll.push((byM[m] || 0) * price);
-  const avgL = done.length ? done : doneAll, avg = avgL.length ? avgL.reduce((a, b) => a + b, 0) / avgL.length : null;
-  let km = null; try { km = rangeKm(t0, Date.now()); } catch (e) { }
-  return { kwh, n, price, eur: kwh * price, months, avg, km: km > 0 ? km : null, p0 };
+  /* Ø/Monat erst ab dem Monat, in dem regelmäßig zuhause geladen wird: erster abgeschlossener Monat mit mind. 25 % des stärksten
+     abgeschlossenen Monats (vorher meist nur vereinzelt zuhause geladen → würde den Schnitt drücken). Laufender Monat zählt nicht. */
+  const doneM = []; for (let m = m0; m < cur; m++) doneM.push(m);
+  const mx = Math.max(0, ...doneM.map(m => byM[m] || 0)), startM = doneM.find(m => (byM[m] || 0) >= mx * 0.25 && mx > 0);
+  const avgL = startM != null ? doneM.filter(m => m >= startM).map(m => (byM[m] || 0) * price) : [];
+  const avg = avgL.length ? avgL.reduce((a, b) => a + b, 0) / avgL.length : null;
+  /* ct/km: was 1 km mit Heimstrom kostet = Strompreis × eigener Verbrauch inkl. Ladeverlust (kWh/100 km aus allen Ladungen) –
+     nicht Heimkosten ÷ alle km, sonst zählen km mit, die mit Strom von unterwegs gefahren wurden */
+  let k100 = null; try { const t = consumptionTotals(rs, rs.map((_, i) => i)); k100 = t && t.km >= 100 ? t.kwh100 : null; } catch (e) { }
+  return { kwh, n, price, eur: kwh * price, months, avg, avgFrom: startM, avgN: avgL.length, ctKm: k100 ? price * k100 : null, k100, p0 };
 }
 function renderHomeCard() {
   const el = $('home-card'); if (!el) return;
@@ -36,7 +41,7 @@ function renderHomeCard() {
     <p class="home-sub text-[11px]">seit Kauf ${new Date(s.p0 + 'T12:00:00').toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })} · ${s.n} ${s.n === 1 ? 'Ladung' : 'Ladungen'}</p>
     <div class="min-h-1 flex-1"></div>
     <div class="mt-1.5 flex items-end gap-1.5">${bars}</div>
-    <div class="home-sub mt-1.5 flex justify-between text-[11px]"><span>${s.avg != null ? `Ø <b class="home-strong">${fmt(Math.round(s.avg), 0)} €</b>/Monat` : ''}</span><span>${s.km ? `<b class="home-strong">${fmt(s.eur / s.km * 100, 1)} ct</b>/km` : ''}</span></div>`;
+    <div class="home-sub mt-1.5 flex justify-between text-[11px]"><span>${s.avg != null ? `Ø <b class="home-strong">${fmt(Math.round(s.avg), 0)} €</b>/Monat${s.avgN === 1 ? ' (' + MS[s.avgFrom % 12] + ')' : ' (ab ' + MS[s.avgFrom % 12] + ')'}` : ''}</span><span title="Strompreis × Verbrauch ${s.k100 ? fmt(s.k100, 1) : ''} kWh/100 km inkl. Ladeverlust">${s.ctKm ? `<b class="home-strong">${fmt(s.ctKm, 1)} ct</b>/km` : ''}</span></div>`;
 }
 { const rd = renderDashboard; renderDashboard = function () { const r = rd.apply(this, arguments); try { renderHomeCard(); } catch (e) { } try { renderNews(); } catch (e) { } return r; }; }
 try { renderHomeCard(); } catch (e) { } try { renderNews(); } catch (e) { }   // erster Aufbau (Start wurde schon vor diesem Skriptteil gezeichnet)
