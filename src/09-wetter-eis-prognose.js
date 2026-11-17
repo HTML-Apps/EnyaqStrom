@@ -345,12 +345,11 @@ const wxoTT = (v) => fmt(Math.round(v), 0).replace('-', '−') + '°';
 const wxoCut = () => { const v = Number(getSettings().wxoCut); return Number.isInteger(v) && v >= 0 && v <= 24 ? v : 18; };   // ab dieser Stunde gilt „Morgen“
 const dashFirst = () => { const v = getSettings().dashFirst; return v === 'meter' || v === 'dyn' ? v : 'wx'; };
 const DASH_DYN_SOC = 30;                                                                  // „Dynamisch“: unter diesem Akkustand zuerst der Zählerstand
-/** Welche Karte beim Öffnen vorne liegt: fest gewählt oder dynamisch nach dem zuletzt vom Auto gemeldeten Akkustand (bis 6 h alt) */
-function dashFirstSlide(soc) {
-  const f = dashFirst(); if (f !== 'dyn') return f;
-  if (soc == null) { const c = load(KEY_WXO + 'S', null); soc = c && Date.now() - c.t < 6 * 3600e3 ? c.soc : null; }
-  return soc != null && soc < DASH_DYN_SOC ? 'meter' : 'wx';
-}
+/** Startansicht: in Einstellungen › Startseite per Stern gewählt (settings.dashStart); ohne Wahl wie früher „Beim Öffnen zeigen“ (dashFirst: Prognose/Zählerstand) */
+function dashStartPref() { const st = getSettings(), v = st.dashStart; if (typeof v === 'string' && /^[a-z-]+$/.test(v) && $(v)) return v; return st.dashFirst === 'meter' ? 'meter-card' : 'wxo-card'; }
+/** „Dynamisch“: unter 30 % Akku (Stand vom Auto, bis 6 h alt) zuerst der Zählerstand */
+function dashDyn() { const st = getSettings(); return st.dashDyn != null ? !!st.dashDyn : st.dashFirst === 'dyn'; }
+function dashLowSoc(soc) { if (soc == null) { const c = load(KEY_WXO + 'S', null); soc = c && Date.now() - c.t < 6 * 3600e3 ? c.soc : null; } return soc != null && soc < DASH_DYN_SOC; }
 function setQuickSetting(k, v) { const st = load(KEY_SETTINGS, {}) || {}; if (v === undefined) delete st[k]; else st[k] = v; save(KEY_SETTINGS, st); try { pushPrefs(); } catch (e) { } }
 function fillWxoPrefs() {
   Promise.resolve().then(() => fillIcePush()).catch(() => { });                    // erst nach dem Laden des Skripts (Konstanten weiter unten)
@@ -358,12 +357,11 @@ function fillWxoPrefs() {
     $('set-ice-info').textContent = 'Eis-Wahrscheinlichkeit für den Ort „Zuhause“ (Temperatur, Taupunkt, Bewölkung, Wind) als Badge an der Verbrauchs-Prognose und in der 7-Tage-Ansicht; „Hinweis ab“ gilt für die Push-Nachricht. Morgens fragt die App kurz nach, ob es gestimmt hat.' + (Math.abs(st.k - 1) >= 0.02 ? ' Gelernt: dein Stellplatz kühlt ' + fmt(Math.abs(st.k - 1) * 100, 0) + ' % ' + (st.k > 1 ? 'stärker' : 'schwächer') + ' aus als üblich.' : ''); } catch (e) { }
   const gm = $('set-gt-mirror'); if (gm) gm.checked = !!getSettings().gtMirror;
   const wi = $('set-wx-icons'); if (wi && document.activeElement !== wi) wi.value = wxIconStyle();
-  const cn = $('set-car-n'), cs = $('set-car-sec'); if (cn && document.activeElement !== cn) cn.value = String(carAutoN()); if (cs && document.activeElement !== cs) { const v = String(carAutoMs() / 1000); cs.value = [...cs.options].some(o => o.value === v) ? v : '30'; } const a = $('set-wxo-cut'), b = $('set-dash-first'); if (a && document.activeElement !== a) a.value = String(wxoCut()); if (b && document.activeElement !== b) b.value = dashFirst(); }
+  const cn = $('set-car-n'), cs = $('set-car-sec'); if (cn && document.activeElement !== cn) cn.value = String(carAutoN()); if (cs && document.activeElement !== cs) { const v = String(carAutoMs() / 1000); cs.value = [...cs.options].some(o => o.value === v) ? v : '30'; } const a = $('set-wxo-cut'); if (a && document.activeElement !== a) a.value = String(wxoCut()); }
 $('set-wxo-cut').addEventListener('change', (e) => { setQuickSetting('wxoCut', Number(e.target.value)); renderWxo(); });
 $('set-car-n').addEventListener('change', (e) => { setQuickSetting('carN', Number(e.target.value)); try { window.carReschedule && window.carReschedule(); } catch (er) { } });
 $('set-car-sec').addEventListener('change', (e) => { setQuickSetting('carSec', Number(e.target.value)); try { window.carReschedule && window.carReschedule(); } catch (er) { } });
 $('set-wx-icons').addEventListener('change', (e) => { setQuickSetting('wxIcons', e.target.value); try { renderWxo(); } catch (er) { } });
-$('set-dash-first').addEventListener('change', (e) => { setQuickSetting('dashFirst', e.target.value); });
 [['set-ice-dep', 'iceDep', v => /^\d{2}:\d{2}$/.test(v) ? v : undefined], ['set-ice-park', 'icePark', v => v], ['set-ice-min', 'iceMin', v => v], ['set-ice-we', 'iceWe', v => v === '1' || undefined]].forEach(([id, key, f]) =>
   $(id).addEventListener('change', (e) => { setQuickSetting(key, f(e.target.value)); localStorage.removeItem(KEY_ICE); const c = load(KEY_FROST, {}) || {}; delete c.snooze; save(KEY_FROST, c); try { fillWxoPrefs(); renderFrost(); } catch (er) { } }));
 const wxoN = () => !isDesk() ? 3 : ($('wxo-card').clientWidth || document.querySelector('main').clientWidth) >= 760 ? 7 : 5;   // Tage in der Vorschau: Handy 3, PC je nach Breite 5 oder 7
@@ -407,7 +405,7 @@ async function renderWxo() {
     tip.classList.remove('hidden');
   } else tip.classList.add('hidden');
   el.classList.remove('hidden');
-  if (dashFirst() === 'dyn' && !window.dSwUser) { const want = dashFirstSlide(soc) === 'wx' ? dashIdx('wxo-card') : dashIdx('meter-card'); if (dSw.idx !== want) setTimeout(() => dashSwipeTo(want), 50); }
+  if (dashDyn() && !window.dSwUser) { const want = dashIdx(dashStartId(soc)); if (dSw.idx !== want) setTimeout(() => dashSwipeTo(want), 50); }
   try { save(KEY_WXO + 'H', { day: todayYMD(), st: wxIconStyle(), n: wxoN(), cut: hl, days: $('wxo-days').innerHTML, tip: tip.classList.contains('hidden') ? '' : tip.textContent }); } catch (e) { }   // für den sofortigen Aufbau beim nächsten Öffnen
 }
 /** Beim Laden: Karte sofort aus dem letzten Stand zeigen (oder als Platzhalter in gleicher Höhe), damit nichts springt; renderWxo füllt sie danach neu */
@@ -457,11 +455,12 @@ const dSw = { tr: $('dash-swipe-track'), idx: 0 };
 function dashSlides() { if (isSimple()) return [$('ltm-card'), $('veh-slide'), $('care-slide')].filter(x => x && !x.classList.contains('hidden')); return [$('home-card'), $('ltm-card'), $('btm-card'), $('wxo-card'), $('veh-slide'), $('meter-card'), $('news-card')].filter(x => x && !x.classList.contains('hidden') && !((x.id === 'btm-card' || x.id === 'ltm-card' || x.id === 'home-card' || x.id === 'news-card') && liveHero)); }
 const dashIdx = (id) => Math.max(0, dashSlides().indexOf($(id)));
 /** Karte beim Öffnen: Prognose oder Zählerstand (Akku-Temperatur liegt links davon und wird nur per Wischen erreicht) */
-/** Karte, die beim Öffnen vorne liegt: Prognose bzw. Zählerstand (Einstellung „Beim Öffnen zeigen“), sonst die erste sichtbare – ausgeblendete (Einstellungen › Startseite) zählen nicht */
-function dashStartId() {
+/** Karte, die beim Öffnen vorne liegt: „Dynamisch“ + wenig Akku → Zählerstand, sonst die Stern-Wahl; ausgeblendete/leere Karten zählen nicht (dann Zählerstand bzw. erste sichtbare) */
+function dashStartId(soc) {
   if (isSimple()) return 'veh-slide';
   const ok = (id) => { const e = $(id); return !!e && !e.classList.contains('hidden') && !e.classList.contains('dash-off'); };
-  if (dashFirstSlide() === 'wx' && ok('wxo-card')) return 'wxo-card';
+  if (dashDyn() && dashLowSoc(soc) && ok('meter-card')) return 'meter-card';
+  const p = dashStartPref(); if (ok(p)) return p;
   if (ok('meter-card')) return 'meter-card';
   const sl = dashSlides(); return sl[0] ? sl[0].id : 'meter-card';
 }

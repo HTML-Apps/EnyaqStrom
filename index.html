@@ -253,7 +253,7 @@
   @media (prefers-reduced-motion: reduce) { #bd-conf i, #bdg-conf i { animation: none; top: var(--y, 10%); } #bd-card, #bdg-card { animation: none; } }
 </style>
 <!-- Tailwind fertig gebaut (npm run css) – am Ende des Kopfs wie früher das CDN, damit die Reihenfolge der Regeln gleich bleibt -->
-<link rel="stylesheet" href="/app.css?v=325">
+<link rel="stylesheet" href="/app.css?v=326">
 </head>
 <body class="bg-slate-100 text-slate-900 dark:bg-black dark:text-slate-100 min-h-screen">
 
@@ -1497,9 +1497,12 @@
     <div class="rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
       <div class="flex items-start gap-3 pb-3 border-b-2 border-emerald-500/70">
         <svg class="w-6 h-6 mt-0.5 shrink-0 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9v11h14V9"/><rect x="8" y="12" width="8" height="5" rx="1"/></svg>
-        <div class="min-w-0"><h2 class="text-lg font-bold leading-6">Startseite</h2><p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Widgets im Wisch-Bereich: am Griff ziehen zum Sortieren, rechts ein- und ausblenden.</p></div>
+        <div class="min-w-0"><h2 class="text-lg font-bold leading-6">Startseite</h2><p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Widgets im Wisch-Bereich: am Griff ziehen zum Sortieren, rechts ein- und ausblenden. Der Stern ☆ wählt die Karte, die beim Öffnen vorne liegt.</p></div>
       </div>
       <ul id="dash-order" class="mt-2 select-none"></ul>
+      <label class="mt-3 flex cursor-pointer items-center gap-3 rounded-2xl bg-slate-100 px-3 py-2.5 dark:bg-slate-800/60"><span class="min-w-0 flex-1"><span class="block text-sm font-medium">Dynamisch</span><span class="block text-xs text-slate-500 dark:text-slate-400">Unter 30 % Akku (Stand vom Auto) startet der Zählerstand statt der Stern-Karte.</span></span>
+        <input id="set-dash-dyn" type="checkbox" class="peer sr-only">
+        <span class="relative h-7 w-12 shrink-0 rounded-full bg-slate-300 dark:bg-slate-700 transition-colors peer-checked:bg-emerald-600 peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-500 after:absolute after:left-1 after:top-1 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow after:transition-transform after:content-[''] peer-checked:after:translate-x-5" aria-hidden="true"></span></label>
       <div class="mt-2 flex items-center justify-between gap-2"><p id="dash-order-msg" class="min-w-0 text-xs text-slate-500 dark:text-slate-400"></p><button id="dash-order-reset" type="button" class="shrink-0 rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm font-semibold active:scale-95 transition">Standard</button></div>
     </div>
     <div class="rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
@@ -1522,10 +1525,9 @@
           <p class="block text-sm font-medium text-slate-700 dark:text-slate-300">Verbrauchs-Prognose auf Start</p>
           <div class="mt-1"><label for="set-wx-icons" class="text-xs text-slate-500 dark:text-slate-400">Wetter-Symbole</label><select id="set-wx-icons" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"><option value="meteo">Meteocons (animiert)</option><option value="emoji">Open-Meteo (Emoji)</option></select></div>
           <div class="mt-1 grid grid-cols-2 gap-2">
-            <div><label for="set-wxo-cut" class="text-xs text-slate-500 dark:text-slate-400">„Morgen“ hervorheben</label><select id="set-wxo-cut" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"><option value="6">ab 6 Uhr</option><option value="7">ab 7 Uhr</option><option value="8">ab 8 Uhr</option><option value="9">ab 9 Uhr</option><option value="10">ab 10 Uhr</option><option value="11">ab 11 Uhr</option><option value="12">ab 12 Uhr</option><option value="13">ab 13 Uhr</option><option value="14">ab 14 Uhr</option><option value="15">ab 15 Uhr</option><option value="16">ab 16 Uhr</option><option value="17">ab 17 Uhr</option><option value="18">ab 18 Uhr</option><option value="19">ab 19 Uhr</option><option value="20">ab 20 Uhr</option><option value="21">ab 21 Uhr</option><option value="22">ab 22 Uhr</option><option value="23">ab 23 Uhr</option><option value="24">nie (immer heute)</option></select></div>
-            <div><label for="set-dash-first" class="text-xs text-slate-500 dark:text-slate-400">Beim Öffnen zeigen</label><select id="set-dash-first" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"><option value="wx">Prognose</option><option value="meter">Zählerstand</option><option value="dyn">Dynamisch</option></select></div>
+            <div class="col-span-2"><label for="set-wxo-cut" class="text-xs text-slate-500 dark:text-slate-400">„Morgen“ hervorheben</label><select id="set-wxo-cut" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"><option value="6">ab 6 Uhr</option><option value="7">ab 7 Uhr</option><option value="8">ab 8 Uhr</option><option value="9">ab 9 Uhr</option><option value="10">ab 10 Uhr</option><option value="11">ab 11 Uhr</option><option value="12">ab 12 Uhr</option><option value="13">ab 13 Uhr</option><option value="14">ab 14 Uhr</option><option value="15">ab 15 Uhr</option><option value="16">ab 16 Uhr</option><option value="17">ab 17 Uhr</option><option value="18">ab 18 Uhr</option><option value="19">ab 19 Uhr</option><option value="20">ab 20 Uhr</option><option value="21">ab 21 Uhr</option><option value="22">ab 22 Uhr</option><option value="23">ab 23 Uhr</option><option value="24">nie (immer heute)</option></select></div>
           </div>
-          <p class="mt-1.5 text-xs text-left text-slate-500 dark:text-slate-400">Ab dieser Uhrzeit wird „Morgen“ umrandet und „Restakku – reicht bis …“ rechnet ab morgen. „Dynamisch“: unter 30 % Akku (Stand vom Auto) zuerst der Zählerstand, sonst die Prognose. Wird mit deinem Konto synchronisiert.</p>
+          <p class="mt-1.5 text-xs text-left text-slate-500 dark:text-slate-400">Ab dieser Uhrzeit wird „Morgen“ umrandet und „Restakku – reicht bis …“ rechnet ab morgen. Welche Karte beim Öffnen vorne liegt, wählst du unter Einstellungen › Startseite. Wird mit deinem Konto synchronisiert.</p>
         </div>
         <div class="py-4 first:pt-4 last:pb-0">
           <p class="block text-sm font-medium text-slate-700 dark:text-slate-300">Eis-Warnung</p>
@@ -1978,7 +1980,7 @@
   </div>
 </nav>
 
-<script src="/app.js?v=325"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
+<script src="/app.js?v=326"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
 <script type="module">
 /* Firebase (modular SDK). Die Konfiguration ist kein Geheimnis – geschützt wird über Auth + Firestore-Regeln. */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
