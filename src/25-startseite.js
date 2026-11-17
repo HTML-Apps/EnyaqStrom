@@ -36,10 +36,12 @@ function dashSave(order, off) {
 }
 function renderDashSet() {
   const ul = $('dash-order'); if (!ul) return; const c = dashCfg();
-  ul.innerHTML = c.order.map(id => { const w = DASH_W.find(x => x[0] === id), on = !c.off.includes(id);
-    return `<li data-w="${id}" class="flex items-center gap-2 border-b border-slate-200 bg-white py-2 last:border-b-0 dark:border-slate-800 dark:bg-slate-900">
+  let first = ''; try { first = dashStartId(); } catch (e) { }
+  const dyn = (() => { try { return dashFirst() === 'dyn'; } catch (e) { return false; } })();
+  ul.innerHTML = c.order.map(id => { const w = DASH_W.find(x => x[0] === id), on = !c.off.includes(id), st = on && id === first;
+    return `<li data-w="${id}" class="flex items-center gap-2 border-b border-slate-200 py-2 last:border-b-0 dark:border-slate-800 ${st ? 'dash-start relative z-[1] -mx-2 my-1 rounded-2xl border-b-0 bg-emerald-50 px-2 ring-2 ring-emerald-500 dark:bg-emerald-500/10' : 'bg-white dark:bg-slate-900'}"${st ? ' aria-current="true"' : ''}>
       <button type="button" data-drag class="flex h-11 w-9 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg text-slate-400 active:cursor-grabbing active:bg-slate-100 dark:active:bg-slate-800" aria-label="${esc(w[1])} verschieben (Pfeiltasten hoch/runter)"><svg class="h-5 w-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></button>
-      <span class="min-w-0 flex-1 ${on ? '' : 'opacity-50'}"><span class="block text-sm font-medium">${esc(w[1])}</span><span class="block truncate text-xs text-slate-500 dark:text-slate-400">${esc(w[2])}</span></span>
+      <span class="min-w-0 flex-1 ${on ? '' : 'opacity-50'}"><span class="flex min-w-0 items-center gap-1.5"><span class="truncate text-sm ${st ? 'font-bold' : 'font-medium'}">${esc(w[1])}</span>${st ? '<span class="shrink-0 rounded-md bg-emerald-600 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">Startansicht</span>' : ''}</span><span class="block truncate text-xs ${st ? 'text-emerald-700 dark:text-emerald-300' : 'text-slate-500 dark:text-slate-400'}">${esc(st ? (dyn ? 'wird beim Öffnen zuerst gezeigt (gerade, „Dynamisch“)' : 'wird beim Öffnen zuerst gezeigt') : w[2])}</span></span>
       <label class="flex shrink-0 cursor-pointer items-center"><input type="checkbox" data-won="${id}" class="peer sr-only" aria-label="${esc(w[1])} anzeigen"${on ? ' checked' : ''}>
       <span class="relative h-7 w-12 shrink-0 rounded-full bg-slate-300 dark:bg-slate-700 transition-colors peer-checked:bg-emerald-600 peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-500 after:absolute after:left-1 after:top-1 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow after:transition-transform after:content-[''] peer-checked:after:translate-x-5" aria-hidden="true"></span></label></li>`; }).join('');
 }
@@ -67,7 +69,7 @@ function dashDragEnd(e) {
   const d = dashDrag; if (!d || (e && e.pointerId !== d.pid)) return; dashDrag = null;
   d.li.classList.remove('dragging'); d.li.style.transition = 'transform .15s'; d.li.style.transform = '';
   setTimeout(() => { d.li.style.transition = ''; }, 160);
-  if (d.moved) dashSave(dashDomOrder(), dashCfg().off);
+  if (d.moved) { dashSave(dashDomOrder(), dashCfg().off); setTimeout(renderDashSet, 170); }
 }
 $('dash-order').addEventListener('pointerup', dashDragEnd);
 $('dash-order').addEventListener('pointercancel', dashDragEnd);
@@ -78,6 +80,7 @@ $('dash-order').addEventListener('keydown', (e) => {
   if (e.key === 'ArrowUp') o.before(li); else o.after(li); h.focus(); dashSave(dashDomOrder(), dashCfg().off);
 });
 $('dash-order-reset').addEventListener('click', () => { setQuickSetting('dash', undefined); applyDash(); renderDashSet(); const m = $('dash-order-msg'); if (m) m.textContent = '✓ Standard wiederhergestellt'; });
+$('set-dash-first').addEventListener('change', () => setTimeout(() => { try { renderDashSet(); } catch (e) { } }, 0));
 { const sv = showView; showView = function (v) { const r = sv.apply(this, arguments); if (v === 'settings') try { renderDashSet(); } catch (e) { } return r; }; }
 { const rd = renderDashboard; renderDashboard = function () { const r = rd.apply(this, arguments); try { applyDash(); } catch (e) { } return r; }; }
 try { applyDash(); renderDashSet(); } catch (e) { }

@@ -457,7 +457,15 @@ const dSw = { tr: $('dash-swipe-track'), idx: 0 };
 function dashSlides() { if (isSimple()) return [$('ltm-card'), $('veh-slide'), $('care-slide')].filter(x => x && !x.classList.contains('hidden')); return [$('home-card'), $('ltm-card'), $('btm-card'), $('wxo-card'), $('veh-slide'), $('meter-card'), $('news-card')].filter(x => x && !x.classList.contains('hidden') && !((x.id === 'btm-card' || x.id === 'ltm-card' || x.id === 'home-card' || x.id === 'news-card') && liveHero)); }
 const dashIdx = (id) => Math.max(0, dashSlides().indexOf($(id)));
 /** Karte beim Öffnen: Prognose oder Zählerstand (Akku-Temperatur liegt links davon und wird nur per Wischen erreicht) */
-const dashDefaultIdx = () => isSimple() ? dashIdx('veh-slide') : dashFirstSlide() === 'wx' && !$('wxo-card').classList.contains('hidden') ? dashIdx('wxo-card') : dashIdx('meter-card');
+/** Karte, die beim Öffnen vorne liegt: Prognose bzw. Zählerstand (Einstellung „Beim Öffnen zeigen“), sonst die erste sichtbare – ausgeblendete (Einstellungen › Startseite) zählen nicht */
+function dashStartId() {
+  if (isSimple()) return 'veh-slide';
+  const ok = (id) => { const e = $(id); return !!e && !e.classList.contains('hidden') && !e.classList.contains('dash-off'); };
+  if (dashFirstSlide() === 'wx' && ok('wxo-card')) return 'wxo-card';
+  if (ok('meter-card')) return 'meter-card';
+  const sl = dashSlides(); return sl[0] ? sl[0].id : 'meter-card';
+}
+const dashDefaultIdx = () => dashIdx(dashStartId());
 function dashSwipeSync() {
   const sl = dashSlides(), w = dSw.tr.clientWidth + 12, i = Math.max(0, Math.min(sl.length - 1, Math.round(dSw.tr.scrollLeft / (w || 1)))); dSw.idx = i;
   const two = sl.length > 1, dd = $('dash-dots'); dd.classList.toggle('hidden', !two);
