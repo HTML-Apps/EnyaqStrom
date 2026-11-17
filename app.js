@@ -9430,7 +9430,7 @@ const newsStill = () => matchMedia('(prefers-reduced-motion: reduce)').matches |
 function newsOpenFull() {
   if (newsFull) return;
   const card = $('news-card'), r = card.getBoundingClientRect();
-  const ov = document.createElement('div'); newsFull = ov;
+  const ov = document.createElement('div'); newsFull = ov; ov.id = 'news-full';
   ov.className = 'fixed inset-0 z-[75] flex flex-col bg-white text-slate-900 dark:bg-slate-900 dark:text-slate-100';
   ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true'); ov.setAttribute('aria-label', 'Neuigkeiten');
   ov.innerHTML = `<div data-nf-in class="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col px-4" style="padding-top:calc(env(safe-area-inset-top) + 14px)">
