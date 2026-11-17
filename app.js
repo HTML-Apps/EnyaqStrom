@@ -888,11 +888,11 @@ window.onCloudProviders = (list, first, uid) => {
   if (first && (uploadCutoff(uid) === 0 || !Array.isArray(list))) { const merged = next.concat(local.filter(n => !next.some(m => m.toLowerCase() === n.toLowerCase()))); if (merged.length !== next.length || !Array.isArray(list)) { next = merged; if (next.length) window.cloud.setProviders(next).catch(() => {}); } }
   if (JSON.stringify(next) !== JSON.stringify(local)) { save(KEY_PROVIDERS, next); renderProviders(); if (capPlace === 'away') setCapPlace('away'); }
 };
-$('set-year').addEventListener('input', (e) => {
-  const el = e.target, del = e.inputType && e.inputType.startsWith('delete'), raw = /^[1-9]\//.test(el.value) ? '0' + el.value : el.value;   // „1/“ → „01/“
-  let d = raw.replace(/\D/g, '').slice(0, 6);
-  if (d.length === 1 && +d > 1) d = '0' + d;                                          // „5“ → „05“
-  el.value = d.length > 2 || (d.length === 2 && !del) ? d.slice(0, 2) + '/' + d.slice(2) : d;
+$('set-year').addEventListener('input', (e) => {                                     // Zulassungstag TT.MM.JJJJ: Punkte automatisch
+  const el = e.target, del = e.inputType && e.inputType.startsWith('delete');
+  if (/^\d{1,2}\/\d{0,4}$/.test(el.value)) return;                                      // altes Format MM/JJJJ nicht umbauen
+  const d = el.value.replace(/\D/g, '').slice(0, 8);
+  el.value = d.length > 4 || (d.length === 4 && !del) ? d.slice(0, 2) + '.' + d.slice(2, 4) + '.' + d.slice(4) : d.length > 2 || (d.length === 2 && !del) ? d.slice(0, 2) + '.' + d.slice(2) : d;
 });
 $('btn-save-settings').addEventListener('click', () => {
   const price = parseNum($('set-price').value);
@@ -928,10 +928,11 @@ $('btn-save-settings').addEventListener('click', () => {
   if (wln !== undefined && !(wln > 5 && wln < 40)) { appNote('Bitte den WLTP-Verbrauch ohne Ladeverluste in kWh/100 km eingeben (z. B. 14,7) oder das Feld leer lassen.'); return; }
   const vin = $('set-vin').value.trim().toUpperCase().replace(/\s+/g, ''), yr = $('set-year').value.trim();
   if (vin && !/^[A-HJ-NPR-Z0-9]{17}$/.test(vin)) { appNote('Die Fahrgestellnummer (FIN) hat 17 Zeichen aus Ziffern und Buchstaben (ohne I, O und Q). Bitte prüfen oder das Feld leer lassen.'); return; }
-  if (yr) {                                                                         // Baujahr immer als MM/JJJJ, nicht in der Zukunft
-    const m = /^(0[1-9]|1[0-2])\/(\d{4})$/.exec(yr), now = new Date();
-    if (!m) { appNote('Bitte das Baujahr im Format MM/JJJJ eingeben (z. B. 11/2023) oder das Feld leer lassen.'); $('set-year').focus(); return; }
-    if (+m[2] < 1990 || +m[2] * 12 + +m[1] > now.getFullYear() * 12 + now.getMonth() + 1) { appNote('Das Baujahr ' + yr + ' kann nicht stimmen: Es muss zwischen 01/1990 und ' + String(now.getMonth() + 1).padStart(2, '0') + '/' + now.getFullYear() + ' liegen.'); $('set-year').focus(); return; }
+  if (yr) {                                                                         // Zulassungstag TT.MM.JJJJ (älteres MM/JJJJ bleibt gültig), nicht in der Zukunft
+    const m = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(yr), old = /^(0[1-9]|1[0-2])\/(\d{4})$/.test(yr), now = new Date();
+    const d = m ? new Date(+m[3], +m[2] - 1, +m[1]) : null;
+    if (!old && (!m || d.getDate() !== +m[1] || d.getMonth() !== +m[2] - 1)) { appNote('Bitte den Zulassungstag als TT.MM.JJJJ eingeben (z. B. 18.11.2023) oder das Feld leer lassen.'); $('set-year').focus(); return; }
+    if (m && (+m[3] < 1990 || d > now)) { appNote('Der Zulassungstag ' + yr + ' kann nicht stimmen: Er muss zwischen 1990 und heute liegen.'); $('set-year').focus(); return; }
   }
   const txt = (id, n) => $(id).value.trim().replace(/\s+/g, ' ').slice(0, n) || undefined;
   const carWas = carProf().key;                                                   // Fahrzeugtyp gewechselt → neu laden (Karussell-Bilder, Titel)
@@ -4485,47 +4486,62 @@ bookRecurring();                                         // fällige wiederkehre
 initCarousel();                                          // Enyaq1–5 laden (asynchron)
 
 /* =====================================================================
-   Jahrestag des Kaufs: Festkarte mit Konfetti. Erscheint am Jahrestag des Kauftags (ab dem 1. Jahr)
-   bei jedem Öffnen der App und wenn die App nach mindestens 5 Minuten wieder in den Vordergrund kommt.
-   Wurde sie am Jahrestag nicht gesehen, erscheint sie innerhalb von 7 Tagen einmal nachträglich.
-   Kauf am 29.02.: in Nicht-Schaltjahren am 28.02. Fahrzeugalter monatsgenau ab Baujahr (MM/JJJJ).
+   Jahrestage mit Festkarte + Konfetti: Kauf (purchaseDay) und Zulassung (settings.year = Zulassungstag TT.MM.JJJJ).
+   Am Jahrestag (ab dem 1. Jahr) bei jedem Öffnen und wenn die App nach mindestens 5 Minuten wieder in den Vordergrund kommt;
+   nicht gesehen → innerhalb von 7 Tagen einmal nachträglich. 29.02. → 28.02. Fallen beide auf denselben Tag, kommen beide nacheinander.
+   Push dazu im Abendlauf (api/ice-push.js, kind 'bd').
    ===================================================================== */
-const BD_LATE = 7, KEY_BDSEEN = 'enyaq.bdSeen';            // Frist für die nachträgliche Gratulation (Tage)
+const BD_LATE = 7, KEY_BDSEEN = 'enyaq.bdSeen';            // Frist für die nachträgliche Gratulation (Tage); Gesehen je Art: Kauf = bdSeen, Zulassung = bdSeenR
 const BD_ORD = ['ersten', 'zweiten', 'dritten', 'vierten', 'fünften', 'sechsten', 'siebten', 'achten', 'neunten', 'zehnten'];
-function bdInfo(today = new Date()) {
-  const [py, pm, pd] = purchaseDay().split('-').map(Number), t0 = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+/** Zulassungstag aus settings.year: {y, m, d} (TT.MM.JJJJ) bzw. {y, m, d: null} (altes MM/JJJJ) */
+function regDay() {
+  const v = (getSettings().year || '').trim(), a = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(v), b = /^(0[1-9]|1[0-2])\/(\d{4})$/.exec(v);
+  return a ? { y: +a[3], m: +a[2], d: +a[1] } : b ? { y: +b[2], m: +b[1], d: null } : null;
+}
+function bdInfo(today = new Date(), kind = 'buy') {
+  let py, pm, pd;
+  if (kind === 'reg') { const r = regDay(); if (!r || !r.d) return null; py = r.y; pm = r.m; pd = r.d; }
+  else [py, pm, pd] = purchaseDay().split('-').map(Number);
+  const t0 = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const ann = (y) => new Date(y, pm - 1, Math.min(pd, new Date(y, pm, 0).getDate()));   // Jahrestag im Jahr y (29.02. → 28.02.)
   let y = today.getFullYear(), A = ann(y); if (A > t0) { y--; A = ann(y); }               // letzter Jahrestag bis heute
   const years = y - py, late = Math.round((t0 - A) / 864e5);
   if (years < 1 || late > BD_LATE) return null;
-  const key = y + '-' + pm;
-  if (late > 0 && load(KEY_BDSEEN, '') === key) return null;                              // nachträglich nur einmal
-  const ym = /^(0[1-9]|1[0-2])\/(\d{4})$/.exec((getSettings().year || '').trim());
-  const ageM = ym ? (y * 12 + pm) - (+ym[2] * 12 + +ym[1]) : null;
-  return { years, py, pm, pd, ym: ym ? ym[0] : null, ageM, late, key, day: A, from: ann(y - 1).getTime(), to: A.getTime() };
+  const key = y + '-' + pm, seenKey = kind === 'reg' ? KEY_BDSEEN + 'R' : KEY_BDSEEN;
+  if (late > 0 && load(seenKey, '') === key) return null;                                // nachträglich nur einmal
+  const r = regDay(), ageM = r ? (y * 12 + pm) - (r.y * 12 + r.m) - (r.d && pd < r.d ? 1 : 0) : null;
+  return { kind, years, py, pm, pd, reg: r, ageM, late, key, seenKey, day: A, from: ann(y - 1).getTime(), to: A.getTime() };
 }
 const bdUnit = (n, one, many) => n + ' <span class="text-xl">' + (n === 1 ? one : many) + '</span>';
-let bdShown = 0, bdHidden = 0;
+const bdAgeHtml = (mo) => { const J = Math.floor(mo / 12), M = mo % 12; return J && M ? J + ' <span class="text-xl">J.</span> ' + M + ' <span class="text-xl">Mon.</span>' : J ? bdUnit(J, 'Jahr', 'Jahre') : bdUnit(M, 'Monat', 'Monate'); };
+const dmy = (y, m, d) => String(d).padStart(2, '0') + '.' + String(m).padStart(2, '0') + '.' + y;
+let bdShown = 0, bdHidden = 0, bdQueue = [];
 async function showBirthday() {
-  const b = bdInfo(); if (!b || !$('wr-ov').classList.contains('hidden')) return;
-  const set = getSettings(), name = (set.model || '').trim() || carProf().short;
+  if (!$('wr-ov').classList.contains('hidden') || !$('bd-ov').classList.contains('hidden')) return;
+  const b = bdQueue.shift() || bdInfo(new Date(), 'buy') || bdInfo(new Date(), 'reg'); if (!b) return;
+  if (b.kind === 'buy') { const r2 = bdInfo(new Date(), 'reg'); if (r2) bdQueue = [r2]; }     // gleicher Tag: Zulassung danach
+  const set = getSettings(), name = (set.model || '').trim() || carProf().short, reg = b.kind === 'reg';
   $('bd-name').textContent = name.split(/\s+/)[0] || carProf().short;
-  $('bd-date').textContent = (b.late ? 'Nachträglich · ' : '') + b.day.toLocaleDateString('de-DE', { day: 'numeric', month: 'long', year: 'numeric' });
-  save(KEY_BDSEEN, b.key);
-  $('bd-own').innerHTML = bdUnit(b.years, 'Jahr', 'Jahre');
-  $('bd-own-s').textContent = 'seit ' + String(b.pd).padStart(2, '0') + '.' + String(b.pm).padStart(2, '0') + '.' + b.py;
-  const hasAge = b.ageM != null && b.ageM >= 0;
-  $('bd-age-tile').classList.toggle('hidden', !hasAge); $('bd-tiles').classList.toggle('grid-cols-2', hasAge);
-  if (hasAge) {
-    const J = Math.floor(b.ageM / 12), M = b.ageM % 12;
-    $('bd-age').innerHTML = J && M ? J + ' <span class="text-xl">J.</span> ' + M + ' <span class="text-xl">Mon.</span>' : J ? bdUnit(J, 'Jahr', 'Jahre') : bdUnit(M, 'Monat', 'Monate');
-    $('bd-age-s').textContent = 'Baujahr ' + b.ym;
+  $('bd-date').textContent = (b.late ? 'Nachträglich · ' : '') + b.day.toLocaleDateString('de-DE', { day: 'numeric', month: 'long', year: 'numeric' }) + (reg ? ' · Zulassungstag' : ' · Kauftag');
+  save(b.seenKey, b.key);
+  const [py0, pm0, pd0] = purchaseDay().split('-').map(Number);
+  if (reg) {                                                                             // Zulassung: groß das Alter, daneben seit wann bei dir
+    $('bd-own-l').textContent = 'wird heute'; $('bd-own').innerHTML = bdUnit(b.years, 'Jahr', 'Jahre') + (b.late ? '' : ''); $('bd-own-s').textContent = 'zugelassen ' + dmy(b.py, b.pm, b.pd);
+    const tAnn = new Date(b.to), mo = (tAnn.getFullYear() * 12 + tAnn.getMonth()) - (py0 * 12 + pm0 - 1) - (tAnn.getDate() < pd0 ? 1 : 0);
+    const has = mo >= 0; $('bd-age-tile').classList.toggle('hidden', !has); $('bd-tiles').classList.toggle('grid-cols-2', has);
+    if (has) { $('bd-age-l').textContent = 'bei dir'; $('bd-age').innerHTML = bdAgeHtml(mo); $('bd-age-s').textContent = 'seit ' + dmy(py0, pm0, pd0); }
+  } else {                                                                               // Kauf: seit wann bei dir, daneben Fahrzeugalter ab Zulassung
+    $('bd-own-l').textContent = 'bei dir'; $('bd-own').innerHTML = bdUnit(b.years, 'Jahr', 'Jahre'); $('bd-own-s').textContent = 'seit ' + dmy(b.py, b.pm, b.pd);
+    const has = b.ageM != null && b.ageM >= 0;
+    $('bd-age-tile').classList.toggle('hidden', !has); $('bd-tiles').classList.toggle('grid-cols-2', has);
+    if (has) { $('bd-age-l').textContent = 'Fahrzeugalter'; $('bd-age').innerHTML = bdAgeHtml(b.ageM); $('bd-age-s').textContent = b.reg && b.reg.d ? 'Zulassung ' + dmy(b.reg.y, b.reg.m, b.reg.d) : 'Baujahr ' + String(b.reg.m).padStart(2, '0') + '/' + b.reg.y; }
   }
-  /* Bilanz des zurückliegenden Jahres: Kilometer und Ladungen */
-  const km = rangeKm(b.from, b.to), rs = getReadings();
-  let n = 0; rs.forEach((r, i) => { const t = Date.parse(r.date); if (t >= b.from && t < b.to && isCharge(rs, i)) n++; });
+  /* Bilanz des zurückliegenden Jahres: Kilometer und Ladungen (bei der Zulassung nur der Teil, seit er dir gehört) */
+  const p0 = Date.parse(purchaseDay() + 'T00:00:00'), from = Math.max(b.from, reg ? p0 : b.from), km = from < b.to ? rangeKm(from, b.to) : 0, rs = getReadings();
+  let n = 0; rs.forEach((r, i) => { const t = Date.parse(r.date); if (t >= from && t < b.to && isCharge(rs, i)) n++; });
   const parts = []; if (km) parts.push('<b class="text-white">' + fmt(km, 0) + ' km</b>'); if (n) parts.push('<b class="text-white">' + n + (n === 1 ? ' Ladung' : ' Ladungen') + '</b>');
-  $('bd-stats').innerHTML = parts.length ? 'Im ' + (BD_ORD[b.years - 1] ? BD_ORD[b.years - 1] + ' ' : b.years + '. ') + 'gemeinsamen Jahr:<br>' + parts.join(' · ') : '';
+  const ord = BD_ORD[b.years - 1] ? BD_ORD[b.years - 1] + ' ' : b.years + '. ';
+  $('bd-stats').innerHTML = parts.length ? (reg ? (from > b.from ? 'Im ' + ord + 'Lebensjahr, seit er bei dir ist:' : 'Im ' + ord + 'Lebensjahr:') : 'Im ' + ord + 'gemeinsamen Jahr:') + '<br>' + parts.join(' · ') : '';
   $('bd-stats').classList.toggle('hidden', !parts.length);
   /* Konfetti */
   const box = $('bd-conf'), cols = ['#34d399', '#fbbf24', '#f472b6', '#38bdf8', '#a78bfa', '#fb7185'];
@@ -4538,7 +4554,7 @@ async function showBirthday() {
   $('bd-ov').classList.remove('hidden'); document.body.style.overflow = 'hidden'; bdShown = Date.now();
   const img = $('bd-img'); if (!img.src) { const src = await findHeroImg(1); if (src) { img.src = (await cutWhite(src)).src; img.alt = 'Dein ' + name; img.classList.remove('hidden'); } }
 }
-function hideBirthday() { $('bd-ov').classList.add('hidden'); $('bd-conf').textContent = ''; document.body.style.overflow = ''; setTimeout(() => { try { showNextBadge(); } catch (e) { } }, 350); }
+function hideBirthday() { $('bd-ov').classList.add('hidden'); $('bd-conf').textContent = ''; document.body.style.overflow = ''; setTimeout(() => { if (bdQueue.length) { showBirthday(); return; } try { showNextBadge(); } catch (e) { } }, 350); }
 $('bd-close').addEventListener('click', hideBirthday);
 $('bd-ov').addEventListener('click', (e) => { if (e.target === e.currentTarget || e.target.parentElement === e.currentTarget) hideBirthday(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('bd-ov').classList.contains('hidden')) hideBirthday(); });
@@ -5287,7 +5303,7 @@ function akteHtml() {
   h += kpi([[['Kilometerstand', km != null ? fmt(km, 0) + ' km' : '–'], ['Geladen', fmt(kwh, 0) + ' kWh'], ['Ø Verbrauch', tot && tot.km ? fmt(tot.kwh100, 1) + ' kWh/100 km' : '–']], [['Ø Strompreis', kwh > 0 ? fmt(laden / kwh * 100, 1) + ' ct/kWh' : '–'], ['Betriebskosten gesamt', eur(total)], ['Betriebskosten pro km', driven > 0 ? fmt(total / driven * 100, 1) + ' ct/km' : '–']]]);
   const yrs = (now - P0) / (365.25 * 864e5), sincePk = pk != null && km != null ? km - pk : null;
   const SV = getSettings(), mm = [SV.brand, SV.model].filter(Boolean).join(' ');
-  h += H2('Fahrzeug') + kv([mm ? ['Fahrzeug', esc(mm)] : null, SV.year ? ['Baujahr', esc(SV.year)] : null, SV.plate ? ['Kennzeichen', esc(SV.plate)] : null, SV.vin ? ['Fahrgestellnummer (FIN)', esc(SV.vin)] : null, ['Kauftag', D1(P0)], ['Nutzungsdauer', fmt((now - P0) / 864e5 / 30.4375, 1) + ' Monate'], pk != null ? ['Kilometerstand bei Kauf', fmt(pk, 0) + ' km'] : null, pp != null ? ['Kaufpreis', eur(pp)] : null, ['Aktueller km-Stand', km != null ? fmt(km, 0) + ' km' : '–'], sincePk != null ? ['Gefahren seit Kauf', fmt(sincePk, 0) + ' km' + (yrs >= .25 ? ' (Ø ' + fmt(sincePk / yrs, 0) + ' km pro Jahr)' : '')] : null, driven != null ? ['Aufgezeichnet', fmt(driven, 0) + ' km seit ' + D1(Date.parse(od[0].date))] : null, ['Batterie (Nettokapazität laut Einstellung)', fmt(batteryKwh(), 0) + ' kWh'], rs.length ? ['Aufzeichnung', D1(Date.parse(rs[0].date)) + ' bis ' + D1(Date.parse(rs[rs.length - 1].date))] : null]);
+  h += H2('Fahrzeug') + kv([mm ? ['Fahrzeug', esc(mm)] : null, SV.year ? [/\./.test(SV.year) ? 'Zulassung' : 'Baujahr', esc(SV.year)] : null, SV.plate ? ['Kennzeichen', esc(SV.plate)] : null, SV.vin ? ['Fahrgestellnummer (FIN)', esc(SV.vin)] : null, ['Kauftag', D1(P0)], ['Nutzungsdauer', fmt((now - P0) / 864e5 / 30.4375, 1) + ' Monate'], pk != null ? ['Kilometerstand bei Kauf', fmt(pk, 0) + ' km'] : null, pp != null ? ['Kaufpreis', eur(pp)] : null, ['Aktueller km-Stand', km != null ? fmt(km, 0) + ' km' : '–'], sincePk != null ? ['Gefahren seit Kauf', fmt(sincePk, 0) + ' km' + (yrs >= .25 ? ' (Ø ' + fmt(sincePk / yrs, 0) + ' km pro Jahr)' : '')] : null, driven != null ? ['Aufgezeichnet', fmt(driven, 0) + ' km seit ' + D1(Date.parse(od[0].date))] : null, ['Batterie (Nettokapazität laut Einstellung)', fmt(batteryKwh(), 0) + ' kWh'], rs.length ? ['Aufzeichnung', D1(Date.parse(rs[0].date)) + ' bis ' + D1(Date.parse(rs[rs.length - 1].date))] : null]);
   { const cc = getSettings().ccEnd; h += H2('Ausstattung') + kv(AUSST.pdf.map(([k, v]) => [k, esc(v)]).concat(/^\d{4}-\d{2}-\d{2}$/.test(cc || '') ? [['Care Connect bis', fmtYMD(cc)]] : []))
     + CAP('Technische Daten') + kv(AUSST.tech.flatMap(g => g[2]).map(([k, v]) => [esc(k), esc(v)]))
     + AUSST.groups.map(([name, , items]) => CAP(esc(name)) + tbl(['Code', 'Bezeichnung'], items.map(([c, t]) => [c || 'Serie', esc(t)]), [], 11)).join(''); }
@@ -8594,13 +8610,13 @@ async function fillIcePush() {
 /* Ein Gerät, zwei Arten: Eis-Warnung (ice) und fällige Erinnerungen (rem). Angemeldet, solange eins davon an ist; der Server schickt je Art nur an Geräte mit Häkchen. */
 async function pushSave() {
   const f = { ice: !!load('enyaq.icePush', false), rem: !!load('enyaq.remPush', false), low: Number(load('enyaq.lowPush', 0)) || 0,
-    veh: !!load('enyaq.vehPush', false), mon: !!load('enyaq.monPush', false), key: load('enyaq.keyPush', null) !== false };   // Schlüssel: fehlt = an
-  if (!f.ice && !f.rem && !f.low && !f.veh && !f.mon && load('enyaq.keyPush', null) !== true) { try { await window.cloud.setPush(devId(), null); } catch (e) { } try { const s = await pushState(); if (s) await s.unsubscribe(); } catch (e) { } return; }
+    veh: !!load('enyaq.vehPush', false), mon: !!load('enyaq.monPush', false), key: load('enyaq.keyPush', null) !== false, bd: load('enyaq.bdPush', null) !== false };   // Schlüssel + Jahrestage: fehlt = an
+  if (!f.ice && !f.rem && !f.low && !f.veh && !f.mon && load('enyaq.keyPush', null) !== true && load('enyaq.bdPush', null) !== true) { try { await window.cloud.setPush(devId(), null); } catch (e) { } try { const s = await pushState(); if (s) await s.unsubscribe(); } catch (e) { } return; }
   if (!window.cloud?.isSignedIn()) throw new Error('Bitte zuerst bei Google anmelden.');
   const perm = await Notification.requestPermission(); if (perm !== 'granted') throw new Error('Benachrichtigungen nicht erlaubt.');
   const reg = await navigator.serviceWorker.ready; let sub = await reg.pushManager.getSubscription();
   if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64u(VAPID_PUBLIC) });
-  await window.cloud.setPush(devId(), { sub: JSON.stringify(sub.toJSON()), at: new Date().toISOString(), ua: (navigator.userAgentData && navigator.userAgentData.platform) || (/(Android|iPhone|Windows|Mac)/.exec(navigator.userAgent) || [''])[0], ice: f.ice, rem: f.rem, low: f.low, veh: f.veh, mon: f.mon, key: f.key });
+  await window.cloud.setPush(devId(), { sub: JSON.stringify(sub.toJSON()), at: new Date().toISOString(), ua: (navigator.userAgentData && navigator.userAgentData.platform) || (/(Android|iPhone|Windows|Mac)/.exec(navigator.userAgent) || [''])[0], ice: f.ice, rem: f.rem, low: f.low, veh: f.veh, mon: f.mon, key: f.key, bd: f.bd });
   if (vehicle && vehicle.ok) authHeaders().then(h => fetch('/api/ice-push', { method: 'POST', headers: { ...h, 'Content-Type': 'application/json' }, body: JSON.stringify({ low: 'reg' }) })).catch(() => { });   // Konto für den Abendlauf (Auto-Abfrage) freischalten
 }
 async function pushKind(key, on) { const was = load(key, false); save(key, on); try { await pushSave(); } catch (e) { save(key, was); throw e; } }
@@ -8668,7 +8684,8 @@ $('low-test').addEventListener('click', async (ev) => {
 const PX = {
   veh: { key: 'enyaq.vehPush', on: '✓ Dieses Gerät warnt abends, wenn das Auto offen ist.', car: true },
   mon: { key: 'enyaq.monPush', on: '✓ Dieses Gerät meldet am Monatsanfang den Monatsbericht.' },
-  key: { key: 'enyaq.keyPush', on: '✓ Dieses Gerät erinnert rechtzeitig an den Škoda-Schlüssel.', car: true, def: true }
+  key: { key: 'enyaq.keyPush', on: '✓ Dieses Gerät erinnert rechtzeitig an den Škoda-Schlüssel.', car: true, def: true },
+  bd: { key: 'enyaq.bdPush', on: '✓ Dieses Gerät gratuliert an den Jahrestagen von Kauf und Zulassung.', def: true }
 };
 const pxOn = (k) => { const v = load(PX[k].key, null); return PX[k].def ? v !== false : !!v; };
 const pxMsg = (k, t, bad) => { const el = $(k + '-push-msg'); if (el) { el.textContent = t || ''; el.classList.toggle('text-red-600', !!bad); el.classList.toggle('dark:text-red-400', !!bad); } };

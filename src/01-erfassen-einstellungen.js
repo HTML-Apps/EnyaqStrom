@@ -297,11 +297,11 @@ window.onCloudProviders = (list, first, uid) => {
   if (first && (uploadCutoff(uid) === 0 || !Array.isArray(list))) { const merged = next.concat(local.filter(n => !next.some(m => m.toLowerCase() === n.toLowerCase()))); if (merged.length !== next.length || !Array.isArray(list)) { next = merged; if (next.length) window.cloud.setProviders(next).catch(() => {}); } }
   if (JSON.stringify(next) !== JSON.stringify(local)) { save(KEY_PROVIDERS, next); renderProviders(); if (capPlace === 'away') setCapPlace('away'); }
 };
-$('set-year').addEventListener('input', (e) => {
-  const el = e.target, del = e.inputType && e.inputType.startsWith('delete'), raw = /^[1-9]\//.test(el.value) ? '0' + el.value : el.value;   // „1/“ → „01/“
-  let d = raw.replace(/\D/g, '').slice(0, 6);
-  if (d.length === 1 && +d > 1) d = '0' + d;                                          // „5“ → „05“
-  el.value = d.length > 2 || (d.length === 2 && !del) ? d.slice(0, 2) + '/' + d.slice(2) : d;
+$('set-year').addEventListener('input', (e) => {                                     // Zulassungstag TT.MM.JJJJ: Punkte automatisch
+  const el = e.target, del = e.inputType && e.inputType.startsWith('delete');
+  if (/^\d{1,2}\/\d{0,4}$/.test(el.value)) return;                                      // altes Format MM/JJJJ nicht umbauen
+  const d = el.value.replace(/\D/g, '').slice(0, 8);
+  el.value = d.length > 4 || (d.length === 4 && !del) ? d.slice(0, 2) + '.' + d.slice(2, 4) + '.' + d.slice(4) : d.length > 2 || (d.length === 2 && !del) ? d.slice(0, 2) + '.' + d.slice(2) : d;
 });
 $('btn-save-settings').addEventListener('click', () => {
   const price = parseNum($('set-price').value);
@@ -337,10 +337,11 @@ $('btn-save-settings').addEventListener('click', () => {
   if (wln !== undefined && !(wln > 5 && wln < 40)) { appNote('Bitte den WLTP-Verbrauch ohne Ladeverluste in kWh/100 km eingeben (z. B. 14,7) oder das Feld leer lassen.'); return; }
   const vin = $('set-vin').value.trim().toUpperCase().replace(/\s+/g, ''), yr = $('set-year').value.trim();
   if (vin && !/^[A-HJ-NPR-Z0-9]{17}$/.test(vin)) { appNote('Die Fahrgestellnummer (FIN) hat 17 Zeichen aus Ziffern und Buchstaben (ohne I, O und Q). Bitte prüfen oder das Feld leer lassen.'); return; }
-  if (yr) {                                                                         // Baujahr immer als MM/JJJJ, nicht in der Zukunft
-    const m = /^(0[1-9]|1[0-2])\/(\d{4})$/.exec(yr), now = new Date();
-    if (!m) { appNote('Bitte das Baujahr im Format MM/JJJJ eingeben (z. B. 11/2023) oder das Feld leer lassen.'); $('set-year').focus(); return; }
-    if (+m[2] < 1990 || +m[2] * 12 + +m[1] > now.getFullYear() * 12 + now.getMonth() + 1) { appNote('Das Baujahr ' + yr + ' kann nicht stimmen: Es muss zwischen 01/1990 und ' + String(now.getMonth() + 1).padStart(2, '0') + '/' + now.getFullYear() + ' liegen.'); $('set-year').focus(); return; }
+  if (yr) {                                                                         // Zulassungstag TT.MM.JJJJ (älteres MM/JJJJ bleibt gültig), nicht in der Zukunft
+    const m = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(yr), old = /^(0[1-9]|1[0-2])\/(\d{4})$/.test(yr), now = new Date();
+    const d = m ? new Date(+m[3], +m[2] - 1, +m[1]) : null;
+    if (!old && (!m || d.getDate() !== +m[1] || d.getMonth() !== +m[2] - 1)) { appNote('Bitte den Zulassungstag als TT.MM.JJJJ eingeben (z. B. 18.11.2023) oder das Feld leer lassen.'); $('set-year').focus(); return; }
+    if (m && (+m[3] < 1990 || d > now)) { appNote('Der Zulassungstag ' + yr + ' kann nicht stimmen: Er muss zwischen 1990 und heute liegen.'); $('set-year').focus(); return; }
   }
   const txt = (id, n) => $(id).value.trim().replace(/\s+/g, ' ').slice(0, n) || undefined;
   const carWas = carProf().key;                                                   // Fahrzeugtyp gewechselt → neu laden (Karussell-Bilder, Titel)

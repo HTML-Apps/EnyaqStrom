@@ -255,7 +255,7 @@
   @media (prefers-reduced-motion: reduce) { #bd-conf i, #bdg-conf i { animation: none; top: var(--y, 10%); } #bd-card, #bdg-card { animation: none; } }
 </style>
 <!-- Tailwind fertig gebaut (npm run css) – am Ende des Kopfs wie früher das CDN, damit die Reihenfolge der Regeln gleich bleibt -->
-<link rel="stylesheet" href="/app.css?v=330">
+<link rel="stylesheet" href="/app.css?v=331">
 </head>
 <body class="bg-slate-100 text-slate-900 dark:bg-black dark:text-slate-100 min-h-screen">
 
@@ -1251,7 +1251,7 @@
             <div><label for="set-brand" class="block text-sm font-medium text-slate-700 dark:text-slate-300">Marke</label><input id="set-brand" type="text" maxlength="30" autocomplete="off" autocapitalize="words" placeholder="z. B. Škoda" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
             <div><label for="set-model" class="block text-sm font-medium text-slate-700 dark:text-slate-300">Modell</label><input id="set-model" type="text" maxlength="40" autocomplete="off" autocapitalize="words" placeholder="z. B. Enyaq iV 50" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
             <div><label for="set-plate" class="block text-sm font-medium text-slate-700 dark:text-slate-300">Kennzeichen</label><input id="set-plate" type="text" maxlength="15" autocomplete="off" autocapitalize="characters" placeholder="z. B. NK-AB 123" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500 uppercase"></div>
-            <div><label for="set-year" class="block text-sm font-medium text-slate-700 dark:text-slate-300">Baujahr</label><input id="set-year" type="text" inputmode="numeric" maxlength="7" autocomplete="off" placeholder="MM/JJJJ" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
+            <div><label for="set-year" class="block text-sm font-medium text-slate-700 dark:text-slate-300">Zulassungstag</label><input id="set-year" type="text" inputmode="numeric" maxlength="10" autocomplete="off" placeholder="TT.MM.JJJJ" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
           </div>
           <label for="set-vin" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mt-3">Fahrgestellnummer (FIN)</label>
           <input id="set-vin" type="text" maxlength="17" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="17 Zeichen" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500 uppercase font-mono tracking-wider">
@@ -1341,6 +1341,11 @@
           <p class="block text-sm font-medium text-slate-700 dark:text-slate-300">Škoda-Schlüssel läuft ab</p>
           <label class="mt-2 flex items-center justify-between gap-3"><span><span class="block text-sm font-medium text-slate-700 dark:text-slate-300">Rechtzeitig erinnern</span><span class="block text-xs text-left text-slate-500 dark:text-slate-400">Push-Nachricht 7 Tage vor Ablauf, am Vortag und am Ablauftag. Ist automatisch an, sobald dieses Gerät eine andere Benachrichtigung bekommt.</span></span><input id="set-key-push" type="checkbox" class="h-5 w-5 shrink-0 accent-emerald-600"></label>
           <div class="mt-2 flex items-center gap-2"><button id="key-test" type="button" class="shrink-0 rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm font-semibold active:scale-95 transition">Testnachricht senden</button><span id="key-push-msg" class="min-w-0 text-xs text-left text-slate-500 dark:text-slate-400"></span></div>
+        </div>
+        <div id="bd-push-box" class="py-4 first:pt-4 last:pb-0">
+          <p class="block text-sm font-medium text-slate-700 dark:text-slate-300">Jahrestage</p>
+          <label class="mt-2 flex items-center justify-between gap-3"><span><span class="block text-sm font-medium text-slate-700 dark:text-slate-300">Gratulieren</span><span class="block text-xs text-left text-slate-500 dark:text-slate-400">Push-Nachricht gegen 18 Uhr am Jahrestag des Kaufs und der Zulassung (Zulassungstag unter Fahrzeug &amp; Kauf). Ist automatisch an, sobald dieses Gerät eine andere Benachrichtigung bekommt.</span></span><input id="set-bd-push" type="checkbox" class="h-5 w-5 shrink-0 accent-emerald-600"></label>
+          <div class="mt-2 flex items-center gap-2"><button id="bd-test" type="button" class="shrink-0 rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm font-semibold active:scale-95 transition">Testnachricht senden</button><span id="bd-push-msg" class="min-w-0 text-xs text-left text-slate-500 dark:text-slate-400"></span></div>
         </div>
       </div>
     </div>
@@ -1736,8 +1741,8 @@
       <h2 id="bd-h" class="mt-1 text-center font-barlow text-[34px] font-bold uppercase leading-9 tracking-[0.06em] text-white">Alles Gute,<br><span id="bd-name">Enyaq</span>!</h2>
       <img id="bd-img" alt="" decoding="async" draggable="false" class="mx-auto mt-2 hidden h-[170px] w-full object-contain select-none">
       <div id="bd-tiles" class="mt-3 grid grid-cols-2 gap-2">
-        <div class="rounded-2xl bg-slate-800/70 p-3 text-center"><p class="text-xs text-slate-400">bei dir</p><p id="bd-own" class="font-barlow text-[40px] font-bold leading-10 text-emerald-400"></p><p id="bd-own-s" class="mt-0.5 text-xs text-slate-400"></p></div>
-        <div id="bd-age-tile" class="rounded-2xl bg-slate-800/70 p-3 text-center"><p class="text-xs text-slate-400">Fahrzeugalter</p><p id="bd-age" class="font-barlow text-[40px] font-bold leading-10 text-white"></p><p id="bd-age-s" class="mt-0.5 text-xs text-slate-400"></p></div>
+        <div class="rounded-2xl bg-slate-800/70 p-3 text-center"><p id="bd-own-l" class="text-xs text-slate-400">bei dir</p><p id="bd-own" class="font-barlow text-[40px] font-bold leading-10 text-emerald-400"></p><p id="bd-own-s" class="mt-0.5 text-xs text-slate-400"></p></div>
+        <div id="bd-age-tile" class="rounded-2xl bg-slate-800/70 p-3 text-center"><p id="bd-age-l" class="text-xs text-slate-400">Fahrzeugalter</p><p id="bd-age" class="font-barlow text-[40px] font-bold leading-10 text-white"></p><p id="bd-age-s" class="mt-0.5 text-xs text-slate-400"></p></div>
       </div>
       <p id="bd-stats" class="mt-3 hidden text-center text-sm text-slate-300"></p>
       <button id="bd-close" type="button" class="mt-4 h-12 w-full rounded-2xl bg-emerald-600 font-semibold text-white active:scale-[0.98] transition">Danke, weiter</button>
@@ -1982,7 +1987,7 @@
   </div>
 </nav>
 
-<script src="/app.js?v=330"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
+<script src="/app.js?v=331"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
 <script type="module">
 /* Firebase (modular SDK). Die Konfiguration ist kein Geheimnis – geschützt wird über Auth + Firestore-Regeln. */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';

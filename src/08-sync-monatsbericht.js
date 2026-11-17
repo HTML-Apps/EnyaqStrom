@@ -381,47 +381,62 @@ bookRecurring();                                         // fällige wiederkehre
 initCarousel();                                          // Enyaq1–5 laden (asynchron)
 
 /* =====================================================================
-   Jahrestag des Kaufs: Festkarte mit Konfetti. Erscheint am Jahrestag des Kauftags (ab dem 1. Jahr)
-   bei jedem Öffnen der App und wenn die App nach mindestens 5 Minuten wieder in den Vordergrund kommt.
-   Wurde sie am Jahrestag nicht gesehen, erscheint sie innerhalb von 7 Tagen einmal nachträglich.
-   Kauf am 29.02.: in Nicht-Schaltjahren am 28.02. Fahrzeugalter monatsgenau ab Baujahr (MM/JJJJ).
+   Jahrestage mit Festkarte + Konfetti: Kauf (purchaseDay) und Zulassung (settings.year = Zulassungstag TT.MM.JJJJ).
+   Am Jahrestag (ab dem 1. Jahr) bei jedem Öffnen und wenn die App nach mindestens 5 Minuten wieder in den Vordergrund kommt;
+   nicht gesehen → innerhalb von 7 Tagen einmal nachträglich. 29.02. → 28.02. Fallen beide auf denselben Tag, kommen beide nacheinander.
+   Push dazu im Abendlauf (api/ice-push.js, kind 'bd').
    ===================================================================== */
-const BD_LATE = 7, KEY_BDSEEN = 'enyaq.bdSeen';            // Frist für die nachträgliche Gratulation (Tage)
+const BD_LATE = 7, KEY_BDSEEN = 'enyaq.bdSeen';            // Frist für die nachträgliche Gratulation (Tage); Gesehen je Art: Kauf = bdSeen, Zulassung = bdSeenR
 const BD_ORD = ['ersten', 'zweiten', 'dritten', 'vierten', 'fünften', 'sechsten', 'siebten', 'achten', 'neunten', 'zehnten'];
-function bdInfo(today = new Date()) {
-  const [py, pm, pd] = purchaseDay().split('-').map(Number), t0 = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+/** Zulassungstag aus settings.year: {y, m, d} (TT.MM.JJJJ) bzw. {y, m, d: null} (altes MM/JJJJ) */
+function regDay() {
+  const v = (getSettings().year || '').trim(), a = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(v), b = /^(0[1-9]|1[0-2])\/(\d{4})$/.exec(v);
+  return a ? { y: +a[3], m: +a[2], d: +a[1] } : b ? { y: +b[2], m: +b[1], d: null } : null;
+}
+function bdInfo(today = new Date(), kind = 'buy') {
+  let py, pm, pd;
+  if (kind === 'reg') { const r = regDay(); if (!r || !r.d) return null; py = r.y; pm = r.m; pd = r.d; }
+  else [py, pm, pd] = purchaseDay().split('-').map(Number);
+  const t0 = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const ann = (y) => new Date(y, pm - 1, Math.min(pd, new Date(y, pm, 0).getDate()));   // Jahrestag im Jahr y (29.02. → 28.02.)
   let y = today.getFullYear(), A = ann(y); if (A > t0) { y--; A = ann(y); }               // letzter Jahrestag bis heute
   const years = y - py, late = Math.round((t0 - A) / 864e5);
   if (years < 1 || late > BD_LATE) return null;
-  const key = y + '-' + pm;
-  if (late > 0 && load(KEY_BDSEEN, '') === key) return null;                              // nachträglich nur einmal
-  const ym = /^(0[1-9]|1[0-2])\/(\d{4})$/.exec((getSettings().year || '').trim());
-  const ageM = ym ? (y * 12 + pm) - (+ym[2] * 12 + +ym[1]) : null;
-  return { years, py, pm, pd, ym: ym ? ym[0] : null, ageM, late, key, day: A, from: ann(y - 1).getTime(), to: A.getTime() };
+  const key = y + '-' + pm, seenKey = kind === 'reg' ? KEY_BDSEEN + 'R' : KEY_BDSEEN;
+  if (late > 0 && load(seenKey, '') === key) return null;                                // nachträglich nur einmal
+  const r = regDay(), ageM = r ? (y * 12 + pm) - (r.y * 12 + r.m) - (r.d && pd < r.d ? 1 : 0) : null;
+  return { kind, years, py, pm, pd, reg: r, ageM, late, key, seenKey, day: A, from: ann(y - 1).getTime(), to: A.getTime() };
 }
 const bdUnit = (n, one, many) => n + ' <span class="text-xl">' + (n === 1 ? one : many) + '</span>';
-let bdShown = 0, bdHidden = 0;
+const bdAgeHtml = (mo) => { const J = Math.floor(mo / 12), M = mo % 12; return J && M ? J + ' <span class="text-xl">J.</span> ' + M + ' <span class="text-xl">Mon.</span>' : J ? bdUnit(J, 'Jahr', 'Jahre') : bdUnit(M, 'Monat', 'Monate'); };
+const dmy = (y, m, d) => String(d).padStart(2, '0') + '.' + String(m).padStart(2, '0') + '.' + y;
+let bdShown = 0, bdHidden = 0, bdQueue = [];
 async function showBirthday() {
-  const b = bdInfo(); if (!b || !$('wr-ov').classList.contains('hidden')) return;
-  const set = getSettings(), name = (set.model || '').trim() || carProf().short;
+  if (!$('wr-ov').classList.contains('hidden') || !$('bd-ov').classList.contains('hidden')) return;
+  const b = bdQueue.shift() || bdInfo(new Date(), 'buy') || bdInfo(new Date(), 'reg'); if (!b) return;
+  if (b.kind === 'buy') { const r2 = bdInfo(new Date(), 'reg'); if (r2) bdQueue = [r2]; }     // gleicher Tag: Zulassung danach
+  const set = getSettings(), name = (set.model || '').trim() || carProf().short, reg = b.kind === 'reg';
   $('bd-name').textContent = name.split(/\s+/)[0] || carProf().short;
-  $('bd-date').textContent = (b.late ? 'Nachträglich · ' : '') + b.day.toLocaleDateString('de-DE', { day: 'numeric', month: 'long', year: 'numeric' });
-  save(KEY_BDSEEN, b.key);
-  $('bd-own').innerHTML = bdUnit(b.years, 'Jahr', 'Jahre');
-  $('bd-own-s').textContent = 'seit ' + String(b.pd).padStart(2, '0') + '.' + String(b.pm).padStart(2, '0') + '.' + b.py;
-  const hasAge = b.ageM != null && b.ageM >= 0;
-  $('bd-age-tile').classList.toggle('hidden', !hasAge); $('bd-tiles').classList.toggle('grid-cols-2', hasAge);
-  if (hasAge) {
-    const J = Math.floor(b.ageM / 12), M = b.ageM % 12;
-    $('bd-age').innerHTML = J && M ? J + ' <span class="text-xl">J.</span> ' + M + ' <span class="text-xl">Mon.</span>' : J ? bdUnit(J, 'Jahr', 'Jahre') : bdUnit(M, 'Monat', 'Monate');
-    $('bd-age-s').textContent = 'Baujahr ' + b.ym;
+  $('bd-date').textContent = (b.late ? 'Nachträglich · ' : '') + b.day.toLocaleDateString('de-DE', { day: 'numeric', month: 'long', year: 'numeric' }) + (reg ? ' · Zulassungstag' : ' · Kauftag');
+  save(b.seenKey, b.key);
+  const [py0, pm0, pd0] = purchaseDay().split('-').map(Number);
+  if (reg) {                                                                             // Zulassung: groß das Alter, daneben seit wann bei dir
+    $('bd-own-l').textContent = 'wird heute'; $('bd-own').innerHTML = bdUnit(b.years, 'Jahr', 'Jahre') + (b.late ? '' : ''); $('bd-own-s').textContent = 'zugelassen ' + dmy(b.py, b.pm, b.pd);
+    const tAnn = new Date(b.to), mo = (tAnn.getFullYear() * 12 + tAnn.getMonth()) - (py0 * 12 + pm0 - 1) - (tAnn.getDate() < pd0 ? 1 : 0);
+    const has = mo >= 0; $('bd-age-tile').classList.toggle('hidden', !has); $('bd-tiles').classList.toggle('grid-cols-2', has);
+    if (has) { $('bd-age-l').textContent = 'bei dir'; $('bd-age').innerHTML = bdAgeHtml(mo); $('bd-age-s').textContent = 'seit ' + dmy(py0, pm0, pd0); }
+  } else {                                                                               // Kauf: seit wann bei dir, daneben Fahrzeugalter ab Zulassung
+    $('bd-own-l').textContent = 'bei dir'; $('bd-own').innerHTML = bdUnit(b.years, 'Jahr', 'Jahre'); $('bd-own-s').textContent = 'seit ' + dmy(b.py, b.pm, b.pd);
+    const has = b.ageM != null && b.ageM >= 0;
+    $('bd-age-tile').classList.toggle('hidden', !has); $('bd-tiles').classList.toggle('grid-cols-2', has);
+    if (has) { $('bd-age-l').textContent = 'Fahrzeugalter'; $('bd-age').innerHTML = bdAgeHtml(b.ageM); $('bd-age-s').textContent = b.reg && b.reg.d ? 'Zulassung ' + dmy(b.reg.y, b.reg.m, b.reg.d) : 'Baujahr ' + String(b.reg.m).padStart(2, '0') + '/' + b.reg.y; }
   }
-  /* Bilanz des zurückliegenden Jahres: Kilometer und Ladungen */
-  const km = rangeKm(b.from, b.to), rs = getReadings();
-  let n = 0; rs.forEach((r, i) => { const t = Date.parse(r.date); if (t >= b.from && t < b.to && isCharge(rs, i)) n++; });
+  /* Bilanz des zurückliegenden Jahres: Kilometer und Ladungen (bei der Zulassung nur der Teil, seit er dir gehört) */
+  const p0 = Date.parse(purchaseDay() + 'T00:00:00'), from = Math.max(b.from, reg ? p0 : b.from), km = from < b.to ? rangeKm(from, b.to) : 0, rs = getReadings();
+  let n = 0; rs.forEach((r, i) => { const t = Date.parse(r.date); if (t >= from && t < b.to && isCharge(rs, i)) n++; });
   const parts = []; if (km) parts.push('<b class="text-white">' + fmt(km, 0) + ' km</b>'); if (n) parts.push('<b class="text-white">' + n + (n === 1 ? ' Ladung' : ' Ladungen') + '</b>');
-  $('bd-stats').innerHTML = parts.length ? 'Im ' + (BD_ORD[b.years - 1] ? BD_ORD[b.years - 1] + ' ' : b.years + '. ') + 'gemeinsamen Jahr:<br>' + parts.join(' · ') : '';
+  const ord = BD_ORD[b.years - 1] ? BD_ORD[b.years - 1] + ' ' : b.years + '. ';
+  $('bd-stats').innerHTML = parts.length ? (reg ? (from > b.from ? 'Im ' + ord + 'Lebensjahr, seit er bei dir ist:' : 'Im ' + ord + 'Lebensjahr:') : 'Im ' + ord + 'gemeinsamen Jahr:') + '<br>' + parts.join(' · ') : '';
   $('bd-stats').classList.toggle('hidden', !parts.length);
   /* Konfetti */
   const box = $('bd-conf'), cols = ['#34d399', '#fbbf24', '#f472b6', '#38bdf8', '#a78bfa', '#fb7185'];
@@ -434,7 +449,7 @@ async function showBirthday() {
   $('bd-ov').classList.remove('hidden'); document.body.style.overflow = 'hidden'; bdShown = Date.now();
   const img = $('bd-img'); if (!img.src) { const src = await findHeroImg(1); if (src) { img.src = (await cutWhite(src)).src; img.alt = 'Dein ' + name; img.classList.remove('hidden'); } }
 }
-function hideBirthday() { $('bd-ov').classList.add('hidden'); $('bd-conf').textContent = ''; document.body.style.overflow = ''; setTimeout(() => { try { showNextBadge(); } catch (e) { } }, 350); }
+function hideBirthday() { $('bd-ov').classList.add('hidden'); $('bd-conf').textContent = ''; document.body.style.overflow = ''; setTimeout(() => { if (bdQueue.length) { showBirthday(); return; } try { showNextBadge(); } catch (e) { } }, 350); }
 $('bd-close').addEventListener('click', hideBirthday);
 $('bd-ov').addEventListener('click', (e) => { if (e.target === e.currentTarget || e.target.parentElement === e.currentTarget) hideBirthday(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('bd-ov').classList.contains('hidden')) hideBirthday(); });

@@ -12,7 +12,8 @@
 //      · Auto nicht abgeschlossen (devices[id].veh): Schloss/Türen/Fenster/Licht, nur wenn der Stand ≥ 30 Min. alt ist.
 //      · Monatsanfang (devices[id].mon): Monatsbericht des Vormonats + Fahrtenbuch-Hinweis, einmal je Monat (bis zum 7. nachgeholt).
 //      · Škoda-Schlüssel (devices[id].key, fehlt = an): 7 Tage vorher, am Vortag, am Ablauftag.
-//      Zustand je Konto in settings/pushState (remKm, remDay, monSent, keySent) – ausgefallene Abende werden nachgeholt (Erinnerungen bis 7 Tage).
+//      bd: Jahrestag von Kauf und Zulassung (Gerät-Merker bd, fehlt = an), einmal je Tag und Art (pushState.bdSent).
+//      Zustand je Konto in settings/pushState (remKm, remDay, monSent, keySent, bdSent) – ausgefallene Abende werden nachgeholt (Erinnerungen bis 7 Tage).
 import webpush from 'web-push';
 import { SignJWT, importPKCS8 } from 'jose';
 import { verifyUser, accountForUser, usable } from '../lib/auth.js';
@@ -85,7 +86,7 @@ async function riskFor(uid, prefs0) {
   const w = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}&hourly=temperature_2m,dew_point_2m,cloud_cover,wind_speed_10m,precipitation&wind_speed_unit=ms&timezone=Europe%2FBerlin&forecast_days=3`);
   if (!w.ok) throw new Error('Wetter ' + w.status); return { st, r: iceEval((await w.json()).hourly, day, st) };
 }
-async function devices(uid) { const d = await fsGet(`enyaqStrom/${uid}/settings/push`); return Object.entries((d && d.devices) || {}).filter(([, v]) => v && v.sub).map(([id, v]) => ({ id, sub: JSON.parse(v.sub), ice: v.ice !== false, low: Number(v.low) > 0 ? Number(v.low) : 0, rem: v.rem === true, veh: v.veh === true, mon: v.mon === true, key: v.key !== false })); }
+async function devices(uid) { const d = await fsGet(`enyaqStrom/${uid}/settings/push`); return Object.entries((d && d.devices) || {}).filter(([, v]) => v && v.sub).map(([id, v]) => ({ id, sub: JSON.parse(v.sub), ice: v.ice !== false, low: Number(v.low) > 0 ? Number(v.low) : 0, rem: v.rem === true, veh: v.veh === true, mon: v.mon === true, key: v.key !== false, bd: v.bd !== false })); }
 
 /* ---- Fällige Erinnerungen ---- */
 async function fsList(path) {                                                   // alle Dokumente einer Sammlung → [Felder]
@@ -174,6 +175,20 @@ async function monthMessage(uid, ym) {
     + (tripHint ? '\nFahrtenbuch für ' + MON[m - 1] + ' noch aus MyŠkoda importieren' : ''), kind: 'mon', tag: 'mon-' + ym, url: '/?go=berichte' };
 }
 /* ---- Škoda-Schlüssel läuft ab: 7 Tage vorher, am Vortag und am Ablauftag (je Stufe einmal, auch nachgeholt) ---- */
+/** Jahrestage am heutigen Tag (Berlin): Kauf (settings.purchase JJJJ-MM-TT) und Zulassung (settings.year TT.MM.JJJJ), ab dem 1. Jahr; 29.02. → 28.02. */
+function annivs(set, today) {
+  const out = [], [ty, tm, td] = today.split('-').map(Number);
+  const hit = (y, m, d) => (m === tm && Math.min(d, new Date(ty, m, 0).getDate()) === td && ty - y >= 1) ? ty - y : 0;
+  const p = /^(\d{4})-(\d{2})-(\d{2})/.exec(String((set && set.purchase) || '')); if (p) { const n = hit(+p[1], +p[2], +p[3]); if (n) out.push({ k: 'buy', n }); }
+  const r = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(String((set && set.year) || '').trim()); if (r) { const n = hit(+r[3], +r[2], +r[1]); if (n) out.push({ k: 'reg', n }); }
+  return out;
+}
+function bdMessage(a, set, today) {
+  const name = (String((set && set.model) || '').trim().split(/\s+/)[0]) || 'Enyaq', J = (n) => n + (n === 1 ? ' Jahr' : ' Jahre');
+  return a.k === 'reg'
+    ? { title: '🎂 Dein ' + name + ' wird heute ' + J(a.n) + ' alt!', body: 'Heute vor ' + J(a.n).replace('Jahre', 'Jahren') + ' wurde er zugelassen. Alles Gute! Öffne die App für die Geburtstagskarte.', kind: 'bd', tag: 'bd-reg-' + today, url: '/' }
+    : { title: '🎉 ' + J(a.n) + ' mit deinem ' + name + '!', body: 'Heute vor ' + J(a.n).replace('Jahre', 'Jahren') + ' hast du ihn gekauft. Öffne die App für die Festkarte mit deiner Jahresbilanz.', kind: 'bd', tag: 'bd-buy-' + today, url: '/' };
+}
 function keyStage(expires, today) {
   if (!expires || isNaN(Date.parse(expires))) return null; const ex = String(expires).slice(0, 10), d = Math.round((Date.parse(ex + 'T12:00:00Z') - Date.parse(today + 'T12:00:00Z')) / 864e5);
   return d <= 0 ? { stage: 0, d, ex } : d <= 1 ? { stage: 1, d, ex } : d <= 7 ? { stage: 7, d, ex } : null;
@@ -195,7 +210,7 @@ async function send(list, payload) {
 /** Ein Konto im Abendlauf: alle Arten getrennt, Fehler einer Art stoppen die anderen nicht. Zustand (pushState) wird am Ende in einem Schritt geschrieben. */
 async function runAccount(uid) {
   const o = { uid: uid.slice(0, 6) }, all = await devices(uid); if (!all.length) return null;
-  const today = iso(new Date()), L = (f) => all.filter(f), iceL = L(d => d.ice), remL = L(d => d.rem), lowL = L(d => d.low > 0), vehL = L(d => d.veh), monL = L(d => d.mon), keyL = L(d => d.key);
+  const today = iso(new Date()), L = (f) => all.filter(f), iceL = L(d => d.ice), remL = L(d => d.rem), lowL = L(d => d.low > 0), vehL = L(d => d.veh), monL = L(d => d.mon), keyL = L(d => d.key), bdL = L(d => d.bd);
   const [prefs, st0] = await Promise.all([fsGet(`enyaqStrom/${uid}/settings/prefs`), fsGetStrings(`enyaqStrom/${uid}/settings/pushState`).catch(() => null)]);
   const st = { ...(st0 || {}) }; let risk = null, acc = null, car = null;
   if (iceL.length) { try { const { st: is, r, why } = risk = await riskFor(uid, prefs);
@@ -225,6 +240,9 @@ async function runAccount(uid) {
   if (keyL.length && acc && !acc.demo) { try { const k = keyStage(acc.expires, today), tag = k ? k.ex + '|' + k.stage : '';
       if (k && st.keySent !== tag) { o.key = await send(keyL, keyMessage(k)); st.keySent = tag; }
     } catch (e) { o.keyErr = String(e.message || e).slice(0, 120); } }
+  if (bdL.length) { try { const set = prefs && prefs.settings, a = annivs(set, today).filter(x => !String(st.bdSent || '').includes(today + x.k));
+      if (a.length) { o.bd = []; for (const x of a) o.bd.push(await send(bdL, bdMessage(x, set, today))); st.bdSent = today + a.map(x => x.k).join('') + (String(st.bdSent || '').startsWith(today) ? String(st.bdSent).slice(10) : ''); }
+    } catch (e) { o.bdErr = String(e.message || e).slice(0, 120); } }
   if (JSON.stringify(st) !== JSON.stringify(st0 || {})) await fsSetStrings(`enyaqStrom/${uid}/settings/pushState`, { ...st, at: new Date().toISOString() }).catch(() => { });
   return o;
 }
@@ -238,6 +256,9 @@ async function testPayload(kind, user) {
   if (kind === 'key') { let acc = null; try { acc = await lowAccount(user.uid, user.email); } catch (e) { }
     const ex = acc && acc.expires && !isNaN(Date.parse(acc.expires)) ? String(acc.expires).slice(0, 10) : null, k = keyStage(ex, today);
     return { p: { ...keyMessage(k || { d: 7, ex: ex || iso(new Date(Date.now() + 7 * 864e5)) }), tag: 'key-test' }, real: !!k, expires: ex }; }
+  if (kind === 'bd') { let set = null; try { const pr = await fsGet(`enyaqStrom/${user.uid}/settings/prefs`); set = pr && pr.settings; } catch (e) { }
+    const r = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(String((set && set.year) || '').trim()), n = r ? Math.max(1, Number(today.slice(0, 4)) - +r[3]) : 3;
+    return { p: { ...bdMessage({ k: 'reg', n }, set, today), tag: 'bd-test' }, real: false }; }
   return null;
 }
 
@@ -259,7 +280,7 @@ export default async function handler(req, res) {
         if (!real) c = { soc: 17, rangeKm: 62, at: new Date().toISOString() };
         return res.status(200).json({ ...(await send(list, { ...lowMessage(c, false), tag: 'low-test' })), devices: list.length, real, soc: real ? c.soc : null, plugged: real ? plugged(c) : null });
       }
-      if (['veh', 'mon', 'key'].includes(body.test)) {
+      if (['veh', 'mon', 'key', 'bd'].includes(body.test)) {
         const list = all.filter(d => d[body.test]); if (!list.length) return res.status(404).json({ error: 'no_device' });
         const t = await testPayload(body.test, user); return res.status(200).json({ ...(await send(list, t.p)), devices: list.length, real: t.real, state: t.state ?? null, expires: t.expires ?? null });
       }
