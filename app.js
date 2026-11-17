@@ -5814,7 +5814,7 @@ try { renderWrapCard(); } catch (e) { }
    im Dokument enyaqStrom/<uid>/settings/prefs, gleiche Regel wie Anbieter und Kategorien. Die PIN bleibt nur auf dem Gerät.
    Erster Abgleich: Was die Cloud hat, gilt; fehlt dort etwas und ist lokal vorhanden, wird es hochgeladen. Danach gilt die Cloud (Änderung auf einem Gerät wirkt auf allen).
    ===================================================================== */
-const SYNC_SET_KEYS = ['presetV', 'bdg', 'title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAcKwh', 'certDcKwh', 'certKm', 'wltpNet', 'ccEnd', 'wxoCut', 'dashFirst', 'dashStart', 'dashDyn', 'car', 'carT', 'ui', 'carN', 'carSec', 'wxIcons', 'nRep', 'nCare', 'nTrips', 'nBakYm', 'nBakAt', 'nBakSnz', 'gtMirror', 'gtList', 'iceDep', 'iceWe', 'icePark', 'iceMin', 'iceK', 'cmpCar', 'cmpL', 'cmpEur', 'cmpCo2', 'news', 'dash'];
+const SYNC_SET_KEYS = ['presetV', 'bdg', 'title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAcKwh', 'certDcKwh', 'certKm', 'wltpNet', 'ccEnd', 'wxoCut', 'dashFirst', 'dashStart', 'dashDyn', 'car', 'carT', 'ui', 'carN', 'carSec', 'wxIcons', 'nRep', 'nCare', 'nTrips', 'nBakYm', 'nBakAt', 'nBakSnz', 'gtMirror', 'gtList', 'iceDep', 'iceWe', 'icePark', 'iceMin', 'iceK', 'cmpCar', 'cmpL', 'cmpEur', 'cmpCo2', 'news', 'newsRead', 'dash'];
 /** Einstellungen für die Cloud: feste Reihenfolge, ohne leere Werte (Firestore verbietet undefined). null = nichts vorhanden. */
 function syncSet(src) {
   const o = {}; if (src && typeof src === 'object') SYNC_SET_KEYS.forEach(k => { const v = src[k]; if (v != null && v !== '' && !(typeof v === 'number' && !isFinite(v))) o[k] = v; });
@@ -9351,8 +9351,8 @@ setTimeout(async () => {
 const NEWS_SRC = [   // GoingElectric und TFF sperren Server-Abrufe (403) – nicht dabei
   { k: 'ef', n: 'enyaq-forum.de', short: 'enyaq-forum', g: 'forum', sub: 'Bereiche unten auswählen', c: '#22c55e', on: true },
   { k: 'mt', n: 'Motor-Talk', g: 'forum', sub: 'Skoda Elektrofahrzeuge (Enyaq + Elroq, viel Kaufberatung)', c: '#38bdf8', on: false },
-  { k: 'el', n: 'electrive', g: 'news', sub: 'Fachnachrichten, Schlagwort „Enyaq“', c: '#f97316', on: true },
-  { k: 'ec', n: 'ecomento', g: 'news', sub: 'Nachrichten, Schlagwort „Škoda Enyaq“', c: '#eab308', on: true },
+  { k: 'el', n: 'electrive', g: 'news', sub: 'Fachnachrichten, Schlagwort „Enyaq“', c: '#3b82f6', on: true },
+  { k: 'ec', n: 'ecomento', g: 'news', sub: 'Nachrichten, Schlagwort „Škoda Enyaq“', c: '#a78bfa', on: true },
   { k: 'sb', n: 'Škoda Storyboard', g: 'skoda', sub: 'Škoda-Pressemeldungen zu Enyaq, Elroq, Software, MyŠkoda', c: '#10b981', on: true },
   { k: 'bk', n: 'BRISKODA', g: 'en', sub: 'Enyaq-Forum (englisch) – sperrt Abrufe zeitweise', c: '#ec4899', on: false }];
 const NEWS_GROUPS = [['forum', 'Forum'], ['news', 'News'], ['skoda', 'Škoda'], ['en', 'Englisch']];
@@ -9367,6 +9367,14 @@ const newsQuery = () => newsOn().flatMap(k => k === 'ef' ? newsBoards().map(id =
 const newsDef = (k) => NEWS_SRC.find(s => s.k === k) || { n: k, c: '#64748b', g: 'news' };
 /** enyaq-forum.de: Thread direkt beim neuesten Beitrag öffnen (auch für ältere Zwischenstände ohne den Zusatz vom Server) */
 const newsUrl = (u) => /^https:\/\/www\.enyaq-forum\.de\/forum\/thread\/\d+[^?#]*$/.test(u) ? u + '?action=lastPost' : u;
+/* Gelesen (angetippt): kurze Kennung je Link, letzte 300, synchronisiert (settings.newsRead) → Streifen links orange */
+const NEWS_READ_C = '#f97316';
+function newsId(u) { let h = 2166136261; for (let i = 0; i < u.length; i++) { h ^= u.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0).toString(36); }
+function newsReadSet() { const a = getSettings().newsRead; return new Set(Array.isArray(a) ? a : []); }
+function newsMarkRead(u) {
+  const id = newsId(u), a = Array.isArray(getSettings().newsRead) ? getSettings().newsRead.filter(x => x !== id) : [];
+  a.push(id); setQuickSetting('newsRead', a.slice(-300));
+}
 const newsGrp = (x) => x.g || newsDef(x.s).g;
 function newsAgo(t) {
   const m = Math.round((Date.now() - t) / 60e3);
@@ -9398,8 +9406,9 @@ function newsParts(big) {
   const items = newsFilter === 'all' ? all : all.filter(x => newsGrp(x) === newsFilter);
   const chip = (k, label, n) => `<button type="button" data-nf="${k}" class="shrink-0 whitespace-nowrap rounded-[9px] px-2.5 py-1 ${big ? 'text-[13px]' : 'text-[11.5px]'} font-semibold active:scale-95 transition ${newsFilter === k ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400' : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200'}">${esc(label)} ${n}</button>`;
   const chips = chip('all', 'Alle', all.length) + (grps.length > 1 ? grps.map(([g, n]) => chip(g, n, cnt(g))).join('') : '');
-  const row = (x) => { const d = Date.parse(x.d), nw = d > seen && seen > 0, s = newsDef(x.s);
-    return `<a href="${esc(newsUrl(x.u))}" target="_blank" rel="noopener" class="${big ? 'mb-2 rounded-2xl px-3.5 py-3' : 'mb-1.5 rounded-xl px-2.5 py-2'} block border-l-[3px] bg-slate-100 text-left active:scale-[.99] transition dark:bg-slate-800" style="border-left-color:${s.c}">
+  const rd = newsReadSet();
+  const row = (x) => { const d = Date.parse(x.d), id = newsId(x.u), read = rd.has(id), nw = !read && d > seen && seen > 0, s = newsDef(x.s);
+    return `<a href="${esc(newsUrl(x.u))}" target="_blank" rel="noopener" data-nread="${esc(x.u)}" class="${big ? 'mb-2 rounded-2xl px-3.5 py-3' : 'mb-1.5 rounded-xl px-2.5 py-2'} block border-l-[3px] bg-slate-100 text-left active:scale-[.99] transition dark:bg-slate-800" style="border-left-color:${read ? NEWS_READ_C : s.c}"${read ? ' title="Gelesen"' : ''}>
       <span class="${big ? 'line-clamp-3 text-[15px]' : 'line-clamp-2 text-[12.5px]'} font-semibold leading-snug">${esc(x.t)}</span>
       <span class="mt-0.5 flex justify-between gap-2 ${big ? 'text-xs' : 'text-[10.5px]'} text-slate-500 dark:text-slate-400"><span class="min-w-0 truncate">${esc(s.n)}${x.b ? ' · ' + esc((EF_B.find(b => b[0] === x.b) || [0, ''])[1]) : x.f ? ' · ' + esc(x.f) : ''}</span><span class="shrink-0">${Number.isFinite(d) ? newsAgo(d) : ''}${nw ? ' · <b class="font-semibold text-emerald-600 dark:text-emerald-400">neu</b>' : ''}</span></span></a>`; };
   const empty = !fresh ? (newsErr || 'Lade Neuigkeiten …') : !items.length ? (newsErr || 'Keine Beiträge gefunden.') : '';
@@ -9506,6 +9515,14 @@ $('news-src').addEventListener('click', (e) => {
   st.efb = cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id]; newsSaveSet(st);
 });
 { const sv = showView; showView = function (v) { const r = sv.apply(this, arguments); if (v === 'settings') try { renderNewsSet(); } catch (e) { } return r; }; }
+
+/* Antippen eines Beitrags (Karte oder Vollbild) = gelesen; Streifen wird kurz danach orange (nach dem Öffnen des Links) */
+document.addEventListener('click', (e) => {
+  const a = e.target.closest('a[data-nread]'); if (!a) return;
+  try { newsMarkRead(a.dataset.nread); } catch (er) { }
+  a.style.borderLeftColor = NEWS_READ_C; a.title = 'Gelesen';
+  setTimeout(() => { try { renderNews(); } catch (er) { } }, 400);
+}, true);
 
 // ───── src/24-strom-zuhause.js ─────
 /* =====================================================================
