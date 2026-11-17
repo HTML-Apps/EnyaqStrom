@@ -304,7 +304,9 @@ $('set-year').addEventListener('input', (e) => {                                
   const d = el.value.replace(/\D/g, '').slice(0, 8);
   el.value = d.length > 4 || (d.length === 4 && !del) ? d.slice(0, 2) + '.' + d.slice(2, 4) + '.' + d.slice(4) : d.length > 2 || (d.length === 2 && !del) ? d.slice(0, 2) + '.' + d.slice(2) : d;
 });
-$('btn-save-settings').addEventListener('click', () => {
+/* Einstellungen Fahrzeug & Kauf, Laden & Akku, Erinnerungen: speichern automatisch, sobald ein Feld geändert und verlassen wird
+   (change-Ereignis, kein Knopf mehr). Ungültige Eingaben → Hinweis, nichts wird gespeichert, bis der Wert stimmt. */
+function saveSettingsForm() {
   const price = parseNum($('set-price').value);
   if (!isFinite(price) || price < 0) { appNote('Bitte einen gültigen Strompreis eingeben (z. B. 0,307).'); return; }
   const carT = {}; for (const k of Object.keys(CAR_TECH)) {                       // technische Werte: leer = Wert des Fahrzeugtyps
@@ -353,9 +355,15 @@ $('btn-save-settings').addEventListener('click', () => {
       if (n !== pvHomeName()) { info.home = n ? { ...(info.home || {}), name: n } : {}; setProvInfo(info); try { renderHomeCard(); } catch (e) { } } } catch (e) { }
     renderReminderBadges(); renderHeroStats(); pushPrefs(); applyTitle();
     if (carProf().key !== carWas) { setTimeout(() => location.reload(), 1200); }   // Cloud-Schreibvorgang liegt in der Offline-Warteschlange und geht nicht verloren
-    $('settings-msg').classList.remove('hidden'); setTimeout(() => $('settings-msg').classList.add('hidden'), 2500);
+    appNote('✓ Gespeichert', 'ok');
   }
-});
+}
+const SET_FORM_IDS = new Set(['set-battery', 'set-brand', 'set-car', 'set-cert-ac', 'set-cert-dc', 'set-cert-km', 'set-home-prov', 'set-model', 'set-next-hu', 'set-next-svc', 'set-plate', 'set-power', 'set-price', 'set-purchase', 'set-purchase-km', 'set-purchase-price', 'set-ref-hi', 'set-ref-lo', 'set-rem-days', 'set-rem-km', 'set-title', 'set-ui', 'set-vin', 'set-wltp', 'set-wltp-net', 'set-year']);
+let setFormT = null;
+const setFormField = (el) => !!el && (SET_FORM_IDS.has(el.id) || /^set-ct-/.test(el.id || ''));
+$('view-settings').addEventListener('change', (e) => { if (!setFormField(e.target)) return; clearTimeout(setFormT); setFormT = setTimeout(saveSettingsForm, 150); });
+/* App geht in den Hintergrund, während noch in einem Feld getippt wird → trotzdem speichern */
+document.addEventListener('visibilitychange', () => { if (document.hidden && setFormField(document.activeElement)) { clearTimeout(setFormT); saveSettingsForm(); } });
 /* Alle Daten löschen: zweistufig. Stufe 1 = Dialog mit Erklärung, Stufe 2 = Wort LÖSCHEN eintippen. Erst dann wird der rote Button aktiv. */
 const WIPE_WORD = 'LÖSCHEN';
 $('btn-wipe').addEventListener('click', () => {

@@ -21,7 +21,6 @@ let setSec = (() => { try { return localStorage.getItem(KEY_SETSEC) || 'fahrzeug
 (function tagSettingsCards() {
   [...$('view-settings').children].forEach(el => {
     if (el.id === 'set-head' || el.id === 'set-sub') return;
-    if (el.querySelector('#btn-save-settings')) { el.dataset.secs = SET_SECS.filter(x => x.save).map(x => x.k).join(' '); return; }
     const h = (el.querySelector('h2')?.textContent || '').trim(), sec = SET_SECS.find(x => x.h.includes(h));
     el.dataset.secs = sec ? sec.k : 'fahrzeug';
   });
@@ -32,7 +31,7 @@ function setSettingsSec(k) {
   [...$('view-settings').children].forEach(el => { if (el.dataset.secs) el.classList.toggle('hidden', !el.dataset.secs.split(' ').includes(sec.k)); });
   $('set-h').textContent = sec.t;
   /* Nur eine Karte im Bereich: deren Kopfzeile (Symbol + Titel) doppelt die Seitenüberschrift → ausblenden, ihr Erklärsatz wird Untertitel */
-  const cards = [...$('view-settings').children].filter(el => el.dataset.secs && !el.classList.contains('hidden') && !el.querySelector('#btn-save-settings'));
+  const cards = [...$('view-settings').children].filter(el => el.dataset.secs && !el.classList.contains('hidden'));
   cards.forEach(c => { const hd = c.querySelector(':scope > .border-b-2'); if (hd) hd.classList.remove('hidden'); });
   let sub = '';
   if (cards.length === 1) { const hd = cards[0].querySelector(':scope > .border-b-2'); if (hd) { hd.classList.add('hidden'); sub = (hd.querySelector('p')?.textContent || '').trim(); } }
