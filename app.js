@@ -7781,10 +7781,11 @@ function renderTires() {
   const el = $('tire-body'); if (!el) return; const all = getLab().tires || [];
   if (!tireSet) { const last = all.slice().sort((a, b) => String(b.date).localeCompare(String(a.date)))[0]; tireSet = last ? last.set : 'so'; }
   $('tire-seg').innerHTML = TIRE_SETS.concat([['hist', '🗂️ Historie']]).map(([k, l]) => `<button type="button" data-tset="${k}" class="flex-1 min-w-0 py-1.5 rounded-lg text-[13px] font-medium whitespace-nowrap ${tireSet === k ? 'bg-white dark:bg-slate-700 shadow-sm' : 'text-slate-600 dark:text-slate-400'}">${k === 'hist' ? 'Historie' : l.split(' ')[1]}</button>`).join('');
-  if (tireSet === 'hist') { renderTireHist(); return; }
-  const ms = tireList(tireSet), last = ms[ms.length - 1];
-  if (!last) { el.innerHTML = `<p class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 text-sm text-slate-600 dark:text-slate-300 text-left">Für den ${TIRE_SETS.find(s => s[0] === tireSet)[1].split(' ')[1]}satz gibt es noch keine Messung. Über „+ Messung“ die Profiltiefe aller vier Reifen eintragen – je Reifen außen, mitte und innen, immer an denselben Stellen (z. B. Hauptrille an der Ventil-Position). Werte vom Kauf mit dem damaligen Datum nachtragen.</p>`; return; }
-  const next = new Date(Date.parse(last.date + 'T12:00:00')); next.setMonth(next.getMonth() + 6); const due = next < new Date();
+  const vs = tireSet === 'hist' && tsView ? tsById(tsView) : null;              // Ansicht eines einzelnen Satzes (aus der Historie, auch ausgemustert)
+  if (tireSet === 'hist' && !vs) { tsView = null; renderTireHist(); return; }
+  const sea = vs ? vs.sea : tireSet, ms = vs ? tsMs(vs) : tireList(tireSet), last = ms[ms.length - 1], ended = !!(vs && vs.end), top = vs ? tsViewHead(vs) : '';
+  if (!last) { el.innerHTML = top + `<p class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 text-sm text-slate-600 dark:text-slate-300 text-left">Für den ${TIRE_SETS.find(s => s[0] === sea)[1].split(' ')[1]}satz gibt es noch keine Messung. Über „+ Messung“ die Profiltiefe aller vier Reifen eintragen – je Reifen außen, mitte und innen, immer an denselben Stellen (z. B. Hauptrille an der Ventil-Position). Werte vom Kauf mit dem damaligen Datum nachtragen.</p>`; return; }
+  const next = new Date(Date.parse(last.date + 'T12:00:00')); next.setMonth(next.getMonth() + 6); const due = !ended && next < new Date();
   const tile = (p) => { const v = last.v[p] || [], a = tAvg(v), dl = ms.length > 1 ? tDiff(ms[ms.length - 2].v[tPosAt(ms, p)[ms.length - 2]], v) : null, prev = dl == null ? null : a - dl;   // nur gleiche Messpunkte
     return `<button type="button" data-tire="${p}" class="flex h-[96px] w-full flex-col items-center justify-center rounded-2xl border-[1.5px] bg-slate-100 dark:bg-slate-800 px-1 ${tireSel === p ? 'ring-2 ring-offset-0' : ''}" style="border-color:${tCol(a)};${tireSel === p ? '--tw-ring-color:' + TIRE_COL[p] : ''}">
       <span class="text-[10.5px] text-slate-500 dark:text-slate-400">${TIRE_NAME[p]}</span>
@@ -7793,22 +7794,22 @@ function renderTires() {
       ${prev != null && a != null ? `<span class="mt-0.5 text-[9.5px] text-slate-500 dark:text-slate-400">${a - prev > 0.04 ? '+' : a - prev < -0.04 ? '−' : '±'}${fmt(Math.abs(a - prev), 1)} seit letzter</span>` : ''}</button>`; };
   const car = `<div class="relative h-[204px] w-[102px]"><img src="/Bilder/Enyaq/enyaq-top.webp" alt="Enyaq von oben" width="474" height="944" draggable="false" class="h-full w-full select-none object-contain">`
     + [['left', 23.5, 'VL'], ['right', 23.5, 'VR'], ['left', 76.5, 'HL'], ['right', 76.5, 'HR']].map(([sd, y, p]) => `<span class="absolute h-[34px] w-[7px] -translate-y-1/2 rounded-[3px] shadow" style="${sd}:3px;top:${y}%;background:${tCol(tAvg(last.v[p]))}"></span>`).join('') + '</div>';
-  const fc = tireForecast(ms, tireSet);
-  let h = `<div class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 space-y-2">
-    <div class="flex items-baseline justify-between gap-2 text-xs text-slate-500 dark:text-slate-400"><span class="text-left">${labD(last.date)}${last.km ? ' · ' + fmt(last.km, 0) + ' km' : ''}</span><span class="shrink-0 font-semibold ${due ? 'text-red-600 dark:text-red-400' : 'text-amber-600 dark:text-amber-400'}">${due ? 'Messung fällig' : 'nächste: ' + next.toLocaleDateString('de-DE', { month: 'short', year: 'numeric' })}</span></div>
+  const fc = ended ? null : tireForecast(ms, sea);
+  let h = top + `<div class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 space-y-2">
+    <div class="flex items-baseline justify-between gap-2 text-xs text-slate-500 dark:text-slate-400"><span class="text-left">${labD(last.date)}${last.km ? ' · ' + fmt(last.km, 0) + ' km' : ''}</span><span class="shrink-0 font-semibold ${due ? 'text-red-600 dark:text-red-400' : 'text-amber-600 dark:text-amber-400'}">${ended ? 'letzte Messung' : due ? 'Messung fällig' : 'nächste: ' + next.toLocaleDateString('de-DE', { month: 'short', year: 'numeric' })}</span></div>
     <div class="grid grid-cols-[1fr_102px_1fr] items-center gap-x-1.5"><div class="space-y-3">${tile('VL')}${tile('HL')}</div><div class="flex justify-center">${car}</div><div class="space-y-3">${tile('VR')}${tile('HR')}</div></div>
     <p class="text-[11px] text-slate-500 dark:text-slate-400 text-center">je Reifen außen · mitte · innen · Antippen hebt den Reifen im Verlauf hervor</p></div>`;
-  if (fc) h += tireForecastHtml(ms, tireSet);
+  if (fc) h += tireForecastHtml(ms, sea);
   h += `<div class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 space-y-1.5"><div class="flex items-baseline justify-between"><p class="text-sm font-bold">Verlauf</p><span class="text-[11px] text-slate-500 dark:text-slate-400">Ø mm · gleiche Messpunkte</span></div>
-    ${tireChart(ms, tireLim(tireSet))}<div class="flex gap-3 text-[11px] text-slate-500 dark:text-slate-400">${TIRE_POS.map(p => `<span><span class="inline-block h-[3px] w-2.5 align-middle" style="background:${TIRE_COL[p]}"></span> ${p}</span>`).join('')}</div>
-    ${fc ? '' : `<p class="text-[11px] text-slate-500 dark:text-slate-400 text-left">Ab der zweiten Messung mit km-Stand zeigt die App, wann neue Reifen fällig sind (${tireLim(tireSet)} mm).</p>`}</div>`;
+    ${tireChart(ms, tireLim(sea))}<div class="flex gap-3 text-[11px] text-slate-500 dark:text-slate-400">${TIRE_POS.map(p => `<span><span class="inline-block h-[3px] w-2.5 align-middle" style="background:${TIRE_COL[p]}"></span> ${p}</span>`).join('')}</div>
+    ${fc || ended ? '' : `<p class="text-[11px] text-slate-500 dark:text-slate-400 text-left">Ab der zweiten Messung mit km-Stand zeigt die App, wann neue Reifen fällig sind (${tireLim(sea)} mm).</p>`}</div>`;
   if (tireSel) h += `<div class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm px-4 py-3"><p class="text-sm font-bold text-left">${TIRE_NAME[tireSel][0].toUpperCase() + TIRE_NAME[tireSel].slice(1)}</p><div class="mt-1 grid grid-cols-[1.3fr_1fr_1fr_1fr_1fr] gap-1 text-[11px] text-slate-500 dark:text-slate-400"><span>Datum</span><span class="text-right">außen</span><span class="text-right">mitte</span><span class="text-right">innen</span><span class="text-right">Ø</span></div>${(() => { const pa = tPosAt(ms, tireSel); return ms.map((m, k) => [m, pa[k]]).reverse().map(([m, q]) => `<div class="grid grid-cols-[1.3fr_1fr_1fr_1fr_1fr] gap-1 border-t border-slate-100 dark:border-slate-800 py-1.5 text-[13px] tabular-nums"><span>${labD(m.date)}${q !== tireSel ? ' <span class="text-[10px] text-sky-600 dark:text-sky-400">' + q + '</span>' : ''}</span>${[0, 1, 2].map(i => `<span class="text-right">${tFmt((m.v[q] || [])[i])}</span>`).join('')}<b class="text-right" style="color:${tCol(tAvg(m.v[q]))}">${tFmt(tAvg(m.v[q]))}</b></div>`).join(''); })()}</div>`;
   h += `<details class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm px-4 py-3"><summary class="cursor-pointer text-sm font-semibold">Alle Messungen (${ms.length})</summary><div class="mt-2">${ms.slice().reverse().map(m => `<button type="button" data-tm="${esc(m.id)}" class="flex w-full items-center gap-2 border-t border-slate-100 dark:border-slate-800 py-2 text-left text-[13px]"><span class="w-[84px] shrink-0">${labD(m.date)}</span><span class="min-w-0 flex-1 truncate text-xs text-slate-500 dark:text-slate-400">${m.swap ? '<b class="text-sky-600 dark:text-sky-400">⇅ getauscht</b> · ' : ''}${m.km ? fmt(m.km, 0) + ' km · ' : ''}${TIRE_POS.map(p => p + ' ' + tFmt(tAvg(m.v[p]))).join(' · ')}</span><span class="shrink-0 text-slate-400">›</span></button>`).join('')}</div></details>`;
-  el.innerHTML = h; tireFcWire(ms, tireSet);
+  el.innerHTML = h; tireFcWire(ms, sea);
 }
 function openTireSheet(id) {
   const lab = getLab(), m = id ? (lab.tires || []).find(x => x.id === id) : null; tireEdit = m ? m.id : null;
-  const set = m ? m.set : (tireSet !== 'hist' && tireSet) || ((typeof tsMounted === 'function' && tsMounted()) || {}).sea || 'so', prev = tireList(set).filter(x => !m || x.id !== m.id).pop(), km0 = (() => { try { return lastKnownKm(); } catch (_) { return null; } })();
+  const set = m ? m.set : (tireSet === 'hist' && tsView && tsById(tsView) ? tsById(tsView).sea : null) || (tireSet !== 'hist' && tireSet) || ((typeof tsMounted === 'function' && tsMounted()) || {}).sea || 'so', prev = (tireSet === 'hist' && tsView && tsById(tsView) ? tsMs(tsById(tsView)) : tireList(set)).filter(x => !m || x.id !== m.id).pop(), km0 = (() => { try { return lastKnownKm(); } catch (_) { return null; } })();
   tirePrev = prev || null; const sw0 = (m && m.swap) || '';
   const cell = (p, i) => { const v = m ? (m.v[p] || [])[i] : undefined, ph = prev ? (prev.v[TIRE_SWAP[sw0] ? TIRE_SWAP[sw0][p] : p] || [])[i] : undefined;
     return `<input data-tv="${p}:${i}" type="text" inputmode="decimal" autocomplete="off" aria-label="${TIRE_NAME[p]} ${TIRE_PT[i]}" value="${v != null ? String(v).replace('.', ',') : ''}" placeholder="${ph != null ? String(ph).replace('.', ',') : ''}" class="w-full min-w-0 rounded-lg border border-slate-300 dark:border-slate-700 bg-transparent px-0.5 py-2.5 text-center text-[15px] tabular-nums focus:outline-none focus:ring-2 focus:ring-emerald-500">`; };
@@ -7824,7 +7825,7 @@ function openTireSheet(id) {
     <div class="grid grid-cols-2 gap-2.5"><button type="button" data-tss="${m ? 'del' : 'close'}" class="h-12 rounded-2xl border border-slate-300 dark:border-slate-700 text-sm font-semibold ${m ? 'text-red-600 dark:text-red-400' : ''}">${m ? 'Löschen' : 'Abbrechen'}</button><button type="button" data-tss="save" class="h-12 rounded-2xl bg-emerald-600 text-white text-sm font-semibold">Speichern</button></div>`;
   $('tire-sheet').classList.remove('hidden');
 }
-$('tire-seg').addEventListener('click', (e) => { const b = e.target.closest('[data-tset]'); if (b) { tireSet = b.dataset.tset; tireSel = null; renderTires(); } });
+$('tire-seg').addEventListener('click', (e) => { const b = e.target.closest('[data-tset]'); if (b) { tireSet = b.dataset.tset; tireSel = null; tsView = null; renderTires(); } });
 $('tire-body').addEventListener('click', (e) => { const t = e.target.closest('[data-tire]'); if (t) { tireSel = tireSel === t.dataset.tire ? null : t.dataset.tire; renderTires(); return; } const m = e.target.closest('[data-tm]'); if (m) openTireSheet(m.dataset.tm); });
 $('tire-add').addEventListener('click', () => openTireSheet(null));
 $('tire-sheet').addEventListener('change', (e) => {                              // Tausch gewählt → graue Vorwerte zeigen den Reifen, der jetzt dort sitzt
@@ -7844,7 +7845,8 @@ $('tire-sheet').addEventListener('click', (e) => {
   const km = deDec(String($('tire-km').value).replace(/\./g, '')), set = document.querySelector('#tire-set-in .bg-white')?.dataset.tsin || 'so';
   const m = { id: tireEdit || labId(), set, date: $('tire-date').value || wxIso(new Date()), v };
   if (Number.isFinite(km) && km > 0) m.km = Math.round(km); const note = $('tire-note').value.trim(); if (note) m.note = note; const swv = $('tire-swap') ? $('tire-swap').value : ''; if (TIRE_SWAP[swv]) m.swap = swv;
-  lab.tires = tireEdit ? lab.tires.map(x => x.id === tireEdit ? m : x) : lab.tires.concat(m); tireSet = set; setLab(lab); $('tire-sheet').classList.add('hidden');
+  const old = tireEdit ? lab.tires.find(x => x.id === tireEdit) : null; if (old && old.ts) m.ts = old.ts; else if (!old && tireSet === 'hist' && tsView && tsById(tsView) && tsById(tsView).sea === set) m.ts = tsView;   // Messung im Satz eingetragen → fest diesem Satz zuordnen
+  lab.tires = tireEdit ? lab.tires.map(x => x.id === tireEdit ? m : x) : lab.tires.concat(m); if (!(tireSet === 'hist' && tsView)) tireSet = set; setLab(lab); $('tire-sheet').classList.add('hidden');
 });
 
 /* =====================================================================
@@ -9852,7 +9854,7 @@ $('rt-opt').addEventListener('click', (e) => {
    ===================================================================== */
 const TS_SEA = { so: ['#fb923c', 'Sommer'], aw: ['#34d399', 'Allwetter'], wi: ['#38bdf8', 'Winter'] };
 const TS_WHY = { worn: ['abgefahren', '#f87171'], sold: ['verkauft', '#a78bfa'], gone: ['entsorgt', '#94a3b8'], dmg: ['beschädigt', '#f87171'] };
-var tsEdit = null, tswEdit = null, tsImgNew = undefined, tsSlide = 0, tsFetching = {};
+var tsView = null, tsEdit = null, tswEdit = null, tsImgNew = undefined, tsSlide = 0, tsFetching = {};
 const tsAll = () => (getLab().tsets || []).filter(s => s && s.buy).slice().sort((a, b) => a.buy.localeCompare(b.buy));
 const tsById = (id) => (getLab().tsets || []).find(s => s.id === id) || null;
 const tsT = (iso) => Date.parse(iso + 'T12:00:00');
@@ -10001,6 +10003,13 @@ function tsLog() {
   return tsCard('Wechsel-Protokoll', ev.length + ' Einträge', `<div class="mt-1 max-h-[218px] overflow-y-auto">${rows || '<p class="mt-2 text-[12px] text-slate-500 dark:text-slate-400">Noch keine Einträge.</p>'}</div>`);
 }
 
+/* ---- Einzelansicht eines Satzes (Draufsicht, Verlauf, alle Messungen wie im Saison-Tab) ---- */
+function tsViewHead(s) {
+  const st = tsStats(s), c = TS_SEA[s.sea][0], w = s.end ? TS_WHY[s.end.why] || TS_WHY.worn : tsMounted() && tsMounted().id === s.id ? ['montiert', '#34d399'] : ['eingelagert', '#94a3b8'];
+  return `<div class="flex items-center justify-between gap-2"><button type="button" data-tsback class="h-9 rounded-xl px-1 text-sm font-semibold text-emerald-600 dark:text-emerald-400">‹ Historie</button><button type="button" data-tsed="${esc(s.id)}" class="h-9 rounded-xl bg-white dark:bg-slate-900 px-3 text-[13px] font-semibold shadow-sm">✎ Satz bearbeiten</button></div>
+    <div class="flex items-center gap-3 rounded-3xl bg-white dark:bg-slate-900 p-3 text-left shadow-sm">${tsThumb(s, 64, st)}<div class="min-w-0 flex-1"><div class="flex flex-wrap gap-1">${tsChip(TS_SEA[s.sea][1], c)}${tsChip(w[0], w[1])}</div>
+      <p class="mt-1 truncate text-[14px] font-bold">${esc(s.name || TS_SEA[s.sea][1] + 'reifen')}</p><p class="text-[11.5px] text-slate-500 dark:text-slate-400">${tsMon(s.buy)}${s.end ? '–' + tsMon(s.end.date) : ' – heute'}${st.km ? ' · ' + tsKmF(st.km) : ''}${st.wear ? ' · ' + fmt(st.wear, 1) + ' mm/10.000 km' : ''}</p></div></div>`;
+}
 /* ---- Seite ---- */
 function renderTireHist() {
   const el = $('tire-body'), ss = tsAll(), mo = tsMounted();
@@ -10011,7 +10020,7 @@ function renderTireHist() {
   if (mo) { const st = tsStats(mo), c = TS_SEA[mo.sea][0], p = tsPeriods().find(x => x.open), last = st.ms[st.ms.length - 1];
     let fcT = ''; try { const fc = tireForecast(tireList(mo.sea), mo.sea); if (fc && fc.w && fc.w.date) fcT = 'neue Reifen ca. ' + tSeason(fc.w.date) + ' ›'; } catch (e) { }
     h += `<p class="px-1 text-[11px] font-bold tracking-[0.08em] text-emerald-600 dark:text-emerald-400 text-left">MONTIERT</p>
-      <button type="button" data-tsed="${esc(mo.id)}" class="flex w-full items-center gap-3 rounded-3xl bg-gradient-to-br from-emerald-800 to-slate-900 p-3.5 text-left text-white shadow-sm active:scale-[0.99] transition">${tsThumb(mo, 84, st)}
+      <button type="button" data-tsview="${esc(mo.id)}" class="flex w-full items-center gap-3 rounded-3xl bg-gradient-to-br from-emerald-800 to-slate-900 p-3.5 text-left text-white shadow-sm active:scale-[0.99] transition">${tsThumb(mo, 84, st)}
         <div class="min-w-0 flex-1"><div class="flex flex-wrap gap-1">${tsChip(TS_SEA[mo.sea][1], c)}${tsChip('seit ' + tsMon(p.a), '#e2e8f0')}</div>
         <p class="mt-1 text-[15px] font-bold leading-tight">${esc(mo.name || TS_SEA[mo.sea][1] + 'reifen')}</p>${mo.size || mo.dot ? `<p class="text-[11.5px] text-emerald-100/80">${esc([mo.size, mo.dot ? 'DOT ' + mo.dot : ''].filter(Boolean).join(' · '))}</p>` : ''}
         <p class="mt-1 text-[12.5px]"><b>${tsKmF(st.km)}</b>${last ? ' · Ø <b>' + fmt(tsAvgM(last), 1) + ' mm</b>' : ''}</p>${fcT ? `<p class="text-[11.5px] text-emerald-100/80" data-tsgo="${mo.sea}">${fcT}</p>` : ''}</div></button>`; }
@@ -10023,7 +10032,7 @@ function renderTireHist() {
   if (others.length) { const tot = others.reduce((a, s) => a + tsStats(s).km, 0);
     h += `<div class="flex items-baseline justify-between px-1 pt-1"><p class="text-[11px] font-bold tracking-[0.08em] text-slate-500 dark:text-slate-400">WEITERE SÄTZE</p><span class="text-[11px] text-slate-400 dark:text-slate-500">${tot ? tsKmF(tot) : ''}</span></div>`
       + others.map(s => { const st = tsStats(s), c = TS_SEA[s.sea][0], w = s.end ? TS_WHY[s.end.why] || TS_WHY.worn : ['eingelagert', '#94a3b8'];
-        return `<button type="button" data-tsed="${esc(s.id)}" class="flex w-full items-center gap-3 rounded-3xl bg-white dark:bg-slate-900 p-3 text-left shadow-sm active:scale-[0.99] transition">${tsThumb(s, 56, st)}
+        return `<button type="button" data-tsview="${esc(s.id)}" class="flex w-full items-center gap-3 rounded-3xl bg-white dark:bg-slate-900 p-3 text-left shadow-sm active:scale-[0.99] transition">${tsThumb(s, 56, st)}
           <div class="min-w-0 flex-1"><div class="flex flex-wrap gap-1">${tsChip(TS_SEA[s.sea][1], c)}${tsChip(w[0], w[1])}</div><p class="mt-1 truncate text-[13.5px] font-semibold">${esc(s.name || TS_SEA[s.sea][1] + 'reifen')}</p>
           <p class="mt-0.5 flex gap-2.5 whitespace-nowrap text-[11px] text-slate-500 dark:text-slate-400"><span>${tsMon(s.buy)}${s.end ? '–' + tsMon(s.end.date) : ''}</span>${st.km ? `<b class="text-slate-800 dark:text-slate-100">${tsKmF(st.km)}</b>` : ''}${st.cost ? `<span>${fmt(st.cost, 2)} €/1.000</span>` : st.mmEnd != null ? `<span>${fmt(st.mmEnd, 1)} mm</span>` : ''}</p></div><span class="text-lg text-slate-400">›</span></button>`; }).join(''); }
   h += `<div class="grid grid-cols-2 gap-2"><button type="button" data-tsnew class="h-11 ${btn} border border-dashed border-emerald-500/60 text-emerald-600 dark:text-emerald-400">+ Neuer Reifensatz</button><button type="button" data-tswnew class="h-11 ${btn} bg-white dark:bg-slate-900 shadow-sm">⇄ Reifenwechsel</button></div>`;
@@ -10081,7 +10090,7 @@ async function tsSheetClick(e) {
   if (act === 'del') { const s = tsById(tsEdit); if (!s) return; if (!(await ask(`„${s.name || 'Satz'}“ mit Bild löschen? Messungen bleiben erhalten.`, { title: 'Reifensatz löschen', ok: 'Löschen', danger: true }))) return;
     lab.tsets = lab.tsets.filter(x => x.id !== s.id); lab.tsw = (lab.tsw || []).filter(w => w.ts !== s.id); lab.tires = (lab.tires || []).map(m => m.ts === s.id ? (({ ts, ...r }) => r)(m) : m); setLab(lab);
     try { localStorage.removeItem('enyaq.timg.' + s.id); } catch (err) { } try { if (window.cloud && cloud.delTireImg) cloud.delTireImg(s.id); } catch (err) { }
-    sh.classList.add('hidden'); renderTires(); return; }
+    if (tsView === s.id) tsView = null; sh.classList.add('hidden'); renderTires(); return; }
   const name = $('ts-name').value.trim(), buy = $('ts-buy').value, sea = (document.querySelector('#ts-sea .bg-white') || {}).dataset?.tssea || 'aw';
   if (!buy) { $('ts-msg').textContent = 'Bitte das Kauf-/Montagedatum eintragen.'; return; }
   const old = tsEdit ? tsById(tsEdit) : null, s = { id: tsEdit || labId(), sea, name, buy, mnt: $('ts-mnt').checked };
@@ -10128,6 +10137,8 @@ document.addEventListener('click', (e) => {
 $('tire-body').addEventListener('click', (e) => {
   if (tireSet !== 'hist') return;
   const g = e.target.closest('[data-tsgo]'); if (g) { e.stopPropagation(); tireSet = g.dataset.tsgo; renderTires(); return; }
+  if (e.target.closest('[data-tsback]')) { tsView = null; tireSel = null; renderTires(); window.scrollTo({ top: 0 }); return; }
+  const vw = e.target.closest('[data-tsview]'); if (vw) { tsView = vw.dataset.tsview; tireSel = null; renderTires(); window.scrollTo({ top: 0 }); return; }
   const ed = e.target.closest('[data-tsed]'); if (ed) { openTsSheet(ed.dataset.tsed); return; }
   if (e.target.closest('[data-tsnew]')) { openTsSheet(null); return; }
   if (e.target.closest('[data-tswnew]')) { openTswSheet(null); return; }

@@ -9,7 +9,7 @@
    ===================================================================== */
 const TS_SEA = { so: ['#fb923c', 'Sommer'], aw: ['#34d399', 'Allwetter'], wi: ['#38bdf8', 'Winter'] };
 const TS_WHY = { worn: ['abgefahren', '#f87171'], sold: ['verkauft', '#a78bfa'], gone: ['entsorgt', '#94a3b8'], dmg: ['beschädigt', '#f87171'] };
-var tsEdit = null, tswEdit = null, tsImgNew = undefined, tsSlide = 0, tsFetching = {};
+var tsView = null, tsEdit = null, tswEdit = null, tsImgNew = undefined, tsSlide = 0, tsFetching = {};
 const tsAll = () => (getLab().tsets || []).filter(s => s && s.buy).slice().sort((a, b) => a.buy.localeCompare(b.buy));
 const tsById = (id) => (getLab().tsets || []).find(s => s.id === id) || null;
 const tsT = (iso) => Date.parse(iso + 'T12:00:00');
@@ -158,6 +158,13 @@ function tsLog() {
   return tsCard('Wechsel-Protokoll', ev.length + ' Einträge', `<div class="mt-1 max-h-[218px] overflow-y-auto">${rows || '<p class="mt-2 text-[12px] text-slate-500 dark:text-slate-400">Noch keine Einträge.</p>'}</div>`);
 }
 
+/* ---- Einzelansicht eines Satzes (Draufsicht, Verlauf, alle Messungen wie im Saison-Tab) ---- */
+function tsViewHead(s) {
+  const st = tsStats(s), c = TS_SEA[s.sea][0], w = s.end ? TS_WHY[s.end.why] || TS_WHY.worn : tsMounted() && tsMounted().id === s.id ? ['montiert', '#34d399'] : ['eingelagert', '#94a3b8'];
+  return `<div class="flex items-center justify-between gap-2"><button type="button" data-tsback class="h-9 rounded-xl px-1 text-sm font-semibold text-emerald-600 dark:text-emerald-400">‹ Historie</button><button type="button" data-tsed="${esc(s.id)}" class="h-9 rounded-xl bg-white dark:bg-slate-900 px-3 text-[13px] font-semibold shadow-sm">✎ Satz bearbeiten</button></div>
+    <div class="flex items-center gap-3 rounded-3xl bg-white dark:bg-slate-900 p-3 text-left shadow-sm">${tsThumb(s, 64, st)}<div class="min-w-0 flex-1"><div class="flex flex-wrap gap-1">${tsChip(TS_SEA[s.sea][1], c)}${tsChip(w[0], w[1])}</div>
+      <p class="mt-1 truncate text-[14px] font-bold">${esc(s.name || TS_SEA[s.sea][1] + 'reifen')}</p><p class="text-[11.5px] text-slate-500 dark:text-slate-400">${tsMon(s.buy)}${s.end ? '–' + tsMon(s.end.date) : ' – heute'}${st.km ? ' · ' + tsKmF(st.km) : ''}${st.wear ? ' · ' + fmt(st.wear, 1) + ' mm/10.000 km' : ''}</p></div></div>`;
+}
 /* ---- Seite ---- */
 function renderTireHist() {
   const el = $('tire-body'), ss = tsAll(), mo = tsMounted();
@@ -168,7 +175,7 @@ function renderTireHist() {
   if (mo) { const st = tsStats(mo), c = TS_SEA[mo.sea][0], p = tsPeriods().find(x => x.open), last = st.ms[st.ms.length - 1];
     let fcT = ''; try { const fc = tireForecast(tireList(mo.sea), mo.sea); if (fc && fc.w && fc.w.date) fcT = 'neue Reifen ca. ' + tSeason(fc.w.date) + ' ›'; } catch (e) { }
     h += `<p class="px-1 text-[11px] font-bold tracking-[0.08em] text-emerald-600 dark:text-emerald-400 text-left">MONTIERT</p>
-      <button type="button" data-tsed="${esc(mo.id)}" class="flex w-full items-center gap-3 rounded-3xl bg-gradient-to-br from-emerald-800 to-slate-900 p-3.5 text-left text-white shadow-sm active:scale-[0.99] transition">${tsThumb(mo, 84, st)}
+      <button type="button" data-tsview="${esc(mo.id)}" class="flex w-full items-center gap-3 rounded-3xl bg-gradient-to-br from-emerald-800 to-slate-900 p-3.5 text-left text-white shadow-sm active:scale-[0.99] transition">${tsThumb(mo, 84, st)}
         <div class="min-w-0 flex-1"><div class="flex flex-wrap gap-1">${tsChip(TS_SEA[mo.sea][1], c)}${tsChip('seit ' + tsMon(p.a), '#e2e8f0')}</div>
         <p class="mt-1 text-[15px] font-bold leading-tight">${esc(mo.name || TS_SEA[mo.sea][1] + 'reifen')}</p>${mo.size || mo.dot ? `<p class="text-[11.5px] text-emerald-100/80">${esc([mo.size, mo.dot ? 'DOT ' + mo.dot : ''].filter(Boolean).join(' · '))}</p>` : ''}
         <p class="mt-1 text-[12.5px]"><b>${tsKmF(st.km)}</b>${last ? ' · Ø <b>' + fmt(tsAvgM(last), 1) + ' mm</b>' : ''}</p>${fcT ? `<p class="text-[11.5px] text-emerald-100/80" data-tsgo="${mo.sea}">${fcT}</p>` : ''}</div></button>`; }
@@ -180,7 +187,7 @@ function renderTireHist() {
   if (others.length) { const tot = others.reduce((a, s) => a + tsStats(s).km, 0);
     h += `<div class="flex items-baseline justify-between px-1 pt-1"><p class="text-[11px] font-bold tracking-[0.08em] text-slate-500 dark:text-slate-400">WEITERE SÄTZE</p><span class="text-[11px] text-slate-400 dark:text-slate-500">${tot ? tsKmF(tot) : ''}</span></div>`
       + others.map(s => { const st = tsStats(s), c = TS_SEA[s.sea][0], w = s.end ? TS_WHY[s.end.why] || TS_WHY.worn : ['eingelagert', '#94a3b8'];
-        return `<button type="button" data-tsed="${esc(s.id)}" class="flex w-full items-center gap-3 rounded-3xl bg-white dark:bg-slate-900 p-3 text-left shadow-sm active:scale-[0.99] transition">${tsThumb(s, 56, st)}
+        return `<button type="button" data-tsview="${esc(s.id)}" class="flex w-full items-center gap-3 rounded-3xl bg-white dark:bg-slate-900 p-3 text-left shadow-sm active:scale-[0.99] transition">${tsThumb(s, 56, st)}
           <div class="min-w-0 flex-1"><div class="flex flex-wrap gap-1">${tsChip(TS_SEA[s.sea][1], c)}${tsChip(w[0], w[1])}</div><p class="mt-1 truncate text-[13.5px] font-semibold">${esc(s.name || TS_SEA[s.sea][1] + 'reifen')}</p>
           <p class="mt-0.5 flex gap-2.5 whitespace-nowrap text-[11px] text-slate-500 dark:text-slate-400"><span>${tsMon(s.buy)}${s.end ? '–' + tsMon(s.end.date) : ''}</span>${st.km ? `<b class="text-slate-800 dark:text-slate-100">${tsKmF(st.km)}</b>` : ''}${st.cost ? `<span>${fmt(st.cost, 2)} €/1.000</span>` : st.mmEnd != null ? `<span>${fmt(st.mmEnd, 1)} mm</span>` : ''}</p></div><span class="text-lg text-slate-400">›</span></button>`; }).join(''); }
   h += `<div class="grid grid-cols-2 gap-2"><button type="button" data-tsnew class="h-11 ${btn} border border-dashed border-emerald-500/60 text-emerald-600 dark:text-emerald-400">+ Neuer Reifensatz</button><button type="button" data-tswnew class="h-11 ${btn} bg-white dark:bg-slate-900 shadow-sm">⇄ Reifenwechsel</button></div>`;
@@ -238,7 +245,7 @@ async function tsSheetClick(e) {
   if (act === 'del') { const s = tsById(tsEdit); if (!s) return; if (!(await ask(`„${s.name || 'Satz'}“ mit Bild löschen? Messungen bleiben erhalten.`, { title: 'Reifensatz löschen', ok: 'Löschen', danger: true }))) return;
     lab.tsets = lab.tsets.filter(x => x.id !== s.id); lab.tsw = (lab.tsw || []).filter(w => w.ts !== s.id); lab.tires = (lab.tires || []).map(m => m.ts === s.id ? (({ ts, ...r }) => r)(m) : m); setLab(lab);
     try { localStorage.removeItem('enyaq.timg.' + s.id); } catch (err) { } try { if (window.cloud && cloud.delTireImg) cloud.delTireImg(s.id); } catch (err) { }
-    sh.classList.add('hidden'); renderTires(); return; }
+    if (tsView === s.id) tsView = null; sh.classList.add('hidden'); renderTires(); return; }
   const name = $('ts-name').value.trim(), buy = $('ts-buy').value, sea = (document.querySelector('#ts-sea .bg-white') || {}).dataset?.tssea || 'aw';
   if (!buy) { $('ts-msg').textContent = 'Bitte das Kauf-/Montagedatum eintragen.'; return; }
   const old = tsEdit ? tsById(tsEdit) : null, s = { id: tsEdit || labId(), sea, name, buy, mnt: $('ts-mnt').checked };
@@ -285,6 +292,8 @@ document.addEventListener('click', (e) => {
 $('tire-body').addEventListener('click', (e) => {
   if (tireSet !== 'hist') return;
   const g = e.target.closest('[data-tsgo]'); if (g) { e.stopPropagation(); tireSet = g.dataset.tsgo; renderTires(); return; }
+  if (e.target.closest('[data-tsback]')) { tsView = null; tireSel = null; renderTires(); window.scrollTo({ top: 0 }); return; }
+  const vw = e.target.closest('[data-tsview]'); if (vw) { tsView = vw.dataset.tsview; tireSel = null; renderTires(); window.scrollTo({ top: 0 }); return; }
   const ed = e.target.closest('[data-tsed]'); if (ed) { openTsSheet(ed.dataset.tsed); return; }
   if (e.target.closest('[data-tsnew]')) { openTsSheet(null); return; }
   if (e.target.closest('[data-tswnew]')) { openTswSheet(null); return; }
