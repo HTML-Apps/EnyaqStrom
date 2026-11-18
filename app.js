@@ -9946,7 +9946,7 @@ async function tsPrepImg(file) {
 
 /* ---- Wisch-Karten ---- */
 const TS_SL = [['tl', 'Zeitstrahl'], ['pf', 'Profil'], ['rk', 'Rekorde'], ['wl', 'Wechsel']];
-const tsCard = (title, sub, inner) => `<div class="w-[86%] shrink-0 snap-start snap-always"><div class="h-[268px] overflow-hidden rounded-3xl bg-white dark:bg-slate-900 shadow-sm px-3.5 pb-2.5 pt-3.5"><div class="flex items-baseline justify-between gap-2"><p class="text-sm font-bold">${title}</p><span class="text-[11px] text-slate-500 dark:text-slate-400">${sub}</span></div>${inner}</div></div>`;
+const tsCard = (title, sub, inner) => `<div class="w-full shrink-0 snap-start snap-always"><div class="h-[268px] overflow-hidden rounded-3xl bg-white dark:bg-slate-900 shadow-sm px-3.5 pb-2.5 pt-3.5"><div class="flex items-baseline justify-between gap-2"><p class="text-sm font-bold">${title}</p><span class="text-[11px] text-slate-500 dark:text-slate-400">${sub}</span></div>${inner}</div></div>`;
 function tsTimeline(ss) {
   const per = tsPeriods(); if (!per.length) return tsCard('Was war wann drauf', '', '<p class="mt-3 text-[12px] text-slate-500 dark:text-slate-400 text-left">Noch keine montierten Zeiträume.</p>');
   const rows = ss.filter(s => per.some(p => p.ts === s.id)), now = Date.now(), t0 = Math.min(...per.map(p => tsT(p.a))), span = Math.max(30 * 864e5, now - t0);
@@ -10017,7 +10017,7 @@ function renderTireHist() {
         <p class="mt-1 text-[12.5px]"><b>${tsKmF(st.km)}</b>${last ? ' · Ø <b>' + fmt(tsAvgM(last), 1) + ' mm</b>' : ''}</p>${fcT ? `<p class="text-[11.5px] text-emerald-100/80" data-tsgo="${mo.sea}">${fcT}</p>` : ''}</div></button>`; }
   const sl = [tsTimeline(ss), tsProfile(ss, mo && mo.id), tsRecords(ss), tsLog()];
   h += `<div class="flex gap-1.5 px-0.5 text-[11.5px] font-semibold" id="ts-chips">${TS_SL.map(([k, n], i) => `<button type="button" data-tsl="${i}" class="rounded-lg px-2.5 py-1 ${i === tsSlide ? 'bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900' : 'bg-white text-slate-500 shadow-sm dark:bg-slate-800 dark:text-slate-400'}">${n}</button>`).join('')}</div>
-    <div id="ts-swipe" class="no-scrollbar -mr-4 flex snap-x snap-mandatory gap-2 overflow-x-auto pr-4 [scrollbar-width:none]">${sl.join('')}<div class="w-1 shrink-0"></div></div>
+    <div id="ts-swipe" class="no-scrollbar flex snap-x snap-mandatory gap-3 overflow-x-auto [scrollbar-width:none]">${sl.join('')}</div>
     <div id="ts-dots" class="flex justify-center gap-1.5">${sl.map((_, i) => `<span class="h-1.5 rounded-full transition-all ${i === tsSlide ? 'w-4 bg-slate-500 dark:bg-slate-300' : 'w-1.5 bg-slate-300 dark:bg-slate-700'}"></span>`).join('')}</div>`;
   const others = ss.filter(s => !mo || s.id !== mo.id).sort((a, b) => (!!a.end - !!b.end) || ((b.end && b.end.date) || b.buy).localeCompare((a.end && a.end.date) || a.buy));
   if (others.length) { const tot = others.reduce((a, s) => a + tsStats(s).km, 0);
@@ -10028,7 +10028,7 @@ function renderTireHist() {
           <p class="mt-0.5 flex gap-2.5 whitespace-nowrap text-[11px] text-slate-500 dark:text-slate-400"><span>${tsMon(s.buy)}${s.end ? '–' + tsMon(s.end.date) : ''}</span>${st.km ? `<b class="text-slate-800 dark:text-slate-100">${tsKmF(st.km)}</b>` : ''}${st.cost ? `<span>${fmt(st.cost, 2)} €/1.000</span>` : st.mmEnd != null ? `<span>${fmt(st.mmEnd, 1)} mm</span>` : ''}</p></div><span class="text-lg text-slate-400">›</span></button>`; }).join(''); }
   h += `<div class="grid grid-cols-2 gap-2"><button type="button" data-tsnew class="h-11 ${btn} border border-dashed border-emerald-500/60 text-emerald-600 dark:text-emerald-400">+ Neuer Reifensatz</button><button type="button" data-tswnew class="h-11 ${btn} bg-white dark:bg-slate-900 shadow-sm">⇄ Reifenwechsel</button></div>`;
   el.innerHTML = h;
-  const sc = $('ts-swipe'); if (sc) { const card = () => (sc.firstElementChild ? sc.firstElementChild.offsetWidth + 8 : sc.clientWidth);
+  const sc = $('ts-swipe'); if (sc) { const card = () => (sc.firstElementChild ? sc.firstElementChild.offsetWidth + 12 : sc.clientWidth);
     requestAnimationFrame(() => { sc.style.scrollBehavior = 'auto'; sc.scrollLeft = tsSlide * card(); sc.style.scrollBehavior = ''; });
     sc.addEventListener('scroll', () => { const i = Math.max(0, Math.min(3, Math.round(sc.scrollLeft / card()))); if (i === tsSlide) return; tsSlide = i;
       document.querySelectorAll('#ts-dots span').forEach((d, j) => { d.className = 'h-1.5 rounded-full transition-all ' + (j === i ? 'w-4 bg-slate-500 dark:bg-slate-300' : 'w-1.5 bg-slate-300 dark:bg-slate-700'); });
@@ -10132,5 +10132,5 @@ $('tire-body').addEventListener('click', (e) => {
   if (e.target.closest('[data-tsnew]')) { openTsSheet(null); return; }
   if (e.target.closest('[data-tswnew]')) { openTswSheet(null); return; }
   const we = e.target.closest('[data-tswe]'); if (we) { openTswSheet(we.dataset.tswe); return; }
-  const c = e.target.closest('[data-tsl]'); if (c) { tsSlide = +c.dataset.tsl; const sc = $('ts-swipe'); if (sc && sc.firstElementChild) sc.scrollTo({ left: tsSlide * (sc.firstElementChild.offsetWidth + 8), behavior: 'smooth' }); }
+  const c = e.target.closest('[data-tsl]'); if (c) { tsSlide = +c.dataset.tsl; const sc = $('ts-swipe'); if (sc && sc.firstElementChild) sc.scrollTo({ left: tsSlide * (sc.firstElementChild.offsetWidth + 12), behavior: 'smooth' }); }
 });
