@@ -63,7 +63,7 @@ const RT_STANDBY = 0.05;                                                        
 function rtCalc(legs, o) {
   const RT_P = rtPhys(), m = RT_P.m + RT_P.mp * (o.pers - 1), g = 9.81, cap = batteryKwh(), f = 1 + o.tempo / 100, J = 3.6e6;
   const bat = (x) => x > 0 ? x / RT_P.eta : x * RT_P.rec;
-  let t = 0, E = { base: 0, slope: 0, wind: 0, rain: 0, heat: 0 }, cum = [0], Ts = [], rainKm = 0, hwSum = 0, noWx = false, h = [], turn = null, durDrive = 0, d0 = 0, pts = [], dkm = [], tt = [], dk = 0, fogE = [];
+  let t = 0, E = { base: 0, slope: 0, wind: 0, rain: 0, heat: 0 }, cum = [0], Ts = [], rainKm = 0, hwSum = 0, noWx = false, h = [], turn = null, durDrive = 0, d0 = 0, pts = [], dkm = [], tt = [], dk = 0, fogE = [], mwk = [0];   // mwk: Autobahn-km bis zu jedem Punkt (für die Tempo-Optimierung)
   legs.forEach((lg, li) => {
     const route = lg.route, wx = lg.wx;
     if (li) { t += o.stay * 3600; turn = { i: cum.length - 1, t: durDrive }; }
@@ -78,14 +78,14 @@ function rtCalc(legs, o) {
       const pH = w.T < 18 ? 0.09 * (18 - w.T) : w.T > 24 ? 0.08 * (w.T - 24) : 0, cold = Math.max(0, e3) * 0.004 * Math.max(0, 15 - w.T);
       const eb = (e0 + acc) / J + RT_P.aux * dt / 3600, es = (e1 - e0) / J, ew = (e2 - e1) / J, er = (e3 - e2) / J, eh = pH * dt / 3600 + cold / J + (i === 0 ? 0.5 * Math.max(0, 15 - w.T) / 15 + (fogE[li] = rtFog(ww, o.pers)) + (li ? RT_STANDBY * o.stay : 0) : 0);
       E.base += eb; E.slope += es; E.wind += ew; E.rain += er; E.heat += eh; cum.push(cum[cum.length - 1] + eb + es + ew + er + eh);
-      t += dt; durDrive += dt; dk += s.len / 1000; pts.push(route.pts[i + 1]); dkm.push(dk); tt.push(t); Ts.push(w.T); if (w.rain >= 0.3) rainKm += s.len / 1000; hwSum += hw * s.len;
+      t += dt; durDrive += dt; dk += s.len / 1000; pts.push(route.pts[i + 1]); dkm.push(dk); mwk.push(mwk[mwk.length - 1] + (s.mw ? s.len / 1000 : 0)); tt.push(t); Ts.push(w.T); if (w.rain >= 0.3) rainKm += s.len / 1000; hwSum += hw * s.len;
     });
     d0 += route.km;
   });
   if (o.pers >= 2) { E.heat += cum[cum.length - 1] * FREUNDIN_ZUSCHLAG; cum = cum.map(c => c * (1 + FREUNDIN_ZUSCHLAG)); }
   const k = rtFactor(), raw = cum[cum.length - 1], kwh = raw * k, km = d0, socAt = (c) => o.soc - c * k / cap * 100;
   let up = 0, dn = 0; for (let i = 1; i < h.length; i++) { const d = h[i] - h[i - 1]; if (d > 0) up += d; else dn -= d; }
-  return { km, dur: durDrive, tEnd: t, raw, k, kwh, k100: kwh / km * 100, raw100: raw / km * 100, E: Object.fromEntries(Object.entries(E).map(([a, v]) => [a, v * k])), soc: cum.map(socAt),
+  return { km, dur: durDrive, tEnd: t, raw, k, kwh, mwk, mwKm: mwk[mwk.length - 1], k100: kwh / km * 100, raw100: raw / km * 100, E: Object.fromEntries(Object.entries(E).map(([a, v]) => [a, v * k])), soc: cum.map(socAt),
     pts, dkm, tt, cumK: cum.map(c => c * k), fog: fogE.reduce((a, x) => a + (x || 0), 0) * k * (o.pers >= 2 ? 1 + FREUNDIN_ZUSCHLAG : 1), socA: socAt(raw), turn: turn ? { i: turn.i, soc: socAt(cum[turn.i]), t: turn.t, km: legs[0].route.km } : null, up: Math.round(up), dn: Math.round(dn), tMin: Math.min(...Ts), tMax: Math.max(...Ts), tAvg: Ts.reduce((a, x) => a + x, 0) / Ts.length, rainKm, hw: hwSum / (km * 1000), noWx, noH: legs.some(l => l.route.noH), h };
 }
 function rtSvg(r) {
@@ -299,9 +299,9 @@ async function rtRun() {
   RT.busy = true; RT.err = ''; rtRenderRes(); const o = rtParams();
   try { const pairs = o.round ? [[RT.a, RT.b], [RT.b, RT.a]] : [[RT.a, RT.b]], legs = [];
     for (const [x, y] of pairs) { const route = await rtRoute(x, y, RT.v); let wx = null; try { wx = await rtWeather(route, o.dep); } catch (e) { } legs.push({ route, wx }); }
-    if (n !== RT.n) return; RT.o = o; RT.res = RT.base = rtCalc(legs, o); RT.ch = null; }
+    if (n !== RT.n) return; RT.o = o; RT.legs = legs; RT.res = RT.base = rtCalc(legs, o); RT.ch = null; RT.opt = null; }
   catch (e) { if (n !== RT.n) return; RT.res = null; RT.err = 'Prognose nicht möglich: ' + ((e && e.message) || 'kein Internet?'); }
-  RT.busy = false; rtRenderRes(); if (RT.res) rtFindStops(n);
+  RT.busy = false; rtRenderRes(); if (RT.res) rtFindStops(n); try { if (RT.tab === 'opt') rtOptRun(); else rtOptRender(); } catch (e) { }
   try { const pk = (p) => p ? { label: p.label, lat: Math.round(p.lat * 1e5) / 1e5, lon: Math.round(p.lon * 1e5) / 1e5 } : null;   // Planung geräteübergreifend (Einstellungen → Cloud)
     const v = { a: pk(RT.a), b: pk(RT.b), v: pk(RT.v), pers: o.pers, tempo: o.tempo, vab: o.vab, round: !!o.round, stay: o.stay, soc: o.soc, dep: new Date(o.dep).toISOString(), at: new Date().toISOString() }, cur = getSettings().rtLast;
     const same = cur && JSON.stringify({ ...cur, at: 0 }) === JSON.stringify({ ...v, at: 0 }); save(KEY_RT, v); if (!same) { setQuickSetting('rtLast', v); pushRoutes(); } } catch (e) { }
@@ -352,8 +352,8 @@ $('rt-save').addEventListener('click', () => {
 });
 function rtTabs() {
   const n = getLab().fc.length;
-  $('rt-tabs').innerHTML = [['plan', 'Prognose'], ['cmp', 'Abgleich' + (n ? ' (' + n + ')' : '')]].map(([k, l]) => `<button type="button" data-rttab="${k}" class="flex-1 py-1.5 rounded-lg text-[13px] font-medium ${RT.tab === k ? 'bg-white dark:bg-slate-700 shadow-sm' : 'text-slate-600 dark:text-slate-400'}">${l}</button>`).join('');
-  $('rt-plan').classList.toggle('hidden', RT.tab !== 'plan'); $('rt-cmp').classList.toggle('hidden', RT.tab !== 'cmp'); if (RT.tab === 'cmp') rtRenderCmp();
+  $('rt-tabs').innerHTML = [['plan', 'Prognose'], ['cmp', 'Abgleich' + (n ? ' (' + n + ')' : '')], ['opt', 'Optimierung']].map(([k, l]) => `<button type="button" data-rttab="${k}" class="flex-1 py-1.5 rounded-lg text-[13px] font-medium ${RT.tab === k ? 'bg-white dark:bg-slate-700 shadow-sm' : 'text-slate-600 dark:text-slate-400'}">${l}</button>`).join('');
+  $('rt-plan').classList.toggle('hidden', RT.tab === 'cmp'); $('rt-plan').classList.toggle('rt-optmode', RT.tab === 'opt'); $('rt-cmp').classList.toggle('hidden', RT.tab !== 'cmp'); if (RT.tab === 'cmp') rtRenderCmp(); if (RT.tab === 'opt') try { rtOptRun(); } catch (e) { }
 }
 $('rt-tabs').addEventListener('click', (e) => { const b = e.target.closest('[data-rttab]'); if (!b) return; RT.tab = b.dataset.rttab; rtTabs(); });
 function rtStats(list) {

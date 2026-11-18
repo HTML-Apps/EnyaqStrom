@@ -180,6 +180,7 @@
   #view-dashboard.live-mode #btm-card, #view-dashboard.live-mode #ltm-card, #view-dashboard.live-mode #home-card, #view-dashboard.live-mode #news-card { display: none; }
   #dash-swipe-track > .dash-off { display: none !important; } #view-dashboard.live-mode #meter-card.dash-off { display: block !important; }
   #dash-order li.dragging { position: relative; z-index: 5; box-shadow: 0 10px 25px -8px rgba(0,0,0,.35); }
+  #rt-plan.rt-optmode #rt-res, #rt-plan.rt-optmode #rt-abrp { display: none !important; } #rt-plan.rt-optmode #rt-opt { display: block !important; }
   /* Strom zuhause (src/24): neutrale Farben, bei Anbieter „Vattenfall“ Gelb auf Dunkelblau */
   #home-card .home-sub { color: #64748b; } html.dark #home-card .home-sub { color: #94a3b8; }
   #home-card .home-calc { color: #0369a1; } html.dark #home-card .home-calc { color: #7dd3fc; }
@@ -255,7 +256,7 @@
   @media (prefers-reduced-motion: reduce) { #bd-conf i, #bdg-conf i { animation: none; top: var(--y, 10%); } #bd-card, #bdg-card { animation: none; } }
 </style>
 <!-- Tailwind fertig gebaut (npm run css) – am Ende des Kopfs wie früher das CDN, damit die Reihenfolge der Regeln gleich bleibt -->
-<link rel="stylesheet" href="/app.css?v=335">
+<link rel="stylesheet" href="/app.css?v=336">
 </head>
 <body class="bg-slate-100 text-slate-900 dark:bg-black dark:text-slate-100 min-h-screen">
 
@@ -773,6 +774,7 @@
         </div>
       </div>
       <div id="rt-res"></div>
+      <div id="rt-opt" class="hidden"></div>
       <div id="rt-abrp" class="hidden rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-3.5 border border-dashed border-violet-400/50">
         <p class="text-[11px] font-semibold uppercase tracking-[0.06em] text-violet-600 dark:text-violet-300">ABRP zum Vergleich <span class="text-slate-500 dark:text-slate-400">(optional)</span></p>
         <div class="mt-2 flex items-center gap-2">
@@ -1988,7 +1990,7 @@
   </div>
 </nav>
 
-<script src="/app.js?v=335"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
+<script src="/app.js?v=336"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
 <script type="module">
 /* Firebase (modular SDK). Die Konfiguration ist kein Geheimnis – geschützt wird über Auth + Firestore-Regeln. */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
