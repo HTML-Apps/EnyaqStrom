@@ -9714,9 +9714,10 @@ dashHold();
      Energie(v) = Modell(v) + Autobahn-km × [(Mess(v) − Mess(vRef)) − (Flach(v) − Flach(vRef))] / 100,   vRef = eingestelltes AB-Tempo
    (bei vRef stimmt die Optimierung also genau mit der Prognose überein; außerhalb der Messreihe trägt das Physikmodell weiter).
    Ladestopps mit dem echten Lader-Plan (rtDP, eigene DC-Ladekurve, Säulen an der Route). Kosten = Laden unterwegs (Ladekarten-Preis)
-   + Rest zum Nachladen zuhause (Strompreis). Optimal = kleinste Summe aus Reisezeit × Zeitwert (€/h) + Kosten.
+   + Rest zum Nachladen zuhause (Strompreis). Optimal = ausgewogener Kompromiss: Reisezeit und Kosten je auf 0–1 zwischen schnellstem/langsamstem bzw. günstigstem/teuerstem Tempo
+   gebracht und gleich gewichtet, kleinste Summe gewinnt (bei Gleichstand das langsamere Tempo).
    ===================================================================== */
-const OPT_V = [100, 110, 120, 130, 140], KEY_OPTVAL = 'enyaq.optVal', OPT_VALS = [15, 30, 50];
+const OPT_V = [100, 110, 120, 130, 140];
 var optIdx = 1;   // sichtbare Karte (0 langsam, 1 optimal, 2 schnell) – var: TDZ-sicher
 /** Flacher Verbrauch (akkuseitig, kWh/100 km) bei 15 °C, windstill – nur für den Tempo-Unterschied */
 function optFlat(v) { const P = rtPhys(), m = P.m + P.mp, u = v / 3.6, F = P.crr * m * 9.81 + 0.5 * 1.225 * P.cw * P.A * u * u; return (F / P.eta + P.aux * 1000 / u) * 100000 / 3.6e6; }
@@ -9742,7 +9743,6 @@ function optMeas(sr, v) {
 }
 const KEY_OPTABS = 'enyaq.optAbs', optAbs = () => !!load(KEY_OPTABS, false);   // Messwerte direkt (nur dieses Gerät)
 const optKey = () => optSerPick() + (optAbs() ? '|abs' : '');
-const optVal = () => { const v = Number(load(KEY_OPTVAL, 30)); return OPT_VALS.includes(v) ? v : 30; };
 async function rtOptRun() {
   const el = $('rt-opt'); if (!el) return;
   if (!RT.base || !RT.legs || RT.busy) { rtOptRender(); return; }
@@ -9776,8 +9776,9 @@ async function rtOptRun() {
 const optHm = (min) => { const m = Math.round(min); return Math.floor(m / 60) + ':' + String(m % 60).padStart(2, '0'); };
 const optEur = (x) => fmt(x, 2) + '\u00a0€';
 function rtOptPick(rows) {
-  const ok = rows.filter(r => r.ok); if (!ok.length) return null; const val = optVal();
-  const score = (r) => r.tot / 60 * val + r.eur, best = ok.reduce((a, r) => score(r) < score(a) ? r : a, ok[0]);
+  const ok = rows.filter(r => r.ok); if (!ok.length) return null;
+  const T0 = Math.min(...ok.map(r => r.tot)), T1 = Math.max(...ok.map(r => r.tot)), E0 = Math.min(...ok.map(r => r.eur)), E1 = Math.max(...ok.map(r => r.eur));
+  const score = (r) => (T1 > T0 ? (r.tot - T0) / (T1 - T0) : 0) + (E1 > E0 ? (r.eur - E0) / (E1 - E0) : 0), best = ok.reduce((a, r) => score(r) < score(a) - 1e-9 ? r : a, ok[0]);
   const slow = ok.filter(r => r.v < best.v).reduce((a, r) => !a || r.eur < a.eur || (r.eur === a.eur && r.v > a.v) ? r : a, null);
   const fast = ok.filter(r => r.v > best.v).reduce((a, r) => !a || r.tot < a.tot - 0.5 ? r : a, null);
   return { best, slow, fast, score };
@@ -9819,14 +9820,13 @@ function rtOptRender() {
   const cards = [card('slow', pk.slow, 'Langsam', 'bg-white dark:bg-slate-900 shadow-sm', 'text-sky-600 dark:text-sky-400'),
     card('best', B, '★ Optimal', 'bg-gradient-to-br from-emerald-700 to-slate-900 text-white shadow-sm', 'text-emerald-200'),
     card('fast', pk.fast, 'Schnell', 'bg-white dark:bg-slate-900 shadow-sm', 'text-pink-600 dark:text-pink-400')].filter(Boolean);
-  const startI = pk.slow ? 1 : 0, val = optVal(), sr = op.sr;
+  const startI = pk.slow ? 1 : 0, sr = op.sr;
   el.innerHTML = `<div class="${box}"><div class="flex items-baseline justify-between gap-2"><p class="text-sm font-bold">Reisezeit je Tempo</p><p class="text-[11px] text-slate-500 dark:text-slate-400"><span class="text-emerald-500">■</span> Fahren <span class="text-amber-400">■</span> Laden <span class="text-violet-400">●</span> Kosten</p></div>${svg}
       <p class="text-center text-[11px] text-slate-500 dark:text-slate-400">Tempomat auf der Autobahn (km/h)${op.ext.length ? ' · * außerhalb der Messreihe geschätzt' : ''}</p></div>
     <div id="opt-cards" class="no-scrollbar mt-3 flex snap-x snap-mandatory overflow-x-auto scroll-smooth">${cards.join('')}</div>
     ${cards.length > 1 ? `<div class="mt-2 flex justify-center gap-1.5" id="opt-dots">${cards.map((_, i) => `<span class="h-1.5 rounded-full transition-all ${i === startI ? 'w-4 bg-slate-500 dark:bg-slate-300' : 'w-1.5 bg-slate-300 dark:bg-slate-700'}"></span>`).join('')}</div>` : ''}
-    <div class="mt-3 flex flex-wrap items-center gap-1.5 px-1 text-[11px] text-slate-500 dark:text-slate-400"><span>Zeit ist mir wert:</span>${OPT_VALS.map(x => `<button type="button" data-optval="${x}" class="rounded-lg px-2 py-0.5 font-semibold ${x === val ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400' : 'bg-white dark:bg-slate-800 shadow-sm'}">${x} €/h</button>`).join('')}</div>
     ${(() => { const ss = optSerList(), pick = ss.some(s => s.id === optSerPick()) ? optSerPick() : 'auto', au = ss.length ? optSerAuto(ss, RT.base.tAvg) : null, on = 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400', off = 'bg-white dark:bg-slate-800 shadow-sm';
-      return ss.length ? `<div class="mt-2 flex flex-wrap items-center gap-1.5 px-1 text-[11px] text-slate-500 dark:text-slate-400"><span>Messreihe:</span><button type="button" data-optser="auto" class="rounded-lg px-2 py-0.5 font-semibold ${pick === 'auto' ? on : off}">Automatisch${au ? ' (' + esc(optSerShort(au)) + ')' : ''}</button>${ss.map(s => `<button type="button" data-optser="${esc(s.id)}" class="rounded-lg px-2 py-0.5 font-semibold ${pick === s.id ? on : off}">${esc(optSerShort(s))}</button>`).join('')}</div>
+      return ss.length ? `<div class="mt-3 flex flex-wrap items-center gap-1.5 px-1 text-[11px] text-slate-500 dark:text-slate-400"><span>Messreihe:</span><button type="button" data-optser="auto" class="rounded-lg px-2 py-0.5 font-semibold ${pick === 'auto' ? on : off}">Automatisch${au ? ' (' + esc(optSerShort(au)) + ')' : ''}</button>${ss.map(s => `<button type="button" data-optser="${esc(s.id)}" class="rounded-lg px-2 py-0.5 font-semibold ${pick === s.id ? on : off}">${esc(optSerShort(s))}</button>`).join('')}</div>
       <div class="mt-2 flex items-center justify-between gap-3 rounded-2xl bg-white dark:bg-slate-900 px-3 py-2 shadow-sm"><div class="min-w-0 text-left"><p class="text-[13px] font-semibold text-slate-900 dark:text-slate-100">Messwerte direkt</p><p class="text-[11px] text-slate-500 dark:text-slate-400">${op.abs ? 'Autobahn-Verbrauch genau aus der Messreihe – Wetter der Fahrt und dein Faktor zählen dort nicht' : 'Aus: Niveau aus der Prognose (Wetter, Faktor), Messreihe nur für den Tempo-Anstieg'}</p></div>
         <button type="button" data-optabs role="switch" aria-checked="${op.abs ? 'true' : 'false'}" aria-label="Messwerte direkt" class="relative h-7 w-12 shrink-0 rounded-full transition ${op.abs ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-700'}"><span class="absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-all ${op.abs ? 'left-[22px]' : 'left-0.5'}"></span></button></div>` : ''; })()}
     <p class="mt-1.5 px-1 text-[11px] text-slate-500 dark:text-slate-400 text-left">${sr ? (op.abs ? '📈 Autobahn = Messwerte ' : '📈 Tempo-Anstieg aus deiner Messreihe ') + esc(spdLabel(sr)) : '⚠️ Keine Tempomat-Messreihe (Wissen › Tempomat) – nur Physikmodell'} · ${fmt(RT.base.mwKm, 0)} km Autobahn · Kosten = Laden unterwegs + Nachladen zuhause · Ladezeit mit deiner DC-Ladekurve</p>`;
@@ -9836,6 +9836,5 @@ function rtOptRender() {
 $('rt-opt').addEventListener('click', (e) => {
   if (e.target.closest('[data-optabs]')) { save(KEY_OPTABS, !optAbs()); rtOptRun(); return; }
   const sp = e.target.closest('[data-optser]'); if (sp) { save(KEY_OPTSER, sp.dataset.optser); rtOptRun(); return; }
-  const v = e.target.closest('[data-optval]'); if (v) { save(KEY_OPTVAL, Number(v.dataset.optval)); rtOptRender(); return; }
   const u = e.target.closest('[data-optuse]'); if (u) { $('rt-vab').value = u.dataset.optuse; RT.tab = 'plan'; rtTabs(); rtRun(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
 });
