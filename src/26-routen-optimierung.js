@@ -31,19 +31,25 @@ function optMeas(sr, v) {
   for (let i = 1; i < R.length; i++) if (v <= R[i].v) { const p = R[i - 1], q = R[i]; return p.k + (q.k - p.k) * (v - p.v) / (q.v - p.v); }
   return b.k;
 }
+const KEY_OPTABS = 'enyaq.optAbs', optAbs = () => !!load(KEY_OPTABS, false);   // Messwerte direkt (nur dieses Gerät)
+const optKey = () => optSerPick() + (optAbs() ? '|abs' : '');
 const optVal = () => { const v = Number(load(KEY_OPTVAL, 30)); return OPT_VALS.includes(v) ? v : 30; };
 async function rtOptRun() {
   const el = $('rt-opt'); if (!el) return;
   if (!RT.base || !RT.legs || RT.busy) { rtOptRender(); return; }
-  const n = RT.n; if (RT.opt && RT.opt.n === n && !RT.opt.err && RT.opt.pick === optSerPick()) { rtOptRender(); return; }
-  RT.opt = { n, busy: true, pick: optSerPick() }; rtOptRender();
+  const n = RT.n; if (RT.opt && RT.opt.n === n && !RT.opt.err && RT.opt.pick === optKey()) { rtOptRender(); return; }
+  RT.opt = { n, busy: true, pick: optKey() }; rtOptRender();
   try {
-    const o = RT.o, cap = batteryKwh(), vRef = o.vab, sr = optSeries(RT.base.tAvg), homeP = Number(getSettings().price) || 0.3;
+    const abs = optAbs(), o = RT.o, cap = batteryKwh(), vRef = o.vab, sr = optSeries(RT.base.tAvg), homeP = Number(getSettings().price) || 0.3;
     let sites = []; try { sites = await rtChargers(RT.base); } catch (e) { }
     if (n !== RT.n) return; rtCurveInit();
     const rows = OPT_V.map(v => {
       let b = rtCalc(RT.legs, { ...o, vab: v });
-      const corr = sr ? (optMeas(sr, v) - optMeas(sr, vRef)) - (optFlat(v) - optFlat(vRef)) : 0;   // kWh/100 km Autobahn
+      /* Messwerte direkt: Ø des Modells auf den Autobahn-Abschnitten (inkl. Wetter, Höhen, persönlicher Faktor) wird auf den Messwert gesetzt –
+         Unterschiede zwischen den Abschnitten (Steigung, Wind) bleiben, das Niveau kommt aus der Messreihe. Sonst nur der Tempo-Verlauf (s. oben). */
+      let corr = 0;
+      if (sr && abs && b.mwKm > 1) { let mwE = 0; for (let i = 1; i < b.cumK.length; i++) if (b.mwk[i] > b.mwk[i - 1]) mwE += b.cumK[i] - b.cumK[i - 1]; corr = optMeas(sr, v) - mwE / b.mwKm * 100; }
+      else if (sr) corr = (optMeas(sr, v) - optMeas(sr, vRef)) - (optFlat(v) - optFlat(vRef));   // kWh/100 km Autobahn
       if (corr) { const cumK = b.cumK.map((c, i) => c + corr * b.mwk[i] / 100), soc = cumK.map(c => o.soc - c / cap * 100), kwh = cumK[cumK.length - 1];
         b = { ...b, cumK, soc, kwh, k100: kwh / b.km * 100, socA: soc[soc.length - 1], turn: b.turn ? { ...b.turn, soc: soc[b.turn.i] } : null }; }
       let plan = []; const needs = Math.min(...b.soc.slice(1)) < WXO_RES - 0.5;
@@ -54,7 +60,7 @@ async function rtOptRun() {
       return { v, ok: true, kwh: b.kwh, drive: b.dur / 60, ch: chMin, stops: (plan || []).length, tot: r.tEnd / 60, arr: o.dep + r.tEnd * 1000, eur: eurCh + eurHome, eurCh, socA: r.socA };
     });
     if (n !== RT.n) return;
-    RT.opt = { n, pick: optSerPick(), rows, sr, vRef, ext: sr ? OPT_V.filter(v => v > sr.rows[sr.rows.length - 1].v || v < sr.rows[0].v) : [] };
+    RT.opt = { n, pick: optKey(), abs, rows, sr, vRef, ext: sr ? OPT_V.filter(v => v > sr.rows[sr.rows.length - 1].v || v < sr.rows[0].v) : [] };
   } catch (e) { if (n !== RT.n) return; RT.opt = { n, err: (e && e.message) || 'Optimierung nicht möglich' }; }
   optIdx = 1; rtOptRender();
 }
@@ -111,12 +117,15 @@ function rtOptRender() {
     ${cards.length > 1 ? `<div class="mt-2 flex justify-center gap-1.5" id="opt-dots">${cards.map((_, i) => `<span class="h-1.5 rounded-full transition-all ${i === startI ? 'w-4 bg-slate-500 dark:bg-slate-300' : 'w-1.5 bg-slate-300 dark:bg-slate-700'}"></span>`).join('')}</div>` : ''}
     <div class="mt-3 flex flex-wrap items-center gap-1.5 px-1 text-[11px] text-slate-500 dark:text-slate-400"><span>Zeit ist mir wert:</span>${OPT_VALS.map(x => `<button type="button" data-optval="${x}" class="rounded-lg px-2 py-0.5 font-semibold ${x === val ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400' : 'bg-white dark:bg-slate-800 shadow-sm'}">${x} €/h</button>`).join('')}</div>
     ${(() => { const ss = optSerList(), pick = ss.some(s => s.id === optSerPick()) ? optSerPick() : 'auto', au = ss.length ? optSerAuto(ss, RT.base.tAvg) : null, on = 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400', off = 'bg-white dark:bg-slate-800 shadow-sm';
-      return ss.length ? `<div class="mt-2 flex flex-wrap items-center gap-1.5 px-1 text-[11px] text-slate-500 dark:text-slate-400"><span>Messreihe:</span><button type="button" data-optser="auto" class="rounded-lg px-2 py-0.5 font-semibold ${pick === 'auto' ? on : off}">Automatisch${au ? ' (' + esc(optSerShort(au)) + ')' : ''}</button>${ss.map(s => `<button type="button" data-optser="${esc(s.id)}" class="rounded-lg px-2 py-0.5 font-semibold ${pick === s.id ? on : off}">${esc(optSerShort(s))}</button>`).join('')}</div>` : ''; })()}
-    <p class="mt-1.5 px-1 text-[11px] text-slate-500 dark:text-slate-400 text-left">${sr ? '📈 Gerechnet mit deiner Messreihe ' + esc(spdLabel(sr)) : '⚠️ Keine Tempomat-Messreihe (Wissen › Tempomat) – nur Physikmodell'} · ${fmt(RT.base.mwKm, 0)} km Autobahn · Kosten = Laden unterwegs + Nachladen zuhause · Ladezeit mit deiner DC-Ladekurve</p>`;
+      return ss.length ? `<div class="mt-2 flex flex-wrap items-center gap-1.5 px-1 text-[11px] text-slate-500 dark:text-slate-400"><span>Messreihe:</span><button type="button" data-optser="auto" class="rounded-lg px-2 py-0.5 font-semibold ${pick === 'auto' ? on : off}">Automatisch${au ? ' (' + esc(optSerShort(au)) + ')' : ''}</button>${ss.map(s => `<button type="button" data-optser="${esc(s.id)}" class="rounded-lg px-2 py-0.5 font-semibold ${pick === s.id ? on : off}">${esc(optSerShort(s))}</button>`).join('')}</div>
+      <div class="mt-2 flex items-center justify-between gap-3 rounded-2xl bg-white dark:bg-slate-900 px-3 py-2 shadow-sm"><div class="min-w-0 text-left"><p class="text-[13px] font-semibold text-slate-900 dark:text-slate-100">Messwerte direkt</p><p class="text-[11px] text-slate-500 dark:text-slate-400">${op.abs ? 'Autobahn-Verbrauch genau aus der Messreihe – Wetter der Fahrt und dein Faktor zählen dort nicht' : 'Aus: Niveau aus der Prognose (Wetter, Faktor), Messreihe nur für den Tempo-Anstieg'}</p></div>
+        <button type="button" data-optabs role="switch" aria-checked="${op.abs ? 'true' : 'false'}" aria-label="Messwerte direkt" class="relative h-7 w-12 shrink-0 rounded-full transition ${op.abs ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-700'}"><span class="absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-all ${op.abs ? 'left-[22px]' : 'left-0.5'}"></span></button></div>` : ''; })()}
+    <p class="mt-1.5 px-1 text-[11px] text-slate-500 dark:text-slate-400 text-left">${sr ? (op.abs ? '📈 Autobahn = Messwerte ' : '📈 Tempo-Anstieg aus deiner Messreihe ') + esc(spdLabel(sr)) : '⚠️ Keine Tempomat-Messreihe (Wissen › Tempomat) – nur Physikmodell'} · ${fmt(RT.base.mwKm, 0)} km Autobahn · Kosten = Laden unterwegs + Nachladen zuhause · Ladezeit mit deiner DC-Ladekurve</p>`;
   const sc = $('opt-cards'); if (sc) { requestAnimationFrame(() => { sc.style.scrollBehavior = 'auto'; sc.scrollLeft = startI * sc.clientWidth; sc.style.scrollBehavior = ''; });
     sc.addEventListener('scroll', () => { const i = Math.round(sc.scrollLeft / Math.max(1, sc.clientWidth)); document.querySelectorAll('#opt-dots span').forEach((d, j) => { d.className = 'h-1.5 rounded-full transition-all ' + (j === i ? 'w-4 bg-slate-500 dark:bg-slate-300' : 'w-1.5 bg-slate-300 dark:bg-slate-700'); }); }, { passive: true }); }
 }
 $('rt-opt').addEventListener('click', (e) => {
+  if (e.target.closest('[data-optabs]')) { save(KEY_OPTABS, !optAbs()); rtOptRun(); return; }
   const sp = e.target.closest('[data-optser]'); if (sp) { save(KEY_OPTSER, sp.dataset.optser); rtOptRun(); return; }
   const v = e.target.closest('[data-optval]'); if (v) { save(KEY_OPTVAL, Number(v.dataset.optval)); rtOptRender(); return; }
   const u = e.target.closest('[data-optuse]'); if (u) { $('rt-vab').value = u.dataset.optuse; RT.tab = 'plan'; rtTabs(); rtRun(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
