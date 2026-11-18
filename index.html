@@ -256,7 +256,7 @@
   @media (prefers-reduced-motion: reduce) { #bd-conf i, #bdg-conf i { animation: none; top: var(--y, 10%); } #bd-card, #bdg-card { animation: none; } }
 </style>
 <!-- Tailwind fertig gebaut (npm run css) – am Ende des Kopfs wie früher das CDN, damit die Reihenfolge der Regeln gleich bleibt -->
-<link rel="stylesheet" href="/app.css?v=339">
+<link rel="stylesheet" href="/app.css?v=340">
 </head>
 <body class="bg-slate-100 text-slate-900 dark:bg-black dark:text-slate-100 min-h-screen">
 
@@ -1990,12 +1990,12 @@
   </div>
 </nav>
 
-<script src="/app.js?v=339"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
+<script src="/app.js?v=340"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
 <script type="module">
 /* Firebase (modular SDK). Die Konfiguration ist kein Geheimnis – geschützt wird über Auth + Firestore-Regeln. */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
 import { getAuth, onAuthStateChanged, signInWithPopup, reauthenticateWithPopup, GoogleAuthProvider, signOut } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, doc, onSnapshot, writeBatch, setDoc, deleteField, runTransaction } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, doc, onSnapshot, writeBatch, setDoc, getDoc, deleteDoc, deleteField, runTransaction } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
 
 const app = initializeApp({
   apiKey: "AIzaSyDM_1SM3ueFYhAB7zkHO8SG5VVOCsMu_0c", authDomain: "daily-companion-24975.firebaseapp.com",
@@ -2068,6 +2068,10 @@ window.cloud = {
     if (!cred || !cred.accessToken) throw new Error('Google hat kein Drive-Token geliefert.');
     driveTok = cred.accessToken; driveExp = Date.now() + 50 * 60 * 1000; return driveTok;
   },
+  /* Reifen-Bilder: je Satz eigenes Dokument settings/timg_<id> = { v, d (WebP-Data-URL) } – hält prefs klein */
+  setTireImg: (id, o) => user ? setDoc(doc(db, 'enyaqStrom', user.uid, 'settings', 'timg_' + id), { ...o, updatedAt: new Date().toISOString() }) : Promise.resolve(),
+  getTireImg: async (id) => { if (!user) return null; const sn = await getDoc(doc(db, 'enyaqStrom', user.uid, 'settings', 'timg_' + id)); return sn.exists() ? sn.data() : null; },
+  delTireImg: (id) => user ? deleteDoc(doc(db, 'enyaqStrom', user.uid, 'settings', 'timg_' + id)) : Promise.resolve(),
   isSignedIn: () => !!user,
   userInfo: () => user ? { name: user.displayName || '', email: user.email || '', photo: user.photoURL || '' } : null,
   setPrefs: (o) => user ? setDoc(prefDoc(), { ...o, updatedAt: new Date().toISOString() }) : Promise.resolve(),

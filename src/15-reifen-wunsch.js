@@ -18,7 +18,7 @@ function tSeries(ms, p) { const out = ms.map(() => null), pa = tPosAt(ms, p), V 
   for (let k = i - 1, n = i; k >= 0; k--) { const d = tDiff(V(k), V(n)); if (d == null) continue; out[k] = out[n] - d; n = k; } return out; }
 const tCol = (v) => v == null ? '#64748b' : v >= 5 ? '#10b981' : v >= 4 ? '#eab308' : v >= 3 ? '#f97316' : '#ef4444';
 const tFmt = (v) => v == null ? '–' : fmt(v, 1);
-function tireList(set) { return (getLab().tires || []).filter(m => m.set === set && m.date).sort((a, b) => a.date.localeCompare(b.date) || (a.km || 0) - (b.km || 0)); }
+function tireList(set) { return (getLab().tires || []).filter(m => m.set === set && m.date && tsKeep(m)).sort((a, b) => a.date.localeCompare(b.date) || (a.km || 0) - (b.km || 0)); }
 /* ---- Prognose: wann ist die Grenze erreicht (Sommer 3 mm, Allwetter/Winter 4 mm) – nach km aus dem gemeinsamen km-Verlauf ----
    Verschleiß je km aus dem vergleichbaren Verlauf (tSeries, Ausgleichsgerade über alle Messungen mit km-Stand), Spanne aus der Messgenauigkeit (±0,1 mm je Messung),
    Datum über die eigene Fahrleistung (km/Jahr). */
@@ -85,7 +85,7 @@ function tireForecastHtml(ms, set) {
 function tireFcWire(ms, set) {
   const sc = $('tire-fc'); if (!sc) return; const si = +sc.dataset.start || 0; sc.scrollLeft = si * (sc.clientWidth + 12);
   let t = null, cur = si;
-  const go = (i) => { if (i === cur) return; cur = i; tireLimSel = TIRE_LIMS[i]; const fc = tireForecast(ms, set, TIRE_LIMS[i]); if (fc) $('tire-lanes').innerHTML = tireLanesHtml(fc);
+  const go = (i) => { if (i === cur || !$('tire-lanes') || !sc.isConnected) return; cur = i; tireLimSel = TIRE_LIMS[i]; const fc = tireForecast(ms, set, TIRE_LIMS[i]); if (fc) $('tire-lanes').innerHTML = tireLanesHtml(fc);
     $('tire-fc-dots').querySelectorAll('[data-tfl]').forEach((d, k) => { d.classList.toggle('w-5', k === i); d.classList.toggle('bg-emerald-500', k === i); d.classList.toggle('w-1.5', k !== i); d.classList.toggle('bg-slate-300', k !== i); d.classList.toggle('dark:bg-slate-700', k !== i); }); };
   sc.addEventListener('scroll', () => { clearTimeout(t); t = setTimeout(() => go(Math.round(sc.scrollLeft / (sc.clientWidth + 12))), 90); }, { passive: true });
   $('tire-fc-dots').addEventListener('click', (e) => { const d = e.target.closest('[data-tfl]'); if (d) sc.scrollTo({ left: +d.dataset.tfl * (sc.clientWidth + 12), behavior: 'smooth' }); });
@@ -107,7 +107,8 @@ function tireChart(ms, lim = 3) {
 function renderTires() {
   const el = $('tire-body'); if (!el) return; const all = getLab().tires || [];
   if (!tireSet) { const last = all.slice().sort((a, b) => String(b.date).localeCompare(String(a.date)))[0]; tireSet = last ? last.set : 'so'; }
-  $('tire-seg').innerHTML = TIRE_SETS.map(([k, l]) => `<button type="button" data-tset="${k}" class="flex-1 py-1.5 rounded-lg text-[13px] font-medium whitespace-nowrap ${tireSet === k ? 'bg-white dark:bg-slate-700 shadow-sm' : 'text-slate-600 dark:text-slate-400'}">${l}</button>`).join('');
+  $('tire-seg').innerHTML = TIRE_SETS.concat([['hist', '🗂️ Historie']]).map(([k, l]) => `<button type="button" data-tset="${k}" class="flex-1 min-w-0 py-1.5 rounded-lg text-[13px] font-medium whitespace-nowrap ${tireSet === k ? 'bg-white dark:bg-slate-700 shadow-sm' : 'text-slate-600 dark:text-slate-400'}">${k === 'hist' ? 'Historie' : l.split(' ')[1]}</button>`).join('');
+  if (tireSet === 'hist') { renderTireHist(); return; }
   const ms = tireList(tireSet), last = ms[ms.length - 1];
   if (!last) { el.innerHTML = `<p class="rounded-3xl bg-white dark:bg-slate-900 shadow-sm p-4 text-sm text-slate-600 dark:text-slate-300 text-left">Für den ${TIRE_SETS.find(s => s[0] === tireSet)[1].split(' ')[1]}satz gibt es noch keine Messung. Über „+ Messung“ die Profiltiefe aller vier Reifen eintragen – je Reifen außen, mitte und innen, immer an denselben Stellen (z. B. Hauptrille an der Ventil-Position). Werte vom Kauf mit dem damaligen Datum nachtragen.</p>`; return; }
   const next = new Date(Date.parse(last.date + 'T12:00:00')); next.setMonth(next.getMonth() + 6); const due = next < new Date();
@@ -134,7 +135,7 @@ function renderTires() {
 }
 function openTireSheet(id) {
   const lab = getLab(), m = id ? (lab.tires || []).find(x => x.id === id) : null; tireEdit = m ? m.id : null;
-  const set = m ? m.set : tireSet || 'so', prev = tireList(set).filter(x => !m || x.id !== m.id).pop(), km0 = (() => { try { return lastKnownKm(); } catch (_) { return null; } })();
+  const set = m ? m.set : (tireSet !== 'hist' && tireSet) || ((typeof tsMounted === 'function' && tsMounted()) || {}).sea || 'so', prev = tireList(set).filter(x => !m || x.id !== m.id).pop(), km0 = (() => { try { return lastKnownKm(); } catch (_) { return null; } })();
   tirePrev = prev || null; const sw0 = (m && m.swap) || '';
   const cell = (p, i) => { const v = m ? (m.v[p] || [])[i] : undefined, ph = prev ? (prev.v[TIRE_SWAP[sw0] ? TIRE_SWAP[sw0][p] : p] || [])[i] : undefined;
     return `<input data-tv="${p}:${i}" type="text" inputmode="decimal" autocomplete="off" aria-label="${TIRE_NAME[p]} ${TIRE_PT[i]}" value="${v != null ? String(v).replace('.', ',') : ''}" placeholder="${ph != null ? String(ph).replace('.', ',') : ''}" class="w-full min-w-0 rounded-lg border border-slate-300 dark:border-slate-700 bg-transparent px-0.5 py-2.5 text-center text-[15px] tabular-nums focus:outline-none focus:ring-2 focus:ring-emerald-500">`; };
