@@ -11,10 +11,16 @@ const OPT_V = [100, 110, 120, 130, 140], KEY_OPTVAL = 'enyaq.optVal', OPT_VALS =
 var optIdx = 1;   // sichtbare Karte (0 langsam, 1 optimal, 2 schnell) – var: TDZ-sicher
 /** Flacher Verbrauch (akkuseitig, kWh/100 km) bei 15 °C, windstill – nur für den Tempo-Unterschied */
 function optFlat(v) { const P = rtPhys(), m = P.m + P.mp, u = v / 3.6, F = P.crr * m * 9.81 + 0.5 * 1.225 * P.cw * P.A * u * u; return (F / P.eta + P.aux * 1000 / u) * 100000 / 3.6e6; }
-/** Passende Messreihe: Jahreszeit nach mittlerer Temperatur der Fahrt, mind. 3 Werte */
+/** Eigene Tempomat-Messreihen mit mind. 3 Werten (Wissen › Tempomat) */
+const optSerList = () => (getLab().speeds || []).map(s => ({ ...s, rows: (s.rows || []).filter(r => r.v > 0 && r.k > 0).sort((a, b) => a.v - b.v) })).filter(s => s.rows.length >= 3);
+const KEY_OPTSER = 'enyaq.optSer', optSerPick = () => String(load(KEY_OPTSER, 'auto') || 'auto');   // 'auto' oder id einer Messreihe (nur dieses Gerät)
+const optSerShort = (s) => [s.season, s.klima ? 'Klima ' + s.klima : '', s.note].filter(Boolean).join(' · ');
+/** Messreihe: gewählte, sonst automatisch nach Jahreszeit (mittlere Temperatur der Fahrt) */
 function optSeries(tAvg) {
-  const ss = (getLab().speeds || []).map(s => ({ ...s, rows: (s.rows || []).filter(r => r.v > 0 && r.k > 0).sort((a, b) => a.v - b.v) })).filter(s => s.rows.length >= 3);
-  if (!ss.length) return null;
+  const ss = optSerList(); if (!ss.length) return null;
+  const pick = optSerPick(), own = pick !== 'auto' && ss.find(s => s.id === pick); return own || optSerAuto(ss, tAvg);
+}
+function optSerAuto(ss, tAvg) {
   const sea = tAvg < 8 ? 'Winter' : tAvg < 16 ? 'Übergang' : 'Sommer', kl = tAvg < 5 || tAvg > 24 ? 'an' : null;
   return ss.find(s => s.season === sea && (!kl || s.klima === kl)) || ss.find(s => s.season === sea) || ss[0];
 }
@@ -29,8 +35,8 @@ const optVal = () => { const v = Number(load(KEY_OPTVAL, 30)); return OPT_VALS.i
 async function rtOptRun() {
   const el = $('rt-opt'); if (!el) return;
   if (!RT.base || !RT.legs || RT.busy) { rtOptRender(); return; }
-  const n = RT.n; if (RT.opt && RT.opt.n === n && !RT.opt.err) { rtOptRender(); return; }
-  RT.opt = { n, busy: true }; rtOptRender();
+  const n = RT.n; if (RT.opt && RT.opt.n === n && !RT.opt.err && RT.opt.pick === optSerPick()) { rtOptRender(); return; }
+  RT.opt = { n, busy: true, pick: optSerPick() }; rtOptRender();
   try {
     const o = RT.o, cap = batteryKwh(), vRef = o.vab, sr = optSeries(RT.base.tAvg), homeP = Number(getSettings().price) || 0.3;
     let sites = []; try { sites = await rtChargers(RT.base); } catch (e) { }
@@ -48,7 +54,7 @@ async function rtOptRun() {
       return { v, ok: true, kwh: b.kwh, drive: b.dur / 60, ch: chMin, stops: (plan || []).length, tot: r.tEnd / 60, arr: o.dep + r.tEnd * 1000, eur: eurCh + eurHome, eurCh, socA: r.socA };
     });
     if (n !== RT.n) return;
-    RT.opt = { n, rows, sr, vRef, ext: sr ? OPT_V.filter(v => v > sr.rows[sr.rows.length - 1].v || v < sr.rows[0].v) : [] };
+    RT.opt = { n, pick: optSerPick(), rows, sr, vRef, ext: sr ? OPT_V.filter(v => v > sr.rows[sr.rows.length - 1].v || v < sr.rows[0].v) : [] };
   } catch (e) { if (n !== RT.n) return; RT.opt = { n, err: (e && e.message) || 'Optimierung nicht möglich' }; }
   optIdx = 1; rtOptRender();
 }
@@ -90,8 +96,8 @@ function rtOptRender() {
     best: () => pk.fast ? `${pk.fast.v} km/h wäre nur ${-dT(pk.fast)} min schneller, kostet aber +${optEur(dE(pk.fast))}${pk.fast.ch > B.ch + 1 ? ' und lädt ' + Math.round(pk.fast.ch - B.ch) + ' min länger' : ''}.` : pk.slow ? `${pk.slow.v} km/h spart nur ${optEur(-dE(pk.slow))}, dauert aber ${dT(pk.slow)} min länger.` : 'Bester Kompromiss aus Zeit und Kosten.',
     fast: (r) => `${-dT(r)} min früher da, kostet +${optEur(dE(r))}${r.ch > B.ch + 1 ? ', ' + Math.round(r.ch - B.ch) + ' min mehr laden' : ''}.`
   };
-  const card = (k, r, lbl, cls, labCls) => r ? `<div class="w-full shrink-0 snap-center px-0.5"><div class="h-full rounded-3xl p-4 ${cls}">
-      <div class="flex items-baseline justify-between gap-2"><p class="text-[11px] font-bold uppercase tracking-[0.08em] ${labCls}">${lbl}</p><p class="text-xs opacity-80">Ankunft <b>${hhmm(r.arr)}</b></p></div>
+  const card = (k, r, lbl, cls, labCls) => r ? `<div class="w-full shrink-0 snap-center snap-always px-0.5"><div class="h-full rounded-3xl p-4 ${cls}">
+      <div class="flex items-baseline justify-between gap-2"><p class="text-[11px] font-bold uppercase tracking-[0.08em] ${labCls}">${lbl}</p><p class="text-xs opacity-80">${fmt(RT.base.km, 0)} km · Ankunft <b>${hhmm(r.arr)}</b></p></div>
       <p class="mt-0.5 font-barlow text-[40px] font-bold uppercase leading-none">${r.v} km/h</p>
       <p class="mt-1.5 text-[12.5px] opacity-90">${line(r)}</p><p class="mt-1.5 text-[12px] opacity-80">${why[k](r)}</p>
       <button type="button" data-optuse="${r.v}" class="mt-2.5 rounded-xl bg-black/10 px-3 py-1.5 text-xs font-semibold active:scale-95 transition dark:bg-white/10">In Prognose übernehmen ›</button></div></div>` : '';
@@ -104,11 +110,14 @@ function rtOptRender() {
     <div id="opt-cards" class="no-scrollbar mt-3 flex snap-x snap-mandatory overflow-x-auto scroll-smooth">${cards.join('')}</div>
     ${cards.length > 1 ? `<div class="mt-2 flex justify-center gap-1.5" id="opt-dots">${cards.map((_, i) => `<span class="h-1.5 rounded-full transition-all ${i === startI ? 'w-4 bg-slate-500 dark:bg-slate-300' : 'w-1.5 bg-slate-300 dark:bg-slate-700'}"></span>`).join('')}</div>` : ''}
     <div class="mt-3 flex flex-wrap items-center gap-1.5 px-1 text-[11px] text-slate-500 dark:text-slate-400"><span>Zeit ist mir wert:</span>${OPT_VALS.map(x => `<button type="button" data-optval="${x}" class="rounded-lg px-2 py-0.5 font-semibold ${x === val ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400' : 'bg-white dark:bg-slate-800 shadow-sm'}">${x} €/h</button>`).join('')}</div>
-    <p class="mt-1.5 px-1 text-[11px] text-slate-500 dark:text-slate-400 text-left">${sr ? '📈 Messreihe ' + esc(spdLabel(sr)) : '⚠️ Keine Tempomat-Messreihe – nur Physikmodell'} · ${fmt(RT.base.mwKm, 0)} km Autobahn · Kosten = Laden unterwegs + Nachladen zuhause · Ladezeit mit deiner DC-Ladekurve</p>`;
+    ${(() => { const ss = optSerList(), pick = ss.some(s => s.id === optSerPick()) ? optSerPick() : 'auto', au = ss.length ? optSerAuto(ss, RT.base.tAvg) : null, on = 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400', off = 'bg-white dark:bg-slate-800 shadow-sm';
+      return ss.length ? `<div class="mt-2 flex flex-wrap items-center gap-1.5 px-1 text-[11px] text-slate-500 dark:text-slate-400"><span>Messreihe:</span><button type="button" data-optser="auto" class="rounded-lg px-2 py-0.5 font-semibold ${pick === 'auto' ? on : off}">Automatisch${au ? ' (' + esc(optSerShort(au)) + ')' : ''}</button>${ss.map(s => `<button type="button" data-optser="${esc(s.id)}" class="rounded-lg px-2 py-0.5 font-semibold ${pick === s.id ? on : off}">${esc(optSerShort(s))}</button>`).join('')}</div>` : ''; })()}
+    <p class="mt-1.5 px-1 text-[11px] text-slate-500 dark:text-slate-400 text-left">${sr ? '📈 Gerechnet mit deiner Messreihe ' + esc(spdLabel(sr)) : '⚠️ Keine Tempomat-Messreihe (Wissen › Tempomat) – nur Physikmodell'} · ${fmt(RT.base.mwKm, 0)} km Autobahn · Kosten = Laden unterwegs + Nachladen zuhause · Ladezeit mit deiner DC-Ladekurve</p>`;
   const sc = $('opt-cards'); if (sc) { requestAnimationFrame(() => { sc.style.scrollBehavior = 'auto'; sc.scrollLeft = startI * sc.clientWidth; sc.style.scrollBehavior = ''; });
     sc.addEventListener('scroll', () => { const i = Math.round(sc.scrollLeft / Math.max(1, sc.clientWidth)); document.querySelectorAll('#opt-dots span').forEach((d, j) => { d.className = 'h-1.5 rounded-full transition-all ' + (j === i ? 'w-4 bg-slate-500 dark:bg-slate-300' : 'w-1.5 bg-slate-300 dark:bg-slate-700'); }); }, { passive: true }); }
 }
 $('rt-opt').addEventListener('click', (e) => {
+  const sp = e.target.closest('[data-optser]'); if (sp) { save(KEY_OPTSER, sp.dataset.optser); rtOptRun(); return; }
   const v = e.target.closest('[data-optval]'); if (v) { save(KEY_OPTVAL, Number(v.dataset.optval)); rtOptRender(); return; }
   const u = e.target.closest('[data-optuse]'); if (u) { $('rt-vab').value = u.dataset.optuse; RT.tab = 'plan'; rtTabs(); rtRun(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
 });
