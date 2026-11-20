@@ -10222,7 +10222,7 @@ const invOpenN = (its) => its.filter(i => !i.ok).length;
 function invItem(i, where) {
   return `<button type="button" data-invi="${i.li}" class="flex w-full items-center gap-2.5 border-t border-slate-200 dark:border-slate-800 py-2 text-left text-[13.5px] active:opacity-70">
     <span class="flex h-[19px] w-[19px] shrink-0 items-center justify-center rounded-md text-[11px] font-extrabold ${i.ok ? 'bg-emerald-600 text-white' : 'border-[1.5px] border-dashed border-amber-500 text-amber-500'}">${i.ok ? '✓' : '?'}</span>
-    <span class="min-w-0 flex-1 ${i.ok ? '' : 'text-amber-600 dark:text-amber-400'}">${esc(i.n)}${where ? `<span class="block text-[11.5px] text-slate-500 dark:text-slate-400">📍 ${esc(where)}</span>` : i.sub ? ` <span class="text-[11.5px] text-slate-500 dark:text-slate-400">· ${esc(i.sub)}</span>` : ''}</span>${i.ok ? '' : '<span class="text-[11px] text-amber-600 dark:text-amber-400">offen</span>'}</button>`;
+    <span class="min-w-0 flex-1 [overflow-wrap:anywhere] ${i.ok ? '' : 'text-amber-600 dark:text-amber-400'}">${esc(i.n)}${where ? `<span class="block text-[11.5px] text-slate-500 dark:text-slate-400">📍 ${esc(where)}</span>` : i.sub ? ` <span class="text-[11.5px] text-slate-500 dark:text-slate-400">· ${esc(i.sub)}</span>` : ''}</span>${i.ok ? '' : '<span class="shrink-0 text-[11px] text-amber-600 dark:text-amber-400">offen</span>'}</button>`;
 }
 function invHtml(x) {
   const fs = invParse(x.text), zs = invZones(fs), all = zs.flatMap(z => z.items.map(i => ({ ...i, z }))), open = invOpenN(all);
@@ -10237,7 +10237,7 @@ function invHtml(x) {
         <span class="min-w-0 flex-1"><span class="block text-[14px] font-semibold">${mark(i.n)}${i.ok ? '' : ' <span class="text-[11px] font-normal text-amber-600 dark:text-amber-400">offen</span>'}</span><span class="block text-[12px] text-slate-500 dark:text-slate-400">📍 ${esc(i.z.n === i.f ? i.f : i.z.n + ' · ' + i.f)}${i.sub ? ' · ' + esc(i.sub) : ''}</span></span></button>`).join('')}</div>`
       : `<p class="rounded-2xl bg-slate-100 dark:bg-slate-800/70 p-3 text-left text-sm text-slate-500 dark:text-slate-400">Nichts gefunden für „${esc(invQ)}“.</p>`;
     return h; }
-  const desk = isDesk(), pinsW = desk ? 290 : 300, HH = desk ? 480 : H, WW = Math.round(HH * 240 / 478);
+  const desk = isDesk(), pinsW = desk ? 320 : 300, HH = desk ? 560 : H, WW = Math.round(HH * 240 / 478);
   if (desk) h += '<div class="flex items-start gap-4">';
   h += `<div class="relative ${desk ? 'shrink-0' : 'mx-auto'}" style="width:${pinsW}px;max-width:100%;height:${HH}px"><img src="/Bilder/Enyaq/enyaq-top.webp" alt="Enyaq von oben" width="240" height="478" draggable="false" class="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 select-none opacity-90 dark:opacity-80" style="width:${WW}px;height:${HH}px">
     ${zs.map(z => { const on = z.n === invZ, o = invOpenN(z.items);
@@ -10245,7 +10245,8 @@ function invHtml(x) {
     ${desk ? '' : '<p class="-mt-1 text-center text-[11px] text-slate-500 dark:text-slate-400"><span class="inline-block h-1.5 w-1.5 rounded-full bg-amber-500 align-middle"></span> etwas offen · Bereich antippen</p>'}`;
   if (desk) {   // PC: gewählter Bereich rechts, alle Fächer als Kacheln nebeneinander (statt Fächer-Leiste)
     h += `<div id="inv-zone" class="min-w-0 flex-1 text-left"><div class="flex items-baseline justify-between gap-2"><p class="text-[17px] font-bold">${zc.e} ${esc(zc.n)}</p><span class="text-[12px] text-slate-500 dark:text-slate-400">${zc.items.length} Dinge${zc.fs.length > 1 ? ' · ' + zc.fs.length + ' Fächer' : ''} · ${invOpenN(zc.items) ? invOpenN(zc.items) + ' offen' : 'alles da'}</span></div>
-      <div class="mt-2.5 grid grid-cols-3 items-start gap-2.5">${zc.fs.map(f => `<div class="rounded-2xl bg-slate-100 dark:bg-slate-800/60 px-3 pb-1 pt-2.5"><p class="text-[10.5px] font-bold uppercase tracking-[0.06em] text-slate-500 dark:text-slate-400">${esc(f.name)}</p>${f.items.map(i => invItem(i)).join('')}</div>`).join('')}</div>
+      <div class="mt-2.5 grid items-start gap-2.5" style="grid-template-columns:repeat(auto-fill,minmax(250px,1fr))">${zc.fs.map(f => { const big = f.items.length > 8;   // lange Fächer über zwei Spalten, Dinge darin zweispaltig
+        return `<div class="rounded-2xl bg-slate-100 dark:bg-slate-800/60 px-3 pb-1 pt-2.5" style="${big ? 'grid-column:span 2' : ''}"><p class="text-[10.5px] font-bold uppercase tracking-[0.06em] text-slate-500 dark:text-slate-400">${esc(f.name)}</p><div class="${big ? 'columns-2 gap-x-5' : ''}">${f.items.map(i => `<div class="break-inside-avoid">${invItem(i)}</div>`).join('')}</div></div>`; }).join('')}</div>
       <p class="mt-2.5 text-[11.5px] text-slate-500 dark:text-slate-400"><span class="inline-block h-1.5 w-1.5 rounded-full bg-amber-500 align-middle"></span> etwas offen · anderen Bereich am Auto anklicken · ← → wechselt Bereiche</p></div></div>
       <button type="button" data-invtxt class="w-full text-center text-[12px] font-semibold text-slate-500 dark:text-slate-400">${invTxt ? 'Text ausblenden' : 'Als Text anzeigen'}</button>
       ${invTxt ? `<div class="rounded-2xl bg-slate-100 dark:bg-slate-800/60 p-3 text-sm leading-6 whitespace-pre-wrap break-words text-left">${kbLinkify(x.text)}</div>` : ''}`;
