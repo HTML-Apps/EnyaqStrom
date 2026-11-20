@@ -10657,6 +10657,7 @@ function nfDockRect(pane) {
   let d;
   if (nfOff) d = { left: nfOff.x + r.left - nfBp, top: nfOff.y + r.top, width: r.width + 2 * nfBp, height: r.height + nfBp };
   else { const bx = (outerWidth - innerWidth) / 2, by = outerHeight - innerHeight - bx; d = { left: screenX + bx + r.left, top: screenY + by + r.top, width: r.width, height: r.height }; }
+  d.left += 10; d.top += 10; d.width -= 10; d.height -= 10;                     // links/oben 10 px Luft (abgestimmt auf Edge/Windows)
   /* nie über den freien Bildschirmbereich hinaus – sonst schiebt Windows/Edge das ganze Fenster nach oben/links */
   const ax = screen.availLeft || 0, ay = screen.availTop || 0, ar = ax + screen.availWidth, ab = ay + screen.availHeight;
   d.width = Math.min(d.width, ar - d.left + nfBp); d.height = Math.min(d.height, ab - d.top + nfBp);
