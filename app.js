@@ -4943,8 +4943,10 @@ $('set-car-sec').addEventListener('change', (e) => { setQuickSetting('carSec', N
 $('set-wx-icons').addEventListener('change', (e) => { setQuickSetting('wxIcons', e.target.value); try { renderWxo(); } catch (er) { } });
 [['set-ice-dep', 'iceDep', v => /^\d{2}:\d{2}$/.test(v) ? v : undefined], ['set-ice-park', 'icePark', v => v], ['set-ice-min', 'iceMin', v => v], ['set-ice-we', 'iceWe', v => v === '1' || undefined]].forEach(([id, key, f]) =>
   $(id).addEventListener('change', (e) => { setQuickSetting(key, f(e.target.value)); localStorage.removeItem(KEY_ICE); const c = load(KEY_FROST, {}) || {}; delete c.snooze; save(KEY_FROST, c); try { fillWxoPrefs(); renderFrost(); } catch (er) { } }));
-const wxoN = () => !isDesk() ? 3 : ($('wxo-card').clientWidth || document.querySelector('main').clientWidth) >= 760 ? 7 : 5;   // Tage in der Vorschau: Handy 3, PC je nach Breite 5 oder 7
-let wxoNLast = 0; window.addEventListener('resize', () => { clearTimeout(window.__wxoRs); window.__wxoRs = setTimeout(() => { if (wxoN() !== wxoNLast) try { renderWxo(); } catch (e) { } }, 250); });
+/* Immer 7 Tage ausgeben; wie viele sichtbar sind (3/5/7), entscheidet CSS per Container-Abfrage auf #wxo-card (index.html) –
+   hängt so nur an der echten Kartenbreite, nicht an Fenstergröße/Zeitpunkt des Zeichnens (vorher blieben am PC manchmal 3 Tage stehen) */
+const wxoN = () => 7;
+let wxoNLast = 0;
 let wxoTok = 0, wxoLast = null;
 const wxoFmtR = (km) => fmt(Math.round(km / 5) * 5, 0);
 const wxoLowR = (km) => Math.round(km / 5) * 5 < 250;                                // Reichweite unter 250 km: ganz in Rot
@@ -4963,7 +4965,7 @@ async function renderWxo() {
   days.forEach(x => { x.k = wxoPred(m, x.T, x.p >= 1, x.hum); x.r = rng(x.k); x.parts = wxoParts(m, x.T, x.p >= 1, x.hum); });
   const best = rng(m.a), hl = new Date().getHours() >= wxoCut() ? 1 : 0, lab = (i) => i === 0 ? 'Heute' : i === 1 ? 'Morgen' : wxDay(days[i].d).wd + '.';
   wxoLast = { m, days, eff, cap };
-  wxoNLast = wxoN(); $('wxo-days').style.gridTemplateColumns = 'repeat(' + wxoNLast + ', minmax(0, 1fr))';
+  wxoNLast = wxoN(); $('wxo-days').style.gridTemplateColumns = '';
   $('wxo-days').innerHTML = days.slice(0, wxoNLast).map((x, i) => { const on = i === hl;
     return `<div data-wd="${x.d}" class="relative min-w-0 rounded-2xl px-1.5 py-2 text-center ${on ? 'bg-sky-50 dark:bg-sky-950/60 ring-[1.5px] ring-sky-400' : 'bg-slate-100 dark:bg-slate-800/60'}">
       <p class="text-center text-[11px] font-semibold ${on ? 'text-sky-700 dark:text-sky-300' : 'text-slate-500 dark:text-slate-400'}">${lab(i)}</p>
@@ -4991,8 +4993,8 @@ async function renderWxo() {
 function wxoBoot() {
   if (!wxLoc() || liveHero) return;
   const c = load(KEY_WXO + 'H', null), sk = '<div class="h-[148px] rounded-2xl bg-slate-100 dark:bg-slate-800/60 animate-pulse"></div>';
-  $('wxo-days').style.gridTemplateColumns = 'repeat(' + wxoN() + ', minmax(0, 1fr))';
-  $('wxo-days').innerHTML = c && c.day === todayYMD() && c.days && (c.n || 3) === wxoN() && (c.st || 'emoji') === wxIconStyle() ? c.days : sk.repeat(wxoN());
+  $('wxo-days').style.gridTemplateColumns = '';
+  $('wxo-days').innerHTML = c && c.day === todayYMD() && c.days && c.n === 7 && (c.st || 'emoji') === wxIconStyle() ? c.days : sk.repeat(wxoN());
   const tip = $('wxo-tip'); tip.textContent = c && c.day === todayYMD() ? c.tip || '' : ''; tip.classList.toggle('hidden', !tip.textContent);
   if (!tip.textContent) { tip.textContent = ' '; tip.classList.remove('hidden'); }       // gleiche Höhe wie mit Text
   $('wxo-card').classList.remove('hidden');
