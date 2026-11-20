@@ -179,7 +179,9 @@
   #desk-rem { display: none; }
   #view-dashboard.live-mode #btm-card, #view-dashboard.live-mode #ltm-card, #view-dashboard.live-mode #home-card, #view-dashboard.live-mode #news-card, #view-dashboard.live-mode #sos-card { display: none; }
   #sos-card { contain: size; overflow: hidden; min-height: 248px; }   /* übernimmt die Höhe der anderen Karten, vergrößert sie nicht */
-  html.dark .sos-tiles { filter: invert(1) hue-rotate(180deg) brightness(.85) contrast(.9); }
+  html.dark .sos-tiles, #sos-page .sos-tiles { filter: invert(1) hue-rotate(180deg) brightness(.85) contrast(.9); }
+  #sos-page div:has(> .sos-tiles) { background: #1c0a0a; }
+  #sos-page .sos-dot { background: #fff; --tw-ring-color: rgba(255,255,255,.35); }
   #dash-swipe-track > .dash-off { display: none !important; } #view-dashboard.live-mode #meter-card.dash-off { display: block !important; }
   #dash-order li.dragging { position: relative; z-index: 5; box-shadow: 0 10px 25px -8px rgba(0,0,0,.35); }
   #rt-plan.rt-optmode #rt-res, #rt-plan.rt-optmode #rt-abrp { display: none !important; } #rt-plan.rt-optmode #rt-opt { display: block !important; }
@@ -268,7 +270,7 @@
   @media (prefers-reduced-motion: reduce) { #bd-conf i, #bdg-conf i { animation: none; top: var(--y, 10%); } #bd-card, #bdg-card { animation: none; } }
 </style>
 <!-- Tailwind fertig gebaut (npm run css) – am Ende des Kopfs wie früher das CDN, damit die Reihenfolge der Regeln gleich bleibt -->
-<link rel="stylesheet" href="/app.css?v=358">
+<link rel="stylesheet" href="/app.css?v=359">
 </head>
 <body class="bg-slate-100 text-slate-900 dark:bg-black dark:text-slate-100 min-h-screen">
 
@@ -1848,7 +1850,7 @@
   <div id="ch-sheet-box" class="w-full max-w-md max-h-[92vh] overflow-y-auto rounded-t-[28px] bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-4 pt-2.5 pb-5 space-y-3.5"></div>
   <input id="ch-file" type="file" accept="image/*,application/pdf" multiple class="hidden">
 </div>
-<div id="sos-page" class="hidden fixed inset-0 z-[60] overflow-y-auto overscroll-contain bg-slate-100 dark:bg-black text-slate-900 dark:text-slate-100" role="dialog" aria-label="Notfall"></div>
+<div id="sos-page" class="hidden fixed inset-0 z-[60] overflow-y-auto overscroll-contain text-white" style="background:linear-gradient(180deg,#991b1b 0%,#7f1d1d 45%,#5c0f0f 100%)" role="dialog" aria-label="Notfall"></div>
 <div id="kb-dialog" class="hidden fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-3">
   <div class="w-full max-w-sm max-h-[92vh] overflow-y-auto rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 p-4 space-y-3">
     <div id="kb-view" class="space-y-3"></div>
@@ -2010,7 +2012,7 @@
   </div>
 </nav>
 
-<script src="/app.js?v=358"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
+<script src="/app.js?v=359"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
 <script type="module">
 /* Firebase (modular SDK). Die Konfiguration ist kein Geheimnis – geschützt wird über Auth + Firestore-Regeln. */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
