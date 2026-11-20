@@ -37,13 +37,18 @@ function setKb(o) { save(KEY_KB, kbStamp(JSON.parse(JSON.stringify(o)))); pushPr
 /* Abgleich je Eintrag (wie Labor): geänderte/neue Einträge bekommen u = jetzt, gelöschte landen in del (400 Tage), Kategorien mit catsU.
    kbMerge: Vereinigung beider Stände, je Eintrag der neuere; Gelöschtes nur, wenn die Löschung neuer ist als der Eintrag. */
 const kbOrd = (x, y) => String(x.id) < String(y.id) ? -1 : String(x.id) > String(y.id) ? 1 : 0;   // feste Reihenfolge, damit Geräte nicht hin- und herschreiben
+/* Vergleich unabhängig von der Schlüssel-Reihenfolge (Firestore sortiert Schlüssel um – sonst gilt nach jedem Cloud-Abgleich jeder Eintrag als „geändert“
+   und ein Gerät mit altem Stand überschreibt beim nächsten Speichern neuere Einträge anderer Geräte) */
+function canonJ(o) { return JSON.stringify(o, (k, v) => v && typeof v === 'object' && !Array.isArray(v) ? Object.keys(v).sort().reduce((r, x) => (r[x] = v[x], r), {}) : v); }
+/** Zeitstempel für eine Änderung: nie älter als der bisherige Stand + 1 ms (gleicht nachgehende Geräte-Uhren aus) */
+function stampU(old, now) { return Math.max(now, ((old && old.u) || 0) + 1); }
 function kbStamp(o) {
   const prev = load(KEY_KB, null) || {}, now = Date.now(), del = { ...(prev.del || {}) }, pm = new Map((prev.items || []).map(x => [String(x.id), x])), ids = new Set();
   const items = (o.items || []).map(x => { ids.add(String(x.id)); const old = pm.get(String(x.id)), a = { ...x }; delete a.u; const b = old ? { ...old } : null; if (b) delete b.u;
-    return !old || JSON.stringify(a) !== JSON.stringify(b) ? { ...a, u: now } : { ...a, u: old.u || 0 }; });
-  pm.forEach((x, id) => { if (!ids.has(id)) del[id] = now; }); ids.forEach(id => { if (del[id] && del[id] <= now) delete del[id]; });
+    return !old || canonJ(a) !== canonJ(b) ? { ...a, u: stampU(old, now) } : { ...a, u: old.u || 0 }; });
+  pm.forEach((x, id) => { if (!ids.has(id)) del[id] = Math.max(now, (x.u || 0) + 1); }); ids.forEach(id => { if (del[id] && del[id] <= now) delete del[id]; });
   const cut = now - 400 * 864e5; Object.keys(del).forEach(k => { if (del[k] < cut) delete del[k]; });
-  const catsU = JSON.stringify(o.cats || null) !== JSON.stringify(prev.cats || null) ? now : (prev.catsU || 0);
+  const catsU = JSON.stringify(o.cats || null) !== JSON.stringify(prev.cats || null) ? Math.max(now, (prev.catsU || 0) + 1) : (prev.catsU || 0);
   return { cats: o.cats, catsU, items: items.sort(kbOrd), del };
 }
 function kbMerge(a, b) {
@@ -221,7 +226,7 @@ async function upCompare(x) {
 /* Nach 30 Tagen: Auswertung einmal melden (Benachrichtigung, falls erlaubt) */
 function upCheckDone() {
   const kb = getKb(), due = kb.items.filter(x => isUp(x) && !x.base && !x.done && x.inst && upAge(x) >= UP_DAYS); if (!due.length) return;
-  save(KEY_KB, { ...kb, items: kb.items.map(x => due.includes(x) ? { ...x, done: true } : x) }); try { pushPrefs(); } catch (e) { }
+  setKb({ ...kb, items: kb.items.map(x => due.includes(x) ? { ...x, done: true } : x) });   // über setKb: Zeitstempel + del/catsU bleiben erhalten
   try { if ('Notification' in window && Notification.permission === 'granted' && navigator.serviceWorker) navigator.serviceWorker.ready.then(r => due.forEach(x => r.showNotification('Update ' + (x.ver || '') + ' ausgewertet', { body: 'Der Vorher/Nachher-Vergleich ist fertig – Wissen → Updates.', tag: 'upd-' + x.id, icon: '/Bilder/car-v4-192.png' }))); } catch (e) { }
 }
 function kbLinkRow(u = '', l = '') { return `<div class="kb-lrow flex gap-1.5"><input type="url" inputmode="url" autocomplete="off" placeholder="https://…" value="${esc(u)}" aria-label="Adresse" class="kb-lu min-w-0 flex-[3] rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"><input type="text" autocomplete="off" placeholder="Name" value="${esc(l)}" aria-label="Name des Links" class="kb-ll min-w-0 flex-[2] rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"><button type="button" data-kbrm="1" aria-label="Link entfernen" class="w-9 shrink-0 rounded-xl text-slate-500">✕</button></div>`; }
@@ -250,7 +255,7 @@ $('kb-cat').addEventListener('change', (e) => {
   if (e.target.value !== '__new') return;
   const n = (prompt('Name der neuen Kategorie:') || '').trim().replace(/\s+/g, ' ').slice(0, 24), kb = getKb();
   if (!n) { e.target.value = kb.cats[0]; return; }
-  if (!kb.cats.some(c => c.toLowerCase() === n.toLowerCase())) { kb.cats.push(n); save(KEY_KB, kb); }
+  if (!kb.cats.some(c => c.toLowerCase() === n.toLowerCase())) { kb.cats.push(n); setKb(kb); }
   e.target.innerHTML = getKb().cats.map(c => `<option value="${esc(c)}">${KB_ICON(c)} ${esc(c)}</option>`).join('') + '<option value="__new">+ Neue Kategorie …</option>';
   e.target.value = getKb().cats.find(c => c.toLowerCase() === n.toLowerCase());
 });

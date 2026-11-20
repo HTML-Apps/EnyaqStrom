@@ -34,6 +34,8 @@ async function applyUserPreset() {
    sonst überschreibt ein Gerät mit altem Stand (z. B. lange offener PC-Tab, automatischer Tasks-Import) neuere Werte vom Handy (z. B. Vergleichs-Benziner). */
 const KEY_SETBASE = 'enyaq.setBase';
 const KEY_PREFBASE = 'enyaq.prefBase';                                             // letzter Cloud-Stand von wltp, wxLoc, provInfo (wie enyaq.setBase)
+/** Fehler beim Hochladen ins Fehlerprotokoll (offline/kurz nicht erreichbar zählt nicht – das holt die App von selbst nach) */
+function syncErr(e) { const c = (e && e.code) || '', m = (e && e.message) || String(e); if (/unavailable|deadline|offline|network/i.test(c + ' ' + m)) return; try { window.errLogAdd && window.errLogAdd('Cloud-Sync (Wissen/Messwerte): ' + (c ? c + ' – ' : '') + m, 'pushPrefs'); } catch (x) { } }
 function pushPrefs() {
   if (!window.cloud?.isSignedIn()) return;
   const w = Number(getSettings().wltp), o = { wltp: w > 0 ? w : null, wxLoc: wxLoc() || null, provInfo: load(KEY_PROVINFO, null), kb: load('enyaq.kb', null), lab: labNoFc(load(KEY_LAB, null)) };
@@ -47,7 +49,9 @@ function pushPrefs() {
   /* WLTP, Wetter-Standort, Ladeanbieter-Angaben: nur schreiben, was sich hier seit dem letzten Cloud-Stand geändert hat – sonst überschreibt ein Gerät mit altem Stand neuere Werte */
   if (pb) Object.keys(all).forEach(k => { if (labCanon(all[k] ?? null) !== labCanon(pb[k] ?? null)) rest[k] = all[k]; });
   if (pb && Object.keys(rest).length) save(KEY_PREFBASE, { ...pb, ...rest });
-  if (window.cloud.mergePrefs) window.cloud.mergePrefs(rest, set, del, (cl) => lab ? labNoFc(labMerge(lab, cl && typeof cl === 'object' ? cl : null)) : cl, (ck) => kbMerge(kb, ck && typeof ck === 'object' ? ck : null)).catch(() => window.cloud.patchPrefs(rest, set, del).catch(() => { }));
+  try { const sz = JSON.stringify(o).length; if (sz > 850000) syncErr({ message: 'Cloud-Dokument fast voll (' + Math.round(sz / 1024) + ' KB von 1024 KB)' }); } catch (e) { }
+  if (window.cloud.mergePrefs) window.cloud.mergePrefs(rest, set, del, (cl) => lab ? labNoFc(labMerge(lab, cl && typeof cl === 'object' ? cl : null)) : cl, (ck) => kbMerge(kb, ck && typeof ck === 'object' ? ck : null))
+    .then(() => { save('enyaq.syncOk', Date.now()); }).catch((e) => { syncErr(e); window.cloud.patchPrefs(rest, set, del).catch(syncErr); });
   else window.cloud.patchPrefs(rest, set, del).catch(() => { });
   if (base) save(KEY_SETBASE, { ...base, ...set, ...Object.fromEntries(del.map(k => [k, undefined])) });
 }
@@ -89,7 +93,10 @@ window.onCloudPrefs = (d, first, uid) => {
     if (lastBt(nq) !== lastBt(lq)) { try { btmVal = null; renderBtm(); renderLtm(); } catch (e) { } } }
   try { if (currentView === 'route') rtCloudPlan(); } catch (e) { }
   if (d || up) save(KEY_PREFBASE, { wltp: nw, wxLoc: nl, provInfo: np });
-  if (up) window.cloud.setPrefs({ wltp: nw, wxLoc: nl, provInfo: np, settings: ns, kb: nk, lab: labNoFc(nq) }).catch(() => { });
+  /* Hochladen: beim ersten Abgleich ganz (Cloud hatte noch nichts), danach über pushPrefs (Transaktion, je Eintrag zusammengeführt) –
+     ein ganzes setPrefs könnte sonst gleichzeitig auf einem anderen Gerät gespeicherte Einträge überschreiben */
+  if (up && first) window.cloud.setPrefs({ wltp: nw, wxLoc: nl, provInfo: np, settings: ns, kb: nk, lab: labNoFc(nq) }).catch(syncErr);
+  else if (up) setTimeout(() => { try { pushPrefs(); } catch (e) { } }, 300);
 };
 
 /* =====================================================================

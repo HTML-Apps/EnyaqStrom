@@ -19,7 +19,7 @@ function labStamp(o) {
   const prev = load(KEY_LAB, null) || {}, now = Date.now(), del = { ...(prev.del || {}) };
   LAB_LISTS.forEach(k => { const pm = new Map((prev[k] || []).map(x => [String(x.id), x])), ids = new Set();
     o[k] = (o[k] || []).map(x => { ids.add(String(x.id)); const old = pm.get(String(x.id)), a = { ...x }; delete a.u; const b = old ? { ...old } : null; if (b) delete b.u;
-      return !old || JSON.stringify(a) !== JSON.stringify(b) ? { ...a, u: now } : { ...a, u: old.u || 0 }; });
+      return !old || canonJ(a) !== canonJ(b) ? { ...a, u: stampU(old, now) } : { ...a, u: old.u || 0 }; });
     pm.forEach((x, id) => { if (!ids.has(id)) { del[id] = now; if (x.src) del['src:' + x.src] = now; } }); });   // Quelle merken: gelöschte Sprachbefehle nicht erneut holen
   const pr = prev.routes || {}, nr = {}; Object.entries(o.routes || {}).forEach(([k, v]) => { const a = { ...v }; delete a.u; const b = pr[k] ? { ...pr[k] } : null; if (b) delete b.u; nr[k] = !b || JSON.stringify(a) !== JSON.stringify(b) ? { ...a, u: now } : { ...a, u: pr[k].u || 0 }; });
   Object.keys(pr).forEach(k => { if (!nr[k]) del['r_' + k] = now; });
