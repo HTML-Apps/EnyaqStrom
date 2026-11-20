@@ -36,6 +36,19 @@ const KEY_SETBASE = 'enyaq.setBase';
 const KEY_PREFBASE = 'enyaq.prefBase';                                             // letzter Cloud-Stand von wltp, wxLoc, provInfo (wie enyaq.setBase)
 /** Fehler beim Hochladen ins Fehlerprotokoll (offline/kurz nicht erreichbar zählt nicht – das holt die App von selbst nach) */
 function syncErr(e) { const c = (e && e.code) || '', m = (e && e.message) || String(e); if (/unavailable|deadline|offline|network/i.test(c + ' ' + m)) return; try { window.errLogAdd && window.errLogAdd('Cloud-Sync (Wissen/Messwerte): ' + (c ? c + ' – ' : '') + m, 'pushPrefs'); } catch (x) { } }
+/* Wissen + Messwerte per Transaktion zusammenführen – kurz gesammelt (mehrere Speichervorgänge = eine Transaktion) und bei Konflikt
+   (failed-precondition/aborted: gleichzeitig hat ein anderes Schreiben dasselbe Dokument geändert) bis zu 4× mit kurzer Pause wiederholt */
+let kbLabT = null, kbLabTry = 0;
+function pushKbLab(retry) {
+  clearTimeout(kbLabT); if (!retry) kbLabTry = 0;
+  kbLabT = setTimeout(() => {
+    if (!window.cloud?.isSignedIn() || !window.cloud.mergePrefs) return;
+    const lab = labNoFc(load(KEY_LAB, null)), kb = load('enyaq.kb', null);
+    window.cloud.mergePrefs({}, {}, [], (cl) => lab ? labNoFc(labMerge(lab, cl && typeof cl === 'object' ? cl : null)) : cl, (ck) => kbMerge(kb, ck && typeof ck === 'object' ? ck : null))
+      .then(() => { kbLabTry = 0; save('enyaq.syncOk', Date.now()); })
+      .catch((e) => { const c = (e && e.code) || ''; if (/failed-precondition|aborted/.test(c) && kbLabTry < 4) { kbLabTry++; pushKbLab(true); } else syncErr(e); });
+  }, retry ? 600 * kbLabTry : 400);
+}
 function pushPrefs() {
   if (!window.cloud?.isSignedIn()) return;
   const w = Number(getSettings().wltp), o = { wltp: w > 0 ? w : null, wxLoc: wxLoc() || null, provInfo: load(KEY_PROVINFO, null), kb: load('enyaq.kb', null), lab: labNoFc(load(KEY_LAB, null)) };
@@ -53,8 +66,7 @@ function pushPrefs() {
   /* Einstellungen & Co. sofort als normales Schreiben (wirkt lokal sofort, auch für eintreffende Cloud-Stände) – eine Transaktion gilt erst nach der Bestätigung
      durch den Server; ein Cloud-Stand dazwischen hat sonst die gerade geänderte Einstellung (z. B. Startseite-Reihenfolge) wieder zurückgesetzt */
   if (Object.keys(rest).length || Object.keys(set).length || del.length || !window.cloud.mergePrefs) window.cloud.patchPrefs(rest, set, del).catch(syncErr);
-  if (window.cloud.mergePrefs) window.cloud.mergePrefs({}, {}, [], (cl) => lab ? labNoFc(labMerge(lab, cl && typeof cl === 'object' ? cl : null)) : cl, (ck) => kbMerge(kb, ck && typeof ck === 'object' ? ck : null))
-    .then(() => { save('enyaq.syncOk', Date.now()); }).catch(syncErr);
+  if (window.cloud.mergePrefs) pushKbLab();
   if (base) save(KEY_SETBASE, { ...base, ...set, ...Object.fromEntries(del.map(k => [k, undefined])) });
 }
 window.onCloudPrefs = (d, first, uid) => {
