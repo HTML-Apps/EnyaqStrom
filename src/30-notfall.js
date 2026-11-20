@@ -46,12 +46,12 @@ async function sosShare(p) {
   const ok = await errCopy(t); appNote(ok ? '✓ Standort kopiert' : 'Kopieren nicht möglich');
 }
 /** Kleine Karte: 3×3 OSM-Kacheln um den Punkt (Zoom 15), dunkel per Filter */
-function sosMap(p, h, nx) {
-  nx = nx || 1;
+function sosMap(p, h, nx, cx) {
+  nx = nx || 1; cx = cx || '50%';
   const z = 15, n = 2 ** z, xf = (p.lon + 180) / 360 * n, lr = p.lat * Math.PI / 180, yf = (1 - Math.log(Math.tan(lr) + 1 / Math.cos(lr)) / Math.PI) / 2 * n, tx = Math.floor(xf), ty = Math.floor(yf);
-  let t = ''; for (let dx = -nx; dx <= nx; dx++) for (let dy = -1; dy <= 1; dy++) t += `<img src="https://tile.openstreetmap.org/${z}/${tx + dx}/${ty + dy}.png" alt="" width="256" height="256" loading="lazy" draggable="false" class="absolute max-w-none" style="left:calc(50% + ${Math.round((tx + dx - xf) * 256)}px);top:calc(50% + ${Math.round((ty + dy - yf) * 256)}px)">`;
+  let t = ''; for (let dx = -nx; dx <= nx; dx++) for (let dy = -1; dy <= 1; dy++) t += `<img src="https://tile.openstreetmap.org/${z}/${tx + dx}/${ty + dy}.png" alt="" width="256" height="256" loading="lazy" draggable="false" class="absolute max-w-none" style="left:calc(${cx} + ${Math.round((tx + dx - xf) * 256)}px);top:calc(50% + ${Math.round((ty + dy - yf) * 256)}px)">`;
   return `<div class="relative overflow-hidden rounded-2xl bg-slate-200 dark:bg-slate-800" style="height:${h}px"><div class="sos-tiles absolute inset-0">${t}</div>
-    <span class="sos-dot absolute left-1/2 top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-red-500 ring-[6px] ring-red-500/35"></span>
+    <span class="sos-dot absolute left-1/2 top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-red-500 ring-[6px] ring-red-500/35" style="left:${cx}"></span>
     <span class="absolute bottom-0.5 right-1.5 text-[9px] text-slate-600 dark:text-slate-400">© OpenStreetMap</span></div>`;
 }
 function sosLocLine(p) { return p ? (p.src === 'car' ? '🚗 Parkposition vom Auto · ' + sosAge(p.at) : '📍 Handy-GPS ± ' + (p.acc || '?') + ' m · ' + sosAge(p.at)) : ''; }
@@ -63,15 +63,16 @@ function renderSosCard() {
   const btn = 'rounded-xl bg-slate-100 dark:bg-slate-800 py-2 text-center text-[12px] font-semibold active:scale-95 transition';
   if (isDesk()) {   // PC: zwei Spalten – links 112 + Knöpfe + „Liegt im Auto“, rechts Karte über volle Höhe
     const b2 = 'rounded-xl bg-slate-100 dark:bg-slate-800 py-2 text-center text-[12px] font-semibold active:scale-95 transition';
-    el.innerHTML = `<div class="flex min-h-0 flex-1 gap-3"><div class="flex w-[310px] shrink-0 flex-col gap-2">
+    const mp = p ? sosMap(p, 999, 3, 'calc(50% + 165px)').replace('style="height:999px"', 'style="height:100%"').replace('rounded-2xl bg-slate-200', 'bg-slate-200') : '';
+    el.innerHTML = `<div class="relative -m-4 flex min-h-0 flex-1">${p ? `<div class="absolute inset-0">${mp}</div><div class="pointer-events-none absolute inset-0 bg-gradient-to-r from-white from-[36%] via-white/75 via-[48%] to-transparent to-[64%] dark:from-slate-900 dark:via-slate-900/75"></div>` : ''}<div class="relative flex min-h-0 flex-1 gap-3 p-4"><div class="flex w-[310px] shrink-0 flex-col gap-2">
       <div class="flex items-center gap-2"><span class="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-red-600 text-[11px]">🆘</span><p class="min-w-0 flex-1 font-barlow text-xl font-bold uppercase tracking-[0.08em] leading-6">Notfall</p></div>
       <a href="tel:112" data-sosnop class="flex items-center gap-3 rounded-2xl bg-red-600 px-3.5 py-2.5 text-white active:scale-[0.99] transition"><span class="text-[22px]">🚑</span><span class="min-w-0 flex-1"><span class="block text-xl font-extrabold leading-none">112</span><span class="block truncate text-[11px] opacity-90">Notruf · Unfall mit Verletzten</span></span><span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/20">📞</span></a>
       <div class="grid grid-cols-3 gap-1.5">${p ? `<button type="button" data-sosshare class="${b2}">📤 Teilen</button>` : `<button type="button" data-sosloc class="${b2}">📍 Orten</button>`}
         ${d.panne ? `<a href="${sosTelHref(d.panne.tel)}" data-sosnop class="${b2}">🛠️ Panne</a>` : `<button type="button" class="${b2} opacity-60">🛠️ Panne</button>`}
         ${d.ins && d.ins.tel ? `<a href="${sosTelHref(d.ins.tel)}" data-sosnop class="${b2}">🛡️ ${esc((d.ins.name || 'Versicherung').split(' ')[0].slice(0, 12))}</a>` : `<button type="button" class="${b2} opacity-60">🛡️ Versich.</button>`}</div>
       <div class="mt-auto min-h-0 overflow-hidden text-[11.5px] leading-[1.6] text-slate-500 dark:text-slate-400">${d.items.length ? `<p class="font-semibold text-slate-700 dark:text-slate-300">🧰 Liegt im Auto</p>${d.items.slice(0, 3).map(i => `<p class="truncate">${esc(i.n)} · ${esc(i.where)}</p>`).join('')}` : 'Antippen: alle Notfall-Infos'}</div></div>
-      <div class="relative min-w-0 flex-1">${p ? `<div class="absolute inset-0">${sosMap(p, 999, 3).replace('style="height:999px"', 'style="height:100%"')}</div><div class="absolute bottom-2 left-2 max-w-[calc(100%-120px)] truncate rounded-lg bg-white/85 dark:bg-slate-900/80 px-2.5 py-1 text-[12px] font-semibold">${esc((p.addr ? p.addr + ' · ' : '') + sosLocLine(p))}</div>`
-        : `<button type="button" data-sosloc class="absolute inset-0 flex w-full flex-col items-center justify-center gap-1 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 text-[13px] font-semibold active:scale-[0.99]">${sosBusy ? '⏳ Standort wird ermittelt …' : '📍 Standort ermitteln'}<span class="text-[11px] font-normal text-slate-500 dark:text-slate-400">Handy-GPS · sonst Parkposition vom Auto</span></button>`}</div></div>`;
+      <div class="relative min-w-0 flex-1">${p ? `<div class="absolute bottom-0 right-0 max-w-full truncate rounded-lg bg-white/85 dark:bg-slate-900/80 px-2.5 py-1 text-[12px] font-semibold">${esc((p.addr ? p.addr + ' · ' : '') + sosLocLine(p))}</div>`
+        : `<button type="button" data-sosloc class="absolute inset-0 flex w-full flex-col items-center justify-center gap-1 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 text-[13px] font-semibold active:scale-[0.99]">${sosBusy ? '⏳ Standort wird ermittelt …' : '📍 Standort ermitteln'}<span class="text-[11px] font-normal text-slate-500 dark:text-slate-400">Handy-GPS · sonst Parkposition vom Auto</span></button>`}</div></div></div>`;
     return;
   }
   el.innerHTML = `<div class="flex items-center gap-2"><span class="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-red-600 text-[11px]">🆘</span><p class="min-w-0 flex-1 font-barlow text-xl font-bold uppercase tracking-[0.08em] leading-6">Notfall</p>
