@@ -197,7 +197,7 @@ const wxoPred = (m, T, wet, hum) => wxoPredX(m, wxoX(T, wet ? 1 : 0, hum ? 1 : 0
 /** Zuschläge eines Tages für die 7-Tage-Ansicht: ❄️ Kälte (beide Stufen), 🌧️ Regen, 💧 feuchter Morgen */
 function wxoParts(m, T, wet, hum) { const x = wxoX(T, wet ? 1 : 0, hum ? 1 : 0); return { cold: m.b * x[1] + m.d * x[2], rain: m.c * x[3], hum: m.e * x[4] }; }
 /** 7-Tage-Vorhersage: Tagesmittel, Niederschlag, Wettercode (1 h zwischengespeichert) */
-async function wxoForecast(l) {
+async function wxoForecast(l, again) {
   const c = load(KEY_WXO + 'F', null), same = c && c.lat === l.lat && c.lon === l.lon && c.day === wxIso(new Date()) && c.days && c.days[0] && 't7' in c.days[0];
   if (same && Date.now() - c.t < 3600e3) return c.days;
   try {
@@ -206,7 +206,13 @@ async function wxoForecast(l) {
     const j = await r.json(), d = j.daily, hd = wxoHumDays(j), hr = (t, h) => { const k = (j.hourly && j.hourly.time || []).indexOf(t + 'T' + String(h).padStart(2, '0') + ':00'); const v = k >= 0 ? j.hourly.temperature_2m[k] : null; return v == null ? null : v; };
     const days = d.time.map((t, i) => ({ t7: hr(t, WXO_H1), t16: hr(t, WXO_H2), hum: hd[t] || 0, d: t, T: d.temperature_2m_mean[i] ?? (d.temperature_2m_min[i] + d.temperature_2m_max[i]) / 2, lo: d.temperature_2m_min[i], hi: d.temperature_2m_max[i], p: d.precipitation_sum[i] ?? 0, w: d.weather_code[i] }));
     save(KEY_WXO + 'F', { lat: l.lat, lon: l.lon, day: wxIso(new Date()), t: Date.now(), days }); return days;
-  } catch (e) { if (c && c.lat === l.lat) return c.days.filter(x => x.d >= wxIso(new Date())); throw e; }
+  } catch (e) {
+    /* Abruf fehlgeschlagen: einmal nach 2 s erneut; sonst ins Fehlerprotokoll (höchstens stündlich) und alter Stand – der hat aber nur noch die restlichen Tage
+       (Abruf vom 15. → am 20. nur noch 3 Tage). Daher in 2 Min. neu versuchen, statt bis zum nächsten Öffnen 3 Tage zu zeigen. */
+    if (!again && navigator.onLine !== false) { await new Promise(r => setTimeout(r, 2000)); return wxoForecast(l, true); }
+    try { const k = 'enyaq.wxoFErr', t = load(k, 0); if (Date.now() - t > 3600e3) { save(k, Date.now()); window.errLogAdd && window.errLogAdd('Wetter-Prognose nicht abrufbar: ' + ((e && e.message) || e) + (c ? ' – alter Stand vom ' + c.day : ''), 'wxoForecast'); } } catch (x) { }
+    clearTimeout(window.__wxoRetry); window.__wxoRetry = setTimeout(() => { try { if (!document.hidden) renderWxo(); } catch (x) { } }, 120000);
+    if (c && c.lat === l.lat) return c.days.filter(x => x.d >= wxIso(new Date())); throw e; }
 }
 /** Ø km pro Tag aus den letzten ~90 Tagen der km-Stände; typisches Ladeziel (Median der letzten 10 Akku-Ende-Werte) */
 function wxoHabits() {
