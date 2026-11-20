@@ -10,7 +10,8 @@ const DASH_W = [
   ['wxo-card', 'Verbrauchs-Prognose', 'braucht einen Wetter-Standort'],
   ['veh-slide', 'Fahrzeugstatus', 'nur mit verbundenem Fahrzeug · am PC neben dem Auto'],
   ['meter-card', 'Zählerstand', 'beim Live-Laden immer sichtbar'],
-  ['news-card', 'Neuigkeiten', 'Quellen unter Anbieter & Kategorien']];
+  ['news-card', 'Neuigkeiten', 'Quellen unter Anbieter & Kategorien'],
+  ['sos-card', 'Notfall', 'Standort, 112, Pannenhilfe · antippen für die Notfallseite']];
 function dashCfg() {
   const d = getSettings().dash || {}, ids = DASH_W.map(w => w[0]);
   const order = (Array.isArray(d.order) ? d.order : []).filter(id => ids.includes(id));

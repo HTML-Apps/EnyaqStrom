@@ -177,7 +177,9 @@
   #view-dashboard:not(.live-mode) #meter-card > .grid.grid-cols-2 > div { padding-top: .5rem; padding-bottom: .5rem; }
   /* ===== PC / Querformat ab 1280 px: Schnellmenü fest links, App mittig wie am Handy, Erinnerungen fest rechts (am Handy unverändert) ===== */
   #desk-rem { display: none; }
-  #view-dashboard.live-mode #btm-card, #view-dashboard.live-mode #ltm-card, #view-dashboard.live-mode #home-card, #view-dashboard.live-mode #news-card { display: none; }
+  #view-dashboard.live-mode #btm-card, #view-dashboard.live-mode #ltm-card, #view-dashboard.live-mode #home-card, #view-dashboard.live-mode #news-card, #view-dashboard.live-mode #sos-card { display: none; }
+  #sos-card { contain: size; overflow: hidden; min-height: 248px; }   /* übernimmt die Höhe der anderen Karten, vergrößert sie nicht */
+  html.dark .sos-tiles { filter: invert(1) hue-rotate(180deg) brightness(.85) contrast(.9); }
   #dash-swipe-track > .dash-off { display: none !important; } #view-dashboard.live-mode #meter-card.dash-off { display: block !important; }
   #dash-order li.dragging { position: relative; z-index: 5; box-shadow: 0 10px 25px -8px rgba(0,0,0,.35); }
   #rt-plan.rt-optmode #rt-res, #rt-plan.rt-optmode #rt-abrp { display: none !important; } #rt-plan.rt-optmode #rt-opt { display: block !important; }
@@ -231,7 +233,7 @@
   /* Einfache Ansicht (Einstellungen → Fahrzeug & Kauf → Ansicht): weniger Funktionen, Start mit Kacheln, unten Start · Erfassen · Auswerten. Daten bleiben unberührt. */
   .simple-only { display: none !important; }
   html.simple .simple-only { display: block !important; }
-  html.simple #hero-stats, html.simple #hero-rem-wrap, html.simple #frost-banner, html.simple #trips-banner, html.simple #wxo-card, html.simple #btm-card, html.simple #meter-card, html.simple #home-card, html.simple #news-card,
+  html.simple #hero-stats, html.simple #hero-rem-wrap, html.simple #frost-banner, html.simple #trips-banner, html.simple #wxo-card, html.simple #btm-card, html.simple #meter-card, html.simple #home-card, html.simple #news-card, html.simple #sos-card,
   html.simple #go-stat, html.simple #btn-wrap-preview, html.simple #go-akku, html.simple #go-trips, html.simple #go-prov, html.simple #go-badges, html.simple #kb-card,
   html.simple #bottom-nav, html.simple [data-place="bosch"], html.simple #rec-chips, html.simple #rep-mode [data-mode="fahrten"], html.simple [data-bt="kurve"], html.simple [data-bt="mehr"], html.simple #sec-eff, html.simple #sec-trends,
   html.simple [data-dp="akte"], html.simple [data-dp="ausst"], html.simple [data-dp="checkheft"], html.simple [data-filter="fahrten"], html.simple div:has(> #bt-minus),
@@ -266,7 +268,7 @@
   @media (prefers-reduced-motion: reduce) { #bd-conf i, #bdg-conf i { animation: none; top: var(--y, 10%); } #bd-card, #bdg-card { animation: none; } }
 </style>
 <!-- Tailwind fertig gebaut (npm run css) – am Ende des Kopfs wie früher das CDN, damit die Reihenfolge der Regeln gleich bleibt -->
-<link rel="stylesheet" href="/app.css?v=354">
+<link rel="stylesheet" href="/app.css?v=355">
 </head>
 <body class="bg-slate-100 text-slate-900 dark:bg-black dark:text-slate-100 min-h-screen">
 
@@ -397,11 +399,13 @@
       </div>
     </div>
     <div id="news-card" class="hidden flex flex-col w-full shrink-0 snap-center snap-always rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4"></div>
+    <div id="sos-card" class="hidden flex flex-col w-full shrink-0 snap-center snap-always cursor-pointer rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4"></div>
     </div>
     <div id="dash-dots" class="hidden pointer-events-none absolute inset-x-0 bottom-1.5 flex justify-center gap-1.5"><button type="button" data-dslide="0" aria-label="Verbrauchs-Prognose" class="pointer-events-auto h-1.5 w-4 rounded-full bg-slate-400 dark:bg-slate-500 transition-all"></button><button type="button" data-dslide="1" aria-label="Zählerstand" class="pointer-events-auto h-1.5 w-1.5 rounded-full bg-slate-300 dark:bg-slate-700 transition-all"></button></div>
     </div>
 
     <div id="simple-start" class="simple-only !mt-3"></div>
+    <button id="simple-sos" type="button" class="simple-only flex w-full items-center gap-4 rounded-3xl bg-gradient-to-br from-red-700 to-red-950 p-4 text-left text-white shadow-sm active:scale-[0.99] transition"><span class="text-4xl">🆘</span><span class="flex-1"><span class="block text-xl font-extrabold leading-tight">Hilfe</span><span class="block text-sm opacity-90">Panne oder Unfall</span></span><span class="text-2xl opacity-80">›</span></button>
     <button id="go-stat" type="button" class="flex w-full items-center justify-between rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm px-4 py-3 active:scale-[0.99] transition">
       <span class="flex items-center gap-3 font-medium"><svg class="w-6 h-6 text-emerald-500" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/></svg>Fahrzeugdaten</span>
       <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
@@ -1844,6 +1848,7 @@
   <div id="ch-sheet-box" class="w-full max-w-md max-h-[92vh] overflow-y-auto rounded-t-[28px] bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-4 pt-2.5 pb-5 space-y-3.5"></div>
   <input id="ch-file" type="file" accept="image/*,application/pdf" multiple class="hidden">
 </div>
+<div id="sos-page" class="hidden fixed inset-0 z-[60] overflow-y-auto overscroll-contain bg-slate-100 dark:bg-black text-slate-900 dark:text-slate-100" role="dialog" aria-label="Notfall"></div>
 <div id="kb-dialog" class="hidden fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-3">
   <div class="w-full max-w-sm max-h-[92vh] overflow-y-auto rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 p-4 space-y-3">
     <div id="kb-view" class="space-y-3"></div>
@@ -2005,7 +2010,7 @@
   </div>
 </nav>
 
-<script src="/app.js?v=354"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
+<script src="/app.js?v=355"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
 <script type="module">
 /* Firebase (modular SDK). Die Konfiguration ist kein Geheimnis – geschützt wird über Auth + Firestore-Regeln. */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';

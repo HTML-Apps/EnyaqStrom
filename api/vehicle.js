@@ -64,7 +64,8 @@ export default async function handler(req, res) {
   try {
     /* mit Fahrzeugstatus (Türen/Schloss); unterstützt das Auto ihn nicht (400), nur Laden + km-Stand */
     const base = 'https://public.api.connect.skoda-auto.cz/api/v1/vehicles/' + encodeURIComponent(acc.vin) + '?include=', H = { 'X-API-Key': acc.key, Accept: 'application/json' };
-    let r = await fetch(base + 'charging,odometer,status', { headers: H });
+    let r = await fetch(base + 'charging,odometer,status,parkingPosition', { headers: H });           // Parkposition für die Notfallkarte
+    if (r.status === 400) r = await fetch(base + 'charging,odometer,status', { headers: H });
     if (r.status === 400) r = await fetch(base + 'charging,odometer', { headers: H });
     if (!r.ok) {
       const msg = { 401: 'Škoda-API-Schlüssel abgelaufen oder ungültig', 403: 'Schlüssel gilt nicht für dieses Fahrzeug', 429: 'Abfrage-Limit erreicht, bitte später erneut versuchen' }[r.status] || ('Škoda-API Fehler ' + r.status);
@@ -91,6 +92,8 @@ export default async function handler(req, res) {
       chargePowerKw: ch.status?.chargePowerInKw ?? null,
       odometerKm: v.odometer?.mileageInKm ?? null,
       capturedAt: ch.carCapturedTimestamp ?? v.odometer?.carCapturedTimestamp ?? null,
+      park: parkPos(v.parkingPosition),
+      parkKeys: v.parkingPosition && typeof v.parkingPosition === 'object' ? Object.keys(v.parkingPosition).join(',') : null,   // zur Kontrolle der Feldnamen
       keyExpiresAt: r.headers.get('x-api-key-expires-at') ?? acc.expires ?? null
     };
     cache.set(user.email, { at: Date.now(), body });
@@ -98,6 +101,15 @@ export default async function handler(req, res) {
   } catch (err) {
     return res.status(502).json({ error: 'Škoda-Server nicht erreichbar' });
   }
+}
+
+/* Parkposition (nur im Stand; während der Fahrt ohne Koordinaten) – Feldnamen tolerant gelesen */
+function parkPos(pp) {
+  if (!pp || typeof pp !== 'object') return null;
+  const g = pp.gpsCoordinates || pp.gps || pp.coordinates || pp.position || pp, lat = Number(g.latitude ?? g.lat), lon = Number(g.longitude ?? g.lng ?? g.lon);
+  if (!isFinite(lat) || !isFinite(lon) || (lat === 0 && lon === 0)) return null;
+  const a = pp.formattedAddress || pp.address?.formattedAddress || null;
+  return { lat, lon, at: pp.carCapturedTimestamp ?? pp.capturedAt ?? pp.timestamp ?? null, addr: typeof a === 'string' ? a : null };
 }
 
 /* Demo/Test (SKODA_ACCOUNTS-Eintrag {"demo": true}): fester Zustand eines Epiq in der Garage, damit sich die App ohne Auto und
@@ -108,7 +120,8 @@ function demo(req, res) {
   const body = {
     soc: 64, rangeKm: 262, chargeState: 'READY_FOR_CHARGING', plug: 'DISCONNECTED', plugLock: 'UNLOCKED', minutesToFull: null, fullAt: null,
     careMode: 'ACTIVATED', atSavedLocation: true, doorsLocked: 'YES', locked: 'YES', doors: 'CLOSED', windows: 'CLOSED', lights: 'OFF',
-    targetSoc: 80, chargePowerKw: null, odometerKm: 1214, capturedAt: new Date(Date.now() - 10 * 60e3).toISOString(), keyExpiresAt: null, demo: true
+    targetSoc: 80, chargePowerKw: null, odometerKm: 1214, capturedAt: new Date(Date.now() - 10 * 60e3).toISOString(), keyExpiresAt: null, demo: true,
+    park: { lat: 49.3487, lon: 7.1803, at: new Date(Date.now() - 12 * 60e3).toISOString(), addr: null }
   };
   if (req.query && req.query.raw) return res.status(200).json({ status: 200, include: 'demo', data: body });
   return res.status(200).json(body);
