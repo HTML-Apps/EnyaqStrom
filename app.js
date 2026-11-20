@@ -10416,7 +10416,7 @@ function sosCall(ic, t, s, href, cls) {
 }
 function renderSosPage() {
   const pg = $('sos-page'); if (!pg) return; const d = sosData(), p = sosPos(), o = getSettings().sos || {}, inp = inCls;
-  const top = `<div class="bg-gradient-to-br from-red-700 to-red-950 px-4 pb-4 text-white" style="padding-top:calc(env(safe-area-inset-top) + 14px)"><div class="flex items-center justify-between"><button type="button" data-sosclose class="-ml-1 h-9 px-1 text-2xl leading-none" aria-label="Zurück">‹</button>
+  const top = `<div class="px-4 pb-4 text-white" style="padding-top:calc(env(safe-area-inset-top) + 14px);background:linear-gradient(180deg,#000 0,#000 env(safe-area-inset-top),rgba(0,0,0,0) calc(env(safe-area-inset-top) + 64px)),linear-gradient(160deg,#b91c1c 0%,#7f1d1d 60%,#450a0a 100%)"><div class="flex items-center justify-between"><button type="button" data-sosclose class="-ml-1 h-9 px-1 text-2xl leading-none" aria-label="Zurück">‹</button>
       <div class="flex items-center gap-2"><span class="rounded-lg bg-black/25 px-2 py-0.5 text-[11px] font-bold">funktioniert offline</span><button type="button" data-sosedit class="rounded-lg bg-black/25 px-2.5 py-1 text-[13px] font-semibold">${sosEdit ? '✓ Fertig' : '✎'}</button></div></div>
       <p class="mt-1 font-barlow text-[32px] font-bold uppercase tracking-[0.1em] leading-none">Notfall</p><p class="mt-1 text-[13px] opacity-90">Ruhe bewahren · Warnblinker an · Weste anziehen</p></div>`;
   let b = '';
