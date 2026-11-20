@@ -5,11 +5,11 @@
  * - Die KI-Abfrage (/api/…) wird NIE gecacht und läuft immer übers Netz.
  * Bei größeren Änderungen am Cache-Konzept CACHE_VERSION erhöhen. */
 
-const CACHE_VERSION = 'v346';
+const CACHE_VERSION = 'v347';
 const CACHE_NAME = 'enyaq-' + CACHE_VERSION;
 
 // Dateien, die beim Installieren vorab geladen werden
-const SAME_ORIGIN_ASSETS = ['./', './index.html', './app.css?v=346', './app.js?v=346', './Bilder/Enyaq/hero/1.webp'];
+const SAME_ORIGIN_ASSETS = ['./', './index.html', './app.css?v=347', './app.js?v=347', './Bilder/Enyaq/hero/1.webp'];
 const CDN_ASSETS = [
   'https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js'
 ];
@@ -79,6 +79,7 @@ self.addEventListener('fetch', (event) => {
   // Fremde Hosts nur für die bekannten Skript-CDNs cachen – Firestore/Auth (Streaming, Login-Iframe/Popup) niemals anfassen
   const CDN_HOSTS = ['cdn.jsdelivr.net', 'www.gstatic.com'];
   if (url.origin !== self.location.origin && !CDN_HOSTS.includes(url.hostname)) return;
+  if (url.searchParams.has('vcheck')) return;                                   // Versions-Prüfung der App: immer direkt ans Netz, nichts zwischenspeichern
 
   // Seitenaufrufe: Network first, offline -> gecachte index.html
   if (req.mode === 'navigate') {
