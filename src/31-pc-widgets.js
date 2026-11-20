@@ -146,10 +146,41 @@ function nfMarkSel(ov) { ov.querySelectorAll('[data-nf-list] a[data-nread]').for
   ov.addEventListener('click', async (e) => {
     if (e.target.closest('[data-nfp-x]')) { nfSel = null; pane.innerHTML = NF_EMPTY; nfMarkSel(ov); return; }
     if (e.target.closest('[data-nfp-reload]')) { const f = pane.querySelector('[data-nfp-frame]'); if (f) f.src = f.src; return; }
+    if (e.target.closest('[data-nfp-front]')) { nfDockPlace(pane, true); return; }
     const a = e.target.closest('[data-nf-list] a[data-nread]'); if (!a || e.ctrlKey || e.metaKey || e.shiftKey || e.button === 1) return;
     e.preventDefault(); const c = load(KEY_NEWS, null), x = c && c.items.find(i => i.u === a.dataset.nread); if (!x) { window.open(a.href, '_blank', 'noopener'); return; }
-    nfSel = x.u; nfMarkSel(ov); const h = await nfFrameLoad(); if (nfSel !== x.u) return;
-    pane.innerHTML = nfPaneHtml(x, nfHostOk(newsUrl(x.u), h));
+    nfSel = x.u; nfMarkSel(ov); const h = nfFrame ? nfFrame.h : await nfFrameLoad(); if (nfSel !== x.u) return;
+    const ok = nfHostOk(newsUrl(x.u), h);
+    if (ok !== true) { nfDock(x, pane); return; }                                   // Seite sperrt Einbetten (oder unbekannt) → angedocktes Browserfenster
+    pane.innerHTML = nfPaneHtml(x, ok);
     const f = pane.querySelector('[data-nfp-frame]'); if (f) f.addEventListener('load', () => { const l = pane.querySelector('[data-nfp-load]'); if (l) l.remove(); }, { once: true });
   });
   return r; }; }
+
+/* Angedocktes Beitragsfenster: echtes Browserfenster (Pop-up ohne Tableiste) genau über dem rechten Bereich; ein benanntes Fenster für
+   alle Beiträge. Erst leer öffnen, opener trennen (Beitragsseite bekommt keinen Zugriff auf die App), dann zur Adresse. */
+var nfWin = null;
+function nfDockRect(pane) {
+  const r = pane.getBoundingClientRect(), bx = (outerWidth - innerWidth) / 2, by = outerHeight - innerHeight - bx;
+  return { left: Math.round(screenX + bx + r.left), top: Math.round(screenY + by + r.top), width: Math.round(r.width), height: Math.round(r.height) };
+}
+function nfDockPlace(pane, front) {
+  if (!nfWin || nfWin.closed) return false; const d = nfDockRect(pane);
+  try { nfWin.moveTo(d.left, d.top); nfWin.resizeTo(d.width, d.height); } catch (e) { }
+  if (front) try { nfWin.focus(); } catch (e) { }
+  return true;
+}
+function nfDock(x, pane) {
+  const url = newsUrl(x.u), s = newsDef(x.s), d = nfDockRect(pane);
+  if (!nfWin || nfWin.closed) {
+    nfWin = window.open('about:blank', 'enyaqNews', `popup=yes,left=${d.left},top=${d.top},width=${d.width},height=${d.height}`);
+    if (nfWin) try { nfWin.opener = null; } catch (e) { }
+  }
+  if (nfWin) { try { nfWin.location.href = url; } catch (e) { } nfDockPlace(pane, true); }
+  const blocked = !nfWin;
+  pane.innerHTML = `<div class="relative flex flex-1 flex-col items-center justify-center overflow-hidden p-8 text-center"><span class="pointer-events-none absolute -bottom-10 -right-6 select-none text-[220px] leading-none opacity-[0.06]" aria-hidden="true">📰</span>
+      <span class="h-2.5 w-2.5 rounded-full" style="background:${s.c}"></span><p class="mt-2 max-w-lg text-[16px] font-semibold leading-snug">${esc(x.t)}</p><p class="mt-1 text-[12px] text-slate-500 dark:text-slate-400">${esc(s.n)}${Number.isFinite(Date.parse(x.d)) ? ' · ' + newsAgo(Date.parse(x.d)) : ''}</p>
+      <p class="mt-4 max-w-md text-[13px] text-slate-500 dark:text-slate-400">${blocked ? 'Der Browser hat das Fenster blockiert. Erlaube Pop-ups für diese App (Symbol rechts in der Adressleiste), dann klappt es beim nächsten Klick.' : 'Läuft im Fenster hier rechts daneben – die Seite erlaubt keine Anzeige direkt in der App.'}</p>
+      <div class="mt-4 flex gap-2">${blocked ? '' : '<button type="button" data-nfp-front class="rounded-2xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white active:scale-95 transition">⧉ Fenster nach vorne</button>'}
+        <a href="${esc(url)}" target="_blank" rel="noopener" class="rounded-2xl bg-slate-200 dark:bg-slate-800 px-5 py-2.5 text-sm font-semibold active:scale-95 transition">↗ Als Tab öffnen</a></div></div>`;
+}
