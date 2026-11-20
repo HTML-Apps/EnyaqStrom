@@ -10631,6 +10631,7 @@ function nfMarkSel(ov) { ov.querySelectorAll('[data-nf-list] a[data-nread]').for
   inn.replaceWith(row); row.appendChild(inn); inn.classList.remove('mx-auto', 'max-w-2xl', 'w-full', 'flex-1'); inn.classList.add('w-[460px]', 'shrink-0', 'border-r', 'border-slate-200', 'dark:border-slate-800');
   const pane = document.createElement('div'); pane.setAttribute('data-nf-pane', ''); pane.className = 'flex min-w-0 flex-1 flex-col bg-slate-50 dark:bg-slate-950'; pane.style.paddingTop = 'env(safe-area-inset-top)'; pane.innerHTML = NF_EMPTY; row.appendChild(pane);
   ov.addEventListener('click', async (e) => {
+    if (e.isTrusted && (e.screenX || e.screenY)) nfOff = { x: e.screenX - e.clientX, y: e.screenY - e.clientY };
     if (e.target.closest('[data-nfp-x]')) { nfSel = null; pane.innerHTML = NF_EMPTY; nfMarkSel(ov); return; }
     if (e.target.closest('[data-nfp-reload]')) { const f = pane.querySelector('[data-nfp-frame]'); if (f) f.src = f.src; return; }
     if (e.target.closest('[data-nfp-front]')) { nfDockPlace(pane, true); return; }
@@ -10647,8 +10648,14 @@ function nfMarkSel(ov) { ov.querySelectorAll('[data-nf-list] a[data-nread]').for
 /* Angedocktes Beitragsfenster: echtes Browserfenster (Pop-up ohne Tableiste) genau über dem rechten Bereich; ein benanntes Fenster für
    alle Beiträge. Erst leer öffnen, opener trennen (Beitragsseite bekommt keinen Zugriff auf die App), dann zur Adresse. */
 var nfWin = null;
+/* Lage des App-Inhalts auf dem Bildschirm genau aus dem Mausklick (screenX − clientX) – Schätzen über outerWidth − innerWidth
+   lag daneben (Edge-Seitenleiste/vertikale Tabs nur auf einer Seite, unsichtbare Fensterränder unter Windows).
+   nfBp = unsichtbarer Rand des Pop-ups (links/rechts/unten), gemessen solange es noch about:blank ist (gleiche Herkunft). */
+var nfOff = null, nfBp = 0;
 function nfDockRect(pane) {
-  const r = pane.getBoundingClientRect(), bx = (outerWidth - innerWidth) / 2, by = outerHeight - innerHeight - bx;
+  const r = pane.getBoundingClientRect();
+  if (nfOff) return { left: Math.round(nfOff.x + r.left - nfBp), top: Math.round(nfOff.y + r.top), width: Math.round(r.width + 2 * nfBp), height: Math.round(r.height + nfBp) };
+  const bx = (outerWidth - innerWidth) / 2, by = outerHeight - innerHeight - bx;
   return { left: Math.round(screenX + bx + r.left), top: Math.round(screenY + by + r.top), width: Math.round(r.width), height: Math.round(r.height) };
 }
 function nfDockPlace(pane, front) {
@@ -10661,7 +10668,7 @@ function nfDock(x, pane) {
   const url = newsUrl(x.u), s = newsDef(x.s), d = nfDockRect(pane);
   if (!nfWin || nfWin.closed) {
     nfWin = window.open('about:blank', 'enyaqNews', `popup=yes,left=${d.left},top=${d.top},width=${d.width},height=${d.height}`);
-    if (nfWin) try { nfWin.opener = null; } catch (e) { }
+    if (nfWin) try { nfWin.opener = null; const b = (nfWin.outerWidth - nfWin.innerWidth) / 2; if (b >= 0 && b < 20) nfBp = b; } catch (e) { }
   }
   if (nfWin) { try { nfWin.location.href = url; } catch (e) { } nfDockPlace(pane, true); }
   const blocked = !nfWin;
