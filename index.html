@@ -250,7 +250,7 @@
   html.simple main { padding-bottom: calc(96px + env(safe-area-inset-bottom)) !important; }
   html.simple #hero-car { margin-top: 0.25rem; height: clamp(190px, 53vw, 300px); }   /* flacher: die Epiq-Bilder sind breit, die Höhe bleibt sonst leer */
   @media (min-width: 1280px) { html.simple #simple-nav { display: none !important; } }
-  @media (min-width: 1280px) { #kb-dialog > div.kb-wide { max-width: none; width: calc(100vw - 64px); max-height: calc(100vh - 48px); } }   /* Packliste (Utensilien) am PC: breiter Dialog */
+  @media (min-width: 1280px) { #kb-dialog > div.kb-wide { max-width: none; width: calc(100vw - 64px); max-height: calc(100vh - 48px); } #kb-dialog > div.kb-wide #kb-text { min-height: calc(100vh - 420px); } }   /* Packliste (Utensilien) am PC: breiter Dialog */
   /* Verbrauchs-Prognose: sichtbare Tage nach Kartenbreite (3 / 5 / 7) */
   #wxo-card { container-type: inline-size; }
   #wxo-days { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -266,7 +266,7 @@
   @media (prefers-reduced-motion: reduce) { #bd-conf i, #bdg-conf i { animation: none; top: var(--y, 10%); } #bd-card, #bdg-card { animation: none; } }
 </style>
 <!-- Tailwind fertig gebaut (npm run css) – am Ende des Kopfs wie früher das CDN, damit die Reihenfolge der Regeln gleich bleibt -->
-<link rel="stylesheet" href="/app.css?v=353">
+<link rel="stylesheet" href="/app.css?v=354">
 </head>
 <body class="bg-slate-100 text-slate-900 dark:bg-black dark:text-slate-100 min-h-screen">
 
@@ -1867,7 +1867,7 @@
         <div class="grid grid-cols-2 gap-2"><div class="min-w-0"><label for="kb-mg-date" class="flex h-5 items-center text-xs text-slate-500 dark:text-slate-400">Bemerkt am</label><input id="kb-mg-date" type="date" class="h-[46px] mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div>
           <div class="min-w-0"><label for="kb-mg-km" class="flex h-5 items-center gap-1 text-xs text-slate-500 dark:text-slate-400">km-Stand <button id="kb-mg-kmf" type="button" title="km-Stand vom Auto holen" aria-label="km-Stand vom Auto holen" class="leading-none text-emerald-600 dark:text-emerald-400">↻</button></label><input id="kb-mg-km" type="text" inputmode="numeric" autocomplete="off" placeholder="–" class="h-[46px] mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"></div></div>
       </div>
-      <div><label id="kb-text-l" for="kb-text" class="text-xs text-slate-500 dark:text-slate-400">Notiz</label><textarea id="kb-text" rows="5" maxlength="4000" placeholder="Text, Werte, Schritte …" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-y"></textarea></div>
+      <div><label id="kb-text-l" for="kb-text" class="text-xs text-slate-500 dark:text-slate-400">Notiz</label><textarea id="kb-text" rows="5" maxlength="10000" placeholder="Text, Werte, Schritte …" class="mt-1 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-y"></textarea></div>
       <div><div class="flex items-center justify-between"><p class="text-xs text-slate-500 dark:text-slate-400">Links</p><button id="kb-link-add" type="button" class="text-xs font-semibold text-emerald-600 dark:text-emerald-400 px-1.5 py-1">+ Link</button></div><div id="kb-links" class="mt-1 space-y-2"></div></div>
       <div><p class="text-xs text-slate-500 dark:text-slate-400">Belege (Google Drive)</p><div id="kb-files" class="mt-1 flex flex-wrap gap-1.5"></div><input id="kb-file-in" type="file" accept="image/*,application/pdf" multiple class="hidden"></div>
       <label class="flex items-center justify-between rounded-2xl bg-slate-100 dark:bg-slate-800/60 px-3.5 py-2.5"><span class="text-sm">Auf Start anheften</span><input id="kb-pin" type="checkbox" class="h-5 w-5 accent-emerald-600"></label>
@@ -2005,7 +2005,7 @@
   </div>
 </nav>
 
-<script src="/app.js?v=353"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
+<script src="/app.js?v=354"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
 <script type="module">
 /* Firebase (modular SDK). Die Konfiguration ist kein Geheimnis – geschützt wird über Auth + Firestore-Regeln. */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';

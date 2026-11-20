@@ -247,7 +247,7 @@ function editKb(id) {
   kbMgPaint();
   $('kb-links').innerHTML = (x && x.links && x.links.length ? x.links : [{ url: '' }]).map(l => kbLinkRow(l.url, l.label)).join('');
   $('kb-files').innerHTML = kbFilesHtml(kbFiles); $('kb-msg').classList.add('hidden');
-  $('kb-dialog').firstElementChild.classList.remove('kb-wide');
+  $('kb-dialog').firstElementChild.classList.toggle('kb-wide', !!x && invIs(x) && isDesk());   // Packliste am PC: auch Bearbeiten breit, Textfeld hoch
   $('kb-view').classList.add('hidden'); $('kb-edit').classList.remove('hidden'); $('kb-dialog').classList.remove('hidden');
   if (!x) setTimeout(() => $('kb-title').focus(), 50);
 }
@@ -292,7 +292,7 @@ $('kb-save').addEventListener('click', async () => {
     const o = { url: u }; if (l) o.label = l; links.push(o);
   }
   const kb = getKb(), old = kb.items.find(y => String(y.id) === String(kbCur)), item = { id: old ? old.id : Date.now(), title: title || ('Software ' + upVer), cat, at: new Date().toISOString() };
-  const text = $('kb-text').value.trim().slice(0, 4000); if (text) item.text = text; if (links.length) item.links = links; if ($('kb-pin').checked) item.pin = true;
+  const text = $('kb-text').value.trim().slice(0, 10000); if (text) item.text = text; if (links.length) item.links = links; if ($('kb-pin').checked) item.pin = true;
   if (cat === KB_UP) { const km = $('kb-up-km').value.trim() ? Number($('kb-up-km').value.replace(/\D/g, '')) : null; if (km != null && !(km >= 0 && km < 2e6)) { kbErr('Bitte einen gültigen km-Stand eingeben oder das Feld leer lassen.'); return; }
     item.ver = upVer; item.how = kbUp.how;
     if (kbUp.st === 'ann') { item.pend = true; item.ann = old && old.ann ? old.ann : wxIso(new Date()); }
