@@ -10284,13 +10284,12 @@ async function versionCheck() {
 function diagRows() {
   const st = getSettings(), base = load('enyaq.setBase', {}) || {}, ord = (o) => (o && o.order ? o.order : DASH_W.map(w => w[0])).map(id => (DASH_W.find(w => w[0] === id) || [id, id])[1].split(' ')[0]).join(' › ');
   const card = $('wxo-card'), vis = [...document.querySelectorAll('#wxo-days > div')].filter(d => d.offsetWidth > 0).length, ok = load('enyaq.syncOk', 0);
-  const same = canonJ(st.dash || null) === canonJ(base.dash || null) && (st.dashStart || null) === (base.dashStart || null);
   return [
     ['App', 'v' + APP_V + (srvV ? (srvV > APP_V ? ' – Server hat v' + srvV + ' (neu laden!)' : ' – aktuell') : '')],
     ['Fenster', innerWidth + ' × ' + innerHeight + ' px · Zoom ' + Math.round(devicePixelRatio * 100) + ' % · ' + (isDesk() ? 'PC-Ansicht' : 'Handy-Ansicht (unter 1280 px)')],
     ['Prognose', card && card.clientWidth ? 'Karte ' + card.clientWidth + ' px → ' + vis + ' Tage sichtbar' : window.wxoW ? 'Karte zuletzt ' + window.wxoW + ' px → ' + $('wxo-days').dataset.n + ' Tage' : 'Karte noch nicht angezeigt'],
-    ['Startseite', ord(st.dash) + (st.dash && st.dash.off && st.dash.off.length ? ' · aus: ' + st.dash.off.length : '') + (st.dashStart ? ' · ★ ' + st.dashStart.replace('-card', '') : '')],
-    ['Cloud', (same ? 'Startseite wie Cloud' : 'Startseite weicht vom Cloud-Stand ab') + ' · ' + (window.cloud?.isSignedIn?.() ? 'angemeldet' : 'nicht angemeldet') + (ok ? ' · zuletzt abgeglichen ' + new Date(ok).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '')],
+    ['Startseite', ord(st.dash) + (st.dash && st.dash.off && st.dash.off.length ? ' · aus: ' + st.dash.off.length : '') + (st.dashStart ? ' · ★ ' + st.dashStart.replace('-card', '') : '') + ' (nur dieses Gerät)'],
+    ['Cloud', (window.cloud?.isSignedIn?.() ? 'angemeldet' : 'nicht angemeldet') + (ok ? ' · zuletzt abgeglichen ' + new Date(ok).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '')],
     ['Browser', navigator.userAgent.replace(/^Mozilla\/5\.0 /, '').slice(0, 140)]];
 }
 function renderDiag() {
