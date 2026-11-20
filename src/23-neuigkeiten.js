@@ -67,7 +67,7 @@ function newsParts(big) {
       <span class="${big ? 'line-clamp-3 text-[15px]' : 'line-clamp-2 text-[12.5px]'} font-semibold leading-snug">${esc(x.t)}</span>
       <span class="mt-0.5 flex justify-between gap-2 ${big ? 'text-xs' : 'text-[10.5px]'} text-slate-500 dark:text-slate-400"><span class="min-w-0 truncate">${esc(s.n)}${x.b ? ' · ' + esc((EF_B.find(b => b[0] === x.b) || [0, ''])[1]) : x.f ? ' · ' + esc(x.f) : ''}</span><span class="shrink-0">${Number.isFinite(d) ? newsAgo(d) : ''}${nw ? ' · <b class="font-semibold text-emerald-600 dark:text-emerald-400">neu</b>' : ''}</span></span></a>`; };
   const empty = !fresh ? (newsErr || 'Lade Neuigkeiten …') : !items.length ? (newsErr || 'Keine Beiträge gefunden.') : '';
-  return { show: on.length > 0, chips, list: empty ? `<p class="py-6 text-center text-sm text-slate-500 dark:text-slate-400">${esc(empty)}</p>` : items.map(row).join(''), age: fresh ? 'vor ' + newsAgo(c.t).replace('gerade', 'wenigen Sek.') : '' };
+  return { show: on.length > 0, chips, list: empty ? `<p class="py-6 text-center text-sm text-slate-500 dark:text-slate-400">${esc(empty)}</p>` : items.map(row).join(''), items: empty ? [] : items, row, rd, seen, age: fresh ? 'vor ' + newsAgo(c.t).replace('gerade', 'wenigen Sek.') : '' };
 }
 function renderNews() {
   const el = $('news-card'); if (!el) return;
@@ -75,6 +75,7 @@ function renderNews() {
   el.classList.toggle('hidden', !show); setTimeout(() => { try { dashSwipeSync(); } catch (e) { } }, 0);
   if (!show) return;
   const p = newsParts(false), keep = $('news-list') ? $('news-list').scrollTop : 0;
+  if (isDesk() && p.items.length > 1) { pcNewsDesk(el, p, keep); return; }
   el.innerHTML = `<div class="flex items-center justify-between gap-2"><button type="button" data-nopen class="flex min-w-0 items-center gap-1 active:opacity-70" aria-label="Neuigkeiten ganzseitig öffnen"><span class="font-barlow text-xl font-bold uppercase tracking-[0.08em] leading-6">Neuigkeiten</span><svg class="h-4 w-4 shrink-0 text-slate-400" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></button><button type="button" data-nref class="shrink-0 text-[11px] text-slate-500 dark:text-slate-400 active:opacity-60" title="Neu laden">${p.age}</button></div>
     <div class="no-scrollbar -mx-4 mt-2 flex gap-1.5 overflow-x-auto px-4">${p.chips}</div>
     <div class="relative mt-2 min-h-0 flex-1"><div id="news-list" class="no-scrollbar absolute inset-0 overflow-y-auto overscroll-contain pb-3">${p.list}</div>

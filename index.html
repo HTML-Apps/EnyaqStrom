@@ -179,6 +179,14 @@
   #desk-rem { display: none; }
   #view-dashboard.live-mode #btm-card, #view-dashboard.live-mode #ltm-card, #view-dashboard.live-mode #home-card, #view-dashboard.live-mode #news-card, #view-dashboard.live-mode #sos-card { display: none; }
   #sos-card { contain: size; overflow: hidden; min-height: 248px; }   /* übernimmt die Höhe der anderen Karten, vergrößert sie nicht */
+  /* PC-Widgets (src/31) */
+  #home-card .home-tile { background: #f1f5f9; } html.dark #home-card .home-tile { background: #1e293b; } html #home-card.home-vf .home-tile { background: rgba(255,255,255,.08); }
+  #home-card .home-avg { border-color: #94a3b8; } html #home-card.home-vf .home-avg { border-color: rgba(255,218,0,.6); }
+  @media (min-width: 1280px) {
+    #view-dashboard:not(.live-mode) #meter-card { display: grid; grid-template-columns: minmax(0, 470px) minmax(0, 1fr); column-gap: 16px; align-content: start; }
+    #view-dashboard:not(.live-mode) #meter-card > * { grid-column: 1; }
+    #view-dashboard:not(.live-mode) #meter-card > #meter-hist { display: block; grid-column: 2; grid-row: 1 / span 12; position: relative; }
+  }
   html.dark .sos-tiles, #sos-page .sos-tiles { filter: invert(1) hue-rotate(180deg) brightness(.85) contrast(.9); }
   #sos-page div:has(> .sos-tiles) { background: #1c0a0a; }
   #sos-page .sos-dot { background: #fff; --tw-ring-color: rgba(255,255,255,.35); }
@@ -270,7 +278,7 @@
   @media (prefers-reduced-motion: reduce) { #bd-conf i, #bdg-conf i { animation: none; top: var(--y, 10%); } #bd-card, #bdg-card { animation: none; } }
 </style>
 <!-- Tailwind fertig gebaut (npm run css) – am Ende des Kopfs wie früher das CDN, damit die Reihenfolge der Regeln gleich bleibt -->
-<link rel="stylesheet" href="/app.css?v=361">
+<link rel="stylesheet" href="/app.css?v=362">
 </head>
 <body class="bg-slate-100 text-slate-900 dark:bg-black dark:text-slate-100 min-h-screen">
 
@@ -399,6 +407,7 @@
           <p id="dash-last-kwh" class="text-2xl font-semibold text-sky-700 dark:text-sky-300">–</p>
         </div>
       </div>
+      <div id="meter-hist" class="hidden"></div>
     </div>
     <div id="news-card" class="hidden flex flex-col w-full shrink-0 snap-center snap-always rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4"></div>
     <div id="sos-card" class="hidden flex flex-col w-full shrink-0 snap-center snap-always cursor-pointer rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4"></div>
@@ -2012,7 +2021,7 @@
   </div>
 </nav>
 
-<script src="/app.js?v=361"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
+<script src="/app.js?v=362"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
 <script type="module">
 /* Firebase (modular SDK). Die Konfiguration ist kein Geheimnis – geschützt wird über Auth + Firestore-Regeln. */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';

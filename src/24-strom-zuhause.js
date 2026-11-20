@@ -32,6 +32,7 @@ function renderHomeCard() {
   const name = pvHomeName(), vf = /vattenfall/i.test(name), mx = Math.max(1, ...s.months.map(x => x.eur));
   el.classList.toggle('home-vf', vf);
   const MS = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
+  if (isDesk()) { pcHomeDesk(el, s, name, mx, MS); return; }
   const bars = s.months.map(x => `<div class="flex min-w-0 flex-1 flex-col items-center gap-0.5" title="${MS[x.m % 12]}: ${esc(eur(x.eur))}${x.cur ? ' (Zwischenstand)' : ''}">
       <div class="home-bar w-full rounded-t${x.cur ? ' home-bar-cur' : ''}" style="height:${Math.max(3, Math.round(x.eur / mx * 46))}px"></div><span class="home-sub text-[9.5px]">${MS[x.m % 12]}</span></div>`).join('');
   el.innerHTML = `<div class="flex items-center gap-2"><span class="home-dot flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full text-[12px]" aria-hidden="true">⚡</span>
