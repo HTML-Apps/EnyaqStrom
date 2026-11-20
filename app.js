@@ -10654,20 +10654,24 @@ var nfWin = null;
 var nfOff = null, nfBp = 0;
 function nfDockRect(pane) {
   const r = pane.getBoundingClientRect();
-  if (nfOff) return { left: Math.round(nfOff.x + r.left - nfBp), top: Math.round(nfOff.y + r.top), width: Math.round(r.width + 2 * nfBp), height: Math.round(r.height + nfBp) };
-  const bx = (outerWidth - innerWidth) / 2, by = outerHeight - innerHeight - bx;
-  return { left: Math.round(screenX + bx + r.left), top: Math.round(screenY + by + r.top), width: Math.round(r.width), height: Math.round(r.height) };
+  let d;
+  if (nfOff) d = { left: nfOff.x + r.left - nfBp, top: nfOff.y + r.top, width: r.width + 2 * nfBp, height: r.height + nfBp };
+  else { const bx = (outerWidth - innerWidth) / 2, by = outerHeight - innerHeight - bx; d = { left: screenX + bx + r.left, top: screenY + by + r.top, width: r.width, height: r.height }; }
+  /* nie über den freien Bildschirmbereich hinaus – sonst schiebt Windows/Edge das ganze Fenster nach oben/links */
+  const ax = screen.availLeft || 0, ay = screen.availTop || 0, ar = ax + screen.availWidth, ab = ay + screen.availHeight;
+  d.width = Math.min(d.width, ar - d.left + nfBp); d.height = Math.min(d.height, ab - d.top + nfBp);
+  return { left: Math.round(d.left), top: Math.round(d.top), width: Math.round(d.width), height: Math.round(d.height) };
 }
 function nfDockPlace(pane, front) {
   if (!nfWin || nfWin.closed) return false; const d = nfDockRect(pane);
-  try { nfWin.moveTo(d.left, d.top); nfWin.resizeTo(d.width, d.height); } catch (e) { }
+  try { nfWin.resizeTo(d.width, d.height); nfWin.moveTo(d.left, d.top); } catch (e) { }   // erst Größe (Außenmaß), dann Lage – sonst wird zu groß verschoben
   if (front) try { nfWin.focus(); } catch (e) { }
   return true;
 }
 function nfDock(x, pane) {
   const url = newsUrl(x.u), s = newsDef(x.s), d = nfDockRect(pane);
   if (!nfWin || nfWin.closed) {
-    nfWin = window.open('about:blank', 'enyaqNews', `popup=yes,left=${d.left},top=${d.top},width=${d.width},height=${d.height}`);
+    nfWin = window.open('about:blank', 'enyaqNews', `popup=yes,left=${d.left},top=${d.top},width=${Math.max(300, d.width - 40)},height=${Math.max(300, d.height - 120)}`);   // width/height = Innenmaß → kleiner öffnen, danach aufs Außenmaß ziehen
     if (nfWin) try { nfWin.opener = null; const b = (nfWin.outerWidth - nfWin.innerWidth) / 2; if (b >= 0 && b < 20) nfBp = b; } catch (e) { }
   }
   if (nfWin) { try { nfWin.location.href = url; } catch (e) { } nfDockPlace(pane, true); }
