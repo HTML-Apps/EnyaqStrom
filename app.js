@@ -10596,3 +10596,47 @@ function pcNewsDesk(el, p, keep) {
 /* Wechsel Handy ↔ PC (Fenstergröße): alle betroffenen Widgets neu zeichnen */
 try { matchMedia('(min-width: 1280px)').addEventListener('change', () => { [renderHomeCard, renderLtm, renderBtm, pcMeterHist, renderNews].forEach(f => { try { f(); } catch (e) { } }); }); } catch (e) { }
 try { renderLtm(); renderBtm(); pcMeterHist(); } catch (e) { }
+
+/* ---- Neuigkeiten-Vollbild am PC: Liste links angeheftet, rechts eingebautes Browser-Fenster (iframe) ----
+   Ob eine Seite eingebettet werden darf, prüft der Server (/api/news?frame=1: X-Frame-Options / CSP frame-ancestors).
+   Verbietet die Seite das Einbetten → rechts Hinweis + „Im Browser öffnen“. Unbekannt → Versuch im Fenster, Knopf ↗ immer da. */
+var nfSel = null, nfFrame = null;
+function nfFrameLoad() {
+  if (nfFrame && Date.now() - nfFrame.t < 6 * 3600e3) return Promise.resolve(nfFrame.h);
+  const c = load('enyaq.newsFrame', null); if (c && Date.now() - c.t < 12 * 3600e3) { nfFrame = c; return Promise.resolve(c.h); }
+  return fetch('/api/news?frame=1').then(r => r.ok ? r.json() : null).then(j => { const h = j && j.hosts || {}; nfFrame = { t: Date.now(), h }; try { save('enyaq.newsFrame', nfFrame); } catch (e) { } return h; }).catch(() => ({}));
+}
+function nfHostOk(u, h) { try { const x = (h || {})[new URL(u).host]; return x ? x.ok : null; } catch (e) { return null; } }
+function nfPaneHtml(x, ok) {
+  const s = newsDef(x.s), d = Date.parse(x.d), url = newsUrl(x.u);
+  const bar = `<div class="flex shrink-0 items-center gap-2 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2"><span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background:${s.c}"></span>
+      <div class="min-w-0 flex-1"><p class="truncate text-[13px] font-semibold">${esc(x.t)}</p><p class="truncate text-[11px] text-slate-500 dark:text-slate-400">${esc(s.n)} · ${Number.isFinite(d) ? newsAgo(d) : ''} · ${esc(url.replace(/^https?:\/\//, '').slice(0, 70))}</p></div>
+      ${ok !== false ? '<button type="button" data-nfp-reload class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-[17px] hover:bg-slate-100 dark:hover:bg-slate-800" title="Neu laden" aria-label="Neu laden">↻</button>' : ''}
+      <a href="${esc(url)}" target="_blank" rel="noopener" class="flex h-9 shrink-0 items-center gap-1 rounded-xl bg-slate-100 dark:bg-slate-800 px-3 text-[12.5px] font-semibold hover:bg-slate-200 dark:hover:bg-slate-700">↗ Im Browser öffnen</a>
+      <button type="button" data-nfp-x class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-[18px] hover:bg-slate-100 dark:hover:bg-slate-800" title="Fenster schließen" aria-label="Fenster schließen">×</button></div>`;
+  if (ok === false) return bar + `<div class="relative flex flex-1 flex-col items-center justify-center overflow-hidden p-8 text-center"><span class="pointer-events-none absolute -bottom-10 -right-6 select-none text-[220px] leading-none opacity-[0.06]" aria-hidden="true">📰</span>
+      <p class="text-[15px] font-semibold">${esc(s.n)} erlaubt keine Anzeige in anderen Apps.</p><p class="mt-1 max-w-md text-[13px] text-slate-500 dark:text-slate-400">Die Seite verbietet das Einbetten – das lässt sich nicht umgehen. Öffne den Beitrag einfach im Browser.</p>
+      <a href="${esc(url)}" target="_blank" rel="noopener" class="mt-4 rounded-2xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white active:scale-95 transition">↗ Im Browser öffnen</a></div>`;
+  return bar + `<div class="relative min-h-0 flex-1 bg-white"><div data-nfp-load class="absolute inset-0 flex items-center justify-center text-[13px] text-slate-400">Seite wird geladen …</div>
+      <iframe data-nfp-frame src="${esc(url)}" title="${esc(x.t)}" class="relative h-full w-full border-0" referrerpolicy="no-referrer-when-downgrade" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox" loading="eager"></iframe></div>
+      ${ok == null ? '<p class="shrink-0 border-t border-slate-200 dark:border-slate-800 px-3 py-1.5 text-[11px] text-slate-500 dark:text-slate-400">Bleibt das Fenster leer, lässt die Seite keine Anzeige in der App zu – dann ↗ Im Browser öffnen.</p>' : ''}`;
+}
+const NF_EMPTY = `<div class="relative flex flex-1 flex-col items-center justify-center overflow-hidden p-8 text-center"><span class="pointer-events-none absolute -bottom-10 -right-6 select-none text-[220px] leading-none opacity-[0.06]" aria-hidden="true">📰</span><p class="text-[15px] font-semibold">Beitrag links auswählen</p><p class="mt-1 text-[13px] text-slate-500 dark:text-slate-400">Er öffnet sich hier im eingebauten Fenster.</p></div>`;
+function nfMarkSel(ov) { ov.querySelectorAll('[data-nf-list] a[data-nread]').forEach(a => { const on = a.dataset.nread === nfSel; a.classList.toggle('ring-2', on); a.classList.toggle('ring-emerald-500', on); }); }
+{ const ro = newsFullRender; newsFullRender = function () { const r = ro.apply(this, arguments); try { if (newsFull && newsFull.classList.contains('nf-desk')) nfMarkSel(newsFull); } catch (e) { } return r; }; }
+{ const ro = newsOpenFull; newsOpenFull = function () {
+  const was = newsFull, r = ro.apply(this, arguments), ov = newsFull; if (!ov || ov === was || !isDesk()) return r;
+  ov.classList.add('nf-desk'); nfSel = null; nfFrameLoad();
+  const inn = ov.querySelector('[data-nf-in]'), row = document.createElement('div'); row.className = 'flex min-h-0 flex-1';
+  inn.replaceWith(row); row.appendChild(inn); inn.classList.remove('mx-auto', 'max-w-2xl', 'w-full', 'flex-1'); inn.classList.add('w-[460px]', 'shrink-0', 'border-r', 'border-slate-200', 'dark:border-slate-800');
+  const pane = document.createElement('div'); pane.setAttribute('data-nf-pane', ''); pane.className = 'flex min-w-0 flex-1 flex-col bg-slate-50 dark:bg-slate-950'; pane.style.paddingTop = 'env(safe-area-inset-top)'; pane.innerHTML = NF_EMPTY; row.appendChild(pane);
+  ov.addEventListener('click', async (e) => {
+    if (e.target.closest('[data-nfp-x]')) { nfSel = null; pane.innerHTML = NF_EMPTY; nfMarkSel(ov); return; }
+    if (e.target.closest('[data-nfp-reload]')) { const f = pane.querySelector('[data-nfp-frame]'); if (f) f.src = f.src; return; }
+    const a = e.target.closest('[data-nf-list] a[data-nread]'); if (!a || e.ctrlKey || e.metaKey || e.shiftKey || e.button === 1) return;
+    e.preventDefault(); const c = load(KEY_NEWS, null), x = c && c.items.find(i => i.u === a.dataset.nread); if (!x) { window.open(a.href, '_blank', 'noopener'); return; }
+    nfSel = x.u; nfMarkSel(ov); const h = await nfFrameLoad(); if (nfSel !== x.u) return;
+    pane.innerHTML = nfPaneHtml(x, nfHostOk(newsUrl(x.u), h));
+    const f = pane.querySelector('[data-nfp-frame]'); if (f) f.addEventListener('load', () => { const l = pane.querySelector('[data-nfp-load]'); if (l) l.remove(); }, { once: true });
+  });
+  return r; }; }

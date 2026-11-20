@@ -1,5 +1,6 @@
 // Neuigkeiten aus Enyaq-Foren (Widget „Neuigkeiten“ auf Start, src/23-neuigkeiten.js).
 //   GET ?src=ef3,ef8,el,sb,bk  -> { items:[{s, g, t, u, d, f}], at, err:{src:msg} }   (öffentliche Beiträge, keine Anmeldung nötig; efNN = Bereich NN von enyaq-forum.de)
+//   GET ?frame=1           -> { hosts: { host: { ok: true|false|null, why } } } – darf die Seite eingebettet werden (PC-Vollbild)
 //   GET ?diag=1            -> je Quelle: gefundene Feed-Adressen, Status, Anzahl (zum Prüfen, welche Feeds wirklich gehen)
 // Feeds werden je Quelle 30 Min. im Speicher gehalten, die Antwort zusätzlich im Vercel-CDN (s-maxage) – die Foren sehen höchstens ~2 Abrufe pro Stunde.
 const UA = 'Mozilla/5.0 (compatible; EnyaqStrom/1.0; +https://enyaqstromapp.vercel.app)';
@@ -84,8 +85,30 @@ async function loadSource(s, diag) {
   cache.set(s, res); return res;
 }
 
+/* Lässt sich die Seite in der App einbetten (PC: Neuigkeiten im Vollbild rechts im eingebauten Fenster)? Prüft X-Frame-Options und
+   CSP frame-ancestors der Startseite je Quelle. true = erlaubt, false = verboten, null = unbekannt (Seite sperrt Server-Abrufe). 12 h im Speicher. */
+const FRAME_HOSTS = ['www.enyaq-forum.de', 'www.motor-talk.de', 'www.electrive.net', 'ecomento.de', 'www.skoda-storyboard.com', 'www.briskoda.net'];
+let frameCache = null;
+async function frameOk(host) {
+  try {
+    const r = await fetch('https://' + host + '/', { headers: { 'User-Agent': UA, Accept: 'text/html' }, redirect: 'follow', signal: AbortSignal.timeout(6000) });
+    try { await r.body?.cancel(); } catch (e) { }
+    const xfo = (r.headers.get('x-frame-options') || '').toLowerCase(), csp = (r.headers.get('content-security-policy') || '').toLowerCase();
+    const fa = /frame-ancestors([^;]*)/.exec(csp);
+    if (xfo && /deny|sameorigin/.test(xfo)) return { ok: false, why: 'X-Frame-Options ' + xfo };
+    if (fa && !/\*|enyaqstromapp\.vercel\.app/.test(fa[1])) return { ok: false, why: 'frame-ancestors' + fa[1] };
+    if (!r.ok) return { ok: null, why: 'HTTP ' + r.status };
+    return { ok: true };
+  } catch (e) { return { ok: null, why: e.name === 'TimeoutError' ? 'Zeitüberschreitung' : e.message }; }
+}
+
 export default async function handler(req, res) {
   const q = req.query || {}, diag = q.diag === '1';
+  if (q.frame === '1') {
+    if (!frameCache || Date.now() - frameCache.at > 12 * 3600e3) { const r = await Promise.all(FRAME_HOSTS.map(frameOk)); frameCache = { at: Date.now(), hosts: Object.fromEntries(FRAME_HOSTS.map((h, i) => [h, r[i]])) }; }
+    res.setHeader('Cache-Control', 'public, s-maxage=43200, stale-while-revalidate=86400');
+    return res.status(200).json(frameCache);
+  }
   const want = [...new Set(String(q.src || 'ef3,ef5,ef8,ef9,ef49,el,sb,bk').split(',').map(x => x.trim()).filter(x => SOURCES[x]))].slice(0, 16);
   if (diag) {
     res.setHeader('Cache-Control', 'no-store');
