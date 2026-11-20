@@ -3985,6 +3985,7 @@ function editKb(id) {
   kbMgPaint();
   $('kb-links').innerHTML = (x && x.links && x.links.length ? x.links : [{ url: '' }]).map(l => kbLinkRow(l.url, l.label)).join('');
   $('kb-files').innerHTML = kbFilesHtml(kbFiles); $('kb-msg').classList.add('hidden');
+  $('kb-dialog').firstElementChild.classList.remove('kb-wide');
   $('kb-view').classList.add('hidden'); $('kb-edit').classList.remove('hidden'); $('kb-dialog').classList.remove('hidden');
   if (!x) setTimeout(() => $('kb-title').focus(), 50);
 }
@@ -10236,10 +10237,20 @@ function invHtml(x) {
         <span class="min-w-0 flex-1"><span class="block text-[14px] font-semibold">${mark(i.n)}${i.ok ? '' : ' <span class="text-[11px] font-normal text-amber-600 dark:text-amber-400">offen</span>'}</span><span class="block text-[12px] text-slate-500 dark:text-slate-400">📍 ${esc(i.z.n === i.f ? i.f : i.z.n + ' · ' + i.f)}${i.sub ? ' · ' + esc(i.sub) : ''}</span></span></button>`).join('')}</div>`
       : `<p class="rounded-2xl bg-slate-100 dark:bg-slate-800/70 p-3 text-left text-sm text-slate-500 dark:text-slate-400">Nichts gefunden für „${esc(invQ)}“.</p>`;
     return h; }
-  h += `<div class="relative mx-auto" style="width:300px;max-width:100%;height:${H}px"><img src="/Bilder/Enyaq/enyaq-top.webp" alt="Enyaq von oben" width="240" height="478" draggable="false" class="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 select-none opacity-90 dark:opacity-80" style="width:${W}px;height:${H}px">
+  const desk = isDesk(), pinsW = desk ? 290 : 300, HH = desk ? 480 : H, WW = Math.round(HH * 240 / 478);
+  if (desk) h += '<div class="flex items-start gap-4">';
+  h += `<div class="relative ${desk ? 'shrink-0' : 'mx-auto'}" style="width:${pinsW}px;max-width:100%;height:${HH}px"><img src="/Bilder/Enyaq/enyaq-top.webp" alt="Enyaq von oben" width="240" height="478" draggable="false" class="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 select-none opacity-90 dark:opacity-80" style="width:${WW}px;height:${HH}px">
     ${zs.map(z => { const on = z.n === invZ, o = invOpenN(z.items);
       return `<button type="button" data-invz="${esc(z.n)}" class="absolute flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 whitespace-nowrap rounded-full py-[3px] pl-1.5 pr-2 text-[11.5px] font-bold shadow-sm transition active:scale-95 ${on ? 'bg-emerald-500 text-emerald-950 ring-4 ring-emerald-500/30' : 'bg-white/95 text-slate-800 ring-1 ring-slate-300 dark:bg-slate-900/95 dark:text-slate-100 dark:ring-slate-700'}" style="left:${z.x}%;top:${z.y}%"><span class="text-[13px]">${z.e}</span>${esc(z.n)} <span class="opacity-60">${z.items.length}</span>${o ? '<span class="h-1.5 w-1.5 rounded-full bg-amber-500"></span>' : ''}</button>`; }).join('')}</div>
-    <p class="-mt-1 text-center text-[11px] text-slate-500 dark:text-slate-400"><span class="inline-block h-1.5 w-1.5 rounded-full bg-amber-500 align-middle"></span> etwas offen · Bereich antippen</p>`;
+    ${desk ? '' : '<p class="-mt-1 text-center text-[11px] text-slate-500 dark:text-slate-400"><span class="inline-block h-1.5 w-1.5 rounded-full bg-amber-500 align-middle"></span> etwas offen · Bereich antippen</p>'}`;
+  if (desk) {   // PC: gewählter Bereich rechts, alle Fächer als Kacheln nebeneinander (statt Fächer-Leiste)
+    h += `<div id="inv-zone" class="min-w-0 flex-1 text-left"><div class="flex items-baseline justify-between gap-2"><p class="text-[17px] font-bold">${zc.e} ${esc(zc.n)}</p><span class="text-[12px] text-slate-500 dark:text-slate-400">${zc.items.length} Dinge${zc.fs.length > 1 ? ' · ' + zc.fs.length + ' Fächer' : ''} · ${invOpenN(zc.items) ? invOpenN(zc.items) + ' offen' : 'alles da'}</span></div>
+      <div class="mt-2.5 grid grid-cols-3 items-start gap-2.5">${zc.fs.map(f => `<div class="rounded-2xl bg-slate-100 dark:bg-slate-800/60 px-3 pb-1 pt-2.5"><p class="text-[10.5px] font-bold uppercase tracking-[0.06em] text-slate-500 dark:text-slate-400">${esc(f.name)}</p>${f.items.map(i => invItem(i)).join('')}</div>`).join('')}</div>
+      <p class="mt-2.5 text-[11.5px] text-slate-500 dark:text-slate-400"><span class="inline-block h-1.5 w-1.5 rounded-full bg-amber-500 align-middle"></span> etwas offen · anderen Bereich am Auto anklicken · ← → wechselt Bereiche</p></div></div>
+      <button type="button" data-invtxt class="w-full text-center text-[12px] font-semibold text-slate-500 dark:text-slate-400">${invTxt ? 'Text ausblenden' : 'Als Text anzeigen'}</button>
+      ${invTxt ? `<div class="rounded-2xl bg-slate-100 dark:bg-slate-800/60 p-3 text-sm leading-6 whitespace-pre-wrap break-words text-left">${kbLinkify(x.text)}</div>` : ''}`;
+    return h;
+  }
   const fsel = zc.fs.some(f => f.name === invF) ? invF : null, shown = fsel ? zc.fs.filter(f => f.name === fsel) : zc.fs;
   h += `<div id="inv-zone" class="rounded-2xl bg-slate-100 dark:bg-slate-800/60 px-3 pb-1.5 pt-3 text-left"><div class="flex items-baseline justify-between gap-2"><p class="text-[15px] font-bold">${zc.e} ${esc(zc.n)}</p><span class="text-[11.5px] text-slate-500 dark:text-slate-400">${zc.items.length} Dinge${zc.fs.length > 1 ? ' · ' + zc.fs.length + ' Fächer' : ''}${invOpenN(zc.items) ? ' · ' + invOpenN(zc.items) + ' offen' : ''}</span></div>
     ${zc.fs.length > 1 ? `<div class="no-scrollbar -mx-1 mt-2 flex gap-1.5 overflow-x-auto px-1 pb-1 text-[11.5px] font-semibold">${[['', 'Alle']].concat(zc.fs.map(f => [f.name, f.name])).map(([k, n]) => `<button type="button" data-invf="${esc(k)}" class="shrink-0 rounded-lg px-2.5 py-1 ${(fsel || '') === k ? 'bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900' : 'bg-white text-slate-600 dark:bg-slate-900 dark:text-slate-400'}">${esc(n)}</button>`).join('')}</div>` : ''}
@@ -10264,6 +10275,13 @@ document.addEventListener('click', (e) => {
   const f = e.target.closest('[data-invf]'); if (f) { invF = f.dataset.invf || null; invRender(); }
 });
 document.addEventListener('input', (e) => { if (e.target.id === 'inv-q') { invQ = e.target.value; invRender(); } });
+/* PC: Dialog für Packlisten breit (Auto links, Bereich rechts); ← → wechselt den Bereich */
+{ const ok = openKb; openKb = function (id) { const r = ok.apply(this, arguments); try { const x = getKb().items.find(y => String(y.id) === String(id)); $('kb-dialog').firstElementChild.classList.toggle('kb-wide', !!x && invIs(x) && isDesk()); } catch (e) { } return r; }; }
+document.addEventListener('keydown', (e) => {
+  if ((e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') || !$('inv-box') || $('kb-dialog').classList.contains('hidden') || /INPUT|TEXTAREA|SELECT/.test((document.activeElement || {}).tagName || '')) return;
+  const x = getKb().items.find(y => String(y.id) === String(kbCur)); if (!x) return; const zs = invZones(invParse(x.text)), i = zs.findIndex(z => z.n === invZ); if (i < 0) return;
+  invZ = zs[(i + (e.key === 'ArrowRight' ? 1 : -1) + zs.length) % zs.length].n; invF = null; e.preventDefault(); invRender();
+});
 
 // ───── src/29-geraetecheck.js ─────
 /* =====================================================================

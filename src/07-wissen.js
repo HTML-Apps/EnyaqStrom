@@ -247,6 +247,7 @@ function editKb(id) {
   kbMgPaint();
   $('kb-links').innerHTML = (x && x.links && x.links.length ? x.links : [{ url: '' }]).map(l => kbLinkRow(l.url, l.label)).join('');
   $('kb-files').innerHTML = kbFilesHtml(kbFiles); $('kb-msg').classList.add('hidden');
+  $('kb-dialog').firstElementChild.classList.remove('kb-wide');
   $('kb-view').classList.add('hidden'); $('kb-edit').classList.remove('hidden'); $('kb-dialog').classList.remove('hidden');
   if (!x) setTimeout(() => $('kb-title').focus(), 50);
 }
