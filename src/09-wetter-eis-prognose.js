@@ -368,6 +368,7 @@ $('set-wx-icons').addEventListener('change', (e) => { setQuickSetting('wxIcons',
    hängt so nur an der echten Kartenbreite, nicht an Fenstergröße/Zeitpunkt des Zeichnens (vorher blieben am PC manchmal 3 Tage stehen) */
 const wxoN = () => 7;
 let wxoNLast = 0;
+try { new ResizeObserver(() => { const w = $('wxo-card').clientWidth; if (w > 0) $('wxo-days').dataset.n = w >= 660 ? 7 : w >= 470 ? 5 : 3; }).observe($('wxo-card')); } catch (e) { }
 let wxoTok = 0, wxoLast = null;
 const wxoFmtR = (km) => fmt(Math.round(km / 5) * 5, 0);
 const wxoLowR = (km) => Math.round(km / 5) * 5 < 250;                                // Reichweite unter 250 km: ganz in Rot

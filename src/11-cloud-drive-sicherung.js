@@ -50,9 +50,11 @@ function pushPrefs() {
   if (pb) Object.keys(all).forEach(k => { if (labCanon(all[k] ?? null) !== labCanon(pb[k] ?? null)) rest[k] = all[k]; });
   if (pb && Object.keys(rest).length) save(KEY_PREFBASE, { ...pb, ...rest });
   try { const sz = JSON.stringify(o).length; if (sz > 850000) syncErr({ message: 'Cloud-Dokument fast voll (' + Math.round(sz / 1024) + ' KB von 1024 KB)' }); } catch (e) { }
-  if (window.cloud.mergePrefs) window.cloud.mergePrefs(rest, set, del, (cl) => lab ? labNoFc(labMerge(lab, cl && typeof cl === 'object' ? cl : null)) : cl, (ck) => kbMerge(kb, ck && typeof ck === 'object' ? ck : null))
-    .then(() => { save('enyaq.syncOk', Date.now()); }).catch((e) => { syncErr(e); window.cloud.patchPrefs(rest, set, del).catch(syncErr); });
-  else window.cloud.patchPrefs(rest, set, del).catch(() => { });
+  /* Einstellungen & Co. sofort als normales Schreiben (wirkt lokal sofort, auch für eintreffende Cloud-Stände) – eine Transaktion gilt erst nach der Bestätigung
+     durch den Server; ein Cloud-Stand dazwischen hat sonst die gerade geänderte Einstellung (z. B. Startseite-Reihenfolge) wieder zurückgesetzt */
+  if (Object.keys(rest).length || Object.keys(set).length || del.length || !window.cloud.mergePrefs) window.cloud.patchPrefs(rest, set, del).catch(syncErr);
+  if (window.cloud.mergePrefs) window.cloud.mergePrefs({}, {}, [], (cl) => lab ? labNoFc(labMerge(lab, cl && typeof cl === 'object' ? cl : null)) : cl, (ck) => kbMerge(kb, ck && typeof ck === 'object' ? ck : null))
+    .then(() => { save('enyaq.syncOk', Date.now()); }).catch(syncErr);
   if (base) save(KEY_SETBASE, { ...base, ...set, ...Object.fromEntries(del.map(k => [k, undefined])) });
 }
 window.onCloudPrefs = (d, first, uid) => {
