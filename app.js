@@ -10771,3 +10771,56 @@ function pcWxoSheet(box) {
   iceDays(days.map(x => x.d)).then(map => { box.querySelectorAll('[data-wdd]').forEach(el => { const r = map[el.dataset.wdd]; if (!r || r.p < 20) return;
     el.insertAdjacentHTML('beforeend', `<span class="absolute -top-2 right-2 inline-flex items-center gap-0.5 rounded-full py-0.5 pl-1 pr-2 text-[11.5px] font-bold leading-none text-slate-900 shadow" style="background:${ICE_COL(r.p)}" title="Eis morgens ≈ ${r.p} % (${ICE_NAME(r.p)}, Scheibe ≈ ${fmt(Math.round(r.minTg) || 0, 0).replace('-', '−')} °C)"><span aria-hidden="true">❄️</span>${r.p} %</span>`); }); }).catch(() => { });
 }
+
+/* ---- Rückblick „Wrapped“ am PC (Variante A): geteilte Bühne – links Zahl + Text groß, rechts ein großes Bild je Kapitel
+   (Route zum Vergleichsziel, Kästchen-Raster Haushaltsstrom, WLTP-Skala, Kostenaufteilung, Sprit vs. Strom) + Zusatzkacheln.
+   Kapitel erkannt an der Seitenfarbe aus wrPages. Pfeile an den Seiten, ← → / Leertaste. Handy unverändert. */
+{ const wp = wrPages; wrPages = function (p) { const pages = wp.apply(this, arguments); try { const st = p.st || wrStats(p); pages.forEach(pg => { pg.side = pcWrSide(pg.bg, st, p); }); } catch (e) { } return pages; }; }
+function pcWrSide(bg, st, p) {
+  const MU = '#cbd5e1', T = (l, v) => `<div style="border-radius:18px;background:rgba(255,255,255,.08);padding:14px 16px;min-width:0"><div style="font-size:12.5px;color:${MU}">${l}</div><div style="${WR_F};font-size:30px;font-weight:700;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${v}</div></div>`;
+  const tiles = (a) => `<div style="display:grid;grid-template-columns:repeat(${a.length},minmax(0,1fr));gap:12px;width:100%;margin-top:22px">${a.map(x => T(x[0], x[1])).join('')}</div>`;
+  const days = st.days || 1, km = st.km || 0;
+  if (bg === '#022c22') {   // Strecke: Route zum Vergleichsziel
+    const dc = wrDist(km), city = ((wxLoc() || {}).label || '').split(',')[0] || 'Zuhause', ac = '#6ee7b7', path = 'M40 380 C 140 320, 120 250, 220 220 S 360 160, 400 115 S 540 60, 600 32';
+    return `<svg viewBox="0 0 640 420" style="width:100%;max-width:640px;height:auto;overflow:visible" aria-hidden="true"><path d="${path}" fill="none" stroke="${ac}" stroke-width="5" stroke-dasharray="2 12" stroke-linecap="round" opacity=".5"/>
+      <path d="${path}" fill="none" stroke="${ac}" stroke-width="5" stroke-linecap="round"/><circle cx="40" cy="380" r="11" fill="${ac}"/><circle cx="600" cy="32" r="12" fill="#022c22" stroke="${ac}" stroke-width="4"/>
+      <text x="62" y="392" fill="${MU}" font-size="17">${esc(city)}</text><text x="578" y="20" fill="#fff" font-size="18" font-weight="700" text-anchor="end">${esc(dc.dest || '')}</text></svg>`
+      + tiles([['pro Tag', fmt(km / days, 0) + ' km'], ['Zeitraum', wrDur(days)], ['Ladungen', fmt(st.n || 0, 0)]]);
+  }
+  if (bg === '#0c4a6e') {   // Energie: 100 Kästchen = Jahresstrom Single-Haushalt
+    const pct = Math.min(100, Math.round(st.kwh / WR_HOUSEHOLD * 100)), cells = Array.from({ length: 100 }, (_, i) => `<div style="aspect-ratio:1;border-radius:5px;background:${i < pct ? '#7dd3fc' : 'rgba(255,255,255,.12)'}"></div>`).join('');
+    return `<div style="width:100%;max-width:520px"><div style="display:grid;grid-template-columns:repeat(10,1fr);gap:6px">${cells}</div><div style="font-size:14px;color:${MU};margin-top:12px">1 Kästchen = ${fmt(WR_HOUSEHOLD / 100, 0)} kWh · 100 Kästchen = Jahresstrom eines Single-Haushalts</div></div>`
+      + tiles([['pro Ladung', st.n ? fmt(st.kwh / st.n, 1) + ' kWh' : '–'], ['pro Tag', fmt(st.kwh / days, 1) + ' kWh'], ['Ladungen', fmt(st.n || 0, 0)]]);
+  }
+  if (bg === '#422006') {   // Verbrauch: große Skala mit WLTP
+    const w = wltpVal(), v = st.kwh100; if (v == null) return '';
+    const lo = Math.min(w, v) * .8, hi = Math.max(w, v) * 1.2, x = (q) => ((q - lo) / (hi - lo) * 100).toFixed(1);
+    return `<div style="width:100%;max-width:600px;position:relative;height:150px"><div style="position:absolute;left:0;right:0;top:70px;height:14px;border-radius:7px;background:linear-gradient(90deg,#16a34a,#fcd34d,#ef4444);opacity:.85"></div>
+      <div style="position:absolute;left:${x(w)}%;top:40px;transform:translateX(-50%);text-align:center"><div style="font-size:13px;color:${MU}">WLTP</div><div style="width:3px;height:52px;margin:2px auto 0;background:#fff;opacity:.7"></div><div style="font-size:15px;font-weight:700">${fmt(w, 1)}</div></div>
+      <div style="position:absolute;left:${x(v)}%;top:0;transform:translateX(-50%);text-align:center"><div style="${WR_F};font-size:30px;font-weight:700;color:#fcd34d">${fmt(v, 1)}</div><div style="width:22px;height:22px;margin:22px auto 0;border-radius:11px;background:#fcd34d;box-shadow:0 0 0 6px rgba(252,211,77,.3)"></div></div></div>`
+      + tiles([['Unterschied', (v >= w ? '+' : '−') + fmt(Math.abs(v / w - 1) * 100, 0) + ' %'], ['auf 100 km', fmt(v - w, 1).replace(/^(?!-)/, '+').replace('-', '−') + ' kWh'], ['Strecke', fmt(km, 0) + ' km']]);
+  }
+  if (bg === '#4c0519') {   // Kosten: Aufteilung Laden / sonstige Kosten
+    const other = Math.max(0, st.cost - st.laden), mx = Math.max(st.cost, 0.01), bar = (l, v, c) => `<div style="margin-top:18px"><div style="display:flex;justify-content:space-between;font-size:15px;color:${MU}"><span>${l}</span><span style="color:#fff;font-weight:700">${eur(v)}</span></div><div style="height:22px;border-radius:11px;background:rgba(255,255,255,.12);margin-top:6px;overflow:hidden"><div style="width:${Math.max(2, v / mx * 100)}%;height:100%;border-radius:11px;background:${c}"></div></div></div>`;
+    return `<div style="width:100%;max-width:600px">${bar('Laden', st.laden, '#fda4af')}${bar('Sonstige Kosten (Wartung, Versicherung …)', other, 'rgba(255,255,255,.55)')}${bar('Gesamt', st.cost, '#fb7185')}</div>`
+      + tiles([['pro Tag', eur(st.cost / days)], ['pro 100 km', km > 0 ? eur(st.cost / km * 100) : '–'], ['Ladungen', fmt(st.n || 0, 0)]]);
+  }
+  if (bg === '#1e1b4b') {   // Ersparnis: Sprit vs. Strom als hohe Säulen
+    const cc = cmpCar(), lit = km * cc.l / 100, fuel = lit * cc.eur, mx = Math.max(fuel, st.laden, 0.01), col = (l, v, c) => `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%"><div style="${WR_F};font-size:34px;font-weight:700">${fmt(v, 0)} €</div><div style="width:70%;height:${Math.max(3, v / mx * 78)}%;border-radius:18px 18px 6px 6px;background:${c};margin-top:8px"></div><div style="font-size:14px;color:${MU};margin-top:10px;text-align:center">${l}</div></div>`;
+    return `<div style="width:100%;max-width:520px;height:340px;display:flex;gap:28px">${col('Sprit · ' + esc(cc.name), fuel, 'rgba(255,255,255,.5)')}${col('Strom fürs Laden', st.laden, '#c4b5fd')}</div>`
+      + tiles([['Liter Sprit', fmt(lit, 0) + ' l'], ['Strom', km > 0 ? fmt(st.laden / km * 100, 1) + ' ct/km' : '–'], ['Sprit', km > 0 ? fmt(fuel / km * 100, 1) + ' ct/km' : '–']]);
+  }
+  return '';
+}
+{ const wr = wrRender; wrRender = function () {
+  const r = wr.apply(this, arguments), pg = wrCur && wrCur.pages[wrIdx], box = $('wr-page'); if (!pg || !box) return r;
+  box.classList.toggle('wr-desk', isDesk()); if (!isDesk()) return r;
+  const body = [...box.children].find(c => c.style.pointerEvents === 'none');
+  if (body) { const bigT = (/font-size:min\(34vw,150px\)[^>]*>([^<]*)</.exec(body.innerHTML) || [])[1] || '', bigPx = Math.max(110, Math.min(210, Math.floor((innerWidth / (pg.side ? 2 : 1) - 170) / (Math.max(3, bigT.length) * 0.56))));
+    body.innerHTML = body.innerHTML.replace('font-size:min(34vw,150px)', 'font-size:' + bigPx + 'px').replace('font-size:52px;font-weight:600', 'font-size:76px;font-weight:600').replace('<div style="font-size:22px;color:#cbd5e1">', '<div style="font-size:28px;color:#cbd5e1">').replace('font-size:22px;line-height:1.3;margin-top:22px', 'font-size:28px;line-height:1.3;margin-top:28px;max-width:620px');
+    if (pg.side) { const g = document.createElement('div'); g.style.cssText = 'position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:64px;align-items:center';
+      body.style.pointerEvents = 'none'; body.replaceWith(g); g.appendChild(body); const s = document.createElement('div'); s.style.cssText = 'display:flex;flex-direction:column;align-items:center;pointer-events:none'; s.innerHTML = pg.side; g.appendChild(s); } }
+  const n = wrCur.pages.length, arr = (k, on, txt, side) => `<button data-wr="${k}" aria-label="${k === 'next' ? 'Weiter' : 'Zurück'}" style="position:absolute;${side}:20px;top:50%;transform:translateY(-50%);z-index:2;width:56px;height:56px;border-radius:28px;border:0;cursor:pointer;font-size:30px;font-weight:800;${on ? (k === 'next' ? 'background:' + pg.ac + ';color:#0f172a' : 'background:rgba(255,255,255,.14);color:#fff') : 'visibility:hidden'}">${txt}</button>`;
+  box.insertAdjacentHTML('beforeend', arr('prev', wrIdx > 0, '‹', 'left') + arr('next', wrIdx < n - 1, '›', 'right'));
+  return r; }; }
+document.addEventListener('keydown', e => { if (wrCur && e.key === ' ' && isDesk()) { e.preventDefault(); try { wrGo(1); } catch (er) { } } });
