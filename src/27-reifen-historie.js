@@ -1,6 +1,6 @@
 /* =====================================================================
    Reifen › Historie: Reifensätze mit Bild, was war wann drauf, Profil über die Laufleistung, Rekorde, Wechsel-Protokoll.
-   lab.tsets = [{ id, sea: 'so'|'aw'|'wi', name, size?, dot?, buy (JJJJ-MM-TT), buyKm?, price?, mnt (beim Kauf montiert, Standard ja), img? (Version des Bilds),
+   lab.tsets = [{ id, sea: 'so'|'aw'|'wi', name, size?, dot?, buy (JJJJ-MM-TT), buyKm?, price?, nw? (Neuprofil mm), mnt (beim Kauf montiert, Standard ja), img? (Version des Bilds),
                   end?: { date, km?, why: 'worn'|'sold'|'gone'|'dmg', mm?, earn? } }]
    lab.tsw   = [{ id, date, km?, ts }]   Reifenwechsel: ab diesem Tag ist Satz ts montiert
    Messungen (lab.tires) gehören zum Satz m.ts, sonst zum Satz derselben Saison, dessen Zeitraum das Messdatum enthält.
@@ -219,6 +219,7 @@ function openTsSheet(id, sea0) {
     <div class="grid grid-cols-[1.4fr_1fr] gap-2"><div class="min-w-0"><label for="ts-size" class="text-xs text-slate-500 dark:text-slate-400">Größe</label><input id="ts-size" type="text" maxlength="24" value="${esc((s && s.size) || '')}" placeholder="235/50 R20" class="${inCls}"></div><div class="min-w-0"><label for="ts-dot" class="text-xs text-slate-500 dark:text-slate-400">DOT (WWJJ)</label><input id="ts-dot" type="text" inputmode="numeric" maxlength="4" value="${esc((s && s.dot) || '')}" placeholder="1226" class="${inCls}"></div></div>
     <div class="grid grid-cols-[1.35fr_1fr] gap-2">${dIn('ts-buy', 'Gekauft / montiert am', s ? s.buy : first || wxIso(new Date()))}${kmF('ts-buykm', 'km-Stand', s ? s.buyKm : (first ? '' : km0 || ''))}</div>
     <div class="grid grid-cols-2 gap-2">${fld('ts-price', 'Preis Satz (€)', s ? s.price : '', 'z. B. 780')}<label class="flex items-end gap-2 pb-3 text-[13px]"><input id="ts-mnt" type="checkbox" class="h-5 w-5 accent-emerald-600"${!s || s.mnt !== false ? ' checked' : ''}> beim Kauf montiert</label></div>
+    <div class="grid grid-cols-2 items-end gap-2">${fld('ts-nw', 'Neuprofil (mm)', s && s.nw ? String(s.nw).replace('.', ',') : '', 'z. B. 8,5')}<p class="pb-2 text-[11px] leading-snug text-slate-500 dark:text-slate-400 text-left">Profiltiefe des neuen Reifens – für den Restweg am PC. Leer = 8 mm.</p></div>
     <details class="rounded-2xl bg-slate-100 dark:bg-slate-800/70 px-3 py-2"${e ? ' open' : ''}><summary class="cursor-pointer text-sm font-semibold">Satz ausgemustert${e ? ' · ' + (TS_WHY[e.why] || TS_WHY.worn)[0] : ''}</summary>
       <div class="mt-2 space-y-2"><div class="grid grid-cols-[1.35fr_1fr] gap-2">${dIn('ts-end', 'Am', e ? e.date : '')}${kmF('ts-endkm', 'km-Stand', e ? e.km : '')}</div>
       <div class="grid grid-cols-2 gap-2"><div class="min-w-0"><label for="ts-why" class="text-xs text-slate-500 dark:text-slate-400">Grund</label><select id="ts-why" class="${inCls}">${Object.entries(TS_WHY).map(([k, [n]]) => `<option value="${k}"${e && e.why === k ? ' selected' : ''}>${n}</option>`).join('')}</select></div>${fld('ts-mm', 'Restprofil (mm)', e && e.mm != null ? e.mm : '', st && st.mmEnd != null ? fmt(st.mmEnd, 1) : '')}</div>
@@ -250,7 +251,7 @@ async function tsSheetClick(e) {
   if (!buy) { $('ts-msg').textContent = 'Bitte das Kauf-/Montagedatum eintragen.'; return; }
   const old = tsEdit ? tsById(tsEdit) : null, s = { id: tsEdit || labId(), sea, name, buy, mnt: $('ts-mnt').checked };
   const size = $('ts-size').value.trim(), dot = $('ts-dot').value.trim(), buyKm = tsNum('ts-buykm'), price = tsNum('ts-price');
-  if (size) s.size = size; if (dot) s.dot = dot; if (buyKm > 0) s.buyKm = Math.round(buyKm); if (price > 0) s.price = Math.round(price * 100) / 100;
+  if (size) s.size = size; if (dot) s.dot = dot; if (buyKm > 0) s.buyKm = Math.round(buyKm); if (price > 0) s.price = Math.round(price * 100) / 100; const nw = tsNum('ts-nw'); if (nw >= 3 && nw <= 15) s.nw = Math.round(nw * 10) / 10;
   const end = $('ts-end').value; if (end) { if (end < buy) { $('ts-msg').textContent = 'Das Ausmusterungs-Datum liegt vor dem Kauf.'; return; }
     s.end = { date: end, why: $('ts-why').value || 'worn' }; const ek = tsNum('ts-endkm'), mm = tsNum('ts-mm'), earn = tsNum('ts-earn');
     if (ek > 0) s.end.km = Math.round(ek); if (mm >= 0 && mm <= 15) s.end.mm = Math.round(mm * 10) / 10; if (earn > 0) s.end.earn = Math.round(earn * 100) / 100; }
