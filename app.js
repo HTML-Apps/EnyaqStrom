@@ -2879,9 +2879,13 @@ async function initCarousel() {
     const bw = box.clientWidth - 32, bh = box.clientHeight - 10; if (bw <= 0 || bh <= 0) return;
     const over = imgs.map(m => m.aspect ? m.extra * Math.min(bh, bw / m.aspect) : 0);
     els.forEach((el, i) => { el.style.transform = imgs[i].tech ? '' : 'translateY(' + (over[i] - over[0]).toFixed(1) + 'px)'; });
+    /* 360°-Ansicht: über die ganze Breite statt nur so hoch wie die Fläche (höchstens so hoch wie die Fläche – sonst verdeckt es oben die Jahreszahlen) */
+    imgs.forEach((m, i) => { if (!m.c360) return; const el = els[i], h = Math.min((box.clientWidth - 8) / m.aspect, bh), o = m.extra * h;
+      el.className = 'absolute left-1/2 max-w-none'; el.style.width = Math.round(h * m.aspect) + 'px'; el.style.height = Math.round(h) + 'px'; el.style.bottom = '10px';
+      el.style.transform = 'translateX(-50%) translateY(' + (o - over[0]).toFixed(1) + 'px)'; });
   };
   align(); window.addEventListener('resize', align);
-  if (c3) { const ci = imgs.findIndex(m => m.c360); let fi = 0; setInterval(() => { if (cur !== ci || document.hidden || lbOpen || $('view-dashboard').classList.contains('hidden')) return; fi = (fi + 1) % c3.f.length; els[ci].src = c3.f[fi]; }, 700); }   // 360°: dreht sich langsam, solange sichtbar
+  if (c3) { box.classList.add('has-c360'); const ci = imgs.findIndex(m => m.c360); let fi = 0; setInterval(() => { if (cur !== ci || document.hidden || lbOpen || $('view-dashboard').classList.contains('hidden')) return; fi = (fi + 1) % c3.f.length; els[ci].src = c3.f[fi]; }, 700); }   // 360°: dreht sich langsam, solange sichtbar
   const show = (n) => {
     if (slides.length < 2) return; n = ((n % slides.length) + slides.length) % slides.length;   // Endlosschleife: nach Bild 3 wieder Bild 1, vor Bild 1 Bild 3
     if (lock || n === cur) return;
@@ -10851,7 +10855,7 @@ var c360Ov = null;
 async function c360Open() {
   const c = await c360Frames(); if (!c) return; let i = 0, auto = true, t = 0, sx = null, si = 0, pushed = false;
   const ov = document.createElement('div'); c360Ov = ov; ov.className = 'fixed inset-0 z-[95] select-none bg-black text-white'; ov.style.touchAction = 'none';
-  ov.innerHTML = `<img alt="Enyaq 360°" draggable="false" class="absolute inset-0 h-full w-full object-contain" style="padding:max(64px,env(safe-area-inset-top)) 16px max(90px,env(safe-area-inset-bottom))" src="${c.f[0]}">
+  ov.innerHTML = `<img alt="Enyaq 360°" draggable="false" class="absolute inset-0 h-full w-full object-contain" style="padding:max(56px,env(safe-area-inset-top)) 4px max(84px,env(safe-area-inset-bottom))" src="${c.f[0]}">
     <p class="absolute left-4 font-barlow text-xl font-bold uppercase tracking-[0.1em]" style="top:max(16px,env(safe-area-inset-top))">360°</p>
     <button type="button" data-c3="x" aria-label="Schließen" class="absolute right-3 flex h-11 w-11 items-center justify-center rounded-full bg-white/15 text-xl" style="top:max(8px,env(safe-area-inset-top))">✕</button>
     <div class="absolute inset-x-0 flex items-center justify-center gap-3" style="bottom:max(22px,env(safe-area-inset-bottom))">

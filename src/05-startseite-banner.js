@@ -199,9 +199,13 @@ async function initCarousel() {
     const bw = box.clientWidth - 32, bh = box.clientHeight - 10; if (bw <= 0 || bh <= 0) return;
     const over = imgs.map(m => m.aspect ? m.extra * Math.min(bh, bw / m.aspect) : 0);
     els.forEach((el, i) => { el.style.transform = imgs[i].tech ? '' : 'translateY(' + (over[i] - over[0]).toFixed(1) + 'px)'; });
+    /* 360°-Ansicht: über die ganze Breite statt nur so hoch wie die Fläche (höchstens so hoch wie die Fläche – sonst verdeckt es oben die Jahreszahlen) */
+    imgs.forEach((m, i) => { if (!m.c360) return; const el = els[i], h = Math.min((box.clientWidth - 8) / m.aspect, bh), o = m.extra * h;
+      el.className = 'absolute left-1/2 max-w-none'; el.style.width = Math.round(h * m.aspect) + 'px'; el.style.height = Math.round(h) + 'px'; el.style.bottom = '10px';
+      el.style.transform = 'translateX(-50%) translateY(' + (o - over[0]).toFixed(1) + 'px)'; });
   };
   align(); window.addEventListener('resize', align);
-  if (c3) { const ci = imgs.findIndex(m => m.c360); let fi = 0; setInterval(() => { if (cur !== ci || document.hidden || lbOpen || $('view-dashboard').classList.contains('hidden')) return; fi = (fi + 1) % c3.f.length; els[ci].src = c3.f[fi]; }, 700); }   // 360°: dreht sich langsam, solange sichtbar
+  if (c3) { box.classList.add('has-c360'); const ci = imgs.findIndex(m => m.c360); let fi = 0; setInterval(() => { if (cur !== ci || document.hidden || lbOpen || $('view-dashboard').classList.contains('hidden')) return; fi = (fi + 1) % c3.f.length; els[ci].src = c3.f[fi]; }, 700); }   // 360°: dreht sich langsam, solange sichtbar
   const show = (n) => {
     if (slides.length < 2) return; n = ((n % slides.length) + slides.length) % slides.length;   // Endlosschleife: nach Bild 3 wieder Bild 1, vor Bild 1 Bild 3
     if (lock || n === cur) return;

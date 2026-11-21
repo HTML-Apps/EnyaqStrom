@@ -20,7 +20,7 @@ var c360Ov = null;
 async function c360Open() {
   const c = await c360Frames(); if (!c) return; let i = 0, auto = true, t = 0, sx = null, si = 0, pushed = false;
   const ov = document.createElement('div'); c360Ov = ov; ov.className = 'fixed inset-0 z-[95] select-none bg-black text-white'; ov.style.touchAction = 'none';
-  ov.innerHTML = `<img alt="Enyaq 360°" draggable="false" class="absolute inset-0 h-full w-full object-contain" style="padding:max(64px,env(safe-area-inset-top)) 16px max(90px,env(safe-area-inset-bottom))" src="${c.f[0]}">
+  ov.innerHTML = `<img alt="Enyaq 360°" draggable="false" class="absolute inset-0 h-full w-full object-contain" style="padding:max(56px,env(safe-area-inset-top)) 4px max(84px,env(safe-area-inset-bottom))" src="${c.f[0]}">
     <p class="absolute left-4 font-barlow text-xl font-bold uppercase tracking-[0.1em]" style="top:max(16px,env(safe-area-inset-top))">360°</p>
     <button type="button" data-c3="x" aria-label="Schließen" class="absolute right-3 flex h-11 w-11 items-center justify-center rounded-full bg-white/15 text-xl" style="top:max(8px,env(safe-area-inset-top))">✕</button>
     <div class="absolute inset-x-0 flex items-center justify-center gap-3" style="bottom:max(22px,env(safe-area-inset-bottom))">
