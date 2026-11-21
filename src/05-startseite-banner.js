@@ -182,6 +182,7 @@ const carAutoMs = () => { const v = Number(getSettings().carSec); return (Number
 async function initCarousel() {
   const box = $('car-scroll'), dash = $('car-dashes'); if (!box) return;
   const prof = CAR_HERO[carProf().key], imgs = (prof || HERO_IMGS).map(m => ({ ...m }));
+  const c3 = await c360Frames().catch(() => null); if (c3) imgs.splice(1, 0, { name: '360', src: c3.f[0], aspect: c3.aspect, extra: 0.03, noHd: true, c360: true });   // eigene 360°-Ansicht (src/32) als 2. Bild
   if (prof) { const f = box.querySelector('.car-slide img'); if (f && !f.src.endsWith(prof[0].src)) f.src = prof[0].src; }                                           // Bild 4/5 = Technik (Akku, Motor): mittig und etwas kleiner, ohne Standlinie
   /* Die Bilder liegen übereinander; ein Wisch (oder Pfeiltaste) blendet per CSS-Übergang auf das nächste bzw. vorherige Bild über. Pro Wisch genau ein Bild.
      Bewusst ohne mitlaufende Bewegung beim Wischen: Nur Deckkraft wird animiert (läuft ohne JavaScript pro Frame), dadurch ruckelt nichts.
@@ -199,6 +200,7 @@ async function initCarousel() {
     els.forEach((el, i) => { el.style.transform = imgs[i].tech ? '' : 'translateY(' + (over[i] - over[0]).toFixed(1) + 'px)'; });
   };
   align(); window.addEventListener('resize', align);
+  if (c3) { const ci = imgs.findIndex(m => m.c360); let fi = 0; setInterval(() => { if (cur !== ci || document.hidden || lbOpen || $('view-dashboard').classList.contains('hidden')) return; fi = (fi + 1) % c3.f.length; els[ci].src = c3.f[fi]; }, 700); }   // 360°: dreht sich langsam, solange sichtbar
   const show = (n) => {
     if (slides.length < 2) return; n = ((n % slides.length) + slides.length) % slides.length;   // Endlosschleife: nach Bild 3 wieder Bild 1, vor Bild 1 Bild 3
     if (lock || n === cur) return;
@@ -210,9 +212,9 @@ async function initCarousel() {
   const tick = () => { if (!document.hidden && !liveHero && !lbOpen && !$('view-dashboard').classList.contains('hidden')) show(cur + 1 < Math.min(slides.length, carAutoN()) ? cur + 1 : 0); schedule(); };   // im Live-Modus pausiert
   schedule();
   box.addEventListener('pointerdown', (e) => { sx = e.clientX; sy = e.clientY; tracking = e.clientX >= 40; });   // vom linken Rand: öffnet das Schnellmenü, nicht das Karussell
-  box.addEventListener('pointerup', (e) => { if (!tracking) return; tracking = false; const dx = e.clientX - sx, dy = e.clientY - sy; if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.3) show(cur + (dx < 0 ? 1 : -1)); else if (Math.abs(dx) < 10 && Math.abs(dy) < 10 && !liveHero) lbShow(cur); });   // kurzer Tipp: Vollbild mit Zoom
+  box.addEventListener('pointerup', (e) => { if (!tracking) return; tracking = false; const dx = e.clientX - sx, dy = e.clientY - sy; if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.3) show(cur + (dx < 0 ? 1 : -1)); else if (Math.abs(dx) < 10 && Math.abs(dy) < 10 && !liveHero) { if (imgs[cur].c360) c360Open(); else lbShow(cur); } });   // kurzer Tipp: Vollbild mit Zoom
   box.addEventListener('pointercancel', () => { tracking = false; });
-  box.addEventListener('keydown', (e) => { if (e.key === 'ArrowLeft') show(cur - 1); else if (e.key === 'ArrowRight') show(cur + 1); else if (e.key === 'Enter') lbShow(cur); });
+  box.addEventListener('keydown', (e) => { if (e.key === 'ArrowLeft') show(cur - 1); else if (e.key === 'ArrowRight') show(cur + 1); else if (e.key === 'Enter') { if (imgs[cur].c360) c360Open(); else lbShow(cur); } });
 
   /* ---- Vollbild mit Zoom (Tipp aufs Bild): zwei Finger zoomen, ein Finger verschiebt, Doppeltipp 2,5×; ungezoomt wischen = nächstes Bild,
      nach unten wischen, ✕ oder Zurück-Taste = schließen. Während es offen ist, wechselt das Karussell nicht. Gibt es Bilder/Enyaq/EnyaqN-hd.webp, wird es nachgeladen. */
