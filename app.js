@@ -4811,7 +4811,24 @@ function wxoHabits() {
   const pts = odoPts(); let kmDay = null;                                          // gemeinsamer km-Verlauf (auch Fahrtenbuch und Auto)
   if (pts.length >= 2) { const L = pts[pts.length - 1], lim = L[0] - 90 * 864e5, F = pts.find(q => q[0] >= lim) || pts[0], d = (L[0] - F[0]) / 864e5; if (d >= 7 && L[1] > F[1]) kmDay = (L[1] - F[1]) / d; }
   const ends = getReadings().filter(r => r.socEnd > 30).slice(-10).map(r => r.socEnd);
-  return { kmDay, target: ends.length ? Math.round(median(ends)) : 80 };
+  const wd = kmDay > 3 ? wxoWeekdays(pts, kmDay) : null;
+  return { kmDay, target: ends.length ? Math.round(median(ends)) : 80, wd, kmAt: (iso) => { if (!wd) return kmDay; const r = wd[new Date(iso + 'T12:00:00').getDay()]; return r.ok ? r.km : kmDay; } };
+}
+/** km je Wochentag (0 = So … 6 = Sa) aus dem km-Verlauf der letzten 120 Tage (ohne heute): je Kalendertag km = Stand Ende − Stand Anfang (zwischen zwei Ständen gleichmäßig verteilt).
+    Nur Tage, deren umgebende km-Stände höchstens 3 Tage auseinanderliegen, verraten den Wochentag (bei längeren Lücken wäre es nur der Gesamtdurchschnitt).
+    Neuere Tage zählen stärker (Halbwertszeit 45 Tage). Unter 3 solchen Tagen je Wochentag → Gesamtdurchschnitt (ok: false). */
+function wxoWeekdays(pts, kmDay) {
+  const out = [0, 1, 2, 3, 4, 5, 6].map(() => ({ w: 0, s: 0, n: 0 })); if (!pts || pts.length < 2) return out.map(() => ({ km: kmDay, ok: false, n: 0 }));
+  const t0 = new Date(); t0.setHours(0, 0, 0, 0); const today = t0.getTime(), first = Math.max(pts[0][0], today - 120 * 864e5);
+  const before = (t) => { let k = -1; for (let i = 0; i < pts.length && pts[i][0] <= t; i++) k = i; return k; };
+  for (let d = new Date(today - 864e5); d.getTime() >= first; d.setDate(d.getDate() - 1)) {
+    const a = d.getTime(), e = new Date(a); e.setDate(e.getDate() + 1); const b = e.getTime();
+    const i = before(a), j = pts.findIndex(q => q[0] >= b); if (i < 0 || j < 0) continue;
+    if (pts[j][0] - pts[i][0] > 3.2 * 864e5) continue;                                         // Lücke zu groß: Tag nicht zuordenbar
+    const km = Math.max(0, odoAt(b) - odoAt(a)), w = Math.pow(0.5, (today - a) / (45 * 864e5)), o = out[d.getDay()];
+    o.w += w; o.s += w * km; o.n++;
+  }
+  return out.map(o => o.n >= 3 && o.w > 0 ? { km: o.s / o.w, ok: true, n: o.n } : { km: kmDay, ok: false, n: o.n });
 }
 /** Aktueller Akkustand vom Auto (1 h zwischengespeichert – die Škoda-API erlaubt 20 Abfragen pro Stunde); bei Fehlern der letzte Wert bis 6 h alt */
 async function wxoSoc(force) {
@@ -4994,12 +5011,12 @@ async function renderWxo() {
       <div class="mx-1.5 mt-1.5 h-[5px] rounded-full bg-slate-200 dark:bg-slate-700"><div class="h-[5px] rounded-full bg-gradient-to-r from-emerald-500 to-sky-400" style="width:${Math.max(8, Math.min(100, x.r / best * 100)).toFixed(0)}%"></div></div>
       <p class="mt-0.5 text-center text-[12px]${wxoLowR(x.r) ? ' text-red-600 dark:text-red-400' : ''}"><b>${wxoFmtR(x.r)}</b> <span class="${wxoLowR(x.r) ? '' : 'text-slate-500 dark:text-slate-400'}">km</span></p></div>`; }).join('');
   wxoIceBadges(days.slice(0, wxoNLast).map(x => x.d), tok);
-  /* Reicht-bis: aktueller Akkustand vom Auto (Škoda-API) bis 20 % Reserve, mit Ø km/Tag und dem vorhergesagten Verbrauch des jeweiligen Tages.
+  /* Reicht-bis: aktueller Akkustand vom Auto (Škoda-API) bis 20 % Reserve, mit km je Wochentag (wxoWeekdays, sonst Ø km/Tag) und dem vorhergesagten Verbrauch des jeweiligen Tages.
      Ohne Fahrzeugdaten: ab dem typischen Ladeziel (Ladehub 20–80 %). */
   const hb = wxoHabits(), tip = $('wxo-tip'), soc = Number.isFinite(socNow) ? socNow : null, from = soc ?? hb.target;
   if (hb.kmDay > 3) {
     let e = cap * (from - WXO_RES) / 100, i = hl, n = 0;
-    while (n < 30 && e > 0) { const x = days[Math.min(i, days.length - 1)], need = hb.kmDay * x.k / 100; if (e < need) break; e -= need; i++; n++; }
+    while (n < 30 && e > 0) { const x = days[Math.min(i, days.length - 1)], need = hb.kmAt(x.d) * x.k / 100; if (e < need) break; e -= need; i++; n++; }
     const head = soc != null ? Math.round(soc) + ' % Restakku' : `Ladehub ${WXO_RES}–${hb.target} %`;
     const until = from <= WXO_RES ? 'unter der Reserve' : n <= 0 ? 'reicht keinen vollen Tag' : n === 1 ? 'reicht bis ' + (hl ? 'morgen' : 'heute Abend') : hl + n - 1 < days.length ? 'reicht bis ' + wxDay(days[hl + n - 1].d).wd + '. (' + n + ' Tage)' : 'reicht ca. ' + n + ' Tage';
     tip.textContent = head + ' – ' + until;
@@ -5018,6 +5035,15 @@ function wxoBoot() {
   const tip = $('wxo-tip'); tip.textContent = c && c.day === todayYMD() ? c.tip || '' : ''; tip.classList.toggle('hidden', !tip.textContent);
   if (!tip.textContent) { tip.textContent = ' '; tip.classList.remove('hidden'); }       // gleiche Höhe wie mit Text
   $('wxo-card').classList.remove('hidden');
+}
+/** Gelernte km je Wochentag für „So rechnet die Prognose“ (Mo zuerst; grau = noch zu wenig Tage → Gesamtdurchschnitt) */
+function wxoWdHtml() {
+  let h; try { h = wxoHabits(); } catch (e) { return ''; } if (!h || !h.wd) return '';
+  const N = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'], ord = [1, 2, 3, 4, 5, 6, 0], mx = Math.max(...h.wd.map(r => r.km), 1), any = h.wd.some(r => r.ok);
+  return `<div class="mt-1.5"><p>Gefahrene km je Wochentag${any ? '' : ' <span class="text-slate-400">(lernt noch – bis dahin Ø ' + fmt(h.kmDay, 0) + ' km/Tag)</span>'}:</p>
+    <div class="mt-1 grid grid-cols-7 gap-1 text-center">${ord.map(k => { const r = h.wd[k];
+      return `<div title="${r.ok ? 'gelernt aus ' + r.n + ' Tagen' : 'noch zu wenig Tage (' + r.n + ') – Ø aller Tage'}"><div class="mx-auto flex h-10 w-full max-w-[34px] items-end overflow-hidden rounded-md bg-slate-200 dark:bg-slate-700/60"><div class="w-full rounded-md ${r.ok ? 'bg-sky-500' : 'bg-slate-400 dark:bg-slate-500'}" style="height:${Math.max(4, Math.round(r.km / mx * 100))}%"></div></div><p class="mt-0.5 text-[11px] font-semibold">${N[k]}</p><p class="text-[11px] tabular-nums ${r.ok ? '' : 'text-slate-400'}">${fmt(r.km, 0)}</p></div>`; }).join('')}</div>
+    <p class="mt-1 text-slate-500 dark:text-slate-400">„Reicht bis …“ rechnet je Tag mit diesen km (aus km-Ständen von Ladungen, Fahrtenbuch und Auto der letzten 120 Tage; neuere Wochen zählen stärker). Grau = noch zu wenig Daten, dort gilt der Durchschnitt.</p></div>`;
 }
 function wxoPartsHtml(q) {
   if (!q) return ''; const t = [[q.cold, '❄️'], [q.rain, '🌧️'], [q.hum, '💧']].filter(([v]) => v >= 0.05);   // je Anteil eine Zeile: Symbole und Zahlen jeweils untereinander
@@ -5040,6 +5066,7 @@ function openWxoSheet() {
       <p class="text-slate-500 dark:text-slate-400">❄️ Kälte · 🌧️ Regen · 💧 beschlagene Scheiben (Heizung + Klima)</p>
       <p class="text-slate-500 dark:text-slate-400"><span class="font-semibold text-orange-500">70 %</span> Eis-Wahrscheinlichkeit morgens – geschätzt aus der Scheibentemperatur (Temperatur, Taupunkt, Bewölkung, Wind, Stellplatz); <span class="text-yellow-500">gelb</span> Raureif möglich, <span class="text-orange-500">orange</span> wahrscheinlich vereist, <span class="text-red-500">rot</span> fast sicher bzw. Eisschicht. Ab 20 % angezeigt (Eis-Warnung, Ort „Zuhause“, Abfahrt laut Einstellungen)</p>
       ${m.sd ? `<p>Typische Abweichung: ±${fmt(m.sd, 1)} kWh/100 km</p>` : ''}
+      ${wxoWdHtml()}
       <p class="mt-1.5 text-slate-500 dark:text-slate-400">Gelernt aus ${m.n} genauen Ladungen (mit Akku-% und km-Stand, ≥ 20 km) und dem Wetter an deinem Standort. Jede neue Ladung verbessert die Werte; neuere zählen stärker (eine 90 Tage alte Ladung halb so viel). Verbrauch ohne Ladeverluste (aus dem Akku, vergleichbar mit der Anzeige im Auto). Wetter: Open-Meteo${wxIconStyle() === 'meteo' ? ', Symbole: Meteocons von Bas Milius (MIT)' : ''}. Reichweite: ${fmt(o.cap, 1)} kWh netto bei 100 % Akku.</p>
     </details>
     <button type="button" data-wxo="close" class="h-12 w-full shrink-0 rounded-2xl border border-slate-300 dark:border-slate-700 text-sm font-semibold">Schließen</button>`;
