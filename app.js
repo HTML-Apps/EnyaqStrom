@@ -2863,7 +2863,8 @@ async function initCarousel() {
   const box = $('car-scroll'), dash = $('car-dashes'); if (!box) return;
   const prof = CAR_HERO[carProf().key], imgs = (prof || HERO_IMGS).map(m => ({ ...m }));
   const c3 = await c360Frames().catch(() => null); if (c3) imgs.splice(1, 0, { name: '360', src: c3.f[0], aspect: c3.aspect, extra: 0.03, noHd: true, c360: true });   // eigene 360°-Ansicht (src/32) als 2. Bild
-  if (prof) { const f = box.querySelector('.car-slide img'); if (f && !f.src.endsWith(prof[0].src)) f.src = prof[0].src; }                                           // Bild 4/5 = Technik (Akku, Motor): mittig und etwas kleiner, ohne Standlinie
+  try { carOrdApply(imgs); } catch (e) { }                                              // eigene Reihenfolge (Einstellungen › Bilder-Karussell, src/33)
+  { const f = box.querySelector('.car-slide img'); if (f && !f.src.endsWith(imgs[0].src)) f.src = imgs[0].src; }                                           // Bild 4/5 = Technik (Akku, Motor): mittig und etwas kleiner, ohne Standlinie
   /* Die Bilder liegen übereinander; ein Wisch (oder Pfeiltaste) blendet per CSS-Übergang auf das nächste bzw. vorherige Bild über. Pro Wisch genau ein Bild.
      Bewusst ohne mitlaufende Bewegung beim Wischen: Nur Deckkraft wird animiert (läuft ohne JavaScript pro Frame), dadurch ruckelt nichts.
      Der Schatten unter dem Auto kommt aus den Bildern selbst. */
@@ -5859,7 +5860,7 @@ try { renderWrapCard(); } catch (e) { }
    im Dokument enyaqStrom/<uid>/settings/prefs, gleiche Regel wie Anbieter und Kategorien. Die PIN bleibt nur auf dem Gerät.
    Erster Abgleich: Was die Cloud hat, gilt; fehlt dort etwas und ist lokal vorhanden, wird es hochgeladen. Danach gilt die Cloud (Änderung auf einem Gerät wirkt auf allen).
    ===================================================================== */
-const SYNC_SET_KEYS = ['presetV', 'bdg', 'title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAcKwh', 'certDcKwh', 'certKm', 'wltpNet', 'ccEnd', 'wxoCut', 'dashFirst', 'car', 'carT', 'ui', 'carN', 'carSec', 'wxIcons', 'nRep', 'nCare', 'nTrips', 'nBakYm', 'nBakAt', 'nBakSnz', 'gtMirror', 'gtList', 'iceDep', 'iceWe', 'icePark', 'iceMin', 'iceK', 'cmpCar', 'cmpL', 'cmpEur', 'cmpCo2', 'news', 'newsRead', 'sos', 'dashPD', 'dashPM'];   // Startseite (dash, dashStart, dashDyn) gilt je Gerät; dashPD/dashPM = Sicherung je Gerätetyp (PC/Handy), nur zum Wiederherstellen bei leerem Gerätespeicher (src/25)
+const SYNC_SET_KEYS = ['presetV', 'bdg', 'title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAcKwh', 'certDcKwh', 'certKm', 'wltpNet', 'ccEnd', 'wxoCut', 'dashFirst', 'car', 'carT', 'ui', 'carN', 'carSec', 'wxIcons', 'nRep', 'nCare', 'nTrips', 'nBakYm', 'nBakAt', 'nBakSnz', 'gtMirror', 'gtList', 'iceDep', 'iceWe', 'icePark', 'iceMin', 'iceK', 'cmpCar', 'cmpL', 'cmpEur', 'cmpCo2', 'news', 'newsRead', 'sos', 'dashPD', 'dashPM', 'carOrd'];   // Startseite (dash, dashStart, dashDyn) gilt je Gerät; dashPD/dashPM = Sicherung je Gerätetyp (PC/Handy), nur zum Wiederherstellen bei leerem Gerätespeicher (src/25)
 /** Einstellungen für die Cloud: feste Reihenfolge, ohne leere Werte (Firestore verbietet undefined). null = nichts vorhanden. */
 function syncSet(src) {
   const o = {}; if (src && typeof src === 'object') SYNC_SET_KEYS.forEach(k => { const v = src[k]; if (v != null && v !== '' && !(typeof v === 'number' && !isFinite(v))) o[k] = v; });
@@ -10899,3 +10900,48 @@ c360Status();
     else if (c && c.d && (!l || l.v !== c.v)) { try { localStorage.setItem('enyaq.c360', JSON.stringify({ v: c.v, d: c.d, n: c.n || 12, up: true })); } catch (e) { } c360Status(); if (!l) appNote('360°-Ansicht geladen – erscheint beim nächsten Öffnen im Karussell'); }
     else if (!c && l && l.up) { try { localStorage.removeItem('enyaq.c360'); } catch (e) { } c360Status(); } }).catch(() => { }); }
   return r; }; }
+
+// ───── src/33-karussell-reihenfolge.js ─────
+/* =====================================================================
+   Einstellungen › Fahrzeug & Kauf › Bilder-Karussell: Reihenfolge per Ziehen (Pointer, Tastatur ↑/↓).
+   settings.carOrd = { <Fahrzeugprofil>: [Bild-Kennungen] } (String(name), 360°-Ansicht = '360'), synchronisiert.
+   initCarousel (src/05) ordnet über carOrdApply; geänderte Reihenfolge → Start lädt beim Zurückkehren neu (Karussell baut sich einmal auf).
+   ===================================================================== */
+var carOrdDirty = false;
+function carOrdBase() {
+  const prof = CAR_HERO[carProf().key], list = (prof || HERO_IMGS).map(m => ({ ...m })), o = c360Local();
+  if (o) list.splice(1, 0, { name: '360', src: (c360Cache && c360Cache.f[0]) || '', c360: true });
+  return list;
+}
+function carOrdApply(imgs) {
+  const ord = ((getSettings().carOrd || {})[carProf().key]); if (!Array.isArray(ord) || !ord.length) return imgs;
+  const pos = (m) => { const i = ord.indexOf(String(m.name)); return i < 0 ? 1e3 + imgs.indexOf(m) : i; };
+  const def = imgs.slice(); imgs.sort((a, b) => pos(a) - pos(b) || def.indexOf(a) - def.indexOf(b));   // neue Bilder (nicht in der Liste) hinten
+  return imgs;
+}
+const carOrdLabel = (m, i) => m.c360 ? '360°-Ansicht' : m.tech ? 'Technik' : m.cut ? (String(m.name) === '_4' ? 'Akku-Schnitt' : 'Maße / Schnitt') : 'Foto';
+function renderCarOrd() {
+  const ul = $('car-ord'); if (!ul) return; const base = carOrdBase(), list = carOrdApply(base.slice()), n = (() => { try { return carAutoN(); } catch (e) { return 6; } })();
+  ul.innerHTML = list.map((m, i) => `<li data-ci="${esc(String(m.name))}" class="flex items-center gap-2.5 border-b border-slate-200 bg-white py-1.5 last:border-b-0 dark:border-slate-800 dark:bg-slate-900">
+      <button type="button" data-cdrag class="flex h-11 w-9 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg text-slate-400 active:cursor-grabbing active:bg-slate-100 dark:active:bg-slate-800" aria-label="Bild ${i + 1} verschieben (Pfeiltasten hoch/runter)"><svg class="h-5 w-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></button>
+      <span class="flex h-11 w-20 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-slate-800">${m.src ? `<img src="${m.src}" alt="" class="h-full w-full object-contain" draggable="false">` : '<span class="text-[11px] font-bold text-white">360°</span>'}</span>
+      <span class="min-w-0 flex-1"><span class="block text-sm font-medium">${i + 1}. ${esc(carOrdLabel(m, i))}</span><span class="block text-xs ${i < n ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'}">${i < n ? 'wechselt automatisch' : 'nur per Wischen'}</span></span></li>`).join('');
+}
+function carOrdSave() {
+  const ids = [...$('car-ord').children].map(li => li.dataset.ci), def = carOrdBase().map(m => String(m.name));
+  const all = Object.assign({}, getSettings().carOrd || {}); if (ids.join() === def.join()) delete all[carProf().key]; else all[carProf().key] = ids;
+  setQuickSetting('carOrd', Object.keys(all).length ? all : undefined); carOrdDirty = true; renderCarOrd();
+}
+var carOrdDrag = null;
+$('car-ord').addEventListener('pointerdown', (e) => { const h = e.target.closest('[data-cdrag]'); if (!h || carOrdDrag) return; e.preventDefault(); const li = h.closest('li'); try { h.setPointerCapture(e.pointerId); } catch (er) { } carOrdDrag = { li, y0: e.clientY, pid: e.pointerId, moved: false }; li.classList.add('dragging'); });
+$('car-ord').addEventListener('pointermove', (e) => { const d = carOrdDrag; if (!d || e.pointerId !== d.pid) return; let dy = e.clientY - d.y0; const p = d.li.previousElementSibling, n = d.li.nextElementSibling;
+  if (n && dy > n.offsetHeight / 2) { n.after(d.li); d.y0 += n.offsetHeight; d.moved = true; } else if (p && dy < -p.offsetHeight / 2) { p.before(d.li); d.y0 -= p.offsetHeight; d.moved = true; }
+  dy = e.clientY - d.y0; d.li.style.transform = `translateY(${dy}px)`; });
+function carOrdEnd(e) { const d = carOrdDrag; if (!d || (e && e.pointerId !== d.pid)) return; carOrdDrag = null; d.li.classList.remove('dragging'); d.li.style.transition = 'transform .15s'; d.li.style.transform = ''; setTimeout(() => { d.li.style.transition = ''; if (d.moved) carOrdSave(); }, 160); }
+document.addEventListener('pointerup', carOrdEnd); document.addEventListener('pointercancel', carOrdEnd);   // am Dokument: beim Umhängen der Zeile geht die Zeiger-Bindung verloren
+$('car-ord').addEventListener('keydown', (e) => { const h = e.target.closest('[data-cdrag]'); if (!h || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return; e.preventDefault(); const li = h.closest('li'), o = e.key === 'ArrowUp' ? li.previousElementSibling : li.nextElementSibling; if (!o) return;
+  if (e.key === 'ArrowUp') o.before(li); else o.after(li); carOrdSave(); const nh = $('car-ord').querySelector(`li[data-ci="${li.dataset.ci}"] [data-cdrag]`); if (nh) nh.focus(); });
+$('car-ord-reset').addEventListener('click', () => { const all = Object.assign({}, getSettings().carOrd || {}); delete all[carProf().key]; setQuickSetting('carOrd', Object.keys(all).length ? all : undefined); carOrdDirty = true; renderCarOrd(); });
+$('set-car-n') && $('set-car-n').addEventListener('change', () => setTimeout(renderCarOrd, 50));
+{ const sv = showView; showView = function (v) { if (v === 'dashboard' && carOrdDirty) { carOrdDirty = false; setTimeout(() => location.reload(), 0); } const r = sv.apply(this, arguments); if (v === 'settings') try { c360Frames().then(renderCarOrd, renderCarOrd); } catch (e) { } return r; }; }
+try { renderCarOrd(); } catch (e) { }

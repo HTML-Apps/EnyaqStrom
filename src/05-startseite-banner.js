@@ -183,7 +183,8 @@ async function initCarousel() {
   const box = $('car-scroll'), dash = $('car-dashes'); if (!box) return;
   const prof = CAR_HERO[carProf().key], imgs = (prof || HERO_IMGS).map(m => ({ ...m }));
   const c3 = await c360Frames().catch(() => null); if (c3) imgs.splice(1, 0, { name: '360', src: c3.f[0], aspect: c3.aspect, extra: 0.03, noHd: true, c360: true });   // eigene 360°-Ansicht (src/32) als 2. Bild
-  if (prof) { const f = box.querySelector('.car-slide img'); if (f && !f.src.endsWith(prof[0].src)) f.src = prof[0].src; }                                           // Bild 4/5 = Technik (Akku, Motor): mittig und etwas kleiner, ohne Standlinie
+  try { carOrdApply(imgs); } catch (e) { }                                              // eigene Reihenfolge (Einstellungen › Bilder-Karussell, src/33)
+  { const f = box.querySelector('.car-slide img'); if (f && !f.src.endsWith(imgs[0].src)) f.src = imgs[0].src; }                                           // Bild 4/5 = Technik (Akku, Motor): mittig und etwas kleiner, ohne Standlinie
   /* Die Bilder liegen übereinander; ein Wisch (oder Pfeiltaste) blendet per CSS-Übergang auf das nächste bzw. vorherige Bild über. Pro Wisch genau ein Bild.
      Bewusst ohne mitlaufende Bewegung beim Wischen: Nur Deckkraft wird animiert (läuft ohne JavaScript pro Frame), dadurch ruckelt nichts.
      Der Schatten unter dem Auto kommt aus den Bildern selbst. */
