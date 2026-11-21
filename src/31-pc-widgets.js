@@ -107,7 +107,7 @@ function pcNewsDesk(el, p, keep) {
 }
 
 /* Wechsel Handy ↔ PC (Fenstergröße): alle betroffenen Widgets neu zeichnen */
-try { matchMedia('(min-width: 1280px)').addEventListener('change', () => { [renderHomeCard, renderLtm, renderBtm, pcMeterHist, renderNews].forEach(f => { try { f(); } catch (e) { } }); }); } catch (e) { }
+try { matchMedia('(min-width: 1280px)').addEventListener('change', () => { [renderHomeCard, renderLtm, renderBtm, pcMeterHist, renderNews, renderTires].forEach(f => { try { f(); } catch (e) { } }); }); } catch (e) { }
 try { renderLtm(); renderBtm(); pcMeterHist(); } catch (e) { }
 
 /* ---- Neuigkeiten-Vollbild am PC: Liste links angeheftet, rechts eingebautes Browser-Fenster (iframe) ----
