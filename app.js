@@ -5081,6 +5081,31 @@ try { new ResizeObserver(() => dashSwipeSync()).observe($('ltm-card')); new Resi
 let dSwVis = false; new MutationObserver(() => { const v = !$('wxo-card').classList.contains('hidden'); if (v !== dSwVis) { dSwVis = v; dashSwipeTo(dashDefaultIdx(), false); } dashSwipeSync(); }).observe($('wxo-card'), { attributes: true, attributeFilter: ['class'] });
 $('btn-live').addEventListener('click', () => setTimeout(() => dashSwipeTo(dashIdx('meter-card')), 0));
 mouseSwipe(dSw.tr, 12);
+/* Endlos wischen: an der letzten Karte weiter nach links → erste Karte, an der ersten nach rechts → letzte (kurzes Aus-/Einblenden mit Versatz statt Zurückspulen über alle Karten) */
+function dashWrap(dir) {
+  const sl = dashSlides(), tr = dSw.tr; if (sl.length < 2 || tr.dataset.wrap) return; tr.dataset.wrap = '1';
+  const to = dir > 0 ? 0 : sl.length - 1, off = dir > 0 ? 28 : -28;
+  tr.style.transition = 'opacity .16s ease-in, transform .16s ease-in'; tr.style.opacity = '0'; tr.style.transform = `translateX(${-off}px)`;
+  setTimeout(() => {
+    tr.style.transition = 'none'; tr.style.transform = `translateX(${off}px)`; tr.style.scrollSnapType = 'none'; dashSwipeTo(to, false); dashSwipeSync();
+    requestAnimationFrame(() => requestAnimationFrame(() => { tr.style.scrollSnapType = ''; tr.style.transition = 'opacity .22s ease-out, transform .22s ease-out'; tr.style.opacity = ''; tr.style.transform = '';
+      setTimeout(() => { tr.style.transition = ''; delete tr.dataset.wrap; }, 240); }));
+  }, 170);
+}
+{ const tr = dSw.tr; let g = null;
+  const edge = () => { const max = tr.scrollWidth - tr.clientWidth; return { end: tr.scrollLeft >= max - 4, start: tr.scrollLeft <= 4 }; };
+  const begin = (x, y) => { g = { x, y, ...edge() }; };
+  const finish = (x, y) => { if (!g) return; const dx = x - g.x, dy = y - g.y, e = edge(), s = g; g = null;
+    if (Math.abs(dx) < 45 || Math.abs(dx) < Math.abs(dy) * 1.3) return;
+    if (dx < 0 && s.end && e.end) dashWrap(1); else if (dx > 0 && s.start && e.start) dashWrap(-1); };
+  tr.addEventListener('touchstart', (e) => { if (e.touches.length === 1) begin(e.touches[0].clientX, e.touches[0].clientY); else g = null; }, { passive: true });
+  tr.addEventListener('touchend', (e) => { const t = e.changedTouches[0]; if (t) finish(t.clientX, t.clientY); }, { passive: true });
+  tr.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse' && e.button === 0) begin(e.clientX, e.clientY); });
+  addEventListener('pointerup', (e) => { if (e.pointerType === 'mouse') finish(e.clientX, e.clientY); });
+  /* Mausrad/Touchpad seitlich am Rand */
+  let wAcc = 0, wT = 0; tr.addEventListener('wheel', (e) => { if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return; const ed = edge(); if (!((e.deltaX > 0 && ed.end) || (e.deltaX < 0 && ed.start))) { wAcc = 0; return; }
+    wAcc += e.deltaX; clearTimeout(wT); wT = setTimeout(() => { wAcc = 0; }, 250); if (Math.abs(wAcc) > 120) { const d = wAcc > 0 ? 1 : -1; wAcc = 0; dashWrap(d); } }, { passive: true });
+}
 dashSwipeSync();
 $('wxo-more').addEventListener('click', openWxoSheet);
 $('wxo-days').addEventListener('click', (e) => { const b = e.target.closest('[data-iceb]'); if (b) { e.stopPropagation(); wxoIceTip(b); return; } openWxoSheet(); });
