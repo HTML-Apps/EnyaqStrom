@@ -10404,10 +10404,10 @@ async function sosShare(p) {
   const ok = await errCopy(t); appNote(ok ? '✓ Standort kopiert' : 'Kopieren nicht möglich');
 }
 /** Kleine Karte: 3×3 OSM-Kacheln um den Punkt (Zoom 15), dunkel per Filter */
-function sosMap(p, h, nx, cx) {
-  nx = nx || 1; cx = cx || '50%';
+function sosMap(p, h, nx, cx, ny) {
+  nx = nx || 1; cx = cx || '50%'; ny = ny || 1;
   const z = 15, n = 2 ** z, xf = (p.lon + 180) / 360 * n, lr = p.lat * Math.PI / 180, yf = (1 - Math.log(Math.tan(lr) + 1 / Math.cos(lr)) / Math.PI) / 2 * n, tx = Math.floor(xf), ty = Math.floor(yf);
-  let t = ''; for (let dx = -nx; dx <= nx; dx++) for (let dy = -1; dy <= 1; dy++) t += `<img src="https://tile.openstreetmap.org/${z}/${tx + dx}/${ty + dy}.png" alt="" width="256" height="256" loading="lazy" draggable="false" class="absolute max-w-none" style="left:calc(${cx} + ${Math.round((tx + dx - xf) * 256)}px);top:calc(50% + ${Math.round((ty + dy - yf) * 256)}px)">`;
+  let t = ''; for (let dx = -nx; dx <= nx; dx++) for (let dy = -ny; dy <= ny; dy++) t += `<img src="https://tile.openstreetmap.org/${z}/${tx + dx}/${ty + dy}.png" alt="" width="256" height="256" loading="lazy" draggable="false" class="absolute max-w-none" style="left:calc(${cx} + ${Math.round((tx + dx - xf) * 256)}px);top:calc(50% + ${Math.round((ty + dy - yf) * 256)}px)">`;
   return `<div class="relative overflow-hidden rounded-2xl bg-slate-200 dark:bg-slate-800" style="height:${h}px"><div class="sos-tiles absolute inset-0">${t}</div>
     <span class="sos-dot absolute left-1/2 top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-red-500 ring-[6px] ring-red-500/35" style="left:${cx}"></span>
     <span class="absolute bottom-0.5 right-1.5 text-[9px] text-slate-600 dark:text-slate-400">© OpenStreetMap</span></div>`;
@@ -10442,7 +10442,7 @@ function renderSosCard() {
       ${d.ins && d.ins.tel ? `<a href="${sosTelHref(d.ins.tel)}" data-sosnop class="${btn}">🛡️ ${esc((d.ins.name || 'Versicherung').split(' ')[0].slice(0, 12))}</a>` : `<button type="button" class="${btn} opacity-60">🛡️ Versich.</button>`}</div>
     <p class="mt-1.5 truncate text-[11px] text-slate-500 dark:text-slate-400">${tri || kit ? '🧰 ' + esc([tri && 'Warndreieck: ' + tri.where, kit && !tri ? kit.n + ': ' + kit.where : ''].filter(Boolean).join(' · ')) : 'Antippen: alle Notfall-Infos'}</p>`;
 }
-try { matchMedia('(min-width: 1280px)').addEventListener('change', () => { try { renderSosCard(); } catch (e) { } }); } catch (e) { }
+try { matchMedia('(min-width: 1280px)').addEventListener('change', () => { try { renderSosCard(); if (!$('sos-page').classList.contains('hidden')) renderSosPage(); } catch (e) { } }); } catch (e) { }
 $('sos-card').addEventListener('click', (e) => {
   if (e.target.closest('[data-sosnop]')) return;                                       // Anruf-Links normal ausführen
   if (e.target.closest('[data-sosloc]')) { sosLocate(); return; }
@@ -10471,10 +10471,12 @@ function renderSosPage() {
       <div class="grid grid-cols-2 gap-2">${f('sos-cn', 'Notfallkontakt', o.contact && o.contact.name, 'z. B. Papa')}${f('sos-ct', 'Telefon', o.contact && o.contact.tel, '', 1)}</div>
       <button type="button" data-sossave class="h-11 w-full rounded-2xl bg-emerald-600 text-sm font-semibold text-white">Speichern</button></div>`;
   } else {
-    b += `<div class="space-y-2">${sosCall('🚑', '112 Notruf', 'Unfall mit Verletzten · Feuer', 'tel:112', 'bg-white text-red-700 shadow-xl shadow-black/30', 'bg-red-600 text-white')}
-      ${d.panne ? sosCall('🛠️', d.panne.name || 'Pannenhilfe', d.panne.tel, sosTelHref(d.panne.tel), 'bg-black/25 text-white ring-1 ring-white/5') : sosCall('🛠️', 'Pannenhilfe', 'Nummer eintragen', '', 'bg-black/25 text-white ring-1 ring-white/5')}
-      ${d.ins && d.ins.tel ? sosCall('🛡️', d.ins.name || 'Versicherung', d.ins.tel + (d.ins.nr ? ' · Nr. ' + d.ins.nr : ''), sosTelHref(d.ins.tel), 'bg-black/25 text-white ring-1 ring-white/5') : sosCall('🛡️', 'Versicherung', 'Schaden-Hotline eintragen', '', 'bg-black/25 text-white ring-1 ring-white/5')}
-      ${d.contact ? sosCall('👤', d.contact.name || 'Notfallkontakt', d.contact.tel, sosTelHref(d.contact.tel), 'bg-black/25 text-white ring-1 ring-white/5') : ''}</div>`;
+    const calls = [sosCall('🚑', '112 Notruf', 'Unfall mit Verletzten · Feuer', 'tel:112', 'bg-white text-red-700 shadow-xl shadow-black/30', 'bg-red-600 text-white'),
+      d.panne ? sosCall('🛠️', d.panne.name || 'Pannenhilfe', d.panne.tel, sosTelHref(d.panne.tel), 'bg-black/25 text-white ring-1 ring-white/5') : sosCall('🛠️', 'Pannenhilfe', 'Nummer eintragen', '', 'bg-black/25 text-white ring-1 ring-white/5'),
+      d.ins && d.ins.tel ? sosCall('🛡️', d.ins.name || 'Versicherung', d.ins.tel + (d.ins.nr ? ' · Nr. ' + d.ins.nr : ''), sosTelHref(d.ins.tel), 'bg-black/25 text-white ring-1 ring-white/5') : sosCall('🛡️', 'Versicherung', 'Schaden-Hotline eintragen', '', 'bg-black/25 text-white ring-1 ring-white/5'),
+      d.contact ? sosCall('👤', d.contact.name || 'Notfallkontakt', d.contact.tel, sosTelHref(d.contact.tel), 'bg-black/25 text-white ring-1 ring-white/5') : ''].filter(Boolean);
+    if (isDesk()) { b = sosDeskPage(d, p, calls); pg.innerHTML = `<div class="flex min-h-full flex-col" style="background:linear-gradient(180deg,#000 0,#000 env(safe-area-inset-top),rgba(0,0,0,.55) calc(env(safe-area-inset-top) + 80px),rgba(0,0,0,0) calc(env(safe-area-inset-top) + 230px))">${b}</div>`; return; }
+    b += `<div class="space-y-2">${calls.join('')}</div>`;
     b += `<div class="rounded-3xl bg-black/25 ring-1 ring-white/5 p-4 text-left"><div class="flex items-baseline justify-between"><p class="text-sm font-bold">📍 Standort</p>${p ? `<span class="text-[11px] ${p.src === 'gps' ? 'text-emerald-300' : 'text-green-300'}">${esc(sosLocLine(p))}</span>` : ''}</div>
       ${p ? `<div class="mt-2">${sosMap(p, 150)}</div><p class="mt-2 font-mono text-[13px]">${sosCoord(p)}</p>${p.addr ? `<p class="text-[12px] text-red-100/80">${esc(p.addr)}</p>` : ''}
         <div class="mt-2 grid grid-cols-3 gap-1.5 text-[12px] font-semibold"><button type="button" data-sosshare class="rounded-xl bg-white/10 py-2">📤 Teilen</button><a href="${sosMapsUrl(p)}" target="_blank" rel="noopener" data-sosnop class="rounded-xl bg-white/10 py-2 text-center">🗺️ Karte</a><button type="button" data-soscopy class="rounded-xl bg-white/10 py-2">📋 Kopieren</button></div>` : ''}
@@ -10508,6 +10510,28 @@ $('simple-sos').addEventListener('click', () => sosOpen());
 { const rd = renderDashboard; renderDashboard = function () { const r = rd.apply(this, arguments); try { renderSosCard(); } catch (e) { } return r; }; }
 { const rv = renderVehCard; renderVehCard = function () { const r = rv.apply(this, arguments); try { renderSosCard(); } catch (e) { } return r; }; }   // neue Parkposition vom Auto
 try { renderSosCard(); } catch (e) { }
+
+/* ---- Notfallseite am PC (Variante B): Kopf in einer Zeile, Anrufe oben nebeneinander, Karte groß (2/3) mit Adresse + Aktionen
+   auf der Karte, rechts „Liegt im Auto“ + Fahrzeugdaten. Bearbeiten-Formular bleibt wie am Handy. */
+function sosDeskPage(d, p, calls) {
+  const head = `<div class="flex items-center gap-3 px-8 pb-1 text-white" style="padding-top:calc(env(safe-area-inset-top) + 18px)"><button type="button" data-sosclose class="-ml-1.5 flex h-10 w-7 shrink-0 items-center justify-center text-[34px] leading-none" aria-label="Zurück">‹</button>
+    <p class="shrink-0 font-barlow text-[36px] font-bold uppercase tracking-[0.1em] leading-none">Notfall</p><p class="ml-3 truncate text-[13px] opacity-90">Ruhe bewahren · Warnblinker an · Weste anziehen</p>
+    <span class="ml-1 inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-black/25 px-2 py-0.5 text-[11px] font-bold"><span class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>offline bereit</span>
+    <button type="button" data-sosedit class="ml-auto flex h-10 min-w-[40px] shrink-0 items-center justify-center rounded-full bg-black/25 px-3 text-[15px] font-semibold" aria-label="Angaben bearbeiten">✎</button></div>`;
+  const ov = 'rounded-xl bg-black/70 px-3.5 py-2.5 text-[13px] font-semibold backdrop-blur-sm active:scale-95 transition';
+  const map = p ? `<div class="absolute inset-0">${sosMap(p, 999, 4, '50%', 2).replace('style="height:999px"', 'style="height:100%"').replace('rounded-2xl bg-slate-200', 'rounded-3xl bg-slate-200')}</div>
+      <div class="absolute bottom-4 left-4 max-w-[45%] rounded-2xl bg-black/70 px-4 py-3 backdrop-blur-sm"><p class="text-[11.5px] font-bold ${p.src === 'gps' ? 'text-emerald-300' : 'text-green-300'}">${esc(sosLocLine(p))}</p><p class="mt-0.5 font-mono text-[13px]">${sosCoord(p)}</p>${p.addr ? `<p class="truncate text-[13px] text-red-100/85">${esc(p.addr)}</p>` : ''}</div>
+      <div class="absolute bottom-4 right-4 flex gap-1.5"><button type="button" data-sosshare class="${ov}">📤 Teilen</button><a href="${sosMapsUrl(p)}" target="_blank" rel="noopener" data-sosnop class="${ov}">🗺️ Karte</a><button type="button" data-soscopy class="${ov}">📋 Kopieren</button>${p.src === 'car' ? `<button type="button" data-sosloc class="${ov}">${sosBusy ? '⏳ wird ermittelt …' : '📍 Genauer per GPS'}</button>` : ''}</div>`
+    : `<button type="button" data-sosloc class="absolute inset-0 flex w-full flex-col items-center justify-center gap-2 rounded-3xl border-2 border-dashed border-white/30 bg-black/20 text-[16px] font-semibold">${sosBusy ? '⏳ Standort wird ermittelt …' : '📍 Standort ermitteln'}<span class="text-[12px] font-normal text-red-100/75">Handy-GPS · sonst Parkposition vom Auto</span></button>`;
+  const items = d.items.length ? `<div class="rounded-3xl bg-black/25 ring-1 ring-white/5 p-4 text-left"><p class="text-sm font-bold">🧰 Liegt im Auto</p>${d.items.slice(0, 8).map(i => `<div class="flex items-start justify-between gap-3 border-t border-white/10 py-2 text-[13px]"><span>${esc(i.n)}</span><span class="text-right text-red-100/75">${esc(i.where)}</span></div>`).join('')}</div>` : '';
+  const facts = [['Kennzeichen', d.plate], ['FIN', d.vin], ['Fahrzeug', d.model], ['Erstzulassung', d.year], ['Versicherung', d.ins ? (d.ins.name || '') + (d.ins.nr ? ' · ' + d.ins.nr : '') : '']].filter(x => x[1]);
+  const fh = facts.length ? `<div class="grid grid-cols-2 gap-2">${facts.map(([k, v]) => `<button type="button" data-soscp="${esc(v)}" class="min-w-0 rounded-2xl bg-black/25 ring-1 ring-white/5 px-3 py-2 text-left active:scale-[0.98]"><span class="block text-[10.5px] text-red-100/75">${k}</span><span class="block truncate text-[13px] font-semibold ${k === 'FIN' ? 'font-mono' : ''}">${esc(v)}</span></button>`).join('')}</div>` : '';
+  const cols = calls.length >= 4 ? 'grid-cols-4' : 'grid-cols-3';
+  return head + `<div class="flex min-h-0 flex-1 flex-col gap-4 px-8 pb-8 pt-4">
+    <div class="grid ${cols} gap-3">${calls.join('')}</div>
+    <div class="flex min-h-[460px] flex-1 gap-4"><div class="relative min-w-0 flex-1">${map}</div>
+      <div class="no-scrollbar flex w-[360px] shrink-0 flex-col gap-3 overflow-y-auto">${items}${fh}<p class="mt-auto text-[12px] leading-snug text-red-100/75">Ohne Ortung: Auf der Autobahn zeigen Schilder an den Leitpfosten den Kilometer, Pfeile die Richtung zur nächsten Notrufsäule. Die 112 ortet dein Handy in der Regel selbst.</p></div></div></div>`;
+}
 
 // ───── src/31-pc-widgets.js ─────
 /* =====================================================================
