@@ -4807,8 +4807,15 @@ async function wxoForecast(l, again) {
     if (c && c.lat === l.lat) return c.days.filter(x => x.d >= wxIso(new Date())); throw e; }
 }
 /** Ø km pro Tag aus den letzten ~90 Tagen der km-Stände; typisches Ladeziel (Median der letzten 10 Akku-Ende-Werte) */
+var wxoHbMemo = null;
+/** Fahrgewohnheiten (Ø km/Tag, km je Wochentag, typisches Ladeziel) – zwischengespeichert, solange sich km-Verlauf, Ladungen und Tag nicht ändern (wird z. B. beim Sortieren der Erinnerungen sehr oft aufgerufen) */
 function wxoHabits() {
-  const pts = odoPts(); let kmDay = null;                                          // gemeinsamer km-Verlauf (auch Fahrtenbuch und Auto)
+  const pts = odoPts(), key = pts.length + '|' + (pts.length ? pts[pts.length - 1].join(',') : '') + '|' + getReadings().length + '|' + todayYMD();
+  if (wxoHbMemo && wxoHbMemo.pts === pts && wxoHbMemo.key === key) return wxoHbMemo.v;
+  const v = wxoHabitsCalc(pts); wxoHbMemo = { pts, key, v }; return v;
+}
+function wxoHabitsCalc(pts) {
+  let kmDay = null;                                          // gemeinsamer km-Verlauf (auch Fahrtenbuch und Auto)
   if (pts.length >= 2) { const L = pts[pts.length - 1], lim = L[0] - 90 * 864e5, F = pts.find(q => q[0] >= lim) || pts[0], d = (L[0] - F[0]) / 864e5; if (d >= 7 && L[1] > F[1]) kmDay = (L[1] - F[1]) / d; }
   const ends = getReadings().filter(r => r.socEnd > 30).slice(-10).map(r => r.socEnd);
   const wd = kmDay > 3 ? wxoWeekdays(pts, kmDay) : null;
@@ -4820,12 +4827,13 @@ function wxoHabits() {
 function wxoWeekdays(pts, kmDay) {
   const out = [0, 1, 2, 3, 4, 5, 6].map(() => ({ w: 0, s: 0, n: 0 })); if (!pts || pts.length < 2) return out.map(() => ({ km: kmDay, ok: false, n: 0 }));
   const t0 = new Date(); t0.setHours(0, 0, 0, 0); const today = t0.getTime(), first = Math.max(pts[0][0], today - 120 * 864e5);
-  const before = (t) => { let k = -1; for (let i = 0; i < pts.length && pts[i][0] <= t; i++) k = i; return k; };
+  const before = (t) => { let lo = 0, hi = pts.length - 1, k = -1; while (lo <= hi) { const m = (lo + hi) >> 1; if (pts[m][0] <= t) { k = m; lo = m + 1; } else hi = m - 1; } return k; };
+  const at = (t) => { const i = before(t); if (i < 0) return pts[0][1]; if (i >= pts.length - 1) return pts[pts.length - 1][1]; const a = pts[i], b = pts[i + 1]; return a[1] + (b[1] - a[1]) * (t - a[0]) / ((b[0] - a[0]) || 1); };
   for (let d = new Date(today - 864e5); d.getTime() >= first; d.setDate(d.getDate() - 1)) {
     const a = d.getTime(), e = new Date(a); e.setDate(e.getDate() + 1); const b = e.getTime();
-    const i = before(a), j = pts.findIndex(q => q[0] >= b); if (i < 0 || j < 0) continue;
+    const i = before(a), j = (() => { const k = before(b - 1) + 1; return k < pts.length ? k : -1; })(); if (i < 0 || j < 0) continue;
     if (pts[j][0] - pts[i][0] > 3.2 * 864e5) continue;                                         // Lücke zu groß: Tag nicht zuordenbar
-    const km = Math.max(0, odoAt(b) - odoAt(a)), w = Math.pow(0.5, (today - a) / (45 * 864e5)), o = out[d.getDay()];
+    const km = Math.max(0, at(b) - at(a)), w = Math.pow(0.5, (today - a) / (45 * 864e5)), o = out[d.getDay()];
     o.w += w; o.s += w * km; o.n++;
   }
   return out.map(o => o.n >= 3 && o.w > 0 ? { km: o.s / o.w, ok: true, n: o.n } : { km: kmDay, ok: false, n: o.n });
