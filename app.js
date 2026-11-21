@@ -5857,7 +5857,7 @@ try { renderWrapCard(); } catch (e) { }
    im Dokument enyaqStrom/<uid>/settings/prefs, gleiche Regel wie Anbieter und Kategorien. Die PIN bleibt nur auf dem Gerät.
    Erster Abgleich: Was die Cloud hat, gilt; fehlt dort etwas und ist lokal vorhanden, wird es hochgeladen. Danach gilt die Cloud (Änderung auf einem Gerät wirkt auf allen).
    ===================================================================== */
-const SYNC_SET_KEYS = ['presetV', 'bdg', 'title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAcKwh', 'certDcKwh', 'certKm', 'wltpNet', 'ccEnd', 'wxoCut', 'dashFirst', 'car', 'carT', 'ui', 'carN', 'carSec', 'wxIcons', 'nRep', 'nCare', 'nTrips', 'nBakYm', 'nBakAt', 'nBakSnz', 'gtMirror', 'gtList', 'iceDep', 'iceWe', 'icePark', 'iceMin', 'iceK', 'cmpCar', 'cmpL', 'cmpEur', 'cmpCo2', 'news', 'newsRead', 'sos'];   // Startseite (dash, dashStart, dashDyn) bewusst nur je Gerät: Handy und PC haben verschiedene Layouts
+const SYNC_SET_KEYS = ['presetV', 'bdg', 'title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAcKwh', 'certDcKwh', 'certKm', 'wltpNet', 'ccEnd', 'wxoCut', 'dashFirst', 'car', 'carT', 'ui', 'carN', 'carSec', 'wxIcons', 'nRep', 'nCare', 'nTrips', 'nBakYm', 'nBakAt', 'nBakSnz', 'gtMirror', 'gtList', 'iceDep', 'iceWe', 'icePark', 'iceMin', 'iceK', 'cmpCar', 'cmpL', 'cmpEur', 'cmpCo2', 'news', 'newsRead', 'sos', 'dashPD', 'dashPM'];   // Startseite (dash, dashStart, dashDyn) gilt je Gerät; dashPD/dashPM = Sicherung je Gerätetyp (PC/Handy), nur zum Wiederherstellen bei leerem Gerätespeicher (src/25)
 /** Einstellungen für die Cloud: feste Reihenfolge, ohne leere Werte (Firestore verbietet undefined). null = nichts vorhanden. */
 function syncSet(src) {
   const o = {}; if (src && typeof src === 'object') SYNC_SET_KEYS.forEach(k => { const v = src[k]; if (v != null && v !== '' && !(typeof v === 'number' && !isFinite(v))) o[k] = v; });
@@ -9749,6 +9749,30 @@ try { new MutationObserver(dashHold).observe($('dash-swipe-track'), { subtree: f
 try { $('dash-swipe-track').querySelectorAll(':scope > div').forEach(el => new MutationObserver(dashHold).observe(el, { attributes: true, attributeFilter: ['class', 'style'] })); } catch (e) { }
 dashHold();
 
+/* Sicherung der Startseite je Gerätetyp: Die Einstellung bleibt je Gerät (lokal), wird aber zusätzlich als dashPD (PC) bzw. dashPM (Handy)
+   in die Cloud geschrieben. Ist der Gerätespeicher leer (Browser hat Websitedaten gelöscht, neues Gerät …) – erkennbar am fehlenden
+   lokalen Stempel dashT –, kommt die Startseite aus dieser Sicherung zurück. Ein Gerät mit eigenem Stempel übernimmt nie fremde Werte. */
+const DASH_KEYS = ['dash', 'dashStart', 'dashDyn'];
+const dashTypeKey = () => (matchMedia('(min-width: 1280px)').matches ? 'dashPD' : 'dashPM');
+{ const sq = setQuickSetting; setQuickSetting = function (k, v) {
+  const r = sq.apply(this, arguments);
+  if (DASH_KEYS.includes(k)) { const st = load(KEY_SETTINGS, {}) || {}, b = { t: Date.now() }; DASH_KEYS.forEach(x => { if (st[x] !== undefined) b[x] = st[x]; });
+    st.dashT = b.t; st[dashTypeKey()] = b; save(KEY_SETTINGS, st); try { pushPrefs(); } catch (e) { } }
+  return r; }; }
+function dashRestore() {
+  const st = load(KEY_SETTINGS, {}) || {}; if (st.dashT) return false;
+  const b = st[dashTypeKey()]; if (!b || typeof b !== 'object' || !b.t) return false;
+  DASH_KEYS.forEach(x => { if (b[x] !== undefined) st[x] = b[x]; else delete st[x]; }); st.dashT = b.t; save(KEY_SETTINGS, st);
+  try { applyDash(); renderDashSet(); window.dSwUser = false; dashSwipeTo(dashDefaultIdx(), false); } catch (e) { }
+  return true;
+}
+{ const oc = window.onCloudPrefs; window.onCloudPrefs = function () { const r = oc && oc.apply(this, arguments); try { dashRestore(); } catch (e) { } return r; }; }
+/* Vorhandene Einstellung ohne Stempel (vor dieser Version gespeichert): als eigenen Stand übernehmen und einmal sichern */
+try { const st = load(KEY_SETTINGS, {}) || {}; if (!st.dashT && DASH_KEYS.some(x => st[x] !== undefined)) setQuickSetting('dash', st.dash); else dashRestore(); } catch (e) { }
+/* Browser bitten, den Speicher dieser App nicht von selbst zu leeren (Chrome/Edge/Android); Stand im Gerätecheck */
+try { navigator.storage && navigator.storage.persist && navigator.storage.persisted().then(p => { window.storePersist = p; if (!p) navigator.storage.persist().then(q => { window.storePersist = q; }); }); } catch (e) { }
+try { if (!localStorage.getItem('enyaq.devBorn')) localStorage.setItem('enyaq.devBorn', String(Date.now())); } catch (e) { }
+
 // ───── src/26-routen-optimierung.js ─────
 /* =====================================================================
    Routenplaner › Optimierung: bestes Autobahn-Tempo für die eingegebene Strecke.
@@ -10316,7 +10340,8 @@ function diagRows() {
     ['App', 'v' + APP_V + (srvV ? (srvV > APP_V ? ' – Server hat v' + srvV + ' (neu laden!)' : ' – aktuell') : '')],
     ['Fenster', innerWidth + ' × ' + innerHeight + ' px · Zoom ' + Math.round(devicePixelRatio * 100) + ' % · ' + (isDesk() ? 'PC-Ansicht' : 'Handy-Ansicht (unter 1280 px)')],
     ['Prognose', card && card.clientWidth ? 'Karte ' + card.clientWidth + ' px → ' + vis + ' Tage sichtbar' : window.wxoW ? 'Karte zuletzt ' + window.wxoW + ' px → ' + $('wxo-days').dataset.n + ' Tage' : 'Karte noch nicht angezeigt'],
-    ['Startseite', ord(st.dash) + (st.dash && st.dash.off && st.dash.off.length ? ' · aus: ' + st.dash.off.length : '') + (st.dashStart ? ' · ★ ' + st.dashStart.replace('-card', '') : '') + ' (nur dieses Gerät)'],
+    ['Startseite', ord(st.dash) + (st.dash && st.dash.off && st.dash.off.length ? ' · aus: ' + st.dash.off.length : '') + (st.dashStart ? ' · ★ ' + st.dashStart.replace('-card', '') : '') + ' (nur dieses Gerät' + (st.dashT ? ', gespeichert ' + new Date(st.dashT).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '') + ')'],
+    ['Speicher', 'lokal seit ' + (Number(localStorage.getItem('enyaq.devBorn')) ? new Date(Number(localStorage.getItem('enyaq.devBorn'))).toLocaleDateString('de-DE') : '?') + ' · ' + (window.storePersist === true ? 'dauerhaft (Browser löscht nicht von selbst)' : window.storePersist === false ? 'nicht dauerhaft – Browser darf Daten löschen' : 'unbekannt')],
     ['Cloud', (window.cloud?.isSignedIn?.() ? 'angemeldet' : 'nicht angemeldet') + (ok ? ' · zuletzt abgeglichen ' + new Date(ok).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '')],
     ['Browser', navigator.userAgent.replace(/^Mozilla\/5\.0 /, '').slice(0, 140)]];
 }

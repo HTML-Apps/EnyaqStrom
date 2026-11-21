@@ -26,7 +26,8 @@ function diagRows() {
     ['App', 'v' + APP_V + (srvV ? (srvV > APP_V ? ' – Server hat v' + srvV + ' (neu laden!)' : ' – aktuell') : '')],
     ['Fenster', innerWidth + ' × ' + innerHeight + ' px · Zoom ' + Math.round(devicePixelRatio * 100) + ' % · ' + (isDesk() ? 'PC-Ansicht' : 'Handy-Ansicht (unter 1280 px)')],
     ['Prognose', card && card.clientWidth ? 'Karte ' + card.clientWidth + ' px → ' + vis + ' Tage sichtbar' : window.wxoW ? 'Karte zuletzt ' + window.wxoW + ' px → ' + $('wxo-days').dataset.n + ' Tage' : 'Karte noch nicht angezeigt'],
-    ['Startseite', ord(st.dash) + (st.dash && st.dash.off && st.dash.off.length ? ' · aus: ' + st.dash.off.length : '') + (st.dashStart ? ' · ★ ' + st.dashStart.replace('-card', '') : '') + ' (nur dieses Gerät)'],
+    ['Startseite', ord(st.dash) + (st.dash && st.dash.off && st.dash.off.length ? ' · aus: ' + st.dash.off.length : '') + (st.dashStart ? ' · ★ ' + st.dashStart.replace('-card', '') : '') + ' (nur dieses Gerät' + (st.dashT ? ', gespeichert ' + new Date(st.dashT).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '') + ')'],
+    ['Speicher', 'lokal seit ' + (Number(localStorage.getItem('enyaq.devBorn')) ? new Date(Number(localStorage.getItem('enyaq.devBorn'))).toLocaleDateString('de-DE') : '?') + ' · ' + (window.storePersist === true ? 'dauerhaft (Browser löscht nicht von selbst)' : window.storePersist === false ? 'nicht dauerhaft – Browser darf Daten löschen' : 'unbekannt')],
     ['Cloud', (window.cloud?.isSignedIn?.() ? 'angemeldet' : 'nicht angemeldet') + (ok ? ' · zuletzt abgeglichen ' + new Date(ok).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '')],
     ['Browser', navigator.userAgent.replace(/^Mozilla\/5\.0 /, '').slice(0, 140)]];
 }

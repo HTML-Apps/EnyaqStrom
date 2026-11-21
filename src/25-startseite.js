@@ -103,3 +103,27 @@ function dashHold() {
 try { new MutationObserver(dashHold).observe($('dash-swipe-track'), { subtree: false, childList: true, attributes: true, attributeFilter: ['class', 'style'] }); } catch (e) { }
 try { $('dash-swipe-track').querySelectorAll(':scope > div').forEach(el => new MutationObserver(dashHold).observe(el, { attributes: true, attributeFilter: ['class', 'style'] })); } catch (e) { }
 dashHold();
+
+/* Sicherung der Startseite je Gerätetyp: Die Einstellung bleibt je Gerät (lokal), wird aber zusätzlich als dashPD (PC) bzw. dashPM (Handy)
+   in die Cloud geschrieben. Ist der Gerätespeicher leer (Browser hat Websitedaten gelöscht, neues Gerät …) – erkennbar am fehlenden
+   lokalen Stempel dashT –, kommt die Startseite aus dieser Sicherung zurück. Ein Gerät mit eigenem Stempel übernimmt nie fremde Werte. */
+const DASH_KEYS = ['dash', 'dashStart', 'dashDyn'];
+const dashTypeKey = () => (matchMedia('(min-width: 1280px)').matches ? 'dashPD' : 'dashPM');
+{ const sq = setQuickSetting; setQuickSetting = function (k, v) {
+  const r = sq.apply(this, arguments);
+  if (DASH_KEYS.includes(k)) { const st = load(KEY_SETTINGS, {}) || {}, b = { t: Date.now() }; DASH_KEYS.forEach(x => { if (st[x] !== undefined) b[x] = st[x]; });
+    st.dashT = b.t; st[dashTypeKey()] = b; save(KEY_SETTINGS, st); try { pushPrefs(); } catch (e) { } }
+  return r; }; }
+function dashRestore() {
+  const st = load(KEY_SETTINGS, {}) || {}; if (st.dashT) return false;
+  const b = st[dashTypeKey()]; if (!b || typeof b !== 'object' || !b.t) return false;
+  DASH_KEYS.forEach(x => { if (b[x] !== undefined) st[x] = b[x]; else delete st[x]; }); st.dashT = b.t; save(KEY_SETTINGS, st);
+  try { applyDash(); renderDashSet(); window.dSwUser = false; dashSwipeTo(dashDefaultIdx(), false); } catch (e) { }
+  return true;
+}
+{ const oc = window.onCloudPrefs; window.onCloudPrefs = function () { const r = oc && oc.apply(this, arguments); try { dashRestore(); } catch (e) { } return r; }; }
+/* Vorhandene Einstellung ohne Stempel (vor dieser Version gespeichert): als eigenen Stand übernehmen und einmal sichern */
+try { const st = load(KEY_SETTINGS, {}) || {}; if (!st.dashT && DASH_KEYS.some(x => st[x] !== undefined)) setQuickSetting('dash', st.dash); else dashRestore(); } catch (e) { }
+/* Browser bitten, den Speicher dieser App nicht von selbst zu leeren (Chrome/Edge/Android); Stand im Gerätecheck */
+try { navigator.storage && navigator.storage.persist && navigator.storage.persisted().then(p => { window.storePersist = p; if (!p) navigator.storage.persist().then(q => { window.storePersist = q; }); }); } catch (e) { }
+try { if (!localStorage.getItem('enyaq.devBorn')) localStorage.setItem('enyaq.devBorn', String(Date.now())); } catch (e) { }
