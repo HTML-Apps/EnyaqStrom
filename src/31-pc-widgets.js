@@ -196,3 +196,42 @@ function nfDock(x, pane) {
       <div class="mt-4 flex gap-2">${blocked ? '' : '<button type="button" data-nfp-front class="rounded-2xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white active:scale-95 transition">⧉ Fenster nach vorne</button>'}
         <a href="${esc(url)}" target="_blank" rel="noopener" class="rounded-2xl bg-slate-200 dark:bg-slate-800 px-5 py-2.5 text-sm font-semibold active:scale-95 transition">↗ Als Tab öffnen</a></div></div>`;
 }
+
+/* ---- Verbrauchs-Prognose 7 Tage am PC (Variante A): breites Fenster, 7 große Tages-Spalten (Wettergrafik 110 px, Temperaturen,
+   Niederschlag, Eis-Badge wie auf der Karte, Verbrauch groß, Zuschläge als Chips, Reichweite mit Balken) + Temperatur-Band über die Woche.
+   „So rechnet die Prognose“ wird aus der Handy-Fassung übernommen. */
+{ const ro = openWxoSheet; openWxoSheet = function () {
+  const box = $('wxo-sheet-box'), r = ro.apply(this, arguments);
+  box.classList.toggle('wxo-desk', isDesk()); $('wxo-sheet').classList.toggle('wxo-desk-ov', isDesk());
+  if (isDesk() && wxoLast) try { pcWxoSheet(box); } catch (e) { console.error(e); }
+  return r; }; }
+function pcWxoSheet(box) {
+  const o = wxoLast, days = o.days, det = box.querySelector('details'), detH = det ? det.outerHTML.replace('group rounded-2xl', 'group mt-4 rounded-2xl') : '';
+  const maxR = Math.max(...days.map(x => x.r || 0), 1), wd = (x, i) => i === 0 ? 'Heute' : i === 1 ? 'Morgen' : wxDay(x.d).wd + '.';
+  const chip = (v, ic, cls) => v >= 0.05 ? `<span class="whitespace-nowrap rounded-lg px-1.5 py-0.5 ${cls}">${ic} +${fmt(v, 1)}</span>` : '';
+  const cols = days.map((x, i) => `<div data-wdd="${x.d}" class="relative flex min-w-0 flex-col items-center rounded-[22px] px-2 pb-3.5 pt-4 text-center ${i === 0 ? 'bg-gradient-to-b from-emerald-50 to-white ring-2 ring-emerald-500 dark:from-emerald-950/70 dark:to-slate-900' : 'bg-slate-100 dark:bg-slate-800/50'}">
+      <p class="text-[16px] font-extrabold leading-tight">${wd(x, i)}</p><p class="text-[11.5px] text-slate-500 dark:text-slate-400">${wxDay(x.d).dm}</p>
+      <div class="my-1 flex h-[110px] items-center justify-center text-[64px] leading-none">${wxoIconHtml(x.w, 110)}</div>
+      <p class="text-[15px] font-bold tabular-nums">${fmt(x.lo, 0).replace('-', '−')}° / ${fmt(x.hi, 0).replace('-', '−')}°</p>
+      <p class="h-4 text-[11.5px] text-sky-600 dark:text-sky-400">${x.p >= 1 ? '💧 ' + fmt(x.p, 0) + ' mm' : (wxoText(x.w) || '')}</p>
+      <p class="mt-2.5 font-barlow text-[44px] font-bold leading-none text-emerald-600 dark:text-emerald-400 tabular-nums">${fmt(x.k, 1)}</p><p class="text-[10.5px] text-slate-500 dark:text-slate-400">kWh/100 km</p>
+      <div class="mt-2 flex min-h-[22px] flex-wrap justify-center gap-1 text-[11px]">${x.parts ? chip(x.parts.cold, '❄️', 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300') + chip(x.parts.rain, '🌧️', 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300') + chip(x.parts.hum, '💧', 'bg-cyan-100 text-cyan-800 dark:bg-cyan-950 dark:text-cyan-300') : ''}</div>
+      <div class="mt-auto w-full pt-3"><div class="h-1.5 w-full overflow-hidden rounded-full bg-slate-300 dark:bg-slate-700"><div class="h-full rounded-full ${wxoLowR(x.r) ? 'bg-red-500' : 'bg-emerald-500'}" style="width:${Math.round((x.r || 0) / maxR * 100)}%"></div></div>
+        <p class="mt-1.5 text-[17px] font-extrabold tabular-nums${wxoLowR(x.r) ? ' text-red-600 dark:text-red-400' : ''}">${wxoFmtR(x.r)} km</p><p class="text-[10.5px] text-slate-500 dark:text-slate-400">Reichweite bei 100 %</p></div></div>`).join('');
+  /* Temperatur-Band: Höchst (orange) / Tiefst (blau) je Tag, x = Spaltenmitte; 0 °C gestrichelt (Glätte) */
+  const lo = Math.min(...days.map(x => x.lo), 0) - 2, hi = Math.max(...days.map(x => x.hi), 0) + 2, X = (i) => (i + 0.5) / days.length * 100, Y = (t) => 100 - (t - lo) / (hi - lo) * 100;
+  const up = days.map((x, i) => X(i).toFixed(2) + ',' + Y(x.hi).toFixed(2)), dn = days.map((x, i) => X(i).toFixed(2) + ',' + Y(x.lo).toFixed(2));
+  const band = `<p class="mt-5 text-[12.5px] font-semibold text-slate-600 dark:text-slate-300">Temperatur über die Woche</p>
+    <div class="relative mt-3 h-[170px]"><div class="absolute inset-x-0 top-5 bottom-6">
+      <div class="absolute inset-x-0 border-t border-dashed border-sky-500/60" style="top:${Y(0)}%"><span class="absolute -top-4 left-0 text-[10.5px] text-sky-600 dark:text-sky-400">0 °C · Glätte</span></div>
+      <svg class="absolute inset-0 h-full w-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="pcwxg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fb923c" stop-opacity=".5"/><stop offset="1" stop-color="#60a5fa" stop-opacity=".5"/></linearGradient></defs>
+        <polygon points="${up.join(' ')} ${dn.slice().reverse().join(' ')}" fill="url(#pcwxg)"/><polyline points="${up.join(' ')}" fill="none" stroke="#fb923c" stroke-width="2.5" vector-effect="non-scaling-stroke"/><polyline points="${dn.join(' ')}" fill="none" stroke="#60a5fa" stroke-width="2.5" vector-effect="non-scaling-stroke"/></svg>
+      ${days.map((x, i) => `<span class="absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-orange-400" style="left:${X(i)}%;top:${Y(x.hi)}%"></span><span class="absolute -translate-x-1/2 -translate-y-full pb-1.5 text-[12.5px] font-bold text-orange-500 dark:text-orange-300" style="left:${X(i)}%;top:${Y(x.hi)}%">${fmt(x.hi, 0).replace('-', '−')}°</span>
+        <span class="absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-400" style="left:${X(i)}%;top:${Y(x.lo)}%"></span><span class="absolute -translate-x-1/2 pt-1.5 text-[12.5px] font-bold text-blue-600 dark:text-blue-300" style="left:${X(i)}%;top:${Y(x.lo)}%">${fmt(x.lo, 0).replace('-', '−')}°</span>`).join('')}</div></div>`;
+  const tip = $('wxo-tip') && !$('wxo-tip').classList.contains('hidden') ? $('wxo-tip').textContent.trim() : '';
+  box.innerHTML = `<div class="flex items-center gap-4"><p class="text-[26px] font-extrabold">Prognose 7 Tage</p>${tip ? `<p class="text-[13px] text-slate-500 dark:text-slate-400">${esc(tip)}</p>` : ''}
+      <button type="button" data-wxo="close" class="ml-auto rounded-2xl border border-slate-300 dark:border-slate-700 px-4 py-2 text-[13px] font-semibold">Schließen ✕</button></div>
+    <div class="mt-5 grid grid-cols-7 gap-3">${cols}</div>${band}${detH}`;
+  iceDays(days.map(x => x.d)).then(map => { box.querySelectorAll('[data-wdd]').forEach(el => { const r = map[el.dataset.wdd]; if (!r || r.p < 20) return;
+    el.insertAdjacentHTML('beforeend', `<span class="absolute -top-2 right-2 inline-flex items-center gap-0.5 rounded-full py-0.5 pl-1 pr-2 text-[11.5px] font-bold leading-none text-slate-900 shadow" style="background:${ICE_COL(r.p)}" title="Eis morgens ≈ ${r.p} % (${ICE_NAME(r.p)}, Scheibe ≈ ${fmt(Math.round(r.minTg) || 0, 0).replace('-', '−')} °C)"><span aria-hidden="true">❄️</span>${r.p} %</span>`); }); }).catch(() => { });
+}
