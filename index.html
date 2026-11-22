@@ -286,7 +286,7 @@
   @media (prefers-reduced-motion: reduce) { #bd-conf i, #bdg-conf i { animation: none; top: var(--y, 10%); } #bd-card, #bdg-card { animation: none; } }
 </style>
 <!-- Tailwind fertig gebaut (npm run css) – am Ende des Kopfs wie früher das CDN, damit die Reihenfolge der Regeln gleich bleibt -->
-<link rel="stylesheet" href="/app.css?v=383">
+<link rel="stylesheet" href="/app.css?v=384">
 </head>
 <body class="bg-slate-100 text-slate-900 dark:bg-black dark:text-slate-100 min-h-screen">
 
@@ -1587,6 +1587,7 @@
             <div><label for="set-ice-we" class="text-xs text-slate-500 dark:text-slate-400">Wochenende</label><select id="set-ice-we" class="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"><option value="0">nein</option><option value="1">ja</option></select></div>
           </div>
           <p id="set-ice-info" class="mt-1.5 text-xs text-left text-slate-500 dark:text-slate-400"></p>
+          <div class="mt-3 flex items-center justify-between gap-3"><span class="min-w-0"><span class="block text-sm font-medium text-slate-700 dark:text-slate-300">Eis-Check am Morgen</span><span class="block text-xs text-left text-slate-500 dark:text-slate-400">Handy: beim Öffnen vor der Abfahrt ab 50 % Eis-Wahrscheinlichkeit, mit Link zu MySkoda. Abfahrt lernt die App aus dem Fahrtenbuch.</span></span><button id="icem-prev" type="button" class="shrink-0 rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm font-semibold active:scale-95 transition">Vorschau</button></div>
           <label class="mt-3 flex items-center justify-between gap-3"><span><span class="block text-sm font-medium text-slate-700 dark:text-slate-300">Abends benachrichtigen</span><span class="block text-xs text-left text-slate-500 dark:text-slate-400">Push-Nachricht auf dieses Gerät gegen 18 Uhr, auch bei geschlossener App – nur wenn die Scheibe vereisen dürfte.</span></span><input id="set-ice-push" type="checkbox" class="h-5 w-5 shrink-0 accent-emerald-600"></label>
           <div class="mt-2 flex items-center gap-2"><button id="ice-test" type="button" class="shrink-0 rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm font-semibold active:scale-95 transition">Testnachricht senden</button><span id="ice-push-msg" class="min-w-0 text-xs text-left text-slate-500 dark:text-slate-400"></span></div>
         </div>
@@ -2035,7 +2036,7 @@
   </div>
 </nav>
 
-<script src="/app.js?v=383"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
+<script src="/app.js?v=384"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
 <script type="module">
 /* Firebase (modular SDK). Die Konfiguration ist kein Geheimnis – geschützt wird über Auth + Firestore-Regeln. */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
