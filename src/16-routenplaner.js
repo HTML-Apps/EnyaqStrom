@@ -463,13 +463,13 @@ async function fillIcePush() {
 /* Ein Gerät, zwei Arten: Eis-Warnung (ice) und fällige Erinnerungen (rem). Angemeldet, solange eins davon an ist; der Server schickt je Art nur an Geräte mit Häkchen. */
 async function pushSave() {
   const f = { ice: !!load('enyaq.icePush', false), rem: !!load('enyaq.remPush', false), low: Number(load('enyaq.lowPush', 0)) || 0,
-    veh: !!load('enyaq.vehPush', false), mon: !!load('enyaq.monPush', false), key: load('enyaq.keyPush', null) !== false, bd: load('enyaq.bdPush', null) !== false };   // Schlüssel + Jahrestage: fehlt = an
-  if (!f.ice && !f.rem && !f.low && !f.veh && !f.mon && load('enyaq.keyPush', null) !== true && load('enyaq.bdPush', null) !== true) { try { await window.cloud.setPush(devId(), null); } catch (e) { } try { const s = await pushState(); if (s) await s.unsubscribe(); } catch (e) { } return; }
+    veh: !!load('enyaq.vehPush', false), mon: !!load('enyaq.monPush', false), key: load('enyaq.keyPush', null) !== false, bd: load('enyaq.bdPush', null) !== false, win: load('enyaq.winPush', null) !== false };   // Schlüssel + Jahrestage + Winter-Check: fehlt = an
+  if (!f.ice && !f.rem && !f.low && !f.veh && !f.mon && load('enyaq.keyPush', null) !== true && load('enyaq.bdPush', null) !== true && load('enyaq.winPush', null) !== true) { try { await window.cloud.setPush(devId(), null); } catch (e) { } try { const s = await pushState(); if (s) await s.unsubscribe(); } catch (e) { } return; }
   if (!window.cloud?.isSignedIn()) throw new Error('Bitte zuerst bei Google anmelden.');
   const perm = await Notification.requestPermission(); if (perm !== 'granted') throw new Error('Benachrichtigungen nicht erlaubt.');
   const reg = await navigator.serviceWorker.ready; let sub = await reg.pushManager.getSubscription();
   if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64u(VAPID_PUBLIC) });
-  await window.cloud.setPush(devId(), { sub: JSON.stringify(sub.toJSON()), at: new Date().toISOString(), ua: (navigator.userAgentData && navigator.userAgentData.platform) || (/(Android|iPhone|Windows|Mac)/.exec(navigator.userAgent) || [''])[0], ice: f.ice, rem: f.rem, low: f.low, veh: f.veh, mon: f.mon, key: f.key, bd: f.bd });
+  await window.cloud.setPush(devId(), { sub: JSON.stringify(sub.toJSON()), at: new Date().toISOString(), ua: (navigator.userAgentData && navigator.userAgentData.platform) || (/(Android|iPhone|Windows|Mac)/.exec(navigator.userAgent) || [''])[0], ice: f.ice, rem: f.rem, low: f.low, veh: f.veh, mon: f.mon, key: f.key, bd: f.bd, win: f.win });
   if (vehicle && vehicle.ok) authHeaders().then(h => fetch('/api/ice-push', { method: 'POST', headers: { ...h, 'Content-Type': 'application/json' }, body: JSON.stringify({ low: 'reg' }) })).catch(() => { });   // Konto für den Abendlauf (Auto-Abfrage) freischalten
 }
 async function pushKind(key, on) { const was = load(key, false); save(key, on); try { await pushSave(); } catch (e) { save(key, was); throw e; } }
@@ -538,7 +538,8 @@ const PX = {
   veh: { key: 'enyaq.vehPush', on: '✓ Dieses Gerät warnt abends, wenn das Auto offen ist.', car: true },
   mon: { key: 'enyaq.monPush', on: '✓ Dieses Gerät meldet am Monatsanfang den Monatsbericht.' },
   key: { key: 'enyaq.keyPush', on: '✓ Dieses Gerät erinnert rechtzeitig an den Škoda-Schlüssel.', car: true, def: true },
-  bd: { key: 'enyaq.bdPush', on: '✓ Dieses Gerät gratuliert an den Jahrestagen von Kauf und Zulassung.', def: true }
+  bd: { key: 'enyaq.bdPush', on: '✓ Dieses Gerät gratuliert an den Jahrestagen von Kauf und Zulassung.', def: true },
+  win: { key: 'enyaq.winPush', on: '✓ Dieses Gerät meldet den ersten Frost im Herbst (Winter-Check).', def: true }
 };
 const pxOn = (k) => { const v = load(PX[k].key, null); return PX[k].def ? v !== false : !!v; };
 const pxMsg = (k, t, bad) => { const el = $(k + '-push-msg'); if (el) { el.textContent = t || ''; el.classList.toggle('text-red-600', !!bad); el.classList.toggle('dark:text-red-400', !!bad); } };
@@ -565,7 +566,7 @@ Object.keys(PX).forEach(k => {
       else if (!r.ok) pxMsg(k, 'Fehler: ' + (j.error || r.status), true);
       else if (!j.ok) pxMsg(k, 'Nicht zugestellt – Gerät bitte neu anmelden (Schalter aus und an).', true);
       else pxMsg(k, '✓ Gesendet' + (k === 'veh' ? (j.real ? ' mit dem echten Stand' : j.state ? ' (Beispiel – dein Auto ist gerade ' + j.state + ')' : ' (Beispiel – Auto gerade nicht erreichbar)')
-        : k === 'mon' ? (j.real ? ' mit deinem letzten Monat' : ' (Beispiel)') : (j.expires ? ' – dein Schlüssel gilt bis ' + dd(j.expires) : ' (Beispiel – Ablaufdatum unbekannt)')) + ' – kommt gleich an.');
+        : k === 'win' ? (j.real ? ' mit der echten Frost-Prognose' : ' (Beispiel)') : k === 'mon' ? (j.real ? ' mit deinem letzten Monat' : ' (Beispiel)') : (j.expires ? ' – dein Schlüssel gilt bis ' + dd(j.expires) : ' (Beispiel – Ablaufdatum unbekannt)')) + ' – kommt gleich an.');
     } catch (er) { pxMsg(k, (er && er.message) || 'Senden fehlgeschlagen.', true); }
     b.disabled = false;
   });

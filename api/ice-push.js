@@ -13,6 +13,8 @@
 //      · Monatsanfang (devices[id].mon): Monatsbericht des Vormonats + Fahrtenbuch-Hinweis, einmal je Monat (bis zum 7. nachgeholt).
 //      · Škoda-Schlüssel (devices[id].key, fehlt = an): 7 Tage vorher, am Vortag, am Ablauftag.
 //      bd: Jahrestag von Kauf und Zulassung (Gerät-Merker bd, fehlt = an), einmal je Tag und Art (pushState.bdSent).
+//      win: erster Frost der Saison (Aug–Feb, Luft ≤ 0 °C zwischen jetzt und morgen 10 Uhr am Ort „Zuhause“) → Winter-Check (Gerät-Merker win, fehlt = an),
+//        einmal je Saison (pushState.winSent = Herbst-Jahr); nicht, wenn die App den Winter-Check dieser Saison schon gezeigt hat (settings.winter.s).
 //      Zustand je Konto in settings/pushState (remKm, remDay, monSent, keySent, bdSent) – ausgefallene Abende werden nachgeholt (Erinnerungen bis 7 Tage).
 import webpush from 'web-push';
 import { SignJWT, importPKCS8 } from 'jose';
@@ -86,7 +88,7 @@ async function riskFor(uid, prefs0) {
   const w = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}&hourly=temperature_2m,dew_point_2m,cloud_cover,wind_speed_10m,precipitation&wind_speed_unit=ms&timezone=Europe%2FBerlin&forecast_days=3`);
   if (!w.ok) throw new Error('Wetter ' + w.status); return { st, r: iceEval((await w.json()).hourly, day, st) };
 }
-async function devices(uid) { const d = await fsGet(`enyaqStrom/${uid}/settings/push`); return Object.entries((d && d.devices) || {}).filter(([, v]) => v && v.sub).map(([id, v]) => ({ id, sub: JSON.parse(v.sub), ice: v.ice !== false, low: Number(v.low) > 0 ? Number(v.low) : 0, rem: v.rem === true, veh: v.veh === true, mon: v.mon === true, key: v.key !== false, bd: v.bd !== false })); }
+async function devices(uid) { const d = await fsGet(`enyaqStrom/${uid}/settings/push`); return Object.entries((d && d.devices) || {}).filter(([, v]) => v && v.sub).map(([id, v]) => ({ id, sub: JSON.parse(v.sub), ice: v.ice !== false, low: Number(v.low) > 0 ? Number(v.low) : 0, rem: v.rem === true, veh: v.veh === true, mon: v.mon === true, key: v.key !== false, bd: v.bd !== false, win: v.win !== false })); }
 
 /* ---- Fällige Erinnerungen ---- */
 async function fsList(path) {                                                   // alle Dokumente einer Sammlung → [Felder]
@@ -210,7 +212,7 @@ async function send(list, payload) {
 /** Ein Konto im Abendlauf: alle Arten getrennt, Fehler einer Art stoppen die anderen nicht. Zustand (pushState) wird am Ende in einem Schritt geschrieben. */
 async function runAccount(uid) {
   const o = { uid: uid.slice(0, 6) }, all = await devices(uid); if (!all.length) return null;
-  const today = iso(new Date()), L = (f) => all.filter(f), iceL = L(d => d.ice), remL = L(d => d.rem), lowL = L(d => d.low > 0), vehL = L(d => d.veh), monL = L(d => d.mon), keyL = L(d => d.key), bdL = L(d => d.bd);
+  const today = iso(new Date()), L = (f) => all.filter(f), iceL = L(d => d.ice), remL = L(d => d.rem), lowL = L(d => d.low > 0), vehL = L(d => d.veh), monL = L(d => d.mon), keyL = L(d => d.key), bdL = L(d => d.bd), winL = L(d => d.win);
   const [prefs, st0] = await Promise.all([fsGet(`enyaqStrom/${uid}/settings/prefs`), fsGetStrings(`enyaqStrom/${uid}/settings/pushState`).catch(() => null)]);
   const st = { ...(st0 || {}) }; let risk = null, acc = null, car = null;
   if (iceL.length) { try { const { st: is, r, why } = risk = await riskFor(uid, prefs);
@@ -243,9 +245,28 @@ async function runAccount(uid) {
   if (bdL.length) { try { const set = prefs && prefs.settings, a = annivs(set, today).filter(x => !String(st.bdSent || '').includes(today + x.k));
       if (a.length) { o.bd = []; for (const x of a) o.bd.push(await send(bdL, bdMessage(x, set, today))); st.bdSent = today + a.map(x => x.k).join('') + (String(st.bdSent || '').startsWith(today) ? String(st.bdSent).slice(10) : ''); }
     } catch (e) { o.bdErr = String(e.message || e).slice(0, 120); } }
+  if (winL.length) { try { const sea = winSeason(new Date()), w = prefs && prefs.settings && prefs.settings.winter;
+      if (!sea) o.win = 'keine Saison'; else if (st.winSent === sea) o.win = 'schon gesendet'; else if (w && w.s === sea) { o.win = 'in der App gesehen'; st.winSent = sea; }
+      else { const min = await frostTonight(uid, prefs); if (min == null) o.win = 'kein Ort'; else if (min > 0) o.win = 'kein Frost (' + min + ')';
+        else { o.win = await send(winL, { ...winMessage(min), tag: 'win-' + sea }); st.winSent = sea; } }
+    } catch (e) { o.winErr = String(e.message || e).slice(0, 120); } }
   if (JSON.stringify(st) !== JSON.stringify(st0 || {})) await fsSetStrings(`enyaqStrom/${uid}/settings/pushState`, { ...st, at: new Date().toISOString() }).catch(() => { });
   return o;
 }
+/* ---- Erster Frost im Herbst → Winter-Check ---- */
+const winSeason = (d) => { const m = d.getMonth(); return m >= 7 ? String(d.getFullYear()) : m <= 1 ? String(d.getFullYear() - 1) : null; };   // Aug–Dez: Jahr, Jan/Feb: Vorjahr, sonst keine Saison
+async function frostTonight(uid, prefs) {
+  const places = await fsGet(`enyaqStrom/${uid}/settings/places`).catch(() => null);
+  const home = places && Array.isArray(places.places) ? places.places.find(p => p && p.kind === 'home' && Number.isFinite(p.lat)) : null, loc = home || (prefs && prefs.wxLoc);
+  if (!loc || !Number.isFinite(loc.lat)) return null;
+  const w = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}&hourly=temperature_2m&timezone=Europe%2FBerlin&forecast_days=2`);
+  if (!w.ok) throw new Error('Wetter ' + w.status); const H = (await w.json()).hourly || {};
+  const b = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Berlin' })), pad = (n) => String(n).padStart(2, '0'), t = new Date(b.getTime() + 864e5);
+  const from = `${b.getFullYear()}-${pad(b.getMonth() + 1)}-${pad(b.getDate())}T${pad(b.getHours())}:00`, to = `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}T10:00`;
+  let min = Infinity; (H.time || []).forEach((x, i) => { if (x >= from && x <= to && Number.isFinite(H.temperature_2m[i])) min = Math.min(min, H.temperature_2m[i]); });
+  return Number.isFinite(min) ? min : null;
+}
+const winMessage = (min) => ({ title: '❄ Heute Nacht erster Frost (' + (min <= -0.5 ? '−' + Math.abs(Math.round(min)) : '0') + ' °C)', body: 'Spiegel-Einklappen ausschalten, bevor die Spiegel festfrieren. Winter-Check: 5 Punkte.', kind: 'win', url: '/?go=winter' });
 /** Beispiele für die Testnachrichten (echte Werte, wenn vorhanden) */
 async function testPayload(kind, user) {
   const today = iso(new Date());
@@ -259,6 +280,8 @@ async function testPayload(kind, user) {
   if (kind === 'bd') { let set = null; try { const pr = await fsGet(`enyaqStrom/${user.uid}/settings/prefs`); set = pr && pr.settings; } catch (e) { }
     const r = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(String((set && set.year) || '').trim()), n = r ? Math.max(1, Number(today.slice(0, 4)) - +r[3]) : 3;
     return { p: { ...bdMessage({ k: 'reg', n }, set, today), tag: 'bd-test' }, real: false }; }
+  if (kind === 'win') { let min = null; try { const pr = await fsGet(`enyaqStrom/${user.uid}/settings/prefs`); min = await frostTonight(user.uid, pr); } catch (e) { }
+    return { p: { ...winMessage(min != null && min <= 0 ? min : -2), tag: 'win-test' }, real: min != null && min <= 0 }; }
   return null;
 }
 
@@ -280,7 +303,7 @@ export default async function handler(req, res) {
         if (!real) c = { soc: 17, rangeKm: 62, at: new Date().toISOString() };
         return res.status(200).json({ ...(await send(list, { ...lowMessage(c, false), tag: 'low-test' })), devices: list.length, real, soc: real ? c.soc : null, plugged: real ? plugged(c) : null });
       }
-      if (['veh', 'mon', 'key', 'bd'].includes(body.test)) {
+      if (['veh', 'mon', 'key', 'bd', 'win'].includes(body.test)) {
         const list = all.filter(d => d[body.test]); if (!list.length) return res.status(404).json({ error: 'no_device' });
         const t = await testPayload(body.test, user); return res.status(200).json({ ...(await send(list, t.p)), devices: list.length, real: t.real, state: t.state ?? null, expires: t.expires ?? null });
       }

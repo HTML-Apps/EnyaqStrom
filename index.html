@@ -286,7 +286,7 @@
   @media (prefers-reduced-motion: reduce) { #bd-conf i, #bdg-conf i { animation: none; top: var(--y, 10%); } #bd-card, #bdg-card { animation: none; } }
 </style>
 <!-- Tailwind fertig gebaut (npm run css) – am Ende des Kopfs wie früher das CDN, damit die Reihenfolge der Regeln gleich bleibt -->
-<link rel="stylesheet" href="/app.css?v=387">
+<link rel="stylesheet" href="/app.css?v=388">
 </head>
 <body class="bg-slate-100 text-slate-900 dark:bg-black dark:text-slate-100 min-h-screen">
 
@@ -350,6 +350,8 @@
       <button id="up-banner-go" type="button" class="flex min-w-0 flex-1 items-center gap-2.5 text-left active:opacity-70"><span class="text-lg leading-none" aria-hidden="true">📩</span><span class="flex min-w-0 flex-1 items-baseline gap-2"><span id="up-banner-h" class="shrink-0 whitespace-nowrap font-semibold"></span><span id="up-banner-s" class="min-w-0 flex-1 truncate text-xs opacity-80"></span></span></button>
       <span class="shrink-0 text-[13px] font-semibold text-sky-700 dark:text-sky-300">Ansehen ›</span>
     </div>
+
+    <div id="win-card" class="hidden w-full"></div>
 
     <div id="dash-swipe" class="relative">
     <div id="dash-swipe-track" class="no-scrollbar flex gap-3 overflow-x-auto snap-x snap-mandatory overscroll-x-contain">
@@ -1388,6 +1390,11 @@
           <label class="mt-2 flex items-center justify-between gap-3"><span><span class="block text-sm font-medium text-slate-700 dark:text-slate-300">Rechtzeitig erinnern</span><span class="block text-xs text-left text-slate-500 dark:text-slate-400">Push-Nachricht 7 Tage vor Ablauf, am Vortag und am Ablauftag. Ist automatisch an, sobald dieses Gerät eine andere Benachrichtigung bekommt.</span></span><input id="set-key-push" type="checkbox" class="h-5 w-5 shrink-0 accent-emerald-600"></label>
           <div class="mt-2 flex items-center gap-2"><button id="key-test" type="button" class="shrink-0 rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm font-semibold active:scale-95 transition">Testnachricht senden</button><span id="key-push-msg" class="min-w-0 text-xs text-left text-slate-500 dark:text-slate-400"></span></div>
         </div>
+        <div id="win-push-box" class="py-4 first:pt-4 last:pb-0">
+          <p class="block text-sm font-medium text-slate-700 dark:text-slate-300">Erster Frost im Herbst</p>
+          <label class="mt-2 flex items-center justify-between gap-3"><span><span class="block text-sm font-medium text-slate-700 dark:text-slate-300">Winter-Check</span><span class="block text-xs text-left text-slate-500 dark:text-slate-400">Push gegen 18 Uhr am Abend vor der ersten Frostnacht (einmal pro Saison): Spiegel-Einklappen ausschalten und Auto winterfest machen. Ist automatisch an, sobald dieses Gerät eine andere Benachrichtigung bekommt.</span></span><input id="set-win-push" type="checkbox" class="h-5 w-5 shrink-0 accent-emerald-600"></label>
+          <div class="mt-2 flex items-center gap-2"><button id="win-test" type="button" class="shrink-0 rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm font-semibold active:scale-95 transition">Testnachricht senden</button><span id="win-push-msg" class="min-w-0 text-xs text-left text-slate-500 dark:text-slate-400"></span></div>
+        </div>
         <div id="bd-push-box" class="py-4 first:pt-4 last:pb-0">
           <p class="block text-sm font-medium text-slate-700 dark:text-slate-300">Jahrestage</p>
           <label class="mt-2 flex items-center justify-between gap-3"><span><span class="block text-sm font-medium text-slate-700 dark:text-slate-300">Gratulieren</span><span class="block text-xs text-left text-slate-500 dark:text-slate-400">Push-Nachricht gegen 18 Uhr am Jahrestag des Kaufs und der Zulassung (Zulassungstag unter Fahrzeug &amp; Kauf). Ist automatisch an, sobald dieses Gerät eine andere Benachrichtigung bekommt.</span></span><input id="set-bd-push" type="checkbox" class="h-5 w-5 shrink-0 accent-emerald-600"></label>
@@ -1588,6 +1595,7 @@
           </div>
           <p id="set-ice-info" class="mt-1.5 text-xs text-left text-slate-500 dark:text-slate-400"></p>
           <div class="mt-3 flex items-center justify-between gap-3"><span class="min-w-0"><span class="block text-sm font-medium text-slate-700 dark:text-slate-300">Eis-Check am Morgen</span><span class="block text-xs text-left text-slate-500 dark:text-slate-400">Handy: beim Öffnen vor der Abfahrt ab 50 % Eis-Wahrscheinlichkeit, mit Link zu MySkoda. Abfahrt lernt die App aus dem Fahrtenbuch.</span></span><button id="icem-prev" type="button" class="shrink-0 rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm font-semibold active:scale-95 transition">Vorschau</button></div>
+          <div class="mt-3 flex items-center justify-between gap-3"><span class="min-w-0"><span class="block text-sm font-medium text-slate-700 dark:text-slate-300">Winter-Check beim ersten Frost</span><span class="block text-xs text-left text-slate-500 dark:text-slate-400">Einmal pro Saison: Spiegel-Einklappen aus, Frostschutz, Scheibenplane, Enteiser, Vorklimatisieren – offene Punkte bleiben als Karte auf Start.</span></span><button id="win-prev" type="button" class="shrink-0 rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm font-semibold active:scale-95 transition">Vorschau</button></div>
           <label class="mt-3 flex items-center justify-between gap-3"><span><span class="block text-sm font-medium text-slate-700 dark:text-slate-300">Abends benachrichtigen</span><span class="block text-xs text-left text-slate-500 dark:text-slate-400">Push-Nachricht auf dieses Gerät gegen 18 Uhr, auch bei geschlossener App – nur wenn die Scheibe vereisen dürfte.</span></span><input id="set-ice-push" type="checkbox" class="h-5 w-5 shrink-0 accent-emerald-600"></label>
           <div class="mt-2 flex items-center gap-2"><button id="ice-test" type="button" class="shrink-0 rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm font-semibold active:scale-95 transition">Testnachricht senden</button><span id="ice-push-msg" class="min-w-0 text-xs text-left text-slate-500 dark:text-slate-400"></span></div>
         </div>
@@ -2036,7 +2044,7 @@
   </div>
 </nav>
 
-<script src="/app.js?v=387"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
+<script src="/app.js?v=388"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
 <script type="module">
 /* Firebase (modular SDK). Die Konfiguration ist kein Geheimnis – geschützt wird über Auth + Firestore-Regeln. */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
