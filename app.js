@@ -11041,7 +11041,7 @@ const ICEM_MIN_P = 50;
 /** MySkoda öffnen: Android per Intent (fehlt die App → Play Store), iPhone App-Store-Seite (zeigt „Öffnen“, wenn installiert) */
 function iceMornLink() {
   const ua = navigator.userAgent || '';
-  if (/android/i.test(ua)) return 'intent://#Intent;package=' + MYSKODA_PKG + ';S.browser_fallback_url=' + encodeURIComponent('https://play.google.com/store/search?q=My%C5%A0koda&c=apps') + ';end';
+  if (/android/i.test(ua)) return 'intent://#Intent;package=' + MYSKODA_PKG + ';S.browser_fallback_url=' + encodeURIComponent('https://play.google.com/store/apps/details?id=' + MYSKODA_PKG) + ';end';
   if (/iphone|ipad|ipod/i.test(ua)) return 'https://apps.apple.com/de/app/my%C5%A1koda/id1632202810';
   return 'https://www.skoda.de/myskoda';
 }
@@ -11051,7 +11051,7 @@ const MYSKODA_PKG = 'cz.skodaauto.myskoda';
 function iceMornOpenApp() {
   const ua = navigator.userAgent || '';
   if (/android/i.test(ua)) {
-    const store = 'https://play.google.com/store/search?q=My%C5%A0koda&c=apps';   // Paketname noch unbestätigt → Suche statt Detailseite
+    const store = 'https://play.google.com/store/apps/details?id=' + MYSKODA_PKG;   // Paketname vom Nutzer bestätigt (Play-Store-Link)
     let left = false; const onHide = () => { if (document.hidden) left = true; }; document.addEventListener('visibilitychange', onHide);
     setTimeout(() => { document.removeEventListener('visibilitychange', onHide); if (!left && !document.hidden) location.href = store; }, 1500);
     location.href = 'intent://#Intent;package=' + MYSKODA_PKG + ';action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;S.browser_fallback_url=' + encodeURIComponent(store) + ';end';
