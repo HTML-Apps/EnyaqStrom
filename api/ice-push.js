@@ -249,7 +249,11 @@ async function runAccount(uid) {
       if (!sea) o.win = 'keine Saison'; else if (st.winSent === sea) o.win = 'schon gesendet'; else if (w && w.s === sea) { o.win = 'in der App gesehen'; st.winSent = sea; }
       else { const min = await frostTonight(uid, prefs); if (min == null) o.win = 'kein Ort'; else if (min > 0) o.win = 'kein Frost (' + min + ')';
         else { o.win = await send(winL, { ...winMessage(min), tag: 'win-' + sea }); st.winSent = sea; } }
-    } catch (e) { o.winErr = String(e.message || e).slice(0, 120); } }
+    } catch (e) { o.winErr = String(e.message || e).slice(0, 120); }
+    try { const d = new Date(), m = d.getMonth(), y = String(d.getFullYear()), w = prefs && prefs.settings && prefs.settings.summer;   // Sommer-Check: März–Mai
+      if (m < 2 || m > 4) o.sum = 'keine Saison'; else if (st.sumSent === y) o.sum = 'schon gesendet'; else if (w && w.s === y) { o.sum = 'in der App gesehen'; st.sumSent = y; }
+      else { const ok = await frostFree21(uid, prefs); if (ok == null) o.sum = 'kein Ort'; else if (!ok) o.sum = 'noch Frost'; else { o.sum = await send(winL, { ...sumMessage(), tag: 'sum-' + y }); st.sumSent = y; } }
+    } catch (e) { o.sumErr = String(e.message || e).slice(0, 120); } }
   if (JSON.stringify(st) !== JSON.stringify(st0 || {})) await fsSetStrings(`enyaqStrom/${uid}/settings/pushState`, { ...st, at: new Date().toISOString() }).catch(() => { });
   return o;
 }
@@ -266,6 +270,15 @@ async function frostTonight(uid, prefs) {
   let min = Infinity; (H.time || []).forEach((x, i) => { if (x >= from && x <= to && Number.isFinite(H.temperature_2m[i])) min = Math.min(min, H.temperature_2m[i]); });
   return Number.isFinite(min) ? min : null;
 }
+async function frostFree21(uid, prefs) {                                         // Sommer: letzte 14 + nächste 7 Tage ohne Frost (Tagesminimum > 0 °C)
+  const places = await fsGet(`enyaqStrom/${uid}/settings/places`).catch(() => null);
+  const home = places && Array.isArray(places.places) ? places.places.find(p => p && p.kind === 'home' && Number.isFinite(p.lat)) : null, loc = home || (prefs && prefs.wxLoc);
+  if (!loc || !Number.isFinite(loc.lat)) return null;
+  const w = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}&daily=temperature_2m_min&timezone=Europe%2FBerlin&past_days=14&forecast_days=8`);
+  if (!w.ok) throw new Error('Wetter ' + w.status); const v = (((await w.json()).daily || {}).temperature_2m_min || []).filter(x => Number.isFinite(x));
+  return v.length >= 20 ? v.every(x => x > 0) : null;
+}
+const sumMessage = () => ({ title: '☀ Frost ist vorbei', body: '14 Nächte ohne Frost – Spiegel-Einklappen wieder einschalten. Sommer-Check: 5 Punkte.', kind: 'sum', url: '/?go=sommer' });
 const winMessage = (min) => ({ title: '❄ Heute Nacht erster Frost (' + (min <= -0.5 ? '−' + Math.abs(Math.round(min)) : '0') + ' °C)', body: 'Spiegel-Einklappen ausschalten, bevor die Spiegel festfrieren. Winter-Check: 5 Punkte.', kind: 'win', url: '/?go=winter' });
 /** Beispiele für die Testnachrichten (echte Werte, wenn vorhanden) */
 async function testPayload(kind, user) {
@@ -280,6 +293,7 @@ async function testPayload(kind, user) {
   if (kind === 'bd') { let set = null; try { const pr = await fsGet(`enyaqStrom/${user.uid}/settings/prefs`); set = pr && pr.settings; } catch (e) { }
     const r = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(String((set && set.year) || '').trim()), n = r ? Math.max(1, Number(today.slice(0, 4)) - +r[3]) : 3;
     return { p: { ...bdMessage({ k: 'reg', n }, set, today), tag: 'bd-test' }, real: false }; }
+  if (kind === 'sum') return { p: { ...sumMessage(), tag: 'sum-test' }, real: false };
   if (kind === 'win') { let min = null; try { const pr = await fsGet(`enyaqStrom/${user.uid}/settings/prefs`); min = await frostTonight(user.uid, pr); } catch (e) { }
     return { p: { ...winMessage(min != null && min <= 0 ? min : -2), tag: 'win-test' }, real: min != null && min <= 0 }; }
   return null;
@@ -303,8 +317,8 @@ export default async function handler(req, res) {
         if (!real) c = { soc: 17, rangeKm: 62, at: new Date().toISOString() };
         return res.status(200).json({ ...(await send(list, { ...lowMessage(c, false), tag: 'low-test' })), devices: list.length, real, soc: real ? c.soc : null, plugged: real ? plugged(c) : null });
       }
-      if (['veh', 'mon', 'key', 'bd', 'win'].includes(body.test)) {
-        const list = all.filter(d => d[body.test]); if (!list.length) return res.status(404).json({ error: 'no_device' });
+      if (['veh', 'mon', 'key', 'bd', 'win', 'sum'].includes(body.test)) {
+        const list = all.filter(d => d[body.test === 'sum' ? 'win' : body.test]); if (!list.length) return res.status(404).json({ error: 'no_device' });
         const t = await testPayload(body.test, user); return res.status(200).json({ ...(await send(list, t.p)), devices: list.length, real: t.real, state: t.state ?? null, expires: t.expires ?? null });
       }
       if (body.test === 'rem') {                                               // Erinnerungs-Test: echte heute fällige, sonst ein typisches Beispiel

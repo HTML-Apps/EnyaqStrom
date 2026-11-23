@@ -539,7 +539,7 @@ const PX = {
   mon: { key: 'enyaq.monPush', on: '✓ Dieses Gerät meldet am Monatsanfang den Monatsbericht.' },
   key: { key: 'enyaq.keyPush', on: '✓ Dieses Gerät erinnert rechtzeitig an den Škoda-Schlüssel.', car: true, def: true },
   bd: { key: 'enyaq.bdPush', on: '✓ Dieses Gerät gratuliert an den Jahrestagen von Kauf und Zulassung.', def: true },
-  win: { key: 'enyaq.winPush', on: '✓ Dieses Gerät meldet den ersten Frost im Herbst (Winter-Check).', def: true }
+  win: { key: 'enyaq.winPush', on: '✓ Dieses Gerät meldet den ersten Frost im Herbst und das Ende des Frosts im Frühjahr.', def: true }
 };
 const pxOn = (k) => { const v = load(PX[k].key, null); return PX[k].def ? v !== false : !!v; };
 const pxMsg = (k, t, bad) => { const el = $(k + '-push-msg'); if (el) { el.textContent = t || ''; el.classList.toggle('text-red-600', !!bad); el.classList.toggle('dark:text-red-400', !!bad); } };
