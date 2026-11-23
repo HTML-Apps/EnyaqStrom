@@ -11041,9 +11041,23 @@ const ICEM_MIN_P = 50;
 /** MySkoda öffnen: Android per Intent (fehlt die App → Play Store), iPhone App-Store-Seite (zeigt „Öffnen“, wenn installiert) */
 function iceMornLink() {
   const ua = navigator.userAgent || '';
-  if (/android/i.test(ua)) return 'intent://#Intent;package=cz.skodaauto.myskoda;S.browser_fallback_url=' + encodeURIComponent('https://play.google.com/store/search?q=My%C5%A0koda&c=apps') + ';end';
+  if (/android/i.test(ua)) return 'intent://#Intent;package=' + MYSKODA_PKG + ';S.browser_fallback_url=' + encodeURIComponent('https://play.google.com/store/search?q=My%C5%A0koda&c=apps') + ';end';
   if (/iphone|ipad|ipod/i.test(ua)) return 'https://apps.apple.com/de/app/my%C5%A1koda/id1632202810';
   return 'https://www.skoda.de/myskoda';
+}
+/** MySkoda starten: Android Intent per location (in der installierten PWA zuverlässiger als ein Link-Klick); bleibt die App 1,5 s im
+    Vordergrund (MySkoda nicht gefunden / Paketname falsch), öffnet sich die Play-Store-Seite. iPhone: App-Store-Seite (keine Möglichkeit, MySkoda direkt zu starten). */
+const MYSKODA_PKG = 'cz.skodaauto.myskoda';
+function iceMornOpenApp() {
+  const ua = navigator.userAgent || '';
+  if (/android/i.test(ua)) {
+    const store = 'https://play.google.com/store/search?q=My%C5%A0koda&c=apps';   // Paketname noch unbestätigt → Suche statt Detailseite
+    let left = false; const onHide = () => { if (document.hidden) left = true; }; document.addEventListener('visibilitychange', onHide);
+    setTimeout(() => { document.removeEventListener('visibilitychange', onHide); if (!left && !document.hidden) location.href = store; }, 1500);
+    location.href = 'intent://#Intent;package=' + MYSKODA_PKG + ';action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;S.browser_fallback_url=' + encodeURIComponent(store) + ';end';
+    return;
+  }
+  window.open(iceMornLink(), '_blank', 'noopener');
 }
 /** Übliche Abfahrt (Minuten nach Mitternacht) für den Wochentag von `d`: aus dem Fahrtenbuch gelernt, sonst Einstellung */
 function iceMornDep(d) {
@@ -11096,6 +11110,7 @@ function iceMornShow(r, dep, nowM, preview) {
       <p class="mt-2.5 text-center text-[11px] text-slate-500">${dep.learned ? 'Abfahrt gelernt aus ' + dep.n + ' Fahrten an diesem Wochentag' : 'Abfahrt aus Einstellungen › Eis-Warnung'} · Eis-Prognose für deinen Stellplatz</p>
     </div></div>`;
   el.classList.remove('hidden'); if (!preview) save(KEY_ICEM, todayYMD());
+  const a = el.querySelector('[data-icem=open]'); if (a) a.addEventListener('click', (e) => { e.preventDefault(); iceMornOpenApp(); });
   try { history.pushState({ icem: 1 }, ''); } catch (e) { }
 }
 function iceMornClose(how, fromPop) {
