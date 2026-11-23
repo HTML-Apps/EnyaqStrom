@@ -11054,7 +11054,9 @@ function iceMornOpenApp() {
     const store = 'https://play.google.com/store/apps/details?id=' + MYSKODA_PKG;   // Paketname vom Nutzer bestätigt (Play-Store-Link)
     let left = false; const onHide = () => { if (document.hidden) left = true; }; document.addEventListener('visibilitychange', onHide);
     setTimeout(() => { document.removeEventListener('visibilitychange', onHide); if (!left && !document.hidden) location.href = store; }, 1500);
-    location.href = 'intent://#Intent;package=' + MYSKODA_PKG + ';action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;S.browser_fallback_url=' + encodeURIComponent(store) + ';end';
+    // Chrome startet aus dem Browser nur Activities mit BROWSABLE-Filter – der Start-Bildschirm (LAUNCHER) gehört nicht dazu.
+    // MySkoda registriert das Schema myskoda:// (OAuth-Rückleitung myskoda://redirect/login/) → darüber geht die App auf.
+    location.href = 'intent://redirect/login/#Intent;scheme=myskoda;package=' + MYSKODA_PKG + ';S.browser_fallback_url=' + encodeURIComponent(store) + ';end';
     return;
   }
   window.open(iceMornLink(), '_blank', 'noopener');
