@@ -85,3 +85,4 @@
 - Bento: Basis-Texte (`#eff-note`, `#loss-note`) in `<details id="eff-basis">` „Wie gerechnet?“ zum Aufklappen; Kosten-/Ladeverlust-Kacheln flacher (ct/km in der Zeile „pro 100 km“, Ring 48 px; der Klartext unter dem Prozentwert ist auf Wunsch entfernt).
 - Start-Link „Fahrtenbuch“ (`#go-trips`) ist ausgeblendet (Klasse `hidden`, JS bleibt); Fahrten weiter über Historie → Fahrten.
 - Start-Verknüpfungen als Icon-Leiste (Variante B, `#start-icons`, src/39): die alten Zeilen-Knöpfe (`#go-stat`, `#btn-wrap-preview`, `#go-akku`, `#go-prov`, `#go-badges`, `#kb-card`) bleiben versteckt im DOM (Klick-Logik + Untertitel `*-n`); `startIcons()` übernimmt deren Symbol, ruft `.click()` auf und liest Kurzwerte (Akku x/100, Abzeichen x/y, offene Mängel als roter Zähler) per MutationObserver aus den Untertiteln. Einfache Ansicht blendet die Leiste aus.
+- `#start-icons` steht direkt unter dem Wisch-Bereich, vor der Überschrift Trends (`#sec-trends`).

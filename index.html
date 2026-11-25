@@ -286,7 +286,7 @@
   @media (prefers-reduced-motion: reduce) { #bd-conf i, #bdg-conf i { animation: none; top: var(--y, 10%); } #bd-card, #bdg-card { animation: none; } }
 </style>
 <!-- Tailwind fertig gebaut (npm run css) – am Ende des Kopfs wie früher das CDN, damit die Reihenfolge der Regeln gleich bleibt -->
-<link rel="stylesheet" href="/app.css?v=400">
+<link rel="stylesheet" href="/app.css?v=401">
 </head>
 <body class="bg-slate-100 text-slate-900 dark:bg-black dark:text-slate-100 min-h-screen">
 
@@ -425,6 +425,7 @@
     <div id="dash-dots" class="hidden pointer-events-none absolute inset-x-0 bottom-1.5 flex justify-center gap-1.5"><button type="button" data-dslide="0" aria-label="Verbrauchs-Prognose" class="pointer-events-auto h-1.5 w-4 rounded-full bg-slate-400 dark:bg-slate-500 transition-all"></button><button type="button" data-dslide="1" aria-label="Zählerstand" class="pointer-events-auto h-1.5 w-1.5 rounded-full bg-slate-300 dark:bg-slate-700 transition-all"></button></div>
     </div>
 
+    <div id="start-icons" class="flex justify-around rounded-3xl bg-white dark:bg-slate-900 shadow-sm px-1.5 pt-3 pb-2.5" role="navigation" aria-label="Bereiche"></div>
     <div id="sec-trends" class="!mt-7 flex items-center gap-3 scroll-mt-4" role="presentation">
       <h2 class="shrink-0 font-barlow text-xl font-bold uppercase tracking-[0.1em] text-slate-900 dark:text-white">Trends</h2>
       <span class="h-0.5 flex-1 rounded-full bg-gradient-to-r from-emerald-500/80 to-white/10" aria-hidden="true"></span>
@@ -435,7 +436,6 @@
     </div>
     <div id="simple-start" class="simple-only !mt-3"></div>
     <button id="simple-sos" type="button" class="simple-only flex w-full items-center gap-4 rounded-3xl bg-gradient-to-br from-red-700 to-red-950 p-4 text-left text-white shadow-sm active:scale-[0.99] transition"><span class="text-4xl">🆘</span><span class="flex-1"><span class="block text-xl font-extrabold leading-tight">Hilfe</span><span class="block text-sm opacity-90">Panne oder Unfall</span></span><span class="text-2xl opacity-80">›</span></button>
-    <div id="start-icons" class="flex justify-around rounded-3xl bg-white dark:bg-slate-900 shadow-sm px-1.5 pt-3 pb-2.5" role="navigation" aria-label="Bereiche"></div>
     <button id="go-stat" type="button" class="hidden flex w-full items-center justify-between rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm px-4 py-3 active:scale-[0.99] transition">
       <span class="flex items-center gap-3 font-medium"><svg class="w-6 h-6 text-emerald-500" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/></svg>Fahrzeugdaten</span>
       <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
@@ -2053,7 +2053,7 @@
   </div>
 </nav>
 
-<script src="/app.js?v=400"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
+<script src="/app.js?v=401"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
 <script type="module">
 /* Firebase (modular SDK). Die Konfiguration ist kein Geheimnis – geschützt wird über Auth + Firestore-Regeln. */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
