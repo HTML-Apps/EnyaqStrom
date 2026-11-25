@@ -327,6 +327,7 @@ function renderLossChart() {
   const pct = (o) => o.chg > 0 ? fmt(Math.max(0, (1 - o.st / o.chg) * 100), 1) + ' %' : '–';
   $('loss-summer').textContent = pct(season.summer); $('loss-winter').textContent = pct(season.winter);
   $('loss-cost').textContent = n ? eur(Math.max(0, lossCost)) : '–';
+  if (!$('loss-chart')) { $('loss-note').textContent = n ? 'Basis: ' + n + ' Ladungen · Kapazität je Ladung gespeichert · enthält u. a. Batterieheizung und Wandlerverluste' : ''; return; }   // Diagramm entfernt (v394)
 
   const now = new Date(), labels = [], kwh = [], perc = [];
   for (let k = 11; k >= 0; k--) {                                          // letzte 12 Monate
@@ -444,7 +445,6 @@ function renderDashboard() {
   $('dash-last-label').textContent = last ? 'Kosten (' + fmtDate(last.date) + ')' : 'Kosten';
   segPaint('.dash-place-btn', dashPlace);
   renderLive();                                          // überschreibt die Werte, falls der Live-Modus läuft
-  renderChart();
   renderHeroStats();
   renderStats();
   renderEfficiency();
@@ -453,7 +453,6 @@ function renderDashboard() {
   renderReportBanner(); renderTripsBanner();
 }
 document.querySelectorAll('.dash-place-btn').forEach(b => b.addEventListener('click', () => { dashPlace = b.dataset.place; renderDashboard(); }));
-document.querySelectorAll('.range-btn').forEach(b => b.addEventListener('click', () => { range = b.dataset.range; renderChart(); }));
 
 
 /** Hochrechnung Laufleistung: Ø der abgeschlossenen Monate ohne den ersten Monat mit km-Ständen (angebrochen, zieht sonst den Schnitt runter) */

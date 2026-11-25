@@ -301,7 +301,7 @@ setDpTab('stat', false);
 
 segSwipe($('rep-place'), $('rep-place'));                                   // Berichte → Laden: Ort direkt auf der Tab-Leiste wischen
 segSwipe($('dash-place'), $('dash-place'));                                 // Start: Ort auf der Tab-Leiste (die Seite selbst hat das Bilder-Karussell)
-segSwipe($('range-switch').parentElement, $('range-switch'));               // Start: Diagramm Woche | Monat | Jahr (ganze Karte)
+if ($('range-switch')) segSwipe($('range-switch').parentElement, $('range-switch'));               // Start: Diagramm Woche | Monat | Jahr (ganze Karte)
 segSwipe(document.querySelector('.stat-btn').closest('.rounded-3xl'), document.querySelector('.stat-btn').parentElement);   // Start: Ø Ladungen
 
 initStatImg();                                           // Statistik-Bild laden (asynchron)

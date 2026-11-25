@@ -5,11 +5,11 @@
  * - Die KI-Abfrage (/api/…) wird NIE gecacht und läuft immer übers Netz.
  * Bei größeren Änderungen am Cache-Konzept CACHE_VERSION erhöhen. */
 
-const CACHE_VERSION = 'v393';
+const CACHE_VERSION = 'v394';
 const CACHE_NAME = 'enyaq-' + CACHE_VERSION;
 
 // Dateien, die beim Installieren vorab geladen werden
-const SAME_ORIGIN_ASSETS = ['./', './index.html', './app.css?v=393', './app.js?v=393', './Bilder/Enyaq/hero/1.webp'];
+const SAME_ORIGIN_ASSETS = ['./', './index.html', './app.css?v=394', './app.js?v=394', './Bilder/Enyaq/hero/1.webp'];
 const CDN_ASSETS = [
   'https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js'
 ];

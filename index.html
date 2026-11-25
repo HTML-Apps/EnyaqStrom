@@ -286,7 +286,7 @@
   @media (prefers-reduced-motion: reduce) { #bd-conf i, #bdg-conf i { animation: none; top: var(--y, 10%); } #bd-card, #bdg-card { animation: none; } }
 </style>
 <!-- Tailwind fertig gebaut (npm run css) – am Ende des Kopfs wie früher das CDN, damit die Reihenfolge der Regeln gleich bleibt -->
-<link rel="stylesheet" href="/app.css?v=393">
+<link rel="stylesheet" href="/app.css?v=394">
 </head>
 <body class="bg-slate-100 text-slate-900 dark:bg-black dark:text-slate-100 min-h-screen">
 
@@ -476,17 +476,6 @@
     <div id="dash-place" class="flex bg-slate-200 dark:bg-slate-800 rounded-xl p-1"><button type="button" data-place="home" class="dash-place-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Zuhause</button><button type="button" data-place="bosch" class="dash-place-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Bosch</button><button type="button" data-place="away" class="dash-place-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Unterwegs</button><button type="button" data-place="all" class="dash-place-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Gesamt</button></div>
 
     <div class="rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
-      <div class="flex bg-slate-100 dark:bg-slate-800 rounded-xl p-1 mb-3" id="range-switch">
-        <button data-range="week"  class="range-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Woche</button>
-        <button data-range="month" class="range-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Monat</button>
-        <button data-range="year"  class="range-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Jahr</button>
-      </div>
-      <p id="chart-title" class="text-left text-sm text-slate-500 dark:text-slate-400 mb-2"></p>
-      <div class="relative h-64"><canvas id="chart"></canvas></div>
-      <p id="chart-empty" class="hidden text-center text-sm text-slate-500 py-6">Noch keine Daten. Erfasse mindestens zwei Zählerstände.</p>
-    </div>
-
-    <div class="rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4">
       <div class="flex bg-slate-100 dark:bg-slate-800 rounded-xl p-1 mb-4">
         <button data-stat="week"  class="stat-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Woche</button>
         <button data-stat="month" class="stat-btn flex-1 py-1.5 rounded-lg text-sm font-medium">Monat</button>
@@ -514,8 +503,6 @@
         <div class="rounded-2xl bg-sky-50 dark:bg-sky-950/50 p-3"><p class="text-xs text-slate-500 dark:text-slate-400">Winter</p><p id="loss-winter" class="text-xl font-semibold text-sky-700 dark:text-sky-300">–</p><p class="text-xs text-slate-500 dark:text-slate-400">Okt–Mär</p></div>
         <div class="rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 p-3"><p class="text-xs text-slate-500 dark:text-slate-400">Verlustkosten</p><p id="loss-cost" class="text-xl font-semibold text-emerald-700 dark:text-emerald-300">–</p><p class="text-xs text-slate-500 dark:text-slate-400">gesamt</p></div>
       </div>
-      <div class="relative h-56 mt-4"><canvas id="loss-chart"></canvas></div>
-      <p id="loss-empty" class="hidden text-center text-sm text-slate-500 py-6">Noch keine Ladungen mit Akku-Start und -Ende erfasst.</p>
       <p id="loss-note" class="text-xs text-slate-500 dark:text-slate-400 mt-3 text-center"></p>
     </div>
     </div>
@@ -2045,7 +2032,7 @@
   </div>
 </nav>
 
-<script src="/app.js?v=393"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
+<script src="/app.js?v=394"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
 <script type="module">
 /* Firebase (modular SDK). Die Konfiguration ist kein Geheimnis – geschützt wird über Auth + Firestore-Regeln. */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
