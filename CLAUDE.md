@@ -88,3 +88,4 @@
 - `#start-icons` steht direkt unter dem Wisch-Bereich, vor der Überschrift Trends (`#sec-trends`).
 - „Bilder-Karussell auf Start“ (`set-car-n`, `set-car-sec`, `#car-ord`, 360° `#c360-*`) steht jetzt in der Einstellungs-Karte „Startseite“ unter den Widgets (vorher Fahrzeug & Kauf); Felder hängen nur an IDs, Speichern unverändert.
 - Hintergrundfarbe der Start-Seite (`#hero-swatches`) und Darstellung (`#theme-seg`) stehen ebenfalls in der Karte „Startseite“ (nach dem Bilder-Karussell), nicht mehr unter Fahrzeug & Kauf.
+- Trends starten auf der mittleren Karte (`trMidDone` in src/37: beim ersten Aufbau mit Breite > 0 `trendIdx = floor(n/2)`; ResizeObserver holt es nach, falls der Bereich anfangs unsichtbar war).

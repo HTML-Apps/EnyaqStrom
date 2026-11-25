@@ -11329,7 +11329,9 @@ function fbvCard() {
    gerade sichtbare Karte, Wischen wählt eine andere) und „Fertig“. Reihenfolge settings.trOrd = [data-tkey…] (synchronisiert,
    nur wenn abweichend). Antippen eines Balkens (Verbrauch 30 Tage) → Blase mit Datum, kWh/100, km, Fahrten.
    ===================================================================== */
-let trEdit = false;
+let trEdit = false, trMidDone = false;
+/* Trends-Bereich war beim ersten Aufbau noch unsichtbar (Breite 0) → sobald er Breite bekommt, einmal auf die Mitte setzen */
+try { new ResizeObserver(() => { if (!trMidDone && $('trends').firstElementChild?.offsetWidth > 0) renderTrends(); }).observe($('trends')); } catch (e) { }
 const trDotsHtml = (n) => Array.from({ length: n }, (_, i) => `<span data-tdot="${i}" class="block h-2 rounded-full transition-all ${i === trendIdx ? 'w-5 bg-emerald-500' : 'w-2 bg-slate-500/60'}"></span>`).join('');
 function trKeys() { return [...$('trends').children].map(a => a.dataset.tkey); }
 function trApplyOrder() {
@@ -11343,6 +11345,7 @@ function trApplyOrder() {
     orig.apply(this, arguments);
     const box = $('trends'); if (!box || !box.children.length) return;
     try { trApplyOrder(); } catch (e) { }
+    if (!trMidDone && box.firstElementChild.offsetWidth > 0) { trMidDone = true; trendIdx = Math.floor(box.children.length / 2); }   // Start: mittlere Karte → je 2 nach links/rechts
     trendIdx = Math.min(trendIdx, box.children.length - 1);
     $('trends-dots').innerHTML = trDotsHtml(box.children.length);
     box.scrollLeft = trendIdx * (box.firstElementChild.offsetWidth + 16);
