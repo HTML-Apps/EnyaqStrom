@@ -1382,7 +1382,7 @@ function renderTrends() {
     const num = (v) => v > 0 ? fmt(v, d.dec) : '–', ul = '<span class="ml-1 text-xs font-medium text-slate-500 dark:text-slate-400">' + (d.su || d.unit) + '</span>';
     const stat = (l, v, cls = '') => `<div><p class="text-xs text-slate-500 dark:text-slate-400">${l}</p><p class="text-lg font-semibold tabular-nums leading-tight whitespace-nowrap ${cls}">${v}</p></div>`;
     const empty = !vals.some(x => x.v > 0);
-    return `<article class="snap-center snap-always shrink-0 w-full rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4" aria-label="${d.title}">
+    return `<article data-tkey="${d.key}" class="snap-center snap-always shrink-0 w-full rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4" aria-label="${d.title}">
       <p class="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-700 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300"><svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true">${TREND_ICONS[d.key]}</svg>${d.title}</p>
       ${empty ? '<p class="py-12 text-center text-sm text-slate-500 dark:text-slate-400">Noch keine Daten in den letzten 8 Monaten.</p>' : `
       <div class="mt-4 flex gap-3">
@@ -5924,7 +5924,7 @@ try { renderWrapCard(); } catch (e) { }
    im Dokument enyaqStrom/<uid>/settings/prefs, gleiche Regel wie Anbieter und Kategorien. Die PIN bleibt nur auf dem Gerät.
    Erster Abgleich: Was die Cloud hat, gilt; fehlt dort etwas und ist lokal vorhanden, wird es hochgeladen. Danach gilt die Cloud (Änderung auf einem Gerät wirkt auf allen).
    ===================================================================== */
-const SYNC_SET_KEYS = ['presetV', 'winter', 'bdg', 'title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAcKwh', 'certDcKwh', 'certKm', 'wltpNet', 'ccEnd', 'wxoCut', 'dashFirst', 'car', 'carT', 'ui', 'carN', 'carSec', 'wxIcons', 'nRep', 'nCare', 'nTrips', 'nBakYm', 'nBakAt', 'nBakSnz', 'gtMirror', 'gtList', 'iceDep', 'iceWe', 'icePark', 'iceMin', 'iceK', 'cmpCar', 'cmpL', 'cmpEur', 'cmpCo2', 'news', 'newsRead', 'sos', 'dashPD', 'dashPM', 'carOrd'];   // Startseite (dash, dashStart, dashDyn) gilt je Gerät; dashPD/dashPM = Sicherung je Gerätetyp (PC/Handy), nur zum Wiederherstellen bei leerem Gerätespeicher (src/25)
+const SYNC_SET_KEYS = ['presetV', 'trOrd', 'winter', 'bdg', 'title', 'brand', 'model', 'plate', 'year', 'vin', 'price', 'battery', 'power', 'remDays', 'remKm', 'purchase', 'purchaseKm', 'purchasePrice', 'commuteKm', 'refLo', 'refHi', 'nextHu', 'nextService', 'certAcKwh', 'certDcKwh', 'certKm', 'wltpNet', 'ccEnd', 'wxoCut', 'dashFirst', 'car', 'carT', 'ui', 'carN', 'carSec', 'wxIcons', 'nRep', 'nCare', 'nTrips', 'nBakYm', 'nBakAt', 'nBakSnz', 'gtMirror', 'gtList', 'iceDep', 'iceWe', 'icePark', 'iceMin', 'iceK', 'cmpCar', 'cmpL', 'cmpEur', 'cmpCo2', 'news', 'newsRead', 'sos', 'dashPD', 'dashPM', 'carOrd'];   // Startseite (dash, dashStart, dashDyn) gilt je Gerät; dashPD/dashPM = Sicherung je Gerätetyp (PC/Handy), nur zum Wiederherstellen bei leerem Gerätespeicher (src/25)
 /** Einstellungen für die Cloud: feste Reihenfolge, ohne leere Werte (Firestore verbietet undefined). null = nichts vorhanden. */
 function syncSet(src) {
   const o = {}; if (src && typeof src === 'object') SYNC_SET_KEYS.forEach(k => { const v = src[k]; if (v != null && v !== '' && !(typeof v === 'number' && !isFinite(v))) o[k] = v; });
@@ -11297,17 +11297,17 @@ function fbvCard() {
   const D = fbvData(), dd = (d) => pad2(d.getDate()) + '.' + pad2(d.getMonth() + 1) + '.';
   const tag = '<span class="ml-auto shrink-0 rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[10.5px] font-medium text-slate-500 dark:text-slate-400" title="Diese Werte fließen in keine Berechnung der App ein">nur Anzeige</span>';
   const head = `<div class="flex items-center gap-2"><p class="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-700 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300"><svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="19" r="2"/><circle cx="18" cy="5" r="2"/><path d="M6 17V9a4 4 0 014-4M18 7v8a4 4 0 01-4 4h-2"/></svg>Verbrauch 30 Tage</p>${tag}</div>`;
-  if (D.avg == null) return `<article class="snap-center snap-always shrink-0 w-full rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4" aria-label="Verbrauch 30 Tage aus dem Fahrtenbuch">${head}
+  if (D.avg == null) return `<article data-tkey="fbv" class="snap-center snap-always shrink-0 w-full rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4" aria-label="Verbrauch 30 Tage aus dem Fahrtenbuch">${head}
     <p class="py-12 text-center text-sm text-slate-500 dark:text-slate-400">Keine Fahrten mit Verbrauch in den letzten 30 Tagen.<br><span class="text-xs">Fahrtenbuch aus MySkoda importieren (Teilen-Menü oder Einstellungen › Fahrtenbuch).</span></p></article>`;
   const vs = D.list.filter(x => x.v != null).map(x => x.v), lo = Math.max(0, Math.floor(Math.min(...vs, D.avg) * 0.75)), hi = Math.max(...vs, D.avg) * 1.05, hp = (v) => Math.max(4, (v - lo) / ((hi - lo) || 1) * 100);
   const col = (v) => v > 24 ? 'bg-amber-500' : v < 19 ? 'bg-sky-500' : 'bg-emerald-500';
   const bars = D.list.map(x => x.v == null
-    ? `<div class="flex-1 h-full flex items-end" title="${dd(x.d)}: keine Fahrt"><div class="w-full h-[3px] rounded-sm bg-slate-200 dark:bg-slate-800"></div></div>`
-    : `<div class="flex-1 h-full flex items-end" title="${dd(x.d)}: ${fmt(x.v, 1)} kWh/100 km · ${fmt(x.km, 0)} km · ${x.n} ${x.n === 1 ? 'Fahrt' : 'Fahrten'}"><div class="w-full rounded-t-[3px] rounded-b-[1px] ${col(x.v)}" style="height:${hp(x.v).toFixed(1)}%;opacity:${(0.45 + Math.min(x.km, 80) / 80 * 0.55).toFixed(2)}"></div></div>`).join('');
+    ? `<div class="flex-1 h-full flex items-end" data-fbv="${dd(x.d)}|–|0|0"><div class="w-full h-[3px] rounded-sm bg-slate-200 dark:bg-slate-800"></div></div>`
+    : `<div class="flex-1 h-full flex items-end cursor-pointer" data-fbv="${dd(x.d)}|${fmt(x.v, 1)}|${fmt(x.km, 0)}|${x.n}"><div class="w-full rounded-t-[3px] rounded-b-[1px] ${col(x.v)}" style="height:${hp(x.v).toFixed(1)}%;opacity:${(0.45 + Math.min(x.km, 80) / 80 * 0.55).toFixed(2)}"></div></div>`).join('');
   const mid = D.list[Math.floor(FBV_DAYS / 2)].d, dot = (c) => `<i class="inline-block h-2 w-2 rounded-sm ${c}"></i>`;
-  return `<article class="snap-center snap-always shrink-0 w-full rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4" aria-label="Verbrauch 30 Tage aus dem Fahrtenbuch">${head}
+  return `<article data-tkey="fbv" class="snap-center snap-always shrink-0 w-full rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4" aria-label="Verbrauch 30 Tage aus dem Fahrtenbuch">${head}
     <div class="mt-3 flex flex-wrap items-baseline gap-x-2"><span class="font-barlow text-4xl font-bold leading-none tabular-nums">${fmt(D.avg, 1)}</span><span class="text-xs text-slate-500 dark:text-slate-400">kWh/100 km Ø · ${fmt(D.km, 0)} km · ${D.n} Fahrten</span></div>
-    <div class="relative mt-3 h-[140px]"><div class="absolute inset-0 flex items-end gap-[2px]">${bars}</div>
+    <div class="relative mt-3 h-[140px]" data-fbv-box><div class="absolute inset-0 flex items-end gap-[2px]">${bars}</div>
       <div class="pointer-events-none absolute inset-x-0 border-t-2 border-dashed border-slate-400/70 dark:border-slate-300/60" style="bottom:${hp(D.avg).toFixed(1)}%"><span class="absolute -top-[18px] right-0 rounded bg-white/90 dark:bg-slate-900/90 px-1 text-[10px] text-slate-600 dark:text-slate-300">Ø ${fmt(D.avg, 1)}</span></div></div>
     <div class="mt-1 flex justify-between text-[10px] text-slate-500 dark:text-slate-400"><span>${dd(D.list[0].d)}</span><span>${dd(mid)}</span><span>heute</span></div>
     <p class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-500 dark:text-slate-400"><span>${dot('bg-sky-500')} &lt; 19</span><span>${dot('bg-emerald-500')} 19–24</span><span>${dot('bg-amber-500')} &gt; 24 kWh/100</span><span class="ml-auto">blass = wenig km · aus dem Fahrtenbuch, nur Anzeige</span></p></article>`;
@@ -11322,3 +11322,100 @@ function fbvCard() {
   };
   try { renderTrends(); } catch (e) { }
 }
+
+// ───── src/37-trends-reihenfolge.js ─────
+/* =====================================================================
+   Trends (Start): Reihenfolge ohne Einstellungs-Menü ändern + Wert-Anzeige je Balken bei „Verbrauch 30 Tage“.
+   Lange auf eine Trends-Karte drücken (≈ 0,5 s) → Verschiebe-Modus: Leiste unter dem Karussell mit ‹ › (verschiebt die
+   gerade sichtbare Karte, Wischen wählt eine andere) und „Fertig“. Reihenfolge settings.trOrd = [data-tkey…] (synchronisiert,
+   nur wenn abweichend). Antippen eines Balkens (Verbrauch 30 Tage) → Blase mit Datum, kWh/100, km, Fahrten.
+   ===================================================================== */
+let trEdit = false;
+const trDotsHtml = (n) => Array.from({ length: n }, (_, i) => `<span data-tdot="${i}" class="block h-2 rounded-full transition-all ${i === trendIdx ? 'w-5 bg-emerald-500' : 'w-2 bg-slate-500/60'}"></span>`).join('');
+function trKeys() { return [...$('trends').children].map(a => a.dataset.tkey); }
+function trApplyOrder() {
+  const box = $('trends'), ord = getSettings().trOrd; if (!Array.isArray(ord) || !ord.length) return;
+  const cards = [...box.children], by = {}; cards.forEach(a => by[a.dataset.tkey] = a);
+  const seq = ord.filter(k => by[k]); cards.forEach((a, i) => { const k = a.dataset.tkey; if (seq.includes(k)) return; seq.splice(Math.min(i, seq.length), 0, k); });   // neue Karten an ihrer Standard-Stelle
+  seq.forEach(k => box.appendChild(by[k]));
+}
+{ const orig = renderTrends;
+  renderTrends = function () {
+    orig.apply(this, arguments);
+    const box = $('trends'); if (!box || !box.children.length) return;
+    try { trApplyOrder(); } catch (e) { }
+    trendIdx = Math.min(trendIdx, box.children.length - 1);
+    $('trends-dots').innerHTML = trDotsHtml(box.children.length);
+    box.scrollLeft = trendIdx * (box.firstElementChild.offsetWidth + 16);
+    if (trEdit) trEditPaint();
+  };
+  try { renderTrends(); } catch (e) { }
+}
+function trEditPaint() {
+  const box = $('trends'), n = box.children.length, i = trendIdx;
+  [...box.children].forEach((a, k) => { a.classList.toggle('ring-2', trEdit && k === i); a.classList.toggle('ring-emerald-500', trEdit && k === i); a.classList.toggle('ring-inset', trEdit && k === i); });
+  let bar = $('trends-edit');
+  if (!trEdit) { if (bar) bar.remove(); $('trends-dots').classList.remove('hidden'); return; }
+  if (!bar) {
+    bar = document.createElement('div'); bar.id = 'trends-edit';
+    bar.className = '!mt-2 flex items-center gap-2 rounded-2xl bg-white dark:bg-slate-900 shadow-sm p-1.5';
+    $('trends-dots').after(bar); $('trends-dots').classList.add('hidden');
+  }
+  const btn = 'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-xl font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 disabled:opacity-30 active:scale-95 transition';
+  const title = box.children[i]?.getAttribute('aria-label') || '';
+  bar.innerHTML = `<button type="button" data-trmv="-1" class="${btn}" aria-label="Nach vorne" ${i <= 0 ? 'disabled' : ''}>‹</button>
+    <div class="min-w-0 flex-1 text-center leading-tight"><p class="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">${esc(title)}</p><p class="text-xs text-slate-500 dark:text-slate-400">Position ${i + 1} von ${n} · wischen wählt</p></div>
+    <button type="button" data-trmv="1" class="${btn}" aria-label="Nach hinten" ${i >= n - 1 ? 'disabled' : ''}>›</button>
+    <button type="button" data-trdone class="h-10 shrink-0 rounded-xl bg-emerald-600 px-3 text-sm font-semibold text-white active:scale-95 transition">Fertig</button>`;
+}
+function trEditStart() { trEdit = true; try { navigator.vibrate && navigator.vibrate(15); } catch (e) { } trEditPaint(); }
+function trEditEnd() { trEdit = false; trEditPaint(); }
+function trMove(d) {
+  const box = $('trends'), cards = [...box.children], i = trendIdx, j = i + d; if (j < 0 || j >= cards.length) return;
+  if (d > 0) cards[j].after(cards[i]); else cards[j].before(cards[i]);
+  const keys = trKeys(), def = [...keys].sort((a, b) => TR_DEF.indexOf(a) - TR_DEF.indexOf(b));
+  setQuickSetting('trOrd', keys.join() === def.join() ? undefined : keys);
+  trendIdx = j; $('trends-dots').innerHTML = trDotsHtml(cards.length);
+  box.style.scrollSnapType = 'none'; box.scrollTo({ left: j * (box.firstElementChild.offsetWidth + 16), behavior: 'smooth' });
+  setTimeout(() => { box.style.scrollSnapType = ''; }, 450);
+  trEditPaint();
+}
+const TR_DEF = ['km', 'strom', 'ges', 'eff', 'fbv'];
+document.addEventListener('click', (e) => {
+  const mv = e.target.closest('[data-trmv]'); if (mv) { trMove(Number(mv.dataset.trmv)); return; }
+  if (e.target.closest('[data-trdone]')) { trEditEnd(); return; }
+  if (trEdit && !e.target.closest('#trends, #trends-edit')) trEditEnd();
+});
+/* Langes Drücken auf eine Karte startet den Verschiebe-Modus */
+{ const box = $('trends'); let lp = null, fired = false;
+  box.addEventListener('pointerdown', (e) => {
+    if (e.button > 0) return; fired = false; clearTimeout(lp?.t);
+    lp = { x: e.clientX, y: e.clientY, t: setTimeout(() => { fired = true; lp = null; trEditStart(); }, 520) };
+  });
+  const cancel = () => { if (lp) { clearTimeout(lp.t); lp = null; } };
+  box.addEventListener('pointermove', (e) => { if (lp && Math.hypot(e.clientX - lp.x, e.clientY - lp.y) > 8) cancel(); });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(t => box.addEventListener(t, cancel));
+  box.addEventListener('scroll', cancel, { passive: true });
+  box.addEventListener('contextmenu', (e) => e.preventDefault());
+  box.addEventListener('click', (e) => { if (fired) { fired = false; e.stopPropagation(); e.preventDefault(); } }, true);   // Klick nach langem Drücken schlucken
+  box.addEventListener('scroll', () => { if (trEdit) requestAnimationFrame(trEditPaint); }, { passive: true });
+}
+/* Verbrauch 30 Tage: Wert je Balken als Blase */
+function fbvTip(bar) {
+  const host = bar.closest('[data-fbv-box]'); if (!host) return;
+  const old = host.querySelector('.fbv-tip'), was = old && old.dataset.k === bar.dataset.fbv;
+  host.querySelectorAll('.fbv-tip').forEach(x => x.remove()); host.querySelectorAll('[data-fbv] > div').forEach(x => x.style.outline = '');
+  if (was) return;
+  const [d, v, km, n] = bar.dataset.fbv.split('|'), hr = host.getBoundingClientRect(), br = bar.getBoundingClientRect();
+  const cx = br.left + br.width / 2 - hr.left, tip = document.createElement('div');
+  tip.className = 'fbv-tip pointer-events-none absolute z-20 -top-2 -translate-y-full whitespace-nowrap rounded-xl bg-slate-900 dark:bg-slate-100 px-2.5 py-1.5 text-xs text-white dark:text-slate-900 shadow-lg';
+  tip.dataset.k = bar.dataset.fbv;
+  tip.innerHTML = Number(n) ? `<b class="tabular-nums">${d}</b> · <b class="tabular-nums">${v}</b> kWh/100<br><span class="opacity-75 tabular-nums">${km} km · ${n} ${n === '1' ? 'Fahrt' : 'Fahrten'}</span>` : `<b>${d}</b> · keine Fahrt`;
+  host.appendChild(tip);
+  const w = tip.offsetWidth; tip.style.left = Math.max(0, Math.min(hr.width - w, cx - w / 2)) + 'px';
+  const fill = bar.firstElementChild; if (fill && Number(n)) { fill.style.outline = '2px solid currentColor'; fill.style.outlineOffset = '1px'; }
+}
+$('trends').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-fbv]'); if (b) { fbvTip(b); return; }
+  document.querySelectorAll('#trends .fbv-tip').forEach(x => x.remove()); document.querySelectorAll('#trends [data-fbv] > div').forEach(x => x.style.outline = '');
+});

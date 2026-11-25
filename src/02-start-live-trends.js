@@ -387,7 +387,7 @@ function renderTrends() {
     const num = (v) => v > 0 ? fmt(v, d.dec) : '–', ul = '<span class="ml-1 text-xs font-medium text-slate-500 dark:text-slate-400">' + (d.su || d.unit) + '</span>';
     const stat = (l, v, cls = '') => `<div><p class="text-xs text-slate-500 dark:text-slate-400">${l}</p><p class="text-lg font-semibold tabular-nums leading-tight whitespace-nowrap ${cls}">${v}</p></div>`;
     const empty = !vals.some(x => x.v > 0);
-    return `<article class="snap-center snap-always shrink-0 w-full rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4" aria-label="${d.title}">
+    return `<article data-tkey="${d.key}" class="snap-center snap-always shrink-0 w-full rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-4" aria-label="${d.title}">
       <p class="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-700 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300"><svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true">${TREND_ICONS[d.key]}</svg>${d.title}</p>
       ${empty ? '<p class="py-12 text-center text-sm text-slate-500 dark:text-slate-400">Noch keine Daten in den letzten 8 Monaten.</p>' : `
       <div class="mt-4 flex gap-3">
