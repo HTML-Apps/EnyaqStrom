@@ -22,11 +22,11 @@ function effBento() {
     bd.textContent = Math.abs(d) < 0.5 ? 'wie WLTP' : fmt(Math.abs(d), 0) + ' % ' + (ok ? 'unter' : 'über') + ' WLTP';
     bd.className = 'rounded-full px-2 py-0.5 text-[11px] font-bold ' + (ok ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300' : 'bg-amber-500/15 text-amber-700 dark:text-amber-300');
   }
-  $('eff-ct').textContent = t.cost100 != null ? '≈ ' + fmt(t.cost100, 1) + ' ct je km' : '';
+  $('eff-ct').textContent = t.cost100 != null ? ' · ≈ ' + fmt(t.cost100, 1) + ' ct/km' : '';
   /* Ladeverlust-Ring aus dem schon berechneten Text (eff-loss = „5 %“) */
   const lp = parseFloat(($('eff-loss').textContent || '').replace(',', '.')), C = 2 * Math.PI * 26;
   $('eff-ring').setAttribute('stroke-dasharray', (Number.isFinite(lp) ? Math.max(1.5, Math.min(100, lp) / 100 * C) : 0).toFixed(1) + ' ' + C.toFixed(1));
-  $('eff-loss-txt').textContent = Number.isFinite(lp) ? 'von 100 kWh aus der Wand landen ' + fmt(Math.max(0, 100 - lp), 0) + ' im Akku' : 'noch keine Ladungen mit Akku-%';
+  $('eff-loss-txt').textContent = Number.isFinite(lp) ? fmt(Math.max(0, 100 - lp), 0) + ' von 100 kWh kommen im Akku an' : 'noch keine Ladungen mit Akku-%';
 }
 function statBento() {
   const rs = getReadings(), ch = rs.filter((r, i) => inView(r, dashPlace) && isCharge(rs, i)).map(r => new Date(r.date));

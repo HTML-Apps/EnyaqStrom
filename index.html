@@ -286,7 +286,7 @@
   @media (prefers-reduced-motion: reduce) { #bd-conf i, #bdg-conf i { animation: none; top: var(--y, 10%); } #bd-card, #bdg-card { animation: none; } }
 </style>
 <!-- Tailwind fertig gebaut (npm run css) – am Ende des Kopfs wie früher das CDN, damit die Reihenfolge der Regeln gleich bleibt -->
-<link rel="stylesheet" href="/app.css?v=396">
+<link rel="stylesheet" href="/app.css?v=397">
 </head>
 <body class="bg-slate-100 text-slate-900 dark:bg-black dark:text-slate-100 min-h-screen">
 
@@ -487,14 +487,13 @@
       <div class="rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-3.5">
         <p class="text-[11px] font-extrabold uppercase tracking-[.14em] text-slate-500 dark:text-slate-400">Kosten</p>
         <p id="eff-cost" class="mt-0.5 font-barlow text-3xl font-bold tabular-nums text-sky-700 dark:text-sky-300">–</p>
-        <p class="text-[11px] text-slate-500 dark:text-slate-400">pro 100 km</p>
-        <p id="eff-ct" class="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400"></p>
+        <p class="text-[11px] text-slate-500 dark:text-slate-400">pro 100 km<span id="eff-ct"></span></p>
       </div>
       <div class="rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-3.5">
         <p class="text-[11px] font-extrabold uppercase tracking-[.14em] text-slate-500 dark:text-slate-400">Ladeverlust</p>
-        <div class="mt-1 flex items-center gap-2">
-          <svg class="h-16 w-16 shrink-0 -rotate-90" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="26" fill="none" stroke-width="8" class="stroke-slate-100 dark:stroke-slate-800"/><circle id="eff-ring" cx="32" cy="32" r="26" fill="none" stroke-width="8" stroke-linecap="round" class="stroke-amber-400" stroke-dasharray="0 164"/></svg>
-          <div class="min-w-0"><p id="eff-loss" class="font-barlow text-2xl font-bold leading-none tabular-nums text-amber-600 dark:text-amber-300">–</p><p id="eff-loss-txt" class="mt-1 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400"></p></div>
+        <div class="mt-1.5 flex items-center gap-2.5">
+          <svg class="h-12 w-12 shrink-0 -rotate-90" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="26" fill="none" stroke-width="8" class="stroke-slate-100 dark:stroke-slate-800"/><circle id="eff-ring" cx="32" cy="32" r="26" fill="none" stroke-width="8" stroke-linecap="round" class="stroke-amber-400" stroke-dasharray="0 164"/></svg>
+          <div class="min-w-0"><p id="eff-loss" class="font-barlow text-3xl font-bold leading-none tabular-nums text-amber-600 dark:text-amber-300">–</p><p id="eff-loss-txt" class="mt-1 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400"></p></div>
         </div>
       </div>
       <div class="col-span-2 rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-3.5">
@@ -520,10 +519,10 @@
       </div>
       <div class="col-span-2 rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-3.5">
         <div class="flex items-center justify-between gap-3"><div><p class="text-[11px] font-extrabold uppercase tracking-[.14em] text-slate-500 dark:text-slate-400">Verlustkosten</p><p class="text-[11px] text-slate-500 dark:text-slate-400">bezahlt, aber nie im Akku</p></div><span id="loss-cost" class="font-barlow text-3xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">–</span></div>
-        <div class="mt-2.5 space-y-1 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
-          <p class="flex gap-1.5"><svg class="mt-px h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg><span id="eff-note"></span></p>
-          <p class="flex gap-1.5"><svg class="mt-px h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg><span id="loss-note"></span></p>
-        </div>
+        <details id="eff-basis" class="group mt-2 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+          <summary class="flex w-max cursor-pointer list-none items-center gap-1.5 rounded-full py-1 pr-2 font-medium [&::-webkit-details-marker]:hidden"><svg class="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>Wie gerechnet?<svg class="h-3 w-3 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></summary>
+          <div class="mt-1 space-y-1 border-l-2 border-slate-200 dark:border-slate-700 pl-2.5"><p id="eff-note"></p><p id="loss-note"></p></div>
+        </details>
       </div>
     </div>
     </div>
@@ -2053,7 +2052,7 @@
   </div>
 </nav>
 
-<script src="/app.js?v=396"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
+<script src="/app.js?v=397"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
 <script type="module">
 /* Firebase (modular SDK). Die Konfiguration ist kein Geheimnis – geschützt wird über Auth + Firestore-Regeln. */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
