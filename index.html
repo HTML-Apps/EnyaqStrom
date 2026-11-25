@@ -286,7 +286,7 @@
   @media (prefers-reduced-motion: reduce) { #bd-conf i, #bdg-conf i { animation: none; top: var(--y, 10%); } #bd-card, #bdg-card { animation: none; } }
 </style>
 <!-- Tailwind fertig gebaut (npm run css) – am Ende des Kopfs wie früher das CDN, damit die Reihenfolge der Regeln gleich bleibt -->
-<link rel="stylesheet" href="/app.css?v=397">
+<link rel="stylesheet" href="/app.css?v=398">
 </head>
 <body class="bg-slate-100 text-slate-900 dark:bg-black dark:text-slate-100 min-h-screen">
 
@@ -493,7 +493,7 @@
         <p class="text-[11px] font-extrabold uppercase tracking-[.14em] text-slate-500 dark:text-slate-400">Ladeverlust</p>
         <div class="mt-1.5 flex items-center gap-2.5">
           <svg class="h-12 w-12 shrink-0 -rotate-90" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="26" fill="none" stroke-width="8" class="stroke-slate-100 dark:stroke-slate-800"/><circle id="eff-ring" cx="32" cy="32" r="26" fill="none" stroke-width="8" stroke-linecap="round" class="stroke-amber-400" stroke-dasharray="0 164"/></svg>
-          <div class="min-w-0"><p id="eff-loss" class="font-barlow text-3xl font-bold leading-none tabular-nums text-amber-600 dark:text-amber-300">–</p><p id="eff-loss-txt" class="mt-1 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400"></p></div>
+          <div class="min-w-0"><p id="eff-loss" class="font-barlow text-3xl font-bold leading-none tabular-nums text-amber-600 dark:text-amber-300">–</p></div>
         </div>
       </div>
       <div class="col-span-2 rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm p-3.5">
@@ -2052,7 +2052,7 @@
   </div>
 </nav>
 
-<script src="/app.js?v=397"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
+<script src="/app.js?v=398"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
 <script type="module">
 /* Firebase (modular SDK). Die Konfiguration ist kein Geheimnis – geschützt wird über Auth + Firestore-Regeln. */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';

@@ -26,7 +26,6 @@ function effBento() {
   /* Ladeverlust-Ring aus dem schon berechneten Text (eff-loss = „5 %“) */
   const lp = parseFloat(($('eff-loss').textContent || '').replace(',', '.')), C = 2 * Math.PI * 26;
   $('eff-ring').setAttribute('stroke-dasharray', (Number.isFinite(lp) ? Math.max(1.5, Math.min(100, lp) / 100 * C) : 0).toFixed(1) + ' ' + C.toFixed(1));
-  $('eff-loss-txt').textContent = Number.isFinite(lp) ? fmt(Math.max(0, 100 - lp), 0) + ' von 100 kWh kommen im Akku an' : 'noch keine Ladungen mit Akku-%';
 }
 function statBento() {
   const rs = getReadings(), ch = rs.filter((r, i) => inView(r, dashPlace) && isCharge(rs, i)).map(r => new Date(r.date));
