@@ -252,7 +252,7 @@
   .simple-only { display: none !important; }
   html.simple .simple-only { display: block !important; }
   html.simple #hero-stats, html.simple #hero-rem-wrap, html.simple #frost-banner, html.simple #trips-banner, html.simple #wxo-card, html.simple #btm-card, html.simple #meter-card, html.simple #home-card, html.simple #news-card, html.simple #sos-card,
-  html.simple #go-stat, html.simple #btn-wrap-preview, html.simple #go-akku, html.simple #go-trips, html.simple #go-prov, html.simple #go-badges, html.simple #kb-card,
+  html.simple #start-icons, html.simple #go-stat, html.simple #btn-wrap-preview, html.simple #go-akku, html.simple #go-trips, html.simple #go-prov, html.simple #go-badges, html.simple #kb-card,
   html.simple #bottom-nav, html.simple [data-place="bosch"], html.simple #rec-chips, html.simple #rep-mode [data-mode="fahrten"], html.simple [data-bt="kurve"], html.simple [data-bt="mehr"], html.simple #sec-eff, html.simple #sec-trends,
   html.simple [data-dp="akte"], html.simple [data-dp="ausst"], html.simple [data-dp="checkheft"], html.simple [data-filter="fahrten"], html.simple div:has(> #bt-minus),
   html.simple #sd-list [data-sec="fahrten"], html.simple #sd-list [data-sec="wetter"], html.simple #sd-list [data-sec="sprache"],
@@ -286,7 +286,7 @@
   @media (prefers-reduced-motion: reduce) { #bd-conf i, #bdg-conf i { animation: none; top: var(--y, 10%); } #bd-card, #bdg-card { animation: none; } }
 </style>
 <!-- Tailwind fertig gebaut (npm run css) – am Ende des Kopfs wie früher das CDN, damit die Reihenfolge der Regeln gleich bleibt -->
-<link rel="stylesheet" href="/app.css?v=399">
+<link rel="stylesheet" href="/app.css?v=400">
 </head>
 <body class="bg-slate-100 text-slate-900 dark:bg-black dark:text-slate-100 min-h-screen">
 
@@ -435,15 +435,16 @@
     </div>
     <div id="simple-start" class="simple-only !mt-3"></div>
     <button id="simple-sos" type="button" class="simple-only flex w-full items-center gap-4 rounded-3xl bg-gradient-to-br from-red-700 to-red-950 p-4 text-left text-white shadow-sm active:scale-[0.99] transition"><span class="text-4xl">🆘</span><span class="flex-1"><span class="block text-xl font-extrabold leading-tight">Hilfe</span><span class="block text-sm opacity-90">Panne oder Unfall</span></span><span class="text-2xl opacity-80">›</span></button>
-    <button id="go-stat" type="button" class="flex w-full items-center justify-between rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm px-4 py-3 active:scale-[0.99] transition">
+    <div id="start-icons" class="flex justify-around rounded-3xl bg-white dark:bg-slate-900 shadow-sm px-1.5 pt-3 pb-2.5" role="navigation" aria-label="Bereiche"></div>
+    <button id="go-stat" type="button" class="hidden flex w-full items-center justify-between rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm px-4 py-3 active:scale-[0.99] transition">
       <span class="flex items-center gap-3 font-medium"><svg class="w-6 h-6 text-emerald-500" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/></svg>Fahrzeugdaten</span>
       <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
     </button>
-    <button id="btn-wrap-preview" type="button" class="flex w-full items-center justify-between rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm px-4 py-3 active:scale-[0.99] transition">
+    <button id="btn-wrap-preview" type="button" class="hidden flex w-full items-center justify-between rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm px-4 py-3 active:scale-[0.99] transition">
       <span class="flex items-center gap-3 font-medium"><svg class="w-6 h-6 text-emerald-500" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M18.5 15.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/></svg><span class="min-w-0 truncate">Rückblick<span id="go-wrap-n" class="text-sm font-normal text-slate-500 dark:text-slate-400"></span></span></span>
       <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
     </button>
-    <button id="go-akku" type="button" class="flex w-full items-center justify-between rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm px-4 py-3 active:scale-[0.99] transition">
+    <button id="go-akku" type="button" class="hidden flex w-full items-center justify-between rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm px-4 py-3 active:scale-[0.99] transition">
       <span class="flex items-center gap-3 font-medium"><svg class="w-6 h-6 text-emerald-500" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="16" height="10" rx="2"/><path d="M21 11v2M7 10.5v3M10.5 10.5v3"/></svg><span class="min-w-0 truncate">Akku<span id="go-akku-n" class="text-sm font-normal text-slate-500 dark:text-slate-400"></span></span></span>
       <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
     </button>
@@ -451,15 +452,15 @@
       <span class="flex items-center gap-3 font-medium"><svg class="w-6 h-6 text-emerald-500" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="6" r="2.5"/><path d="M8.5 18H15a3 3 0 0 0 0-6H9a3 3 0 0 1 0-6h6.5"/></svg><span class="min-w-0 truncate">Fahrtenbuch<span id="go-trips-n" class="text-sm font-normal text-slate-500 dark:text-slate-400"></span></span></span>
       <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
     </button>
-    <button id="go-prov" type="button" class="flex w-full items-center justify-between rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm px-4 py-3 active:scale-[0.99] transition">
+    <button id="go-prov" type="button" class="hidden flex w-full items-center justify-between rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm px-4 py-3 active:scale-[0.99] transition">
       <span class="flex items-center gap-3 font-medium"><svg class="w-6 h-6 text-emerald-500" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 9.5h19M6 15h4"/><path d="M16.5 12.5l-1.5 2.5h2l-1.5 2.5"/></svg><span class="min-w-0 truncate">Ladeanbieter<span id="go-prov-n" class="text-sm font-normal text-slate-500 dark:text-slate-400"></span></span></span>
       <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
     </button>
-    <button id="go-badges" type="button" class="flex w-full items-center justify-between rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm px-4 py-3 active:scale-[0.99] transition">
+    <button id="go-badges" type="button" class="hidden flex w-full items-center justify-between rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm px-4 py-3 active:scale-[0.99] transition">
       <span class="flex items-center gap-3 font-medium"><svg class="w-6 h-6 text-emerald-500" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="9" r="6"/><path d="M8.5 14l-1.5 7 5-3 5 3-1.5-7"/></svg><span class="min-w-0 truncate">Abzeichen<span id="go-badges-n" class="text-sm font-normal text-slate-500 dark:text-slate-400"></span></span></span>
       <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
     </button>
-    <div id="kb-card" class="overflow-hidden rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm">
+    <div id="kb-card" class="hidden overflow-hidden rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm">
     <button id="go-kb" type="button" class="flex w-full items-center justify-between px-4 py-3 active:bg-slate-100 dark:active:bg-slate-800 transition">
       <span class="flex items-center gap-3 font-medium"><svg class="w-6 h-6 text-emerald-500" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 1 6.5 18H20v3H6.5"/></svg><span class="min-w-0 truncate">Wissen<span id="go-kb-n" class="text-sm font-normal text-slate-500 dark:text-slate-400"></span></span></span>
       <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
@@ -2052,7 +2053,7 @@
   </div>
 </nav>
 
-<script src="/app.js?v=399"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
+<script src="/app.js?v=400"></script>   <!-- App-Logik: gebaut aus src/*.js (npm run js) -->
 <script type="module">
 /* Firebase (modular SDK). Die Konfiguration ist kein Geheimnis – geschützt wird über Auth + Firestore-Regeln. */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
