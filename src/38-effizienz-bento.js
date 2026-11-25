@@ -41,9 +41,9 @@ function statBento() {
     if (k >= 0 && k < N) b[N - 1 - k]++;
   });
   const mx = Math.max(1, ...b), lab = yr ? (i) => String(now.getFullYear() - (N - 1 - i)) : statRange === 'month' ? (i) => MONTHS[(now.getMonth() - (N - 1 - i) + 120) % 12] : (i) => (N - 1 - i ? 'vor ' + (N - 1 - i) + ' Wo.' : 'diese Woche') + ' (ab ' + new Date(mon.getTime() - (N - 1 - i) * 6048e5).toLocaleDateString('de-DE', { day: 'numeric', month: 'numeric' }) + ')';
-  const ml = (i) => yr ? String(now.getFullYear() - (N - 1 - i)).slice(2) : statRange === 'month' ? MONTHS[(now.getMonth() - (N - 1 - i) + 120) % 12].charAt(0)
-    : MONTHS[new Date(mon.getTime() - (N - 1 - i) * 6048e5).getMonth()].charAt(0);   // Woche: Monat ihres Montags
-  $('stat-spark-lab').innerHTML = ch.length ? b.map((_, i) => `<span class="flex-1">${ml(i)}</span>`).join('') : '';
+  const ml = (i) => yr ? String(now.getFullYear() - (N - 1 - i)) : statRange === 'month' ? MONTHS[(now.getMonth() - (N - 1 - i) + 120) % 12].charAt(0)
+    : String(isoWeek(new Date(mon.getTime() - (N - 1 - i) * 6048e5 + 3 * 864e5)));   // Woche: Kalenderwoche (vom Donnerstag gerechnet)
+  $('stat-spark-lab').innerHTML = ch.length ? b.map((_, i) => `<span class="flex-1 whitespace-nowrap">${ml(i)}</span>`).join('') : '';
   $('stat-spark').innerHTML = ch.length ? b.map((v, i) => `<div class="flex-1 rounded-[3px] ${!v ? 'bg-slate-300 dark:bg-slate-700' : i === N - 1 ? 'bg-emerald-500/40' : 'bg-emerald-500'}" style="height:${v ? Math.max(10, v / mx * 100).toFixed(0) : 6}%" title="${lab(i)}: ${v}"></div>`).join('') : '';
 }
 { const oS = renderStats, oE = renderEfficiency;
