@@ -3841,7 +3841,7 @@ function renderKb() {
 }
 /* Start: Button-Zusatz und angeheftete Einträge als Chips (Link-Einträge öffnen direkt) */
 function renderKbStart() {
-  const kb = getKb(), n = kb.items.length, pins = kb.items.filter(x => x.pin).sort((a, b) => a.title.localeCompare(b.title, 'de'));
+  const kb = getKb(), n = kb.items.length, pins = [];   // angepinnte Einträge nicht mehr auf Start (wurde zu lang) – Pins wirken nur noch in Wissen selbst
   try { upCheckDone(); } catch (e) { }
   try { renderUpBanner(); } catch (e) { }
   const mo = mgOpen(kb); $('go-kb-n').textContent = ' · ' + (mo ? mo + (mo === 1 ? ' offener Mangel' : ' offene Mängel') : n ? n + (n === 1 ? ' Eintrag' : ' Einträge') : 'Handbuch, Tipps & mehr');
