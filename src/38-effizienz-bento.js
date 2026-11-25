@@ -10,7 +10,12 @@ function effBento() {
   const s = getSettings(), wl = Number(s.wltp) > 0 ? Number(s.wltp) : (() => { try { return carProf(s).wltp; } catch (e) { return null; } })();
   const mk = $('eff-mark'), wt = $('eff-wltp'), bd = $('eff-wltp-badge'), has = t.km > 0 && t.kwh100 > 0;
   mk.classList.toggle('hidden', !has); if (has) mk.style.left = pos(t.kwh100);
-  wt.classList.toggle('hidden', !wl); if (wl) { wt.style.left = pos(wl); wt.textContent = '▲ WLTP ' + fmt(wl, 1); }
+  const tk = $('eff-wltp-tick'); wt.classList.toggle('hidden', !wl); tk.classList.toggle('hidden', !wl);
+  if (wl) {   // Dreieck genau unter dem WLTP-Wert (Text daneben; früher wurde der ganze Text mittig gesetzt → Dreieck lag links daneben)
+    tk.style.left = pos(wl); const p = (wl - EFF_LO) / (EFF_HI - EFF_LO), right = p > 0.7;
+    wt.style.left = pos(wl); wt.style.transform = right ? 'translateX(calc(-100% + 5px))' : 'translateX(-5px)';
+    wt.innerHTML = right ? 'WLTP ' + fmt(wl, 1) + ' <span class="inline-block w-2.5 text-center">▲</span>' : '<span class="inline-block w-2.5 text-center">▲</span> WLTP ' + fmt(wl, 1);
+  }
   bd.classList.toggle('hidden', !(has && wl));
   if (has && wl) {
     const d = (t.kwh100 - wl) / wl * 100, ok = d <= 0;
@@ -36,8 +41,11 @@ function statBento() {
       : d >= mon ? 0 : Math.floor((mon - d) / 6048e5) + 1;
     if (k >= 0 && k < N) b[N - 1 - k]++;
   });
-  const mx = Math.max(1, ...b), lab = yr ? (i) => String(now.getFullYear() - (N - 1 - i)) : statRange === 'month' ? (i) => MONTHS[(now.getMonth() - (N - 1 - i) + 120) % 12] : (i) => (N - 1 - i ? 'vor ' + (N - 1 - i) + ' Wo.' : 'diese Woche');
-  $('stat-spark').innerHTML = ch.length ? b.map((v, i) => `<div class="flex-1 rounded-[3px] ${i === N - 1 ? 'bg-emerald-500/40' : 'bg-emerald-500'}" style="height:${Math.max(8, v / mx * 100).toFixed(0)}%" title="${lab(i)}: ${v}"></div>`).join('') : '';
+  const mx = Math.max(1, ...b), lab = yr ? (i) => String(now.getFullYear() - (N - 1 - i)) : statRange === 'month' ? (i) => MONTHS[(now.getMonth() - (N - 1 - i) + 120) % 12] : (i) => (N - 1 - i ? 'vor ' + (N - 1 - i) + ' Wo.' : 'diese Woche') + ' (ab ' + new Date(mon.getTime() - (N - 1 - i) * 6048e5).toLocaleDateString('de-DE', { day: 'numeric', month: 'numeric' }) + ')';
+  const ml = (i) => yr ? String(now.getFullYear() - (N - 1 - i)).slice(2) : statRange === 'month' ? MONTHS[(now.getMonth() - (N - 1 - i) + 120) % 12].charAt(0)
+    : MONTHS[new Date(mon.getTime() - (N - 1 - i) * 6048e5).getMonth()].charAt(0);   // Woche: Monat ihres Montags
+  $('stat-spark-lab').innerHTML = ch.length ? b.map((_, i) => `<span class="flex-1">${ml(i)}</span>`).join('') : '';
+  $('stat-spark').innerHTML = ch.length ? b.map((v, i) => `<div class="flex-1 rounded-[3px] ${!v ? 'bg-slate-300 dark:bg-slate-700' : i === N - 1 ? 'bg-emerald-500/40' : 'bg-emerald-500'}" style="height:${v ? Math.max(10, v / mx * 100).toFixed(0) : 6}%" title="${lab(i)}: ${v}"></div>`).join('') : '';
 }
 { const oS = renderStats, oE = renderEfficiency;
   renderStats = function () { oS.apply(this, arguments); try { statBento(); } catch (e) { } };
